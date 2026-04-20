@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NiCo – Hilfe</title>
+  <script>
+    // Sync language with main app via localStorage
+    const LANG_KEY = 'nico_lang';
+    function setLang(code) {
+      localStorage.setItem(LANG_KEY, code);
+      document.documentElement.lang = code;
+      document.querySelectorAll('.lang-btn').forEach(b =>
+        b.classList.toggle('active', b.dataset.lang === code));
+      document.querySelectorAll('[data-de]').forEach(el => {
+        el.innerHTML = el.dataset[code] ?? el.dataset.de;
+      });
+    }
+    document.addEventListener('DOMContentLoaded', () => {
+      const lang = localStorage.getItem(LANG_KEY) || 'de';
+      setLang(lang);
+      document.querySelectorAll('.lang-btn').forEach(b =>
+        b.addEventListener('click', () => setLang(b.dataset.lang)));
+    });
+  </script>
+  <style>
+    :root {
+      --bg:       #1e1e2e;
+      --mantle:   #181825;
+      --surface0: #313244;
+      --surface1: #45475a;
+      --text:     #cdd6f4;
+      --subtext0: #a6adc8;
+      --subtext1: #bac2de;
+      --blue:     #89b4fa;
+      --mauve:    #cba6f7;
+      --overlay0: #6c7086;
+      --green:    #a6e3a1;
+      --radius:   8px;
+      --mono: 'JetBrains Mono', 'Fira Code', monospace;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      font-size: 15px;
+      line-height: 1.7;
+    }
+
+    .page-header {
+      background: var(--mantle);
+      border-bottom: 1px solid var(--surface0);
+      padding: 18px 40px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .page-header .logo { font-size: 1.1rem; font-weight: 800; color: var(--blue); letter-spacing: 1px; }
+    .page-header .title { color: var(--subtext0); font-size: 13px; }
+    .page-header a { margin-left: auto; color: var(--blue); font-size: 13px; text-decoration: none; }
+    .page-header a:hover { text-decoration: underline; }
+
+    .help-lang-switcher { margin-left: auto; display: flex; align-items: center; gap: 4px; }
+    .lang-btn {
+      background: none; border: none; cursor: pointer;
+      font-size: 12px; font-weight: 600; padding: 2px 4px;
+      color: var(--overlay0); opacity: .7;
+    }
+    .lang-btn.active { opacity: 1; color: var(--blue); }
+    .lang-btn:hover  { opacity: 1; color: var(--text); }
+    .page-header a { margin-left: 12px; }
+
+    .layout {
+      display: flex;
+      max-width: 1100px;
+      margin: 0 auto;
+      gap: 0;
+    }
+
+    /* ── Table of contents ──────────────────────────────────────────────── */
+    .toc {
+      width: 240px;
+      min-width: 240px;
+      padding: 36px 24px;
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      overflow-y: auto;
+      border-right: 1px solid var(--surface0);
+    }
+
+    .toc h2 {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--overlay0);
+      margin-bottom: 16px;
+    }
+
+    .toc ol { list-style: none; padding: 0; }
+
+    .toc > ol > li { margin-bottom: 12px; }
+
+    .toc a {
+      text-decoration: none;
+      color: var(--subtext1);
+      font-size: 13px;
+      line-height: 1.5;
+      transition: color .15s;
+    }
+
+    .toc a:hover { color: var(--blue); }
+
+    .toc .toc-sub {
+      margin-top: 6px;
+      margin-left: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .toc .toc-sub a { color: var(--overlay0); font-size: 12px; }
+    .toc .toc-sub a:hover { color: var(--subtext1); }
+
+    /* ── Content ──────────────────────────────────────────────────────── */
+    .content {
+      flex: 1;
+      padding: 48px 52px;
+      max-width: 760px;
+    }
+
+    .content h1 {
+      font-size: 1.6rem;
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: 8px;
+    }
+
+    .content .intro {
+      color: var(--subtext1);
+      font-size: 14px;
+      margin-bottom: 48px;
+      padding-bottom: 24px;
+      border-bottom: 1px solid var(--surface0);
+    }
+
+    .chapter { margin-bottom: 56px; }
+
+    .chapter h2 {
+      font-size: 1.15rem;
+      font-weight: 700;
+      color: var(--blue);
+      margin-bottom: 16px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--surface0);
+    }
+
+    .chapter h2 .chapter-num {
+      color: var(--overlay0);
+      font-weight: 400;
+      font-size: 0.9rem;
+      margin-right: 8px;
+    }
+
+    .subchapter { margin-bottom: 32px; }
+
+    .subchapter h3 {
+      font-size: 1rem;
+      font-weight: 600;
+      color: var(--mauve);
+      margin-bottom: 10px;
+    }
+
+    .subchapter h3 .sub-num {
+      color: var(--overlay0);
+      font-weight: 400;
+      font-size: 0.85rem;
+      margin-right: 6px;
+    }
+
+    p { color: var(--subtext1); margin-bottom: 14px; line-height: 1.75; }
+
+    code {
+      font-family: var(--mono);
+      background: var(--surface0);
+      padding: 1px 6px;
+      border-radius: 4px;
+      font-size: 13px;
+      color: var(--green);
+    }
+
+    .note {
+      background: var(--mantle);
+      border-left: 3px solid var(--blue);
+      padding: 12px 16px;
+      border-radius: 0 6px 6px 0;
+      margin-bottom: 16px;
+    }
+
+    .note p { color: var(--subtext1); margin: 0; font-size: 13px; }
+    .note strong { color: var(--text); }
+  </style>
+</head>
+<body>
+
+  <div class="page-header">
+    <span class="logo">NiCo</span>
+    <span class="title"
+          data-de="Hilfe &amp; Dokumentation"
+          data-en="Help &amp; Documentation">Hilfe &amp; Dokumentation</span>
+    <div class="help-lang-switcher">
+      <button class="lang-btn active" data-lang="de">DE</button>
+      <span style="opacity:.4;font-size:11px">|</span>
+      <button class="lang-btn" data-lang="en">EN</button>
+    </div>
+    <a href="/"
+       data-de="&#x2190; Zur&#xFC;ck zur App"
+       data-en="&#x2190; Back to app">← Zurück zur App</a>
+  </div>
+
+  <div class="layout">
+
+    <!-- ── Inhaltsverzeichnis ──────────────────────────────────────── -->
+    <nav class="toc">
+      <h2 data-de="Inhalt" data-en="Contents">Inhalt</h2>
+      <ol>
+        <li>
+          <a href="#kapitel-1"
+             data-de="1. Erste Schritte"
+             data-en="1. Getting started">1. Erste Schritte</a>
+          <div class="toc-sub">
+            <a href="#k1-1"
+               data-de="1.1 NiCo starten"
+               data-en="1.1 Starting NiCo">1.1 NiCo starten</a>
+            <a href="#k1-2"
+               data-de="1.2 Einrichtung"
+               data-en="1.2 Setup">1.2 Einrichtung</a>
+          </div>
+        </li>
+        <li>
+          <a href="#kapitel-2"
+             data-de="2. Konfiguration"
+             data-en="2. Configuration">2. Konfiguration</a>
+          <div class="toc-sub">
+            <a href="#k2-1"
+               data-de="2.1 Sektionen &amp; Felder"
+               data-en="2.1 Sections &amp; fields">2.1 Sektionen &amp; Felder</a>
+            <a href="#k2-2"
+               data-de="2.2 Pakete verwalten"
+               data-en="2.2 Managing packages">2.2 Pakete verwalten</a>
+          </div>
+        </li>
+        <li>
+          <a href="#kapitel-3"
+             data-de="3. Nix-Brix"
+             data-en="3. Nix Bricks">3. Nix-Brix</a>
+          <div class="toc-sub">
+            <a href="#k3-1"
+               data-de="3.1 Was sind Nix-Brix?"
+               data-en="3.1 What are Nix Bricks?">3.1 Was sind Nix-Brix?</a>
+            <a href="#k3-2"
+               data-de="3.2 Nix-Brix anlegen &amp; verwalten"
+               data-en="3.2 Creating &amp; managing Nix Bricks">3.2 Nix-Brix anlegen &amp; verwalten</a>
+          </div>
+        </li>
+      </ol>
+    </nav>
+
+    <!-- ── Hauptinhalt ─────────────────────────────────────────────── -->
+    <main class="content">
+      <h1 data-de="NiCo – Hilfe" data-en="NiCo – Help">NiCo – Hilfe</h1>
+      <p class="intro"
+         data-de="NiCo ist ein lokaler, browserbasierter Konfigurator f&#xFC;r NixOS. Er generiert <code>configuration.nix</code> (und optional <code>flake.nix</code>) aus einer grafischen Oberfl&#xE4;che &#x2013; ohne dass du Nix-Syntax auswendig kennen musst."
+         data-en="NiCo is a local, browser-based configurator for NixOS. It generates <code>configuration.nix</code> (and optionally <code>flake.nix</code>) from a graphical interface &#x2013; no need to know Nix syntax by heart.">
+        NiCo ist ein lokaler, browserbasierter Konfigurator für NixOS.
+        Er generiert <code>configuration.nix</code> (und optional <code>flake.nix</code>)
+        aus einer grafischen Oberfläche – ohne dass du Nix-Syntax auswendig kennen musst.
+      </p>
+
+      <!-- ── Kapitel 1 ─────────────────────────────────────────────── -->
+      <section class="chapter" id="kapitel-1">
+        <h2><span class="chapter-num">1</span><span
+            data-de="Erste Schritte" data-en="Getting started">Erste Schritte</span></h2>
+
+        <div class="subchapter" id="k1-1">
+          <h3><span class="sub-num">1.1</span><span
+              data-de="NiCo starten" data-en="Starting NiCo">NiCo starten</span></h3>
+          <p>
+            Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor
+            incididunt ut labore et dolore magna aliqua. NiCo startet einen lokalen Webserver
+            auf Port <code>8421</code> und öffnet den Browser automatisch.
+          </p>
+          <p>
+            Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip
+            ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit
+            esse cillum dolore eu fugiat nulla pariatur.
+          </p>
+          <div class="note">
+            <p>
+              <strong>Hinweis:</strong> Läuft NiCo bereits, öffnet ein erneuter Start nur
+              den Browser – der Webserver wird nicht doppelt gestartet.
+            </p>
+          </div>
+        </div>
+
+        <div class="subchapter" id="k1-2">
+          <h3><span class="sub-num">1.2</span><span
+              data-de="Einrichtung" data-en="Setup">Einrichtung</span></h3>
+          <p>
+            Beim ersten Start fragt NiCo nach dem NixOS-Konfigurationsverzeichnis.
+            Das ist üblicherweise <code>/etc/nixos</code> oder ein eigenes Verzeichnis
+            wie <code>~/.nixos-config</code>.
+          </p>
+          <p>
+            Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor
+            incididunt ut labore et dolore magna aliqua. NiCo legt dort ein Unterverzeichnis
+            <code>nico/</code> an und speichert seine interne Datenhaltung (<code>nico.json</code>)
+            darin. Diese Datei solltest du nicht manuell bearbeiten.
+          </p>
+        </div>
+      </section>
+
+      <!-- ── Kapitel 2 ─────────────────────────────────────────────── -->
+      <section class="chapter" id="kapitel-2">
+        <h2><span class="chapter-num">2</span><span
+            data-de="Konfiguration" data-en="Configuration">Konfiguration</span></h2>
+
+        <div class="subchapter" id="k2-1">
+          <h3><span class="sub-num">2.1</span><span
+              data-de="Sektionen &amp; Felder" data-en="Sections &amp; fields">Sektionen &amp; Felder</span></h3>
+          <p>
+            Die linke Seite der Oberfläche zeigt alle Konfigurationsoptionen in aufklappbaren
+            Sektionen. Jede Sektion entspricht einem Abschnitt in der generierten
+            <code>configuration.nix</code>. Du kannst Sektionen durch Klick auf den Titel
+            auf- und zuklappen – die rechte Vorschau klappt synchron mit.
+          </p>
+          <p>
+            Lorem ipsum dolor sit amet, consectetur adipiscing elit. Ut enim ad minim veniam,
+            quis nostrud exercitation ullamco laboris. Alle Änderungen werden in der rechten
+            Vorschau sofort angezeigt – aber erst nach Klick auf
+            <strong>„In Config schreiben"</strong> auf die Festplatte geschrieben.
+          </p>
+        </div>
+
+        <div class="subchapter" id="k2-2">
+          <h3><span class="sub-num">2.2</span><span
+              data-de="Pakete verwalten" data-en="Managing packages">Pakete verwalten</span></h3>
+          <p>
+            Im Abschnitt <strong>Programme</strong> kannst du Systempakete hinzufügen,
+            entfernen oder vorübergehend deaktivieren. Die Suche nutzt
+            <code>nix search nixpkgs</code> und läuft vollständig lokal – keine Internetverbindung
+            nötig, aber der erste Suchvorgang kann etwas dauern während der Nix-Index aufgebaut wird.
+          </p>
+          <p>
+            Lorem ipsum dolor sit amet, consectetur adipiscing elit. Duis aute irure dolor in
+            reprehenderit. Pakete werden alphabetisch sortiert in die Config geschrieben.
+            Deaktivierte Pakete bleiben in NiCos Liste, werden aber nicht in die Nix-Datei
+            übernommen – praktisch für temporäres Ausschalten ohne Verlust der Information.
+          </p>
+        </div>
+      </section>
+
+      <!-- ── Kapitel 3 ─────────────────────────────────────────────── -->
+      <section class="chapter" id="kapitel-3">
+        <h2><span class="chapter-num">3</span><span
+            data-de="Nix-Brix" data-en="Nix Bricks">Nix-Brix</span></h2>
+
+        <div class="subchapter" id="k3-1">
+          <h3><span class="sub-num">3.1</span><span
+              data-de="Was sind Nix-Brix?" data-en="What are Nix Bricks?">Was sind Nix-Brix?</span></h3>
+          <p>
+            Nix-Brix sind manuelle Nix-Abschnitte, die NiCo <strong>niemals verändert</strong>.
+            Du kannst darin beliebigen Nix-Code schreiben – NiCo liest die Blöcke beim Laden,
+            speichert sie intern, und fügt sie beim nächsten Schreiben unverändert wieder ein.
+          </p>
+          <p>
+            Das ermöglicht es, Dinge die NiCo (noch) nicht grafisch abbildet direkt in Nix
+            zu schreiben, ohne dass sie bei der nächsten Regenerierung verloren gehen.
+            Syntax eines Nix-Brick:
+          </p>
+          <div class="note">
+            <p>
+              <code># &lt;brix: 1-syncthing&gt;</code><br>
+              <code>&nbsp;&nbsp;services.syncthing.enable = true;</code><br>
+              <code># &lt;/brix: 1-syncthing&gt;</code>
+            </p>
+          </div>
+        </div>
+
+        <div class="subchapter" id="k3-2">
+          <h3><span class="sub-num">3.2</span><span
+              data-de="Nix-Brix anlegen &amp; verwalten"
+              data-en="Creating &amp; managing Nix Bricks">Nix-Brix anlegen &amp; verwalten</span></h3>
+          <p>
+            Klicke auf <strong>„Nix-Brick einfügen"</strong> oberhalb der Vorschau um einen neuen
+            Nix-Brick anzulegen. Vergib eine beschreibende Bezeichnung – NiCo weist
+            automatisch eine eindeutige numerische ID zu (Format: <code>ID-bezeichnung</code>).
+          </p>
+          <p>
+            In der Vorschau werden Nix-Brix farblich hervorgehoben. Per Hover-Menü kannst du
+            sie löschen oder verschieben. Beim Löschen erscheint eine Sicherheitsabfrage, da
+            der Inhalt unwiederbringlich verloren geht.
+          </p>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+</body>
+</html>

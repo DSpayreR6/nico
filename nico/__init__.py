@@ -1,0 +1,1 @@
+# NiCo – NixOS Configurator

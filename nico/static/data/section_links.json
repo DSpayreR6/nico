@@ -1,0 +1,182 @@
+{
+  "System": {
+    "de": {
+      "wiki":    "https://wiki.nixos.org/wiki/NixOS_Manual",
+      "options": "https://search.nixos.org/options?query=networking.hostName"
+    },
+    "en": {
+      "wiki":    "https://wiki.nixos.org/wiki/NixOS_Manual",
+      "options": "https://search.nixos.org/options?query=networking.hostName"
+    }
+  },
+  "Lokalisierung": {
+    "de": {
+      "wiki":    "https://wiki.nixos.org/wiki/Localization",
+      "options": "https://search.nixos.org/options?query=i18n"
+    },
+    "en": {
+      "wiki":    "https://wiki.nixos.org/wiki/Localization",
+      "options": "https://search.nixos.org/options?query=i18n"
+    }
+  },
+  "Netzwerk": {
+    "de": {
+      "wiki":    "https://wiki.nixos.org/wiki/Networking",
+      "options": "https://search.nixos.org/options?query=networking"
+    },
+    "en": {
+      "wiki":    "https://wiki.nixos.org/wiki/Networking",
+      "options": "https://search.nixos.org/options?query=networking"
+    }
+  },
+  "Services": {
+    "de": {
+      "wiki":    "https://wiki.nixos.org/wiki/NixOS_Manual",
+      "options": "https://search.nixos.org/options?query=services"
+    },
+    "en": {
+      "wiki":    "https://wiki.nixos.org/wiki/NixOS_Manual",
+      "options": "https://search.nixos.org/options?query=services"
+    }
+  },
+  "Desktop": {
+    "de": {
+      "wiki":    "https://wiki.nixos.org/wiki/Category:Desktop_environments",
+      "options": "https://search.nixos.org/options?query=services.xserver"
+    },
+    "en": {
+      "wiki":    "https://wiki.nixos.org/wiki/Category:Desktop_environments",
+      "options": "https://search.nixos.org/options?query=services.xserver"
+    }
+  },
+  "Audio": {
+    "de": {
+      "wiki":    "https://wiki.nixos.org/wiki/PipeWire",
+      "options": "https://search.nixos.org/options?query=services.pipewire"
+    },
+    "en": {
+      "wiki":    "https://wiki.nixos.org/wiki/PipeWire",
+      "options": "https://search.nixos.org/options?query=services.pipewire"
+    }
+  },
+  "Benutzer": {
+    "de": {
+      "wiki":    "https://wiki.nixos.org/wiki/NixOS_Manual",
+      "options": "https://search.nixos.org/options?query=users.users"
+    },
+    "en": {
+      "wiki":    "https://wiki.nixos.org/wiki/NixOS_Manual",
+      "options": "https://search.nixos.org/options?query=users.users"
+    }
+  },
+  "Programme": {
+    "de": {
+      "wiki":    "https://wiki.nixos.org/wiki/NixOS_Manual",
+      "options": "https://search.nixos.org/options?query=environment.systemPackages"
+    },
+    "en": {
+      "wiki":    "https://wiki.nixos.org/wiki/NixOS_Manual",
+      "options": "https://search.nixos.org/options?query=environment.systemPackages"
+    }
+  },
+  "Schriftarten": {
+    "de": {
+      "wiki":    "https://wiki.nixos.org/wiki/Fonts",
+      "options": "https://search.nixos.org/options?query=fonts"
+    },
+    "en": {
+      "wiki":    "https://wiki.nixos.org/wiki/Fonts",
+      "options": "https://search.nixos.org/options?query=fonts"
+    }
+  },
+  "Nix & System": {
+    "de": {
+      "wiki":    "https://wiki.nixos.org/wiki/Flakes",
+      "options": "https://search.nixos.org/options?query=nix"
+    },
+    "en": {
+      "wiki":    "https://wiki.nixos.org/wiki/Flakes",
+      "options": "https://search.nixos.org/options?query=nix"
+    }
+  },
+  "Home Manager": {
+    "de": {
+      "wiki":    "https://wiki.nixos.org/wiki/Home_Manager",
+      "options": "https://nix-community.github.io/home-manager/options.xhtml"
+    },
+    "en": {
+      "wiki":    "https://wiki.nixos.org/wiki/Home_Manager",
+      "options": "https://nix-community.github.io/home-manager/options.xhtml"
+    }
+  },
+  "Hardware": {
+    "de": {
+      "wiki":    "https://wiki.nixos.org/wiki/NixOS_Manual",
+      "options": "https://search.nixos.org/options?query=hardware"
+    },
+    "en": {
+      "wiki":    "https://wiki.nixos.org/wiki/NixOS_Manual",
+      "options": "https://search.nixos.org/options?query=hardware"
+    }
+  },
+  "Virtualisierung": {
+    "de": {
+      "wiki":    "https://wiki.nixos.org/wiki/Docker",
+      "options": "https://search.nixos.org/options?query=virtualisation"
+    },
+    "en": {
+      "wiki":    "https://wiki.nixos.org/wiki/Docker",
+      "options": "https://search.nixos.org/options?query=virtualisation"
+    }
+  },
+  "Dateisystem & Backup": {
+    "de": {
+      "wiki":    "https://wiki.nixos.org/wiki/Btrfs",
+      "options": "https://search.nixos.org/options?query=services.snapper"
+    },
+    "en": {
+      "wiki":    "https://wiki.nixos.org/wiki/Btrfs",
+      "options": "https://search.nixos.org/options?query=services.snapper"
+    }
+  },
+  "Start": {
+    "de": {
+      "wiki":    "https://wiki.nixos.org/wiki/Flakes",
+      "options": "https://nix.dev/concepts/flakes"
+    },
+    "en": {
+      "wiki":    "https://wiki.nixos.org/wiki/Flakes",
+      "options": "https://nix.dev/concepts/flakes"
+    }
+  },
+  "Inputs": {
+    "de": {
+      "wiki":    "https://wiki.nixos.org/wiki/Flakes",
+      "options": "https://nix.dev/manual/nix/stable/command-ref/new-cli/nix3-flake"
+    },
+    "en": {
+      "wiki":    "https://wiki.nixos.org/wiki/Flakes",
+      "options": "https://nix.dev/manual/nix/stable/command-ref/new-cli/nix3-flake"
+    }
+  },
+  "Outputs": {
+    "de": {
+      "wiki":    "https://wiki.nixos.org/wiki/Flakes",
+      "options": "https://search.nixos.org/options?query=nixpkgs"
+    },
+    "en": {
+      "wiki":    "https://wiki.nixos.org/wiki/Flakes",
+      "options": "https://search.nixos.org/options?query=nixpkgs"
+    }
+  },
+  "Hosts": {
+    "de": {
+      "wiki":    "https://wiki.nixos.org/wiki/Flakes",
+      "options": "https://search.nixos.org/options?query=nixpkgs.lib.nixosSystem"
+    },
+    "en": {
+      "wiki":    "https://wiki.nixos.org/wiki/Flakes",
+      "options": "https://search.nixos.org/options?query=nixpkgs.lib.nixosSystem"
+    }
+  }
+}

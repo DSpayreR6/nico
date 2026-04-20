@@ -1,0 +1,1942 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NiCo – NixOS Configurator</title>
+  <meta name="csrf-token" content="{{ csrf_token }}">
+  <!-- Prism.js – vendored locally -->
+  <link rel="stylesheet" href="/static/vendor/prism/prism-tomorrow.min.css?v={{ static_v }}">
+  <link rel="stylesheet" href="/static/style.css?v={{ static_v }}">
+</head>
+<body>
+
+  <!-- ── Setup-Overlay ────────────────────────────────────────────────── -->
+  <div id="setup-overlay" class="overlay hidden">
+    <div class="modal">
+      <div id="setup-lang-flags" class="setup-lang-flags"></div>
+      <div class="modal-logo">NiCo</div>
+      <h2 data-i18n="setup.title">Willkommen beim NixOS Configurator</h2>
+      <p data-i18n-html="setup.intro">Wo liegt dein NixOS-Konfigurations-Verzeichnis?<br>
+         NiCo legt dort ein <code>nico/</code>-Unterverzeichnis an.</p>
+
+      <div id="setup-input-section">
+        <label for="nixos-dir-input" data-i18n="setup.dirLabel">NixOS-Config-Verzeichnis</label>
+        <div class="setup-dir-row">
+          <input type="text" id="nixos-dir-input"
+                 value="{{ home_dir }}/nixos-config"
+                 spellcheck="false" autocomplete="off">
+          <button type="button" id="setup-browse-btn" class="btn-browse"
+                  data-i18n-title="setup.browse" title="Verzeichnis auswählen">…</button>
+        </div>
+        <div id="setup-error" class="setup-error hidden"></div>
+        <button id="setup-btn" class="btn-primary" data-i18n="setup.btn">Einrichten</button>
+      </div>
+
+      <div id="setup-confirm" class="hidden">
+        <p class="confirm-text">
+          <span data-i18n="setup.confirmPrefix">Das Verzeichnis</span>
+          <code id="confirm-path"></code>
+          <span data-i18n="setup.confirmSuffix">existiert noch nicht. Soll NiCo es anlegen?</span>
+        </p>
+        <div class="confirm-buttons">
+          <button id="confirm-yes-btn" class="btn-primary" data-i18n="setup.confirmYes">Ja, anlegen</button>
+          <button id="confirm-no-btn" data-i18n="setup.confirmNo">Abbrechen</button>
+        </div>
+      </div>
+
+      <div id="setup-symlink-step" class="hidden">
+        <p class="confirm-text" data-i18n-html="setup.symlinkQuestion">
+          Soll <code>/etc/nixos</code> als Symlink auf dieses Verzeichnis angelegt werden?
+        </p>
+        <p class="setup-hint" data-i18n="setup.symlinkHint">
+          Empfohlen: NixOS-Tools wie <code>nixos-rebuild</code> finden die Konfiguration dann automatisch.
+          Vorhandene Dateien aus <code>/etc/nixos</code> werden in das neue Verzeichnis kopiert.
+        </p>
+        <div id="setup-symlink-error" class="setup-error hidden"></div>
+        <div class="confirm-buttons">
+          <button id="setup-symlink-yes-btn" class="btn-primary" data-i18n="setup.symlinkYes">Ja, Symlink anlegen</button>
+          <button id="setup-symlink-no-btn" data-i18n="setup.symlinkNo">Überspringen</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Verzeichnis-Browser ──────────────────────────────────────────── -->
+  <div id="dirbrowser-overlay" class="overlay hidden">
+    <div class="modal">
+      <h2 data-i18n="dirbrowser.title">Verzeichnis auswählen</h2>
+      <div id="dirbrowser-quicklinks" class="dirbrowser-quicklinks hidden"></div>
+      <div id="dirbrowser-path" class="dirbrowser-path"></div>
+      <ul id="dirbrowser-list" class="dirbrowser-list"></ul>
+      <div class="confirm-buttons" style="margin-top:12px">
+        <button id="dirbrowser-select-btn" class="btn-primary" data-i18n="dirbrowser.select">Auswählen</button>
+        <button id="dirbrowser-cancel-btn" data-i18n="dirbrowser.cancel">Abbrechen</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Erststart-Import-Overlay ─────────────────────────────────────── -->
+  <div id="import-overlay" class="overlay hidden">
+    <div class="modal">
+      <h2 id="import-overlay-title" data-i18n="import.title">Vorhandene NixOS-Konfiguration importieren?</h2>
+      <p id="import-intro-text" data-i18n-html="import.intro"></p>
+
+      <div id="import-details" class="import-details hidden">
+        <div id="import-recognized-wrap" class="hidden">
+          <p class="import-section-label"><span id="import-recognized-count">0</span> <span data-i18n="import.recognizedCount">Felder erkannt</span></p>
+        </div>
+        <div id="import-hw-info" class="hidden">
+          <p class="import-section-label" data-i18n="import.hwInfo"></p>
+        </div>
+      </div>
+
+      <!-- Backup-Bestätigung (Erststart-Import) -->
+      <div id="import-backup-confirm" class="hidden">
+        <p id="import-backup-confirm-text"></p>
+        <div class="confirm-buttons">
+          <button id="import-backup-yes-btn" class="btn-primary" data-i18n="import.backupYes"></button>
+          <button id="import-backup-cancel-btn" data-i18n="import.backupCancel"></button>
+        </div>
+      </div>
+
+      <div class="confirm-buttons" id="import-main-buttons">
+        <button id="import-apply-btn" class="btn-primary" data-i18n="import.apply"></button>
+        <button id="import-manual-btn" data-i18n="import.manualBtn"></button>
+        <button id="import-skip-btn" data-i18n="import.skip"></button>
+      </div>
+
+      <div id="import-manual-row" class="import-manual-row hidden">
+        <!-- Auswahl-State: inline dir browser -->
+        <div id="import-manual-choose">
+          <div id="import-inline-path" class="dirbrowser-path"></div>
+          <ul id="import-inline-list" class="dirbrowser-list"></ul>
+          <div class="confirm-buttons" style="margin-top:12px">
+            <button id="import-manual-run-btn" class="btn-primary" data-i18n="import.apply"></button>
+            <button id="import-manual-back-btn" data-i18n="import.manualBack"></button>
+          </div>
+        </div>
+        <!-- Gefunden-State -->
+        <div id="import-manual-found" class="hidden">
+          <p id="import-manual-found-text"></p>
+          <div class="confirm-buttons">
+            <button id="import-manual-confirm-btn" class="btn-primary" data-i18n="import.doImport">Importieren</button>
+            <button id="import-manual-found-back-btn" data-i18n="import.manualBack">Zurück</button>
+          </div>
+        </div>
+        <!-- Nicht-gefunden-State -->
+        <div id="import-manual-notfound" class="hidden">
+          <p id="import-manual-notfound-text" class="setup-error"></p>
+          <div class="confirm-buttons">
+            <button id="import-manual-notfound-back-btn" data-i18n="import.manualBack">Zurück</button>
+          </div>
+        </div>
+        <div id="import-manual-result" class="import-result hidden"></div>
+        <!-- Backup-Bestätigung (manueller Import) -->
+        <div id="import-manual-backup-confirm" class="hidden">
+          <p id="import-manual-backup-text"></p>
+          <div class="confirm-buttons">
+            <button id="import-manual-backup-yes-btn" class="btn-primary" data-i18n="import.backupYes"></button>
+            <button id="import-manual-backup-cancel-btn" data-i18n="import.backupCancel"></button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Haupt-App ─────────────────────────────────────────────────────── -->
+  <div id="app" class="hidden">
+
+    <header>
+      <span class="logo">NiCo</span>
+      <span class="subtitle">NixOS Configurator</span>
+      <div class="header-right">
+        <span id="config-dir-label"></span>
+        <div class="ai-provider-wrap" data-i18n-title="header.aiTitle"
+             title="KI-Anbieter für „KI fragen"-Buttons">
+          <select id="ai-provider-select">
+            <option value="claude">Claude</option>
+            <option value="chatgpt">ChatGPT</option>
+            <option value="gemini">Gemini</option>
+            <option value="grok">Grok</option>
+            <option value="custom" data-i18n="header.aiCustom">Eigene URL …</option>
+          </select>
+          <input type="text" id="ai-custom-url" class="hidden"
+                 data-i18n-placeholder="header.aiCustomPlaceholder"
+                 data-i18n-title="header.aiCustomTitle"
+                 placeholder="https://…" spellcheck="false"
+                 title="URL des KI-Anbieters – wird in neuem Tab geöffnet">
+        </div>
+        <div class="lang-switcher">
+          <button id="lang-current-btn" class="btn-header-icon" title="Sprache / Language">DE</button>
+          <div id="lang-dropdown" class="lang-dropdown hidden">
+          </div>
+        </div>
+        <div class="header-icon-group">
+          <button id="header-dryrun-btn" class="btn-header-icon btn-dryrun"
+                  data-i18n-title="header.dryRunTitle"
+                  title="Speichern und Konfiguration testen">dry-run</button>
+          <button id="admin-btn" class="btn-header-icon"
+                  data-i18n-title="header.adminTitle"
+                  title="Admin-Bereich öffnen">⚙</button>
+          <div class="help-menu" id="help-menu">
+            <button id="help-btn" class="btn-header-icon"
+                    data-i18n-title="header.helpTitle"
+                    title="Hilfe und Dokumentation öffnen">?</button>
+            <div id="help-dropdown" class="help-dropdown hidden">
+              <button id="about-btn"    data-i18n="header.helpAbout">Über NiCo</button>
+              <button id="help-docs-btn" data-i18n="header.helpDocs">Hilfe</button>
+            </div>
+          </div>
+          <button id="quit-btn"  class="btn-header-icon"
+                  data-i18n-title="header.quitTitle"
+                  title="NiCo-Server beenden – Browser-Tab kann danach geschlossen werden">&#x23FB;</button>
+        </div>
+      </div>
+    </header>
+
+    <!-- ── Host-Selektor ─────────────────────────────────────────────── -->
+    <!-- Host-Selektor (erscheint nur wenn Hosts erkannt werden) -->
+    <div id="host-selector" class="hidden">
+      <div class="host-selector-bar">
+        <span class="host-selector-label" data-i18n="host.label">Konfiguration:</span>
+        <div id="host-tabs" class="host-tabs">
+          <button class="host-tab active" data-host="" data-i18n="host.defaults">Defaults</button>
+          <!-- weitere Tabs per JS -->
+        </div>
+      </div>
+    </div>
+
+    <div class="main-layout">
+
+      <!-- ── Linkes Panel ───────────────────────────────────────────────── -->
+      <aside class="settings-panel">
+        <form id="config-form" autocomplete="off" spellcheck="false">
+
+          <!-- Sektionen-Steuerleiste -->
+          <div class="section-controls">
+            <button type="button" id="collapse-all-btn"
+                    data-i18n="sections.collapseAll"
+                    data-i18n-title="sections.collapseAllTitle"
+                    title="Alle Sektionen einklappen">↑ Einklappen</button>
+            <button type="button" id="expand-all-btn"
+                    data-i18n="sections.expandAll"
+                    data-i18n-title="sections.expandAllTitle"
+                    title="Alle Sektionen aufklappen">↓ Aufklappen</button>
+          </div>
+
+          <!-- 1. System -->
+          <section class="collapsible" data-section="System">
+            <h3 class="sec-toggle"><span data-i18n="sec.system">System</span></h3>
+            <div class="sec-body">
+              <label for="hostname" data-i18n="field.hostname">Hostname</label>
+              <input type="text" id="hostname" name="hostname" placeholder="nixos">
+
+              <label for="state_version" data-i18n="field.stateVersion">NixOS stateVersion</label>
+              <input type="text" id="state_version" name="state_version" placeholder="24.11">
+
+              <label for="nix_args" data-i18n="field.nixArgs">Modulargumente</label>
+              <input type="text" id="nix_args" name="nix_args" placeholder="config, pkgs, lib" spellcheck="false">
+            </div>
+          </section>
+
+          <!-- 1b. Boot -->
+          <section class="collapsible" data-section="Boot">
+            <h3 class="sec-toggle"><span data-i18n="sec.boot">Boot</span></h3>
+            <div class="sec-body">
+              <label for="boot_loader" data-i18n="field.bootLoader">Bootloader</label>
+              <select id="boot_loader" name="boot_loader">
+                <option value="none" data-i18n="field.bootLoaderNone">Keiner (manuell)</option>
+                <option value="systemd-boot">systemd-boot</option>
+                <option value="grub">GRUB</option>
+              </select>
+              <div id="boot-efi-options" class="hidden sub-detail">
+                <label class="toggle-row" style="margin-top:8px">
+                  <span>
+                    <span data-i18n="field.bootCanTouch">EFI-Variablen schreibbar</span>
+                    <span class="hint" data-i18n="field.bootCanTouchHint">(canTouchEfiVariables)</span>
+                  </span>
+                  <span class="toggle-wrap">
+                    <input type="checkbox" id="boot_efi_can_touch" name="boot_efi_can_touch">
+                    <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                  </span>
+                </label>
+                <label for="boot_efi_mount_point" data-i18n="field.bootEfiMount">EFI-Mountpunkt</label>
+                <input type="text" id="boot_efi_mount_point" name="boot_efi_mount_point" placeholder="/boot" value="/boot" spellcheck="false">
+                <label for="boot_config_limit" data-i18n="field.bootConfigLimit">Max. Konfigurationen</label>
+                <input type="number" id="boot_config_limit" name="boot_config_limit" min="1" max="20" value="5" style="width:70px">
+              </div>
+            </div>
+          </section>
+
+          <!-- 2. Lokalisierung -->
+          <section class="collapsible" data-section="Lokalisierung">
+            <h3 class="sec-toggle"><span data-i18n="sec.localization">Lokalisierung</span></h3>
+            <div class="sec-body">
+              <label for="timezone" data-i18n="field.timezone">Zeitzone</label>
+              <select id="timezone" name="timezone">
+                <option value="" data-i18n="field.notSet">— nicht gesetzt —</option>
+                <optgroup data-i18n-label="tz.europe" label="Europa">
+                  <option value="Europe/Berlin">Europa/Berlin (Deutschland)</option>
+                  <option value="Europe/Vienna">Europa/Vienna (Österreich)</option>
+                  <option value="Europe/Zurich">Europa/Zurich (Schweiz)</option>
+                  <option value="Europe/Luxembourg">Europa/Luxembourg</option>
+                  <option value="Europe/London">Europa/London</option>
+                  <option value="Europe/Dublin">Europa/Dublin</option>
+                  <option value="Europe/Paris">Europa/Paris</option>
+                  <option value="Europe/Amsterdam">Europa/Amsterdam</option>
+                  <option value="Europe/Brussels">Europa/Brussels</option>
+                  <option value="Europe/Rome">Europa/Rome</option>
+                  <option value="Europe/Madrid">Europa/Madrid</option>
+                  <option value="Europe/Lisbon">Europa/Lisbon</option>
+                  <option value="Europe/Stockholm">Europa/Stockholm</option>
+                  <option value="Europe/Oslo">Europa/Oslo</option>
+                  <option value="Europe/Copenhagen">Europa/Copenhagen</option>
+                  <option value="Europe/Helsinki">Europa/Helsinki</option>
+                  <option value="Europe/Warsaw">Europa/Warsaw</option>
+                  <option value="Europe/Prague">Europa/Prague</option>
+                  <option value="Europe/Bratislava">Europa/Bratislava</option>
+                  <option value="Europe/Budapest">Europa/Budapest</option>
+                  <option value="Europe/Bucharest">Europa/Bucharest</option>
+                  <option value="Europe/Sofia">Europa/Sofia</option>
+                  <option value="Europe/Athens">Europa/Athens</option>
+                  <option value="Europe/Istanbul">Europa/Istanbul</option>
+                  <option value="Europe/Kyiv">Europa/Kyiv</option>
+                  <option value="Europe/Moscow">Europa/Moscow</option>
+                </optgroup>
+                <optgroup data-i18n-label="tz.america" label="Amerika">
+                  <option value="America/New_York">Amerika/New_York</option>
+                  <option value="America/Chicago">Amerika/Chicago</option>
+                  <option value="America/Denver">Amerika/Denver</option>
+                  <option value="America/Los_Angeles">Amerika/Los_Angeles</option>
+                  <option value="America/Anchorage">Amerika/Anchorage</option>
+                  <option value="America/Honolulu">Amerika/Honolulu</option>
+                  <option value="America/Toronto">Amerika/Toronto</option>
+                  <option value="America/Vancouver">Amerika/Vancouver</option>
+                  <option value="America/Mexico_City">Amerika/Mexico_City</option>
+                  <option value="America/Sao_Paulo">Amerika/Sao_Paulo</option>
+                  <option value="America/Argentina/Buenos_Aires">Amerika/Buenos_Aires</option>
+                </optgroup>
+                <optgroup data-i18n-label="tz.asia" label="Asien">
+                  <option value="Asia/Dubai">Asien/Dubai</option>
+                  <option value="Asia/Riyadh">Asien/Riyadh</option>
+                  <option value="Asia/Tehran">Asien/Tehran</option>
+                  <option value="Asia/Kolkata">Asien/Kolkata</option>
+                  <option value="Asia/Bangkok">Asien/Bangkok</option>
+                  <option value="Asia/Singapore">Asien/Singapore</option>
+                  <option value="Asia/Shanghai">Asien/Shanghai</option>
+                  <option value="Asia/Hong_Kong">Asien/Hong_Kong</option>
+                  <option value="Asia/Seoul">Asien/Seoul</option>
+                  <option value="Asia/Tokyo">Asien/Tokyo</option>
+                </optgroup>
+                <optgroup data-i18n-label="tz.africa" label="Afrika">
+                  <option value="Africa/Cairo">Afrika/Cairo</option>
+                  <option value="Africa/Nairobi">Afrika/Nairobi</option>
+                  <option value="Africa/Johannesburg">Afrika/Johannesburg</option>
+                </optgroup>
+                <optgroup data-i18n-label="tz.oceania" label="Australien &amp; Pazifik">
+                  <option value="Australia/Sydney">Australien/Sydney</option>
+                  <option value="Australia/Melbourne">Australien/Melbourne</option>
+                  <option value="Australia/Perth">Australien/Perth</option>
+                  <option value="Pacific/Auckland">Pazifik/Auckland</option>
+                </optgroup>
+                <optgroup data-i18n-label="tz.other" label="Sonstige">
+                  <option value="UTC">UTC</option>
+                </optgroup>
+              </select>
+
+              <label for="locale" data-i18n="field.locale">Locale</label>
+              <select id="locale" name="locale">
+                <option value="" data-i18n="field.notSet">— nicht gesetzt —</option>
+                <optgroup data-i18n-label="locale.german" label="Deutsch">
+                  <option value="de_DE.UTF-8">de_DE.UTF-8 – Deutschland</option>
+                  <option value="de_AT.UTF-8">de_AT.UTF-8 – Österreich</option>
+                  <option value="de_CH.UTF-8">de_CH.UTF-8 – Schweiz</option>
+                  <option value="de_LU.UTF-8">de_LU.UTF-8 – Luxemburg</option>
+                </optgroup>
+                <optgroup data-i18n-label="locale.english" label="Englisch">
+                  <option value="en_US.UTF-8">en_US.UTF-8 – USA</option>
+                  <option value="en_GB.UTF-8">en_GB.UTF-8 – Großbritannien</option>
+                  <option value="en_AU.UTF-8">en_AU.UTF-8 – Australien</option>
+                  <option value="en_CA.UTF-8">en_CA.UTF-8 – Kanada</option>
+                </optgroup>
+                <optgroup data-i18n-label="locale.other" label="Weitere">
+                  <option value="fr_FR.UTF-8">fr_FR.UTF-8 – Französisch</option>
+                  <option value="es_ES.UTF-8">es_ES.UTF-8 – Spanisch</option>
+                  <option value="it_IT.UTF-8">it_IT.UTF-8 – Italienisch</option>
+                  <option value="nl_NL.UTF-8">nl_NL.UTF-8 – Niederländisch</option>
+                  <option value="pt_BR.UTF-8">pt_BR.UTF-8 – Portugiesisch (BR)</option>
+                  <option value="pl_PL.UTF-8">pl_PL.UTF-8 – Polnisch</option>
+                  <option value="cs_CZ.UTF-8">cs_CZ.UTF-8 – Tschechisch</option>
+                  <option value="ru_RU.UTF-8">ru_RU.UTF-8 – Russisch</option>
+                  <option value="ja_JP.UTF-8">ja_JP.UTF-8 – Japanisch</option>
+                  <option value="zh_CN.UTF-8">zh_CN.UTF-8 – Chinesisch (verein.)</option>
+                  <option value="ko_KR.UTF-8">ko_KR.UTF-8 – Koreanisch</option>
+                </optgroup>
+              </select>
+
+              <label for="keyboard_layout" data-i18n="field.keyboardLayout">Tastaturlayout (xkb)</label>
+              <select id="keyboard_layout" name="keyboard_layout">
+                <option value="" data-i18n="field.notSet">— nicht gesetzt —</option>
+                <option value="de">de – Deutsch</option>
+                <option value="de(nodeadkeys)">de (nodeadkeys)</option>
+                <option value="at">at – Österreich</option>
+                <option value="ch">ch – Schweiz</option>
+                <option value="us">us – US-Englisch</option>
+                <option value="gb">gb – Britisch</option>
+                <option value="fr">fr – Französisch</option>
+                <option value="es">es – Spanisch</option>
+                <option value="it">it – Italienisch</option>
+                <option value="pl">pl – Polnisch</option>
+                <option value="ru">ru – Russisch</option>
+                <option value="pt">pt – Portugiesisch</option>
+              </select>
+
+              <label for="keyboard_console" data-i18n="field.keyboardConsole">Konsolenlayout</label>
+              <select id="keyboard_console" name="keyboard_console">
+                <option value="" data-i18n="field.notSet">— nicht gesetzt —</option>
+                <option value="de">de</option>
+                <option value="de-latin1">de-latin1</option>
+                <option value="us">us</option>
+                <option value="uk">uk</option>
+                <option value="fr">fr</option>
+                <option value="es">es</option>
+                <option value="it">it</option>
+                <option value="pl2">pl2</option>
+                <option value="ru">ru</option>
+              </select>
+
+              <label class="toggle-row">
+                <span data-i18n="field.extraLocale">Erweiterte Locale-Einstellungen (LC_*)</span>
+                <span class="toggle-wrap">
+                  <input type="checkbox" id="extra_locale_enable" name="extra_locale_enable">
+                  <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                </span>
+              </label>
+              <div id="extra-locale-detail" class="hidden">
+                <label for="extra_locale" data-i18n="field.extraLocaleValue">Locale für alle LC_*-Felder</label>
+                <select id="extra_locale" name="extra_locale">
+                  <optgroup data-i18n-label="locale.german" label="Deutsch">
+                    <option value="de_DE.UTF-8">de_DE.UTF-8 – Deutschland</option>
+                    <option value="de_AT.UTF-8">de_AT.UTF-8 – Österreich</option>
+                    <option value="de_CH.UTF-8">de_CH.UTF-8 – Schweiz</option>
+                    <option value="de_LU.UTF-8">de_LU.UTF-8 – Luxemburg</option>
+                  </optgroup>
+                  <optgroup data-i18n-label="locale.english" label="Englisch">
+                    <option value="en_US.UTF-8">en_US.UTF-8 – USA</option>
+                    <option value="en_GB.UTF-8">en_GB.UTF-8 – Großbritannien</option>
+                    <option value="en_AU.UTF-8">en_AU.UTF-8 – Australien</option>
+                    <option value="en_CA.UTF-8">en_CA.UTF-8 – Kanada</option>
+                  </optgroup>
+                  <optgroup data-i18n-label="locale.other" label="Weitere">
+                    <option value="fr_FR.UTF-8">fr_FR.UTF-8 – Französisch</option>
+                    <option value="es_ES.UTF-8">es_ES.UTF-8 – Spanisch</option>
+                    <option value="it_IT.UTF-8">it_IT.UTF-8 – Italienisch</option>
+                    <option value="nl_NL.UTF-8">nl_NL.UTF-8 – Niederländisch</option>
+                    <option value="pt_BR.UTF-8">pt_BR.UTF-8 – Portugiesisch (BR)</option>
+                    <option value="pl_PL.UTF-8">pl_PL.UTF-8 – Polnisch</option>
+                    <option value="cs_CZ.UTF-8">cs_CZ.UTF-8 – Tschechisch</option>
+                    <option value="ru_RU.UTF-8">ru_RU.UTF-8 – Russisch</option>
+                    <option value="ja_JP.UTF-8">ja_JP.UTF-8 – Japanisch</option>
+                    <option value="zh_CN.UTF-8">zh_CN.UTF-8 – Chinesisch (verein.)</option>
+                    <option value="ko_KR.UTF-8">ko_KR.UTF-8 – Koreanisch</option>
+                  </optgroup>
+                </select>
+              </div>
+            </div>
+          </section>
+
+          <!-- 3. Netzwerk -->
+          <section class="collapsible" data-section="Netzwerk">
+            <h3 class="sec-toggle"><span data-i18n="sec.network">Netzwerk</span></h3>
+            <div class="sec-body">
+              <label class="toggle-row">
+                <span data-i18n="field.networkmanager">NetworkManager</span>
+                <span class="toggle-wrap">
+                  <input type="checkbox" id="networkmanager" name="networkmanager">
+                  <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                </span>
+              </label>
+              <label class="toggle-row">
+                <span data-i18n="field.ssh">SSH-Server</span>
+                <span class="toggle-wrap">
+                  <input type="checkbox" id="ssh" name="ssh">
+                  <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                </span>
+              </label>
+              <label class="toggle-row">
+                <span data-i18n="field.firewallDisable">Firewall deaktivieren</span>
+                <span class="toggle-wrap">
+                  <input type="checkbox" id="firewall_disable" name="firewall_disable">
+                  <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                </span>
+              </label>
+              <label class="toggle-row">
+                <span>
+                  <span data-i18n="field.firewallTcpEnable">TCP-Ports freigeben</span>
+                  <span class="hint" data-i18n="field.firewallPortsHint">(leerzeichen-getrennt, z.B. 22 80 443)</span>
+                </span>
+                <span class="toggle-wrap">
+                  <input type="checkbox" id="firewall_tcp_enable" name="firewall_tcp_enable">
+                  <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                </span>
+              </label>
+              <div id="firewall-tcp-detail" class="hidden sub-detail">
+                <input type="text" id="firewall_tcp_ports" name="firewall_tcp_ports"
+                       data-i18n-placeholder="field.firewallPortsPlaceholder"
+                       placeholder="22 80 443" spellcheck="false">
+              </div>
+              <label class="toggle-row">
+                <span>
+                  <span data-i18n="field.firewallUdpEnable">UDP-Ports freigeben</span>
+                </span>
+                <span class="toggle-wrap">
+                  <input type="checkbox" id="firewall_udp_enable" name="firewall_udp_enable">
+                  <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                </span>
+              </label>
+              <div id="firewall-udp-detail" class="hidden sub-detail">
+                <input type="text" id="firewall_udp_ports" name="firewall_udp_ports"
+                       data-i18n-placeholder="field.firewallPortsPlaceholder"
+                       placeholder="53 123" spellcheck="false">
+              </div>
+            </div>
+          </section>
+
+          <!-- 4. Services -->
+          <section class="collapsible" data-section="Services">
+            <h3 class="sec-toggle"><span data-i18n="sec.services">Services</span></h3>
+            <div class="sec-body">
+              <label class="toggle-row">
+                <span data-i18n="field.printing">Drucker (CUPS)</span>
+                <span class="toggle-wrap">
+                  <input type="checkbox" id="printing" name="printing">
+                  <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                </span>
+              </label>
+              <label class="toggle-row">
+                <span>
+                  <span data-i18n="field.avahi">Avahi / mDNS</span>
+                  <span class="hint" data-i18n="field.avahiHint">(Netzwerkdienste-Erkennung, z.B. für Netzwerkdrucker)</span>
+                </span>
+                <span class="toggle-wrap">
+                  <input type="checkbox" id="avahi" name="avahi">
+                  <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                </span>
+              </label>
+              <label class="toggle-row">
+                <span data-i18n="field.bluetooth">Bluetooth</span>
+                <span class="toggle-wrap">
+                  <input type="checkbox" id="bluetooth" name="bluetooth">
+                  <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                </span>
+              </label>
+              <label class="toggle-row">
+                <span>
+                  <span data-i18n="field.blueman">Blueman</span>
+                  <span class="hint" data-i18n="field.bluemanHint">(Bluetooth-Manager, empfohlen bei Desktop)</span>
+                </span>
+                <span class="toggle-wrap">
+                  <input type="checkbox" id="blueman" name="blueman">
+                  <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                </span>
+              </label>
+              <label class="toggle-row">
+                <span data-i18n="field.libinput">Touchpad (libinput)</span>
+                <span class="toggle-wrap">
+                  <input type="checkbox" id="libinput" name="libinput">
+                  <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                </span>
+              </label>
+              <label class="toggle-row">
+                <span data-i18n="field.fprintd">Fingerabdruckleser (fprintd)</span>
+                <span class="toggle-wrap">
+                  <input type="checkbox" id="fprintd" name="fprintd">
+                  <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                </span>
+              </label>
+              <label class="toggle-row">
+                <span data-i18n="field.pcscd">Smartcard / YubiKey (pcscd)</span>
+                <span class="toggle-wrap">
+                  <input type="checkbox" id="pcscd" name="pcscd">
+                  <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                </span>
+              </label>
+              <label class="toggle-row">
+                <span data-i18n="field.sunshine">Game-Streaming (Sunshine)</span>
+                <span class="toggle-wrap">
+                  <input type="checkbox" id="sunshine" name="sunshine">
+                  <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                </span>
+              </label>
+            </div>
+          </section>
+
+          <!-- 5. Desktop -->
+          <section class="collapsible" data-section="Desktop">
+            <h3 class="sec-toggle"><span data-i18n="sec.desktop">Desktop</span></h3>
+            <div class="sec-body">
+              <label for="desktop_environment" data-i18n="field.desktopEnv">Desktop-Umgebung</label>
+              <select id="desktop_environment" name="desktop_environment">
+                <option value="none" data-i18n="field.desktopNone">Keins (minimal / Server)</option>
+                <option value="gnome">GNOME</option>
+                <option value="kde">KDE Plasma 6</option>
+                <option value="xfce">XFCE</option>
+                <option value="i3">i3 (X11)</option>
+                <option value="sway">Sway (Wayland)</option>
+                <option value="hyprland">Hyprland (Wayland)</option>
+              </select>
+
+              <label for="autologin_user">
+                <span data-i18n="field.autologin">Auto-Login Benutzer</span>
+                <span class="hint" data-i18n="field.autologinHint">(leer = deaktiviert)</span>
+              </label>
+              <input type="text" id="autologin_user" name="autologin_user" placeholder="">
+            </div>
+          </section>
+
+          <!-- 6. Audio -->
+          <section class="collapsible" data-section="Audio">
+            <h3 class="sec-toggle"><span data-i18n="sec.audio">Audio</span></h3>
+            <div class="sec-body">
+              <label class="toggle-row">
+                <span data-i18n="field.pipewire">PipeWire</span>
+                <span class="toggle-wrap">
+                  <input type="checkbox" id="pipewire" name="pipewire">
+                  <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                </span>
+              </label>
+              <div id="pipewire-options" class="hidden" style="padding-left:16px">
+                <label class="toggle-row">
+                  <span data-i18n="field.pipewire32bit">32-Bit Audio (Steam/Wine)</span>
+                  <span class="toggle-wrap">
+                    <input type="checkbox" id="pipewire_32bit" name="pipewire_32bit">
+                    <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                  </span>
+                </label>
+              </div>
+            </div>
+          </section>
+
+          <!-- 7. Benutzer -->
+          <section class="collapsible" data-section="Benutzer">
+            <h3 class="sec-toggle"><span data-i18n="sec.user">Benutzer</span></h3>
+            <div class="sec-body">
+
+              <!-- Alle Benutzer als einheitliche Karten (JS-gerendert) -->
+              <div id="users-list"></div>
+              <button type="button" id="add-user-btn" class="btn-add-user"
+                      data-i18n="field.addUser">+ Benutzer hinzufügen</button>
+
+              <!-- Guest user toggle – separater Nutzer, immer sichtbar, immer zuletzt -->
+              <label class="toggle-row" style="margin-top:10px">
+                <span>
+                  <span data-i18n="field.guestUser">Gastzugang aktivieren</span>
+                  <span class="hint" data-i18n="field.guestUserHint">(legt Benutzer 'gast' ohne Passwort an, kein sudo)</span>
+                </span>
+                <span class="toggle-wrap">
+                  <input type="checkbox" id="guest_user" name="guest_user">
+                  <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                </span>
+              </label>
+
+            </div>
+          </section>
+
+          <!-- 8. Programme -->
+          <section class="collapsible" data-section="Programme">
+            <h3 class="sec-toggle"><span data-i18n="sec.packages">Programme</span></h3>
+            <div class="sec-body">
+              <label class="toggle-row">
+                <span data-i18n="field.allowUnfree">Unfree Pakete erlauben</span>
+                <span class="toggle-wrap">
+                  <input type="checkbox" id="allowUnfree" name="allowUnfree">
+                  <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                </span>
+              </label>
+              <label class="toggle-row">
+                <span data-i18n="field.steam">Steam</span>
+                <span class="toggle-wrap">
+                  <input type="checkbox" id="steam" name="steam">
+                  <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                </span>
+              </label>
+              <label class="toggle-row">
+                <span>
+                  <span data-i18n="field.appimage">AppImage-Support</span>
+                  <span class="hint" data-i18n="field.appimageHint">(programmes.appimage + binfmt)</span>
+                </span>
+                <span class="toggle-wrap">
+                  <input type="checkbox" id="appimage" name="appimage">
+                  <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                </span>
+              </label>
+              <label class="toggle-row">
+                <span data-i18n="field.firefox">Firefox</span>
+                <span class="toggle-wrap">
+                  <input type="checkbox" id="firefox" name="firefox">
+                  <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                </span>
+              </label>
+              <div id="firefox-detail" class="hidden sub-detail">
+                <label for="firefox_lang_packs" data-i18n="field.firefoxLangPacks">Sprachpakete (kommagetrennt)</label>
+                <input type="text" id="firefox_lang_packs" name="firefox_lang_packs"
+                       placeholder="de, en-US">
+                <label for="firefox_prefs" data-i18n="field.firefoxPrefs">Einstellungen (eine pro Zeile: "schlüssel" = "wert")</label>
+                <textarea id="firefox_prefs" name="firefox_prefs" rows="4"
+                          placeholder='"intl.locale.requested" = "de-DE,de";'></textarea>
+              </div>
+              <div id="packages-list" class="packages-list"></div>
+              <button type="button" id="add-package-btn" class="btn-add-pkg"
+                      data-i18n="btn.addPackage">+ Paket hinzufügen</button>
+            </div>
+          </section>
+
+          <!-- 9. Schriftarten -->
+          <section class="collapsible" data-section="Schriftarten">
+            <h3 class="sec-toggle"><span data-i18n="sec.fonts">Schriftarten</span></h3>
+            <div class="sec-body">
+              <div class="font-grid">
+                <label class="font-check-label">
+                  <input type="checkbox" class="font-check" value="noto-fonts">
+                  <span>Noto Fonts</span>
+                </label>
+                <label class="font-check-label">
+                  <input type="checkbox" class="font-check" value="noto-fonts-cjk-sans">
+                  <span>Noto CJK Sans</span>
+                </label>
+                <label class="font-check-label">
+                  <input type="checkbox" class="font-check" value="noto-fonts-emoji">
+                  <span>Noto Emoji</span>
+                </label>
+                <label class="font-check-label">
+                  <input type="checkbox" class="font-check" value="dejavu_fonts">
+                  <span>DejaVu</span>
+                </label>
+                <label class="font-check-label">
+                  <input type="checkbox" class="font-check" value="liberation_ttf">
+                  <span>Liberation</span>
+                </label>
+                <label class="font-check-label">
+                  <input type="checkbox" class="font-check" value="fira-code">
+                  <span>Fira Code</span>
+                </label>
+                <label class="font-check-label">
+                  <input type="checkbox" class="font-check" value="jetbrains-mono">
+                  <span>JetBrains Mono</span>
+                </label>
+                <label class="font-check-label">
+                  <input type="checkbox" class="font-check" value="hack-font">
+                  <span>Hack</span>
+                </label>
+              </div>
+              <label for="fonts_extra">
+                <span data-i18n="field.fontsExtra">Weitere</span>
+                <span class="hint" data-i18n="field.fontsExtraHint">(ein Nix-Attr pro Zeile)</span>
+              </label>
+              <textarea id="fonts_extra" name="fonts_extra" rows="2"
+                        placeholder="z.B. cascadia-code"></textarea>
+            </div>
+          </section>
+
+          <!-- 10. Nix & System -->
+          <section class="collapsible" data-section="Nix & System">
+            <h3 class="sec-toggle"><span data-i18n="sec.nixSystem">Nix &amp; System</span></h3>
+            <div class="sec-body">
+              <label class="toggle-row">
+                <span data-i18n="field.flakes">Flakes aktivieren</span>
+                <span class="toggle-wrap">
+                  <input type="checkbox" id="flakes" name="flakes">
+                  <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                </span>
+              </label>
+              <label class="toggle-row">
+                <span data-i18n="field.optimizeStore">Store automatisch optimieren</span>
+                <span class="toggle-wrap">
+                  <input type="checkbox" id="nix_optimize_store" name="nix_optimize_store">
+                  <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                </span>
+              </label>
+              <label class="toggle-row">
+                <span data-i18n="field.gc">Automatische Garbage Collection</span>
+                <span class="toggle-wrap">
+                  <input type="checkbox" id="nix_gc" name="nix_gc">
+                  <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                </span>
+              </label>
+              <div id="nix-gc-options" class="hidden">
+                <label for="nix_gc_frequency" data-i18n="field.gcFrequency">Häufigkeit</label>
+                <select id="nix_gc_frequency" name="nix_gc_frequency">
+                  <option value="daily"   data-i18n="gc.daily">Täglich</option>
+                  <option value="weekly"  data-i18n="gc.weekly" selected>Wöchentlich</option>
+                  <option value="monthly" data-i18n="gc.monthly">Monatlich</option>
+                </select>
+                <label for="nix_gc_age" data-i18n="field.gcAge">Generationen löschen älter als</label>
+                <select id="nix_gc_age" name="nix_gc_age">
+                  <option value="7d"  data-i18n="gc.7d">7 Tage</option>
+                  <option value="14d" data-i18n="gc.14d">14 Tage</option>
+                  <option value="30d" data-i18n="gc.30d" selected>30 Tage</option>
+                  <option value="60d" data-i18n="gc.60d">60 Tage</option>
+                  <option value="90d" data-i18n="gc.90d">90 Tage</option>
+                </select>
+              </div>
+            </div>
+          </section>
+
+          <!-- 11. Home Manager -->
+          <section class="collapsible" data-section="Home Manager">
+            <h3 class="sec-toggle"><span data-i18n="sec.homeManager">Home Manager</span></h3>
+            <div class="sec-body">
+              <label class="toggle-row">
+                <span data-i18n="hm.enable">Home Manager aktivieren</span>
+                <span class="toggle-wrap">
+                  <input type="checkbox" id="hm_enabled" name="hm_enabled">
+                  <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                </span>
+              </label>
+              <p class="hint" style="margin-top:4px" data-i18n-html="hm.enableHint">
+                Erzeugt eine <code>home.nix</code> – Benutzername und stateVersion werden aus den System-Einstellungen übernommen.
+              </p>
+
+              <div id="hm-detail" class="hidden">
+
+                <!-- Git -->
+                <div class="hm-group">
+                  <label class="toggle-row" style="margin-top:10px">
+                    <span>Git</span>
+                    <span class="toggle-wrap">
+                      <input type="checkbox" id="hm_git_enable">
+                      <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                    </span>
+                  </label>
+                  <div id="hm-git-detail" class="hidden">
+                    <label for="hm_git_name" data-i18n="hm.gitName">Name</label>
+                    <input type="text" id="hm_git_name" name="hm_git_name"
+                           placeholder="Max Muster" spellcheck="false">
+                    <label for="hm_git_email" data-i18n="hm.gitEmail">E-Mail</label>
+                    <input type="text" id="hm_git_email" name="hm_git_email"
+                           placeholder="max@example.com" spellcheck="false">
+                    <label for="hm_git_default_branch" data-i18n="hm.gitBranch">Default Branch</label>
+                    <input type="text" id="hm_git_default_branch" name="hm_git_default_branch"
+                           placeholder="main" spellcheck="false">
+                  </div>
+                </div>
+
+                <!-- Shell -->
+                <div class="hm-group">
+                  <label for="hm_shell" data-i18n="hm.shell">Shell</label>
+                  <select id="hm_shell" name="hm_shell">
+                    <option value="bash">bash</option>
+                    <option value="zsh">zsh</option>
+                    <option value="fish">fish</option>
+                  </select>
+
+                  <div class="lvl2-section" data-lvl2="hm-shell-extra">
+                    <div class="lvl2-toggle" data-i18n="hm.shellInitExtra">Shell-Init (extra)</div>
+                    <div class="lvl2-body">
+                      <p class="hint" style="margin-bottom:4px" data-i18n="hm.shellInitExtraHint">
+                        Wird ans Ende der Shell-Init-Datei angehängt.
+                      </p>
+                      <textarea id="hm_shell_init_extra" name="hm_shell_init_extra" rows="3"
+                                placeholder='export PATH="$HOME/.local/bin:$PATH"'
+                                spellcheck="false" class="mono-input"></textarea>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Pakete -->
+                <div class="hm-group">
+                  <label for="hm_packages">
+                    <span data-i18n="hm.packages">Pakete</span>
+                    <span class="hint" data-i18n="hm.packagesHint">(ein Nix-Attr pro Zeile)</span>
+                  </label>
+                  <textarea id="hm_packages" name="hm_packages" rows="3"
+                            placeholder="git&#10;ripgrep&#10;bat"
+                            spellcheck="false"></textarea>
+                </div>
+
+                <!-- Firefox -->
+                <label class="toggle-row">
+                  <span>Firefox</span>
+                  <span class="toggle-wrap">
+                    <input type="checkbox" id="hm_firefox">
+                    <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                  </span>
+                </label>
+
+                <!-- XDG-Verzeichnisse -->
+                <label class="toggle-row" style="margin-top:6px">
+                  <span data-i18n="hm.xdgUserDirs">XDG-Benutzerverzeichnisse</span>
+                  <span class="toggle-wrap">
+                    <input type="checkbox" id="hm_xdg_user_dirs">
+                    <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                  </span>
+                </label>
+                <div id="hm-xdg-detail" class="hidden">
+                  <div class="hm-xdg-grid">
+                    <label for="hm_xdg_download"    data-i18n="hm.xdgDownload">Downloads</label>
+                    <input type="text" id="hm_xdg_download"    value="Downloads" spellcheck="false">
+                    <label for="hm_xdg_documents"   data-i18n="hm.xdgDocuments">Dokumente</label>
+                    <input type="text" id="hm_xdg_documents"   value="Documents" spellcheck="false">
+                    <label for="hm_xdg_pictures"    data-i18n="hm.xdgPictures">Bilder</label>
+                    <input type="text" id="hm_xdg_pictures"    value="Pictures"  spellcheck="false">
+                    <label for="hm_xdg_music"       data-i18n="hm.xdgMusic">Musik</label>
+                    <input type="text" id="hm_xdg_music"       value="Music"     spellcheck="false">
+                    <label for="hm_xdg_videos"      data-i18n="hm.xdgVideos">Videos</label>
+                    <input type="text" id="hm_xdg_videos"      value="Videos"    spellcheck="false">
+                    <label for="hm_xdg_desktop"     data-i18n="hm.xdgDesktop">Desktop</label>
+                    <input type="text" id="hm_xdg_desktop"     value="Desktop"   spellcheck="false">
+                    <label for="hm_xdg_templates"   data-i18n="hm.xdgTemplates">Vorlagen</label>
+                    <input type="text" id="hm_xdg_templates"   value="Templates" spellcheck="false">
+                    <label for="hm_xdg_publicshare" data-i18n="hm.xdgPublicShare">Öffentlich</label>
+                    <input type="text" id="hm_xdg_publicshare" value="Public"    spellcheck="false">
+                  </div>
+                </div>
+
+              </div><!-- /hm-detail -->
+
+              <!-- home-manager NixOS-Modul-Optionen -->
+              <div style="margin-top:12px">
+                <label class="toggle-row">
+                  <span data-i18n="hm.useGlobalPkgs">useGlobalPkgs</span>
+                  <span class="toggle-wrap">
+                    <input type="checkbox" id="hm_use_global_pkgs" name="hm_use_global_pkgs">
+                    <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                  </span>
+                </label>
+                <label class="toggle-row">
+                  <span data-i18n="hm.useUserPackages">useUserPackages</span>
+                  <span class="toggle-wrap">
+                    <input type="checkbox" id="hm_use_user_packages" name="hm_use_user_packages">
+                    <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                  </span>
+                </label>
+                <label class="toggle-row" style="margin-top:8px">
+                  <span data-i18n="hm.sharedModules">Shared Modules</span>
+                  <span class="toggle-wrap">
+                    <input type="checkbox" id="hm_shared_modules_enable" name="hm_shared_modules_enable">
+                    <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                  </span>
+                </label>
+                <div id="hm-shared-modules-detail" class="hidden">
+                  <label class="toggle-row" style="margin-top:6px">
+                    <span>plasma-manager</span>
+                    <span class="toggle-wrap">
+                      <input type="checkbox" id="hm_plasma_manager" name="hm_plasma_manager">
+                      <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                    </span>
+                  </label>
+                  <label for="hm_shared_modules_extra" data-i18n="hm.sharedModulesExtra">Weitere (eine pro Zeile)</label>
+                  <textarea id="hm_shared_modules_extra" name="hm_shared_modules_extra" rows="3"
+                            placeholder="inputs.foo.homeModules.bar"></textarea>
+                </div>
+              </div>
+
+            </div>
+          </section>
+
+          <!-- 12. Hardware -->
+          <section class="collapsible" data-section="Hardware">
+            <h3 class="sec-toggle"><span data-i18n="sec.hardware">Hardware</span></h3>
+            <div class="sec-body">
+              <label class="toggle-row">
+                <span data-i18n="field.enableAllFirmware">Alle Firmware aktivieren</span>
+                <span class="toggle-wrap">
+                  <input type="checkbox" id="enable_all_firmware" name="enable_all_firmware">
+                  <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                </span>
+              </label>
+              <label for="cpu_microcode" data-i18n="field.cpuMicrocode">CPU-Microcode</label>
+              <select id="cpu_microcode" name="cpu_microcode">
+                <option value="none"  data-i18n="hw.microcodeNone">Kein</option>
+                <option value="intel" data-i18n="hw.microcodeIntel">Intel</option>
+                <option value="amd"   data-i18n="hw.microcodeAmd">AMD</option>
+              </select>
+              <label class="toggle-row" style="margin-top:8px">
+                <span data-i18n="field.opengl">OpenGL / Mesa</span>
+                <span class="toggle-wrap">
+                  <input type="checkbox" id="opengl" name="opengl">
+                  <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                </span>
+              </label>
+              <div id="opengl-options" class="hidden" style="padding-left:16px">
+                <label class="toggle-row">
+                  <span data-i18n="field.opengl32bit">32-Bit-Unterstützung (Steam/Wine)</span>
+                  <span class="toggle-wrap">
+                    <input type="checkbox" id="opengl_32bit" name="opengl_32bit">
+                    <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                  </span>
+                </label>
+              </div>
+              <label class="toggle-row">
+                <span data-i18n="field.zramSwap">zram Swap</span>
+                <span class="toggle-wrap">
+                  <input type="checkbox" id="zram_swap" name="zram_swap">
+                  <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                </span>
+              </label>
+              <label class="toggle-row">
+                <span data-i18n="field.openrgb">OpenRGB (LED-Steuerung)</span>
+                <span class="toggle-wrap">
+                  <input type="checkbox" id="openrgb" name="openrgb">
+                  <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                </span>
+              </label>
+              <label class="toggle-row">
+                <span data-i18n="field.ledger">Ledger Hardware Wallet</span>
+                <span class="toggle-wrap">
+                  <input type="checkbox" id="ledger" name="ledger">
+                  <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                </span>
+              </label>
+              <label class="toggle-row">
+                <span>
+                  <span data-i18n="field.ratbagd">Ratbagd</span>
+                  <span class="hint" data-i18n="field.ratbagdHint">(Maus-Konfiguration, z.B. für Piper)</span>
+                </span>
+                <span class="toggle-wrap">
+                  <input type="checkbox" id="ratbagd" name="ratbagd">
+                  <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                </span>
+              </label>
+            </div>
+          </section>
+
+          <!-- 13. Virtualisierung -->
+          <section class="collapsible" data-section="Virtualisierung">
+            <h3 class="sec-toggle"><span data-i18n="sec.virtualization">Virtualisierung</span></h3>
+            <div class="sec-body">
+              <label class="toggle-row">
+                <span data-i18n="field.docker">Docker</span>
+                <span class="toggle-wrap">
+                  <input type="checkbox" id="docker" name="docker">
+                  <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                </span>
+              </label>
+              <div id="docker-options" class="hidden" style="padding-left:16px">
+                <label class="toggle-row">
+                  <span data-i18n="field.dockerRootless">Rootless-Modus</span>
+                  <span class="toggle-wrap">
+                    <input type="checkbox" id="docker_rootless" name="docker_rootless">
+                    <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                  </span>
+                </label>
+              </div>
+              <label class="toggle-row">
+                <span data-i18n="field.podman">Podman</span>
+                <span class="toggle-wrap">
+                  <input type="checkbox" id="podman" name="podman">
+                  <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                </span>
+              </label>
+              <div id="podman-options" class="hidden" style="padding-left:16px">
+                <label class="toggle-row">
+                  <span data-i18n="field.podmanDockerCompat">Docker-Kompatibilitätsmodus</span>
+                  <span class="toggle-wrap">
+                    <input type="checkbox" id="podman_docker_compat" name="podman_docker_compat">
+                    <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                  </span>
+                </label>
+              </div>
+              <label class="toggle-row">
+                <span data-i18n="field.virtualboxHost">VirtualBox (Host)</span>
+                <span class="toggle-wrap">
+                  <input type="checkbox" id="virtualbox_host" name="virtualbox_host">
+                  <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                </span>
+              </label>
+              <label class="toggle-row">
+                <span data-i18n="field.virtualboxGuest">VirtualBox (Gast)</span>
+                <span class="toggle-wrap">
+                  <input type="checkbox" id="virtualbox_guest" name="virtualbox_guest">
+                  <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                </span>
+              </label>
+              <div id="vbox-guest-options" class="hidden" style="padding-left:16px">
+                <label class="toggle-row">
+                  <span data-i18n="field.virtualboxGuestDnd">Drag &amp; Drop</span>
+                  <span class="toggle-wrap">
+                    <input type="checkbox" id="virtualbox_guest_drag_drop" name="virtualbox_guest_drag_drop">
+                    <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                  </span>
+                </label>
+              </div>
+              <label class="toggle-row">
+                <span data-i18n="field.libvirtd">libvirtd / KVM</span>
+                <span class="toggle-wrap">
+                  <input type="checkbox" id="libvirtd" name="libvirtd">
+                  <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                </span>
+              </label>
+              <div id="libvirtd-options" class="hidden" style="padding-left:16px">
+                <label class="toggle-row">
+                  <span data-i18n="field.virtManager">virt-manager</span>
+                  <span class="toggle-wrap">
+                    <input type="checkbox" id="virt_manager" name="virt_manager">
+                    <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                  </span>
+                </label>
+              </div>
+            </div>
+          </section>
+
+          <!-- 14. Dateisystem & Backup -->
+          <section class="collapsible" data-section="Dateisystem & Backup">
+            <h3 class="sec-toggle"><span data-i18n="sec.filesystem">Dateisystem &amp; Backup</span></h3>
+            <div class="sec-body">
+              <label class="toggle-row">
+                <span data-i18n="field.btrfsScrub">Btrfs Auto-Scrub</span>
+                <span class="toggle-wrap">
+                  <input type="checkbox" id="btrfs_scrub" name="btrfs_scrub">
+                  <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                </span>
+              </label>
+              <label class="toggle-row">
+                <span data-i18n="field.snapperHome">Snapper: /home</span>
+                <span class="toggle-wrap">
+                  <input type="checkbox" id="snapper_home" name="snapper_home">
+                  <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                </span>
+              </label>
+              <label class="toggle-row">
+                <span data-i18n="field.snapperRoot">Snapper: /</span>
+                <span class="toggle-wrap">
+                  <input type="checkbox" id="snapper_root" name="snapper_root">
+                  <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                </span>
+              </label>
+              <div id="snapper-timeline" class="hidden">
+                <div class="lvl2-section" data-lvl2="snapper-timeline-detail">
+                  <div class="lvl2-toggle" data-i18n="field.snapperTimeline">Snapshot-Zeitplan</div>
+                  <div class="lvl2-body">
+                    <div class="hm-xdg-grid" style="grid-template-columns: repeat(3, 1fr)">
+                      <div>
+                        <label for="snapper_timeline_hourly" data-i18n="field.snapperHourly">Stündlich (max.)</label>
+                        <input type="number" id="snapper_timeline_hourly" name="snapper_timeline_hourly"
+                               min="0" max="48" value="5" style="width:70px">
+                      </div>
+                      <div>
+                        <label for="snapper_timeline_daily" data-i18n="field.snapperDaily">Täglich (max.)</label>
+                        <input type="number" id="snapper_timeline_daily" name="snapper_timeline_daily"
+                               min="0" max="30" value="7" style="width:70px">
+                      </div>
+                      <div>
+                        <label for="snapper_timeline_weekly" data-i18n="field.snapperWeekly">Wöchentlich (max.)</label>
+                        <input type="number" id="snapper_timeline_weekly" name="snapper_timeline_weekly"
+                               min="0" max="52" value="0" style="width:70px">
+                      </div>
+                      <div>
+                        <label for="snapper_timeline_monthly" data-i18n="field.snapperMonthly">Monatlich (max.)</label>
+                        <input type="number" id="snapper_timeline_monthly" name="snapper_timeline_monthly"
+                               min="0" max="12" value="1" style="width:70px">
+                      </div>
+                      <div>
+                        <label for="snapper_timeline_yearly" data-i18n="field.snapperYearly">Jährlich (max.)</label>
+                        <input type="number" id="snapper_timeline_yearly" name="snapper_timeline_yearly"
+                               min="0" max="10" value="0" style="width:70px">
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+
+        </form>
+
+        <!-- ── Flake-Konfigurationsformular ────────────────────────────────── -->
+        <form id="flake-form" autocomplete="off" spellcheck="false" class="hidden">
+
+          <div class="section-controls">
+            <button type="button" id="flake-collapse-all-btn"
+                    data-i18n="sections.collapseAll"
+                    title="Alle Sektionen einklappen">↑ Einklappen</button>
+            <button type="button" id="flake-expand-all-btn"
+                    data-i18n="sections.expandAll"
+                    title="Alle Sektionen aufklappen">↓ Aufklappen</button>
+          </div>
+
+          <!-- Allgemein -->
+          <section class="collapsible" data-section="Start">
+            <h3 class="sec-toggle"><span data-i18n="fl.sec.general">Allgemein</span></h3>
+            <div class="sec-body">
+              <label for="flake_description" data-i18n="fl.field.description">Beschreibung</label>
+              <input type="text" id="flake_description" name="flake_description"
+                     placeholder="NixOS configuration for hostname">
+            </div>
+          </section>
+
+          <!-- Eingabe (inputs) -->
+          <section class="collapsible" data-section="Inputs">
+            <h3 class="sec-toggle"><span data-i18n="fl.sec.inputs">Eingabe</span></h3>
+            <div class="sec-body">
+
+              <!-- nixpkgs -->
+              <label for="flake_nixpkgs_channel">
+                <span data-i18n="fl.field.channel">nixpkgs-Kanal</span>
+                <span class="hint" data-i18n="fl.hint.channel">__TODO__</span>
+              </label>
+              <select id="flake_nixpkgs_channel" name="flake_nixpkgs_channel">
+                <option value="nixos-unstable">nixos-unstable</option>
+                <option value="nixos-25.05">nixos-25.05</option>
+                <option value="nixos-24.11">nixos-24.11</option>
+                <option value="nixos-24.05">nixos-24.05</option>
+              </select>
+
+              <!-- home-manager -->
+              <label class="toggle-row">
+                <span>
+                  <span data-i18n="fl.field.hmInput">home-manager Input</span>
+                  <span class="hint" data-i18n="fl.hint.hmInput">__TODO__</span>
+                </span>
+                <span class="toggle-wrap">
+                  <input type="checkbox" id="flake_hm_input" name="flake_hm_input">
+                  <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                </span>
+              </label>
+              <div id="flake-hm-follows-opt" class="hidden sub-detail">
+                <label class="toggle-row">
+                  <span>
+                    <span data-i18n="fl.field.hmFollows">follows nixpkgs</span>
+                    <span class="hint">(inputs.nixpkgs.follows)</span>
+                  </span>
+                  <span class="toggle-wrap">
+                    <input type="checkbox" id="flake_hm_follows" name="flake_hm_follows">
+                    <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                  </span>
+                </label>
+              </div>
+
+              <!-- nixos-hardware -->
+              <label class="toggle-row">
+                <span>
+                  <span data-i18n="fl.field.nixosHardware">nixos-hardware Input</span>
+                  <span class="hint" data-i18n="fl.hint.nixosHardware">__TODO__</span>
+                </span>
+                <span class="toggle-wrap">
+                  <input type="checkbox" id="flake_nixos_hardware" name="flake_nixos_hardware">
+                  <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                </span>
+              </label>
+
+              <label class="toggle-row">
+                <span>
+                  <span data-i18n="fl.field.plasmaManager">plasma-manager Input</span>
+                  <span class="hint" data-i18n="fl.hint.plasmaManager">__TODO__</span>
+                </span>
+                <span class="toggle-wrap">
+                  <input type="checkbox" id="flake_plasma_manager" name="flake_plasma_manager">
+                  <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                </span>
+              </label>
+
+            </div>
+          </section>
+
+          <!-- Ausgabe (outputs) -->
+          <section class="collapsible" data-section="Outputs">
+            <h3 class="sec-toggle"><span data-i18n="fl.sec.outputs">Ausgabe</span></h3>
+            <div class="sec-body">
+
+              <!-- HM-Modul nur sichtbar wenn home-manager Input aktiv -->
+              <div id="flake-hm-module-opt" class="hidden sub-detail">
+                <label class="toggle-row">
+                  <span>
+                    <span data-i18n="fl.field.hmModule">home-manager NixOS-Modul</span>
+                    <span class="hint">(nixosModules.homeManager)</span>
+                  </span>
+                  <span class="toggle-wrap">
+                    <input type="checkbox" id="flake_hm_module" name="flake_hm_module">
+                    <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                  </span>
+                </label>
+              </div>
+
+            </div>
+          </section>
+
+          <!-- nixosConfigurations (Hosts) -->
+          <section class="collapsible" data-section="Hosts">
+            <h3 class="sec-toggle"><span data-i18n="fl.sec.hosts">Hosts</span></h3>
+            <div class="sec-body">
+              <div id="flake-hosts-list" class="flake-hosts-list"></div>
+            </div>
+          </section>
+
+        </form>
+
+        <!-- Raw-Panel: wird angezeigt wenn eine nicht-verwaltete Datei aktiv ist -->
+        <div id="raw-panel" class="raw-panel hidden">
+          <div id="raw-panel-hw-warn" class="raw-panel-hw-warn hidden">
+            <span data-i18n="sidebar.hwWarnIcon">⚠</span>
+            <span data-i18n="sidebar.hwWarnText">hardware-configuration.nix wird von NixOS automatisch generiert. Manuelle Änderungen können das System destabilisieren.</span>
+          </div>
+          <p class="raw-panel-hint" data-i18n="sidebar.rawPanelHint">Diese Datei wird nicht von NiCo verwaltet. Du kannst sie rechts direkt bearbeiten und speichern.</p>
+        </div>
+
+        <!-- ── Typ-Panels (je ein Panel pro Datei-Typ) ──────────────────── -->
+        <div id="panel-nd" class="type-panel hidden" data-panel-type="nd">
+          <div class="type-panel-header">
+            <span class="type-panel-badge ft-nd">ND</span>
+            <span class="type-panel-name" data-i18n="panel.nd.name">Nicht erkannte Datei</span>
+          </div>
+          <div class="type-panel-content">
+            <div class="type-panel-warnbox">
+              <span>⚠</span>
+              <span data-i18n="panel.nd.info">__TODO__</span>
+            </div>
+          </div>
+        </div>
+
+        <div id="panel-fl" class="type-panel hidden" data-panel-type="fl">
+          <div class="type-panel-header">
+            <span class="type-panel-badge ft-fl">FL</span>
+            <span class="type-panel-name" data-i18n="panel.fl.name">Flake</span>
+          </div>
+        </div>
+
+        <div id="panel-hw" class="type-panel hidden" data-panel-type="hw">
+          <div class="type-panel-header">
+            <span class="type-panel-badge ft-hw">HW</span>
+            <span class="type-panel-name" data-i18n="panel.hw.name">Hardware-Konfiguration</span>
+          </div>
+          <div class="type-panel-content">
+            <div class="type-panel-warnbox">
+              <span>⚠</span>
+              <span data-i18n="panel.hw.info">hardware-configuration.nix wird von NixOS automatisch generiert. Manuelle Änderungen können das System destabilisieren.</span>
+            </div>
+            <a class="type-panel-link" href="https://wiki.nixos.org/wiki/NixOS_Installation_Guide" target="_blank" rel="noopener" data-i18n="panel.hw.link">NixOS Wiki: Installation Guide →</a>
+          </div>
+        </div>
+
+        <div id="panel-mo" class="type-panel hidden" data-panel-type="mo">
+          <div class="type-panel-header">
+            <span class="type-panel-badge ft-mo">MO</span>
+            <span class="type-panel-name" data-i18n="panel.mo.name">NixOS-Modul</span>
+          </div>
+        </div>
+
+        <div id="panel-hm" class="type-panel type-panel-form hidden" data-panel-type="hm">
+          <div class="type-panel-header">
+            <span class="type-panel-badge ft-hm">HM</span>
+            <span class="type-panel-name" data-i18n="panel.hm.name">Home Manager</span>
+          </div>
+          <div id="panel-hm-content" class="type-panel-content"></div>
+        </div>
+
+        <div id="panel-unknown" class="type-panel hidden" data-panel-type="unknown">
+          <div class="type-panel-header">
+            <span class="type-panel-badge ft-unknown">?</span>
+            <span class="type-panel-name" data-i18n="panel.unknown.name">Unbekannter Typ</span>
+          </div>
+        </div>
+
+      </aside>
+
+      <!-- ── Content-Area: permanente Tab-Bar + Tab-Content/Vorschau ─── -->
+      <div class="content-area">
+
+        <!-- Permanente Tab-Bar (immer sichtbar) -->
+        <div class="tab-bar" role="tablist">
+          <div id="active-file-label" class="active-file-label"></div>
+          <button id="preview-mode-btn" class="preview-mode-btn"
+                  data-i18n-title="preview.modePanel"
+                  title="Bearbeitung nur über Panel möglich">👁</button>
+          <div class="tab-actions">
+            <!-- Wrench-Tools-Dropdown -->
+            <div class="tools-menu" id="tools-menu">
+              <button id="tools-btn" class="tab-action-btn"
+                      data-i18n-title="tools.title"
+                      title="Werkzeuge">🔧</button>
+              <div id="tools-dropdown" class="tools-dropdown hidden">
+                <button id="tool-reload"      class="tools-item" data-i18n="tools.reload">Datei neu laden</button>
+                <button id="tool-code-search" class="tools-item" data-i18n="tools.codeSearch">Im Code suchen</button>
+                <button id="tool-set-type"    class="tools-item" data-i18n="tools.setType">Dateityp festlegen</button>
+                <div class="tools-separator"></div>
+                <button id="tool-brix-insert" class="tools-item tools-item-brix" data-i18n="tools.brixInsert">+ Nix-Brick einfügen</button>
+              </div>
+            </div>
+            <!-- Alle speichern (nur sichtbar wenn Tabs offen) -->
+            <button id="save-all-btn" class="tab-action-btn hidden"
+                    data-i18n-title="sidebar.saveAllTitle"
+                    title="Alle Änderungen speichern">💾</button>
+            <!-- Raw-Datei speichern (nur sichtbar im Raw-Edit-Modus) -->
+            <button id="raw-save-tab-btn" class="tab-action-btn hidden"
+                    data-i18n-title="sidebar.rawSave"
+                    title="Datei speichern">💾</button>
+            <!-- Sidebar-Toggle -->
+            <button id="sidebar-toggle-btn" class="tab-action-btn"
+                    data-i18n-title="sidebar.toggleTitle"
+                    title="Dateibaum öffnen/schließen">◧</button>
+          </div>
+        </div>
+
+        <!-- Find-Bar (innerhalb des Tab-Editors) -->
+        <div id="find-bar" class="find-bar hidden">
+          <input type="text" id="find-input" class="find-input"
+                 placeholder="Suchen …" spellcheck="false" autocomplete="off">
+          <span id="find-count" class="find-count"></span>
+          <button id="find-prev-btn" class="find-nav-btn" title="Vorheriger Treffer">↑</button>
+          <button id="find-next-btn" class="find-nav-btn" title="Nächster Treffer">↓</button>
+          <button id="find-close-btn" class="find-close-btn" title="Suche schließen">×</button>
+        </div>
+
+        <!-- Vorschau/Preview -->
+        <main class="preview-panel" id="preview-panel">
+          <!-- File-Tab-Buttons (sichtbar wenn mehr als eine Datei vorhanden) -->
+          <div id="preview-tabs" class="preview-tabs hidden">
+            <button class="tab active" data-tab="configuration"
+                    data-i18n-title="preview.configTab"
+                    title="configuration.nix anzeigen">configuration.nix</button>
+            <button id="flake-tab" class="tab hidden" data-tab="flake"
+                    data-i18n-title="preview.flakeTab"
+                    title="flake.nix anzeigen">flake.nix</button>
+            <button id="hm-tab" class="tab hidden" data-tab="hm"
+                    data-i18n-title="preview.hmTab"
+                    title="home.nix anzeigen">home.nix</button>
+          </div>
+
+          <!-- Suchleiste (erscheint zwischen Tab-Leiste und Code-Inhalt) -->
+          <div id="search-bar" class="search-bar hidden">
+            <input type="text" id="search-input"
+                   data-i18n-placeholder="search.placeholder"
+                   placeholder="Im Nix-Code suchen …" spellcheck="false" autocomplete="off">
+            <span id="search-count" class="search-count"></span>
+            <button id="search-prev" class="search-nav-btn"
+                    data-i18n-title="search.prevTitle"
+                    title="Vorheriger Treffer (Umschalt+Enter)">↑</button>
+            <button id="search-next" class="search-nav-btn"
+                    data-i18n-title="search.nextTitle"
+                    title="Nächster Treffer (Enter)">↓</button>
+            <button id="search-close" class="search-close-btn"
+                    data-i18n-title="search.closeTitle"
+                    title="Suche schließen (Esc)">✕</button>
+          </div>
+
+          <div class="preview-content">
+            <div id="preview-configuration" class="code-view-container"></div>
+            <div id="preview-flake" class="code-view-container hidden"></div>
+            <div id="preview-hm"    class="code-view-container hidden"></div>
+          </div>
+        </main>
+
+      </div><!-- /content-area -->
+
+      <!-- ── Sidebar: Verzeichnisbaum (rechts) ─────────────────────────── -->
+      <div id="sidebar" class="sidebar" role="navigation" aria-label="Dateibaum">
+        <div class="sidebar-header">
+          <span class="sidebar-title" data-i18n="sidebar.title">Dateien</span>
+          <button id="sidebar-expand-all-btn" class="sidebar-icon-btn"
+                  data-i18n-title="sidebar.expandAllTitle" title="Alle aufklappen">↓</button>
+          <button id="sidebar-collapse-all-btn" class="sidebar-icon-btn"
+                  data-i18n-title="sidebar.collapseAllTitle" title="Alle einklappen">↑</button>
+          <button id="sidebar-refresh-btn" class="sidebar-icon-btn"
+                  data-i18n-title="sidebar.refreshTitle" title="Aktualisieren">↻</button>
+        </div>
+        <div id="sidebar-tree" class="sidebar-tree"></div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ── Paketsuch-Modal ───────────────────────────────────────────────── -->
+  <div id="pkg-overlay" class="overlay hidden">
+    <div class="modal modal-wide">
+      <div class="modal-header">
+        <h2 data-i18n="pkg.modalTitle">Paket suchen</h2>
+        <button id="pkg-close-btn" class="btn-icon" title="Schließen">✕</button>
+      </div>
+      <input type="text" id="pkg-search-input"
+             data-i18n-placeholder="pkg.searchPlaceholder"
+             placeholder="z.B. firefox, vim, htop …"
+             spellcheck="false" autocomplete="off">
+      <div id="pkg-search-status" class="pkg-search-status"></div>
+      <div id="pkg-search-results" class="pkg-results"></div>
+      <!-- Direkteingabe wenn Suche nichts findet -->
+      <div class="pkg-manual-row">
+        <span data-i18n="pkg.manualLabel">Direkt als attr-Name hinzufügen:</span>
+        <input type="text" id="pkg-manual-input" spellcheck="false" autocomplete="off"
+               data-i18n-placeholder="pkg.manualPlaceholder" placeholder="z.B. git">
+        <button id="pkg-manual-add-btn" class="btn-surface btn-small"
+                data-i18n="pkg.manualAdd">Hinzufügen</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Über NiCo ───────────────────────────────────────────────────── -->
+  <div id="about-overlay" class="overlay hidden">
+    <div class="modal about-modal">
+      <div class="modal-logo">NiCo</div>
+      <h2 class="about-title" data-i18n="about.title">Über NiCo</h2>
+      <table class="about-table">
+        <tr>
+          <td data-i18n="about.version">Version</td>
+          <td data-i18n="about.versionVal">0.0.0</td>
+        </tr>
+        <tr>
+          <td data-i18n="about.updated">Stand</td>
+          <td data-i18n="about.updatedVal">2026-04-03</td>
+        </tr>
+        <tr>
+          <td data-i18n="about.author">Erstellt von</td>
+          <td data-i18n="about.authorVal">DSpayreR6</td>
+        </tr>
+        <tr>
+          <td data-i18n="about.license">Lizenz</td>
+          <td data-i18n="about.licenseVal">MIT</td>
+        </tr>
+        <tr>
+          <td data-i18n="about.github">Quellcode auf GitHub</td>
+          <td><a href="https://github.com/DSpayreR6/nico" target="_blank" rel="noopener">github.com/DSpayreR6/nico</a></td>
+        </tr>
+        <tr>
+          <td data-i18n="about.thirdParty">Drittanbieter</td>
+          <td data-i18n="about.thirdPartyVal">Prism.js für Syntax-Highlighting (MIT) · siehe THIRD_PARTY_LICENSES.md</td>
+        </tr>
+      </table>
+      <div class="confirm-buttons" style="margin-top:20px">
+        <button id="about-close-btn" data-i18n="about.close">Schließen</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Syntax-Prüfung (Dry-Run) ────────────────────────────────────── -->
+  <div id="dryrun-overlay" class="overlay hidden">
+    <div class="modal modal-wide">
+      <div class="modal-logo" data-i18n="dryrun.title">Syntax-Prüfung</div>
+      <pre id="dryrun-output" class="dryrun-output"></pre>
+      <div class="confirm-buttons" style="margin-top:16px">
+        <button id="dryrun-close-btn" data-i18n="dryrun.close">Schließen</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Sudo-Passwort-Modal ─────────────────────────────────────────────── -->
+  <div id="sudo-overlay" class="overlay hidden">
+    <div class="modal">
+      <div class="modal-logo" data-i18n="sudo.title">Sudo-Passwort</div>
+      <p class="setup-hint" data-i18n="sudo.hint">__TODO__</p>
+      <input type="password" id="sudo-password-input" autocomplete="current-password"
+             style="width:100%;box-sizing:border-box;margin-bottom:12px">
+      <div id="sudo-error" class="setup-error hidden"></div>
+      <div class="confirm-buttons">
+        <button id="sudo-ok-btn" class="btn-primary" data-i18n="sudo.ok">OK</button>
+        <button id="sudo-cancel-btn" data-i18n="sudo.cancel">Abbrechen</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Rebuild-Ausgabe ─────────────────────────────────────────────────── -->
+  <div id="rebuild-overlay" class="overlay hidden">
+    <div class="modal modal-wide">
+      <div class="modal-logo" data-i18n="rebuild.title">NixOS-Rebuild</div>
+      <p class="setup-hint" style="margin:0 0 8px" data-i18n="rebuild.restartHint">__TODO__</p>
+      <div id="rebuild-status" class="rebuild-status" data-i18n="rebuild.waiting">Bereit</div>
+      <pre id="rebuild-output" class="rebuild-output"></pre>
+      <div class="confirm-buttons" style="margin-top:16px">
+        <button id="rebuild-close-btn" data-i18n="rebuild.close">Schließen</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Dateityp festlegen ──────────────────────────────────────────── -->
+  <div id="set-type-overlay" class="overlay hidden">
+    <div class="modal set-type-modal">
+      <div class="modal-logo" data-i18n="setType.title">Dateityp festlegen</div>
+      <p class="set-type-hint" data-i18n="setType.hint">__TODO__</p>
+      <div class="set-type-grid" id="set-type-grid">
+        <!-- Buttons werden per JS eingefügt -->
+      </div>
+      <div class="modal-actions">
+        <button id="set-type-cancel" class="btn" data-i18n="setType.cancel">__TODO__</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Nix-Brick einfügen ───────────────────────────────────────────── -->
+  <div id="brix-insert-overlay" class="overlay hidden">
+    <div class="modal">
+      <div class="modal-logo" data-i18n="brix.insertTitle">Nix-Brick einfügen</div>
+      <p data-i18n-html="brix.insertInfo">Nix-Bricks sind manuelle Nix-Abschnitte die NiCo <strong>nie verändert</strong>.</p>
+      <label for="brix-name-input" data-i18n="brix.nameLabel">Bezeichnung</label>
+      <input type="text" id="brix-name-input"
+             data-i18n-placeholder="brix.namePlaceholder"
+             placeholder="z.B. syncthing" spellcheck="false">
+      <label for="brix-section-select" data-i18n="brix.sectionLabel">Bereich</label>
+      <select id="brix-section-select"></select>
+      <div id="brix-insert-error" class="setup-error hidden"></div>
+      <div class="confirm-buttons" style="margin-top:16px">
+        <button id="brix-insert-confirm-btn" class="btn-primary" data-i18n="brix.insertBtn">Einfügen</button>
+        <button id="brix-insert-cancel-btn" data-i18n="brix.cancelBtn">Abbrechen</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Nix-Brick verschieben ────────────────────────────────────────── -->
+  <div id="brix-move-overlay" class="overlay hidden">
+    <div class="modal">
+      <div class="modal-logo" data-i18n="brix.moveTitle">Nix-Brick verschieben</div>
+      <p data-i18n="brix.moveInfo">__TODO__</p>
+      <div id="brix-move-source-name" class="confirm-text" style="margin-bottom:12px"></div>
+      <label for="brix-move-section" data-i18n="brix.moveSectionLabel">Bereich</label>
+      <select id="brix-move-section"></select>
+      <label for="brix-move-order" data-i18n="brix.moveOrderLabel">Position</label>
+      <input type="number" id="brix-move-order" min="1"
+             data-i18n-placeholder="brix.moveOrderPlaceholder"
+             placeholder="z.B. 1">
+      <div id="brix-move-warning" class="confirm-text hidden" style="margin-top:12px"
+           data-i18n="brix.movePosError">
+        __TODO__
+      </div>
+      <div class="confirm-buttons" style="margin-top:16px">
+        <button id="brix-move-confirm-btn" class="btn-primary" data-i18n="brix.moveBtn">Verschieben</button>
+        <button id="brix-move-cancel-btn" data-i18n="brix.cancelBtn">Abbrechen</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Nix-Brick umbenennen ────────────────────────────────────────── -->
+  <div id="brix-rename-overlay" class="overlay hidden">
+    <div class="modal">
+      <div class="modal-logo" data-i18n="brix.renameTitle">Nix-Brick umbenennen</div>
+      <p data-i18n="brix.renameInfo">__TODO__</p>
+      <label for="brix-rename-new" data-i18n="brix.renameLabel">Neue Bezeichnung</label>
+      <input type="text" id="brix-rename-new"
+             data-i18n-placeholder="brix.namePlaceholder"
+             placeholder="z.B. syncthing" spellcheck="false">
+      <div id="brix-rename-error" class="setup-error hidden"></div>
+      <div class="confirm-buttons" style="margin-top:16px">
+        <button id="brix-rename-confirm-btn" class="btn-primary" data-i18n="brix.renameBtn">Umbenennen</button>
+        <button id="brix-rename-cancel-btn" data-i18n="brix.cancelBtn">Abbrechen</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Nix-Brick splitten ───────────────────────────────────────────── -->
+  <div id="brix-split-overlay" class="overlay hidden">
+    <div class="modal">
+      <div class="modal-logo" data-i18n="brix.splitTitle">Nix-Brick aufteilen</div>
+      <p data-i18n="brix.splitInfo">An welcher Zeile soll der Brick aufgeteilt werden? (1 = nach der ersten Inhaltszeile)</p>
+      <label for="brix-split-line" data-i18n="brix.splitLineLabel">Teilen nach Zeile</label>
+      <input type="number" id="brix-split-line" min="1"
+             data-i18n-placeholder="brix.splitLinePlaceholder"
+             placeholder="z.B. 3">
+      <div id="brix-split-error" class="setup-error hidden"></div>
+      <div class="confirm-buttons" style="margin-top:16px">
+        <button id="brix-split-confirm-btn" class="btn-primary" data-i18n="brix.splitBtn">Aufteilen</button>
+        <button id="brix-split-cancel-btn" data-i18n="brix.cancelBtn">Abbrechen</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Sicherungspunkt-Dialog (beim Schreiben der Config) ──────────────── -->
+  <div id="write-overlay" class="overlay hidden">
+    <div class="modal">
+      <div class="modal-logo" data-i18n="write.title">Konfiguration schreiben</div>
+      <p data-i18n-html="write.info">
+        NiCo schreibt die aktuelle Konfiguration in dein NixOS-Verzeichnis
+        und legt dabei einen <strong>Sicherungspunkt</strong> an –
+        wie eine Zeitmaschine für deine Config.<br><br>
+        Im Admin-Bereich kannst du jederzeit zu einem früheren
+        Sicherungspunkt zurückkehren, falls etwas nicht stimmt.
+      </p>
+      <label for="write-label-input">
+        <span data-i18n="write.labelLabel">Bezeichnung des Sicherungspunkts</span>
+        <span class="hint" data-i18n="write.labelHint">(optional – hilft dir später beim Wiederfinden)</span>
+      </label>
+      <input type="text" id="write-label-input"
+             data-i18n-placeholder="write.labelPlaceholder"
+             placeholder='z.B. „Vor KDE-Wechsel" oder „Erste funktionierende Config"'
+             spellcheck="false" autocomplete="off" maxlength="80">
+      <div class="write-dryrun-row">
+        <label class="checkbox-label">
+          <input type="checkbox" id="write-dryrun-check" checked>
+          <span data-i18n="write.dryrunLabel">Syntax vor dem Schreiben prüfen</span>
+        </label>
+      </div>
+      <pre id="write-dryrun-result" class="dryrun-output hidden"></pre>
+      <div class="confirm-buttons" style="margin-top:14px">
+        <button id="write-confirm-btn" class="btn-primary" style="background:var(--red);color:var(--crust)"
+                data-i18n="write.btn">
+          Schreiben
+        </button>
+        <button id="write-cancel-btn" data-i18n="write.cancel">Abbrechen</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Admin-Bereich ────────────────────────────────────────────────────── -->
+  <div id="admin-overlay" class="overlay hidden">
+    <div class="admin-panel">
+
+      <div class="admin-panel-header">
+        <span class="admin-panel-title" data-i18n="admin.title">⚙ Admin-Bereich</span>
+        <button id="admin-close-btn" class="btn-icon"
+                data-i18n-title="admin.closeTitle"
+                title="Zurück zum Editor">✕</button>
+      </div>
+
+      <!-- Tab-Leiste -->
+      <div class="admin-tabs">
+        <button class="admin-tab active" data-admin-tab="aktionen"
+                data-i18n="admin.tab.aktionen">Aktionen</button>
+        <button class="admin-tab" data-admin-tab="einstellungen"
+                data-i18n="admin.tab.einstellungen">Einstellungen</button>
+        <button class="admin-tab" data-admin-tab="administration"
+                data-i18n="admin.tab.administration">Administration</button>
+        <button class="admin-tab" data-admin-tab="zeitmaschine"
+                data-i18n="admin.tab.zeitmaschine">Zeitmaschine</button>
+      </div>
+
+      <!-- ── Tab 1: Aktionen ─────────────────────────────────────────── -->
+      <div class="admin-tab-panel" data-admin-panel="aktionen">
+        <div class="admin-actions">
+          <button type="button" id="admin-write-btn" class="action-btn btn-red"
+                  data-i18n="admin.checkpoint"
+                  data-i18n-title="admin.checkpointTitle"
+                  title="Speichert den aktuellen Stand und legt einen Punkt in der Zeitmaschine an, zu dem du jederzeit zurückspringen kannst">
+            Zwischenstand konservieren
+          </button>
+          <button type="button" id="admin-rebuild-btn" class="action-btn btn-peach"
+                  data-i18n="admin.rebuild"
+                  data-i18n-title="admin.rebuildTitle"
+                  title="Baut das System neu (nixos-rebuild switch) – schreibt Config vorher, braucht root">
+            System neu bauen
+          </button>
+        </div>
+      </div>
+
+      <!-- ── Tab 2: Einstellungen ───────────────────────────────────── -->
+      <div class="admin-tab-panel hidden" data-admin-panel="einstellungen">
+
+        <!-- NiCo-Einstellungen (bleiben am Rechner) -->
+        <div class="admin-section">
+          <div class="admin-section-title" data-i18n="admin.settings.nicoTitle">NiCo-Einstellungen</div>
+          <p class="raw-panel-hint" style="margin-top:4px;margin-bottom:8px" data-i18n="admin.settings.nicoHint">
+            Programmeinstellungen – bleiben auf diesem Rechner.
+          </p>
+          <!-- Sprache wird über den Header-Switcher eingestellt -->
+          <!-- Theme: Platzhalter für später -->
+          <label style="display:flex;align-items:center;gap:8px;margin-top:8px;cursor:pointer">
+            <input type="checkbox" id="setting-code-view-plain">
+            <span data-i18n="admin.settings.codeViewPlain">Code-Ansicht beim Start: Plain (ohne Brix-Annotationen)</span>
+          </label>
+        </div>
+
+        <!-- Config-Einstellungen (wandern mit der Config) -->
+        <div class="admin-section">
+          <div class="admin-section-title" data-i18n="admin.settings.configTitle">Config-Einstellungen</div>
+          <p class="raw-panel-hint" style="margin-top:4px;margin-bottom:8px" data-i18n="admin.settings.configHint">
+            Diese Einstellungen gehören zur Konfiguration und wandern beim Kopieren mit.
+          </p>
+
+          <!-- Hosts-Verzeichnis -->
+          <label for="settings-hosts-dir" data-i18n="admin.settings.hostsDir">Hosts-Verzeichnis</label>
+          <div style="display:flex;gap:8px;align-items:center;margin-top:6px">
+            <input type="text" id="settings-hosts-dir" class="settings-path-input"
+                   style="flex:1" placeholder="hosts" spellcheck="false" autocomplete="off">
+          </div>
+          <p class="raw-panel-hint" style="margin-top:4px" data-i18n="admin.settings.hostsDirHint">
+            Unterverzeichnis für Host-Konfigurationen (Standard: hosts)
+          </p>
+
+          <!-- Modules-Verzeichnis -->
+          <label for="settings-modules-dir" style="margin-top:12px" data-i18n="admin.settings.modulesDir">Module-Verzeichnis</label>
+          <div style="display:flex;gap:8px;align-items:center;margin-top:6px">
+            <input type="text" id="settings-modules-dir" class="settings-path-input"
+                   style="flex:1" placeholder="modules" spellcheck="false" autocomplete="off">
+          </div>
+          <p class="raw-panel-hint" style="margin-top:4px" data-i18n="admin.settings.modulesDirHint">
+            Unterverzeichnis für NixOS-Module (Standard: modules)
+          </p>
+
+          <!-- Home-Manager-Verzeichnis -->
+          <label for="settings-hm-dir" style="margin-top:12px" data-i18n="admin.settings.hmDir">Home-Manager-Verzeichnis</label>
+          <div style="display:flex;gap:8px;align-items:center;margin-top:6px">
+            <input type="text" id="settings-hm-dir" class="settings-path-input"
+                   style="flex:1" placeholder="home" spellcheck="false" autocomplete="off">
+          </div>
+          <p class="raw-panel-hint" style="margin-top:4px" data-i18n="admin.settings.hmDirHint">
+            Unterverzeichnis für Home-Manager-Dateien (Standard: home)
+          </p>
+
+          <!-- Flake-Update -->
+          <div style="margin-top:16px" id="flake-update-row">
+            <label class="toggle-row" style="cursor:pointer">
+              <span data-i18n="admin.flakeUpdate">Flake aktualisieren vor Rebuild/Dry-Run</span>
+              <span class="toggle-wrap">
+                <input type="checkbox" id="flake-update-toggle">
+                <span class="toggle-track"><span class="toggle-thumb"></span></span>
+              </span>
+            </label>
+          </div>
+
+          <!-- Speichern-Button -->
+          <div style="margin-top:16px">
+            <button id="settings-config-save" class="btn-surface btn-small"
+                    data-i18n="admin.settings.save">Speichern</button>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- ── Tab 2: Administration ───────────────────────────────────── -->
+      <div class="admin-tab-panel hidden" data-admin-panel="administration">
+
+        <!-- Config-Pfad -->
+        <div class="admin-section">
+          <div class="admin-section-title" data-i18n="admin.settingsTitle">Einstellungen</div>
+          <div class="settings-path-row">
+            <label data-i18n="admin.settingsPathLabel">Aktueller NixOS-Config-Pfad:</label>
+            <input type="text" id="settings-current-path" readonly
+                   class="settings-path-input"
+                   data-i18n-placeholder="admin.settingsPathLoading"
+                   placeholder="Wird geladen …">
+            <button type="button" id="settings-change-btn" class="btn-surface btn-small"
+                    data-i18n="admin.settingsChangeBtn">Ändern</button>
+          </div>
+          <div id="settings-change-row" class="settings-change-row hidden">
+            <input type="text" id="settings-new-path" spellcheck="false" autocomplete="off"
+                   class="settings-path-input"
+                   data-i18n-placeholder="admin.settingsNewPathPlaceholder"
+                   placeholder="z.B. ~/nixos-config">
+            <button type="button" id="settings-apply-btn" class="action-btn btn-red btn-small"
+                    data-i18n="admin.settingsApplyBtn">Übernehmen</button>
+            <button type="button" id="settings-cancel-btn" class="btn-surface btn-small"
+                    data-i18n="admin.settingsCancelBtn">Abbrechen</button>
+          </div>
+          <div id="settings-error" class="settings-error hidden"></div>
+        </div>
+
+        <!-- ZIP Export / Import -->
+        <div class="admin-section">
+          <div class="admin-section-title" data-i18n="admin.exportTitle">Exportieren</div>
+          <div class="admin-actions">
+            <div style="display:flex;gap:8px">
+              <button type="button" id="admin-export-btn" class="action-btn btn-yellow"
+                      style="flex:1;width:auto"
+                      data-i18n="admin.export"
+                      data-i18n-title="admin.exportTitle"
+                      title="Erstellt eine ZIP-Datei mit allen Config-Dateien zum Mitnehmen oder Sichern">
+                Als ZIP exportieren
+              </button>
+              <button type="button" id="admin-zip-import-btn" class="action-btn btn-blue"
+                      style="flex:1;width:auto"
+                      data-i18n="admin.zipImport">
+                Aus ZIP importieren
+              </button>
+            </div>
+            <input type="file" id="admin-zip-input" accept=".zip" class="hidden">
+          </div>
+          <div id="admin-zip-import-state" class="hidden" style="margin-top:10px">
+            <div id="admin-zip-checking" class="admin-hint hidden" data-i18n="admin.zipChecking">Prüfe ZIP…</div>
+            <div id="admin-zip-confirm" class="hidden">
+              <p id="admin-zip-confirm-text" class="admin-hint"></p>
+              <div class="confirm-buttons">
+                <button type="button" id="admin-zip-confirm-yes" class="action-btn btn-blue"
+                        data-i18n="admin.zipConfirmYes">Importieren</button>
+                <button type="button" id="admin-zip-confirm-cancel" class="btn-surface"
+                        data-i18n="admin.zipCancel">Abbrechen</button>
+              </div>
+            </div>
+            <div id="admin-zip-backup-confirm" class="hidden">
+              <p id="admin-zip-backup-text" class="admin-hint"></p>
+              <div class="confirm-buttons">
+                <button type="button" id="admin-zip-backup-yes" class="action-btn btn-blue"
+                        data-i18n="import.backupYes">Sichern &amp; Importieren</button>
+                <button type="button" id="admin-zip-backup-cancel" class="btn-surface"
+                        data-i18n="admin.zipCancel">Abbrechen</button>
+              </div>
+            </div>
+            <div id="admin-zip-invalid" class="hidden">
+              <p id="admin-zip-invalid-text" class="admin-hint import-err"></p>
+              <div class="confirm-buttons">
+                <button type="button" id="admin-zip-fallback-btn" class="btn-surface"
+                        data-i18n="admin.zipFallbackBtn">Manuell suchen</button>
+                <button type="button" id="admin-zip-invalid-cancel" class="btn-surface"
+                        data-i18n="admin.zipCancel">Abbrechen</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Import -->
+        <div class="admin-section" id="admin-import-section">
+          <div class="admin-section-title admin-section-toggle" id="admin-import-toggle">
+            <span data-i18n="admin.importTitle">Import</span>
+            <span class="admin-section-chevron">▸</span>
+          </div>
+          <div id="admin-import-body" class="admin-import-body">
+            <p class="admin-hint" data-i18n="admin.importHint"></p>
+            <div class="import-form">
+              <label data-i18n="admin.importConfigLabel">configuration.nix</label>
+              <div class="import-path-row">
+                <input type="text" id="import-config-path" spellcheck="false" autocomplete="off"
+                       value="/etc/nixos">
+                <button type="button" id="import-config-browse" class="btn-browse"
+                        data-i18n="admin.importBrowse" title="Verzeichnis auswählen">…</button>
+              </div>
+              <p class="admin-hint" data-i18n="admin.importPathHint"></p>
+              <button type="button" id="admin-import-btn" class="action-btn btn-blue"
+                      data-i18n="admin.importBtn">Importieren</button>
+            </div>
+            <div id="import-result" class="import-result hidden"></div>
+          </div><!-- /#admin-import-body -->
+        </div>
+
+
+      </div><!-- /Tab 2 -->
+
+      <!-- ── Tab 3: Zeitmaschine ─────────────────────────────────────── -->
+      <div class="admin-tab-panel hidden" data-admin-panel="zeitmaschine">
+
+        <!-- Git-Status / Init -->
+        <div class="admin-section" id="git-init-section">
+          <div class="admin-section-title" data-i18n="admin.gitTitle">Git</div>
+          <div id="git-status-row" class="settings-path-row" style="align-items:center;gap:10px">
+            <span id="git-status-label" data-i18n="admin.gitChecking">…</span>
+            <button id="git-init-btn" class="btn-surface btn-small hidden"
+                    data-i18n="admin.gitInitBtn">Git initialisieren</button>
+          </div>
+        </div>
+
+        <div class="admin-section">
+          <p class="admin-hint" data-i18n="admin.gitHint">
+            NiCo erstellt nach jedem Schreiben automatisch einen Git-Commit.
+            „Zurücksetzen" stellt die Nix-Dateien auf den gewählten Stand zurück –
+            die Git-History bleibt dabei vollständig erhalten.
+          </p>
+          <div id="admin-git-log" class="rollback-list">
+            <span class="admin-loading" data-i18n="admin.loading">Wird geladen …</span>
+          </div>
+        </div>
+      </div><!-- /Tab 3 -->
+
+    </div>
+  </div>
+
+
+  <!-- ── Datei-Viewer / Roh-Editor ─────────────────────────────────────────── -->
+  <div id="file-viewer-overlay" class="overlay hidden">
+    <div class="modal" style="width:min(90vw,900px);max-height:90vh;display:flex;flex-direction:column">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <span id="file-viewer-title" class="modal-logo" style="margin-bottom:0"></span>
+        <button id="file-viewer-close" class="btn-secondary" data-i18n="brix.cancelBtn">Schließen</button>
+      </div>
+      <div id="file-viewer-warning" class="setup-error hidden" style="margin-bottom:8px"></div>
+      <textarea id="file-viewer-content"
+                style="flex:1;min-height:400px;font-family:monospace;font-size:0.82rem;resize:vertical;padding:8px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text)"></textarea>
+      <div id="file-viewer-actions" class="confirm-buttons hidden" style="margin-top:12px">
+        <button id="file-viewer-save" class="btn-primary" data-i18n="write.confirm">Speichern</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Prism.js core + Nix component (manual mode – we call highlightElement ourselves) -->
+  <script>window.Prism = window.Prism || {}; Prism.manual = true;</script>
+  <script src="/static/vendor/prism/prism.min.js?v={{ static_v }}"></script>
+  <script src="/static/vendor/prism/prism-nix.min.js?v={{ static_v }}"></script>
+  <script src="/static/app.js?v={{ static_v }}"></script>
+</body>
+</html>
