@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+### Bugfix: Sudo-Dialog hinter Admin-Panel
+- `#sudo-overlay` z-index auf 200 erhöht – erscheint jetzt immer über anderen Overlays
+
 ### Admin: Symlink /etc/nixos anlegen
 - Neuer Abschnitt „Symlink /etc/nixos" im Admin-Bereich → Tab „Administration" unter dem Config-Pfad
 - Zeigt aktuellen Status: Symlink aktiv/fremdes Ziel, normales Verzeichnis, nicht vorhanden
