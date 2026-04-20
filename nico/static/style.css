@@ -754,9 +754,15 @@ button:active { transform: scale(.97); }
 
 .btn-header-icon:hover { opacity: 1; }
 
-/* NixOS action button */
-#nixos-btn { color: var(--subtext0); }
-#nixos-btn:hover { border-color: var(--blue); opacity: 1; }
+/* NixOS action button – white background as exception for icon legibility */
+#nixos-btn {
+  background: #fff;
+  border-color: #ccc;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+#nixos-btn:hover { border-color: var(--blue); background: #f0f0f0; opacity: 1; }
 #nixos-btn img { display: block; }
 
 #help-btn:hover  { color: var(--blue); border-color: var(--blue); }
