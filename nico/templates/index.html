@@ -152,27 +152,12 @@
       <span class="subtitle">NixOS Configurator</span>
       <div class="header-right">
         <span id="config-dir-label"></span>
-        <div class="ai-provider-wrap" data-i18n-title="header.aiTitle"
-             title="KI-Anbieter für „KI fragen"-Buttons">
-          <select id="ai-provider-select">
-            <option value="claude">Claude</option>
-            <option value="chatgpt">ChatGPT</option>
-            <option value="gemini">Gemini</option>
-            <option value="grok">Grok</option>
-            <option value="custom" data-i18n="header.aiCustom">Eigene URL …</option>
-          </select>
-          <input type="text" id="ai-custom-url" class="hidden"
-                 data-i18n-placeholder="header.aiCustomPlaceholder"
-                 data-i18n-title="header.aiCustomTitle"
-                 placeholder="https://…" spellcheck="false"
-                 title="URL des KI-Anbieters – wird in neuem Tab geöffnet">
-        </div>
-        <div class="lang-switcher">
-          <button id="lang-current-btn" class="btn-header-icon" title="Sprache / Language">DE</button>
-          <div id="lang-dropdown" class="lang-dropdown hidden">
-          </div>
-        </div>
         <div class="header-icon-group">
+          <div class="lang-switcher">
+            <button id="lang-current-btn" class="btn-header-icon" title="Sprache / Language">DE</button>
+            <div id="lang-dropdown" class="lang-dropdown hidden">
+            </div>
+          </div>
           <!-- NixOS action menu -->
           <div class="nixos-menu" id="nixos-menu">
             <button id="nixos-btn" class="btn-header-icon btn-nixos"

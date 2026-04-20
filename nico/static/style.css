@@ -289,30 +289,6 @@ header {
   white-space: nowrap;
 }
 
-/* ── KI-Anbieter Auswahl im Header ──────────────────────────────────────── */
-.ai-provider-wrap {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.ai-provider-wrap select,
-.ai-provider-wrap input {
-  background: var(--surface0);
-  color: var(--subtext0);
-  border: 1px solid var(--surface1);
-  border-radius: 6px;
-  font-size: 11px;
-  padding: 3px 6px;
-  height: 28px;
-}
-
-.ai-provider-wrap select { cursor: pointer; }
-
-.ai-provider-wrap select:hover,
-.ai-provider-wrap input:hover { border-color: var(--overlay0); }
-
-#ai-custom-url { width: 180px; }
 
 /* ── KI-fragen Button in Sektions-Headern ────────────────────────────────── */
 .btn-ai-ask {
