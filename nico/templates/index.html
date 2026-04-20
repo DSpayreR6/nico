@@ -1794,6 +1794,18 @@
           <div id="settings-error" class="settings-error hidden"></div>
         </div>
 
+        <!-- Symlink /etc/nixos → NixOS-Config -->
+        <div class="admin-section" id="admin-symlink-section">
+          <div class="admin-section-title">Symlink /etc/nixos</div>
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:4px">
+            <span id="admin-symlink-status-label" class="admin-hint" style="margin:0"></span>
+            <button type="button" id="admin-symlink-btn" class="action-btn btn-red btn-small hidden">
+              Symlink anlegen
+            </button>
+          </div>
+          <div id="admin-symlink-error" class="settings-error hidden"></div>
+        </div>
+
         <!-- ZIP Export / Import -->
         <div class="admin-section">
           <div class="admin-section-title" data-i18n="admin.exportTitle">Exportieren</div>

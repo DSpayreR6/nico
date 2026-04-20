@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Admin: Symlink /etc/nixos anlegen
+- Neuer Abschnitt „Symlink /etc/nixos" im Admin-Bereich → Tab „Administration" unter dem Config-Pfad
+- Zeigt aktuellen Status: Symlink aktiv/fremdes Ziel, normales Verzeichnis, nicht vorhanden
+- Button „Symlink anlegen" erscheint nur wenn /etc/nixos ein normales Verzeichnis ist
+- Ablauf: Sudo-Passwort abfragen → /etc/nixos nach /etc/nixos.bak verschieben → Symlink setzen
+- Backend-Endpoint `/api/symlink/create` war bereits vorhanden; nur Frontend-Anbindung neu
+
 ### Rebuild: path:-Prefix ohne Git-Repository
 - Vor jedem Rebuild-Start wird geprüft ob das Config-Verzeichnis ein Git-Repository ist (`git_manager.is_git_repo`)
 - Ohne Git: `--flake path:/abs/pfad#hostname` – Nix liest direkt vom Dateisystem statt über den Git-Index

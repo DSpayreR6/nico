@@ -762,7 +762,7 @@ function _switchAdminTab(tab) {
   });
   // Lazy-load per-tab data
   if (tab === 'zeitmaschine') { checkGitStatus(); loadAdminGitLog(); }
-  if (tab === 'administration') { loadSettingsPath(); }
+  if (tab === 'administration') { loadSettingsPath(); loadAdminSymlinkStatus(); }
 }
 
 function initAdminTabs() {
@@ -781,6 +781,68 @@ async function loadSettingsPath() {
     input.value = data.dir || '';
   } catch (e) {
     console.error('loadSettingsPath:', e);
+  }
+}
+
+async function loadAdminSymlinkStatus() {
+  const label  = document.getElementById('admin-symlink-status-label');
+  const btn    = document.getElementById('admin-symlink-btn');
+  const errDiv = document.getElementById('admin-symlink-error');
+  if (!label) return;
+
+  errDiv.classList.add('hidden');
+  btn.classList.add('hidden');
+  label.textContent = '…';
+
+  try {
+    const res  = await csrfFetch('/api/symlink/status');
+    const data = await res.json();
+    if (data.status === 'symlink' && data.points_to_nico) {
+      label.textContent = '✅ Symlink aktiv → ' + data.target;
+    } else if (data.status === 'symlink') {
+      label.textContent = '⚠ Symlink zeigt auf ' + data.target + ' (nicht NiCo-Verzeichnis)';
+    } else if (data.status === 'dir') {
+      label.textContent = '/etc/nixos ist ein normales Verzeichnis';
+      btn.classList.remove('hidden');
+    } else if (data.status === 'missing') {
+      label.textContent = '/etc/nixos existiert nicht';
+    } else {
+      label.textContent = '';
+    }
+  } catch (e) {
+    label.textContent = '';
+    console.error('loadAdminSymlinkStatus:', e);
+  }
+}
+
+async function doAdminSymlink() {
+  const errDiv = document.getElementById('admin-symlink-error');
+  const btn    = document.getElementById('admin-symlink-btn');
+  errDiv.classList.add('hidden');
+  btn.disabled = true;
+
+  const nonce = await acquireSudoNonce();
+  if (nonce === null) { btn.disabled = false; return; }
+
+  try {
+    const res  = await csrfFetch('/api/symlink/create', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ copy_files: false, sudo_nonce: nonce }),
+    });
+    const data = await res.json();
+    if (!res.ok || data.error) {
+      errDiv.textContent = tErr(data.error) || t('toast.error');
+      errDiv.classList.remove('hidden');
+      btn.disabled = false;
+      return;
+    }
+    await loadAdminSymlinkStatus();
+    showToast('Symlink angelegt ✅', 'success');
+  } catch (e) {
+    errDiv.textContent = t('toast.error');
+    errDiv.classList.remove('hidden');
+    btn.disabled = false;
   }
 }
 
@@ -4065,6 +4127,7 @@ function bindUI() {
   on('admin-close-btn', 'click', closeAdmin);
   on('admin-overlay',   'click', e => { if (e.target.id === 'admin-overlay') closeAdmin(); });
   on('admin-export-btn',   'click', exportZip);
+  on('admin-symlink-btn',  'click', doAdminSymlink);
 
   on('admin-import-btn', 'click', runAdminImport);
   initImportBrowse();
