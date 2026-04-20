@@ -785,11 +785,13 @@ async function loadSettingsPath() {
 }
 
 async function loadAdminSymlinkStatus() {
-  const label  = document.getElementById('admin-symlink-status-label');
-  const btn    = document.getElementById('admin-symlink-btn');
-  const errDiv = document.getElementById('admin-symlink-error');
+  const label   = document.getElementById('admin-symlink-status-label');
+  const hint    = document.getElementById('admin-symlink-hint');
+  const btn     = document.getElementById('admin-symlink-btn');
+  const errDiv  = document.getElementById('admin-symlink-error');
   if (!label) return;
 
+  const baseHint = '/etc/nixos wird vorher nach /etc/nixos.bak gesichert.';
   errDiv.classList.add('hidden');
   btn.classList.add('hidden');
   label.textContent = '…';
@@ -799,18 +801,24 @@ async function loadAdminSymlinkStatus() {
     const data = await res.json();
     if (data.status === 'symlink' && data.points_to_nico) {
       label.textContent = '✅ Symlink aktiv → ' + data.target;
+      hint.textContent  = baseHint;
     } else if (data.status === 'symlink') {
       label.textContent = '⚠ Symlink zeigt auf ' + data.target + ' (nicht NiCo-Verzeichnis)';
+      hint.textContent  = baseHint;
     } else if (data.status === 'dir') {
-      label.textContent = '/etc/nixos ist ein normales Verzeichnis';
+      label.textContent = '';
+      hint.textContent  = baseHint + ' (aktuell noch kein Symlink angelegt)';
       btn.classList.remove('hidden');
     } else if (data.status === 'missing') {
       label.textContent = '/etc/nixos existiert nicht';
+      hint.textContent  = baseHint;
     } else {
       label.textContent = '';
+      hint.textContent  = baseHint;
     }
   } catch (e) {
     label.textContent = '';
+    hint.textContent  = baseHint;
     console.error('loadAdminSymlinkStatus:', e);
   }
 }
