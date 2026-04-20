@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Rebuild: path:-Prefix ohne Git-Repository
+- Vor jedem Rebuild-Start wird geprüft ob das Config-Verzeichnis ein Git-Repository ist (`git_manager.is_git_repo`)
+- Ohne Git: `--flake path:/abs/pfad#hostname` – Nix liest direkt vom Dateisystem statt über den Git-Index
+- Mit Git: Verhalten unverändert (`--flake .#hostname`)
+- Dryrun verwendet `path:` bereits immer – keine Änderung nötig
+
 ### Rebuild/Dryrun-Ausgabefenster (nix-output-monitor-Stil)
 - Rebuild-Modal: oberer Scrollbereich für rohen Log-Stream (Warning gelb, Error rot hervorgehoben)
 - Rebuild-Modal: unterer Monitor-Block mit Phasen-Label (Evaluating → Fetching → Building → Activating), animiertem Fortschrittsbalken (Shimmer, phasenfarbig), aktiven Paketnamen und Abschlussstatus (✅/❌)

@@ -1659,7 +1659,13 @@ def create_app() -> Flask:
         update_flake = request.args.get('update_flake', '0') == '1' and use_flake
 
         if use_flake:
-            cmd = ["sudo", "-S", "nixos-rebuild", mode, "--flake", f".#{hostname}"]
+            # Without git nix would try to copy via the git index and fail.
+            # Use path: prefix so nix reads directly from the filesystem.
+            if git_manager.is_git_repo(nixos_dir):
+                flake_arg = f".#{hostname}"
+            else:
+                flake_arg = f"path:{Path(nixos_dir).resolve().as_posix()}#{hostname}"
+            cmd = ["sudo", "-S", "nixos-rebuild", mode, "--flake", flake_arg]
         else:
             cmd = ["sudo", "-S", "nixos-rebuild", mode, "-I", f"nixos-config={conf_path}"]
 
