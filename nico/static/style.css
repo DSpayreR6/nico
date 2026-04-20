@@ -757,8 +757,7 @@ button:active { transform: scale(.97); }
 /* NixOS action button */
 #nixos-btn { color: var(--subtext0); }
 #nixos-btn:hover { border-color: var(--blue); opacity: 1; }
-#nixos-btn img { display: block; filter: invert(60%); }
-#nixos-btn:hover img { filter: invert(80%); }
+#nixos-btn img { display: block; }
 
 #help-btn:hover  { color: var(--blue); border-color: var(--blue); }
 #admin-btn:hover { color: var(--text); border-color: var(--overlay0); }

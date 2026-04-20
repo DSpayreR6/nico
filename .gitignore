@@ -16,6 +16,7 @@ manifest.md
 .claudeignore
 .codex
 *.png
+!nico/static/*.png
 featureplan.txt
 vorgaben.txt
 vm-test.txt
