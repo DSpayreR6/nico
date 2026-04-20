@@ -317,6 +317,7 @@
   "git.rollbackDetail": "Los archivos Nix serán restaurados. Se creará un nuevo commit –\nel historial Git se preservará completamente.",
   "git.rollbackSuccess": "Rollback exitoso.",
   "git.rollbackError":  "Rollback fallido.",
+  "git.remoteBehind":   "__TODO__",
 
   "toast.saved": "Guardado.",
   "toast.error": "Error.",

@@ -264,6 +264,7 @@ async function checkStatus() {
         await loadConfig().catch(e => console.error('loadConfig:', e));
         Sidebar.setActiveFile('configuration.nix', 'configuration.nix');
         checkGitStatus();
+        checkGitRemoteStatus();
       }
     } else {
       showSetupOverlay();
@@ -1146,6 +1147,39 @@ async function checkGitStatus() {
   } catch (e) {
     console.error('checkGitStatus:', e);
   }
+}
+
+async function checkGitRemoteStatus() {
+  try {
+    const res  = await csrfFetch('/api/git/remote-status');
+    const data = await res.json();
+    if (data.behind > 0) {
+      showGitRemoteBanner(data.behind);
+    }
+  } catch (e) {
+    console.error('checkGitRemoteStatus:', e);
+  }
+}
+
+function showGitRemoteBanner(behind) {
+  let el = document.getElementById('git-remote-banner');
+  if (!el) {
+    el = document.createElement('div');
+    el.id        = 'git-remote-banner';
+    el.className = 'git-remote-banner';
+    const header = document.querySelector('#app header');
+    header?.insertAdjacentElement('afterend', el);
+  }
+  el.innerHTML = '';
+  const text = document.createElement('span');
+  text.textContent = t('git.remoteBehind', behind);
+  el.appendChild(text);
+  const dismiss = document.createElement('button');
+  dismiss.textContent = '×';
+  dismiss.className   = 'git-warning-dismiss';
+  dismiss.onclick     = () => el.classList.add('hidden');
+  el.appendChild(dismiss);
+  el.classList.remove('hidden');
 }
 
 async function _doGitInit() {

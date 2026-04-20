@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Git
+- Remote-Stand-Prüfung beim Start: falls das lokale Repo hinter dem Remote liegt, erscheint ein blaues Info-Banner mit Anzahl der fehlenden Commits
+- Neuer `GET /api/git/remote-status`-Endpunkt (`git fetch` + `rev-list HEAD..@{u} --count`)
+- Neuer Übersetzungsschlüssel `git.remoteBehind`
+
 ### Frontend & Lizenzen
 - Prism.js wird nicht mehr per CDN geladen, sondern lokal aus `nico/static/vendor/prism/`
 - Neue Root-Datei `THIRD_PARTY_LICENSES.md` dokumentiert Prism.js, Version, Quelle und MIT-Lizenztext

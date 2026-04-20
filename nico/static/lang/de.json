@@ -318,6 +318,7 @@
   "git.rollbackDetail": "Die Nix-Dateien werden wiederhergestellt. Ein neuer Commit wird angelegt –\ndie Git-History bleibt vollständig erhalten.",
   "git.rollbackSuccess": "Rollback erfolgreich.",
   "git.rollbackError":  "Rollback fehlgeschlagen.",
+  "git.remoteBehind":   "⬇ Remote hat {0} neue Commit(s) – lokaler Stand ist nicht aktuell.",
 
   "toast.saved": "Gespeichert.",
   "toast.error": "Fehler.",

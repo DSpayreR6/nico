@@ -2032,6 +2032,13 @@ def create_app() -> Flask:
             "git_installed": git_installed,
         })
 
+    @app.route("/api/git/remote-status")
+    def git_remote_status():
+        nixos_dir, err = _require_setup()
+        if err:
+            return jsonify({"has_remote": False, "remote_url": "", "behind": 0, "error": ""})
+        return jsonify(git_manager.check_remote_status(nixos_dir))
+
     @app.route("/api/git/init", methods=["POST"])
     def git_init():
         if err := _check_csrf(): return err

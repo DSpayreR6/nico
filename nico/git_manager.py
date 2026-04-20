@@ -108,6 +108,41 @@ def auto_commit(nixos_dir: str, label: str = "") -> tuple[bool, str]:
     return True, msg
 
 
+def check_remote_status(nixos_dir: str) -> dict:
+    """
+    Check whether the local repo is behind its remote.
+    Returns {
+        "has_remote": bool,
+        "remote_url": str,
+        "behind": int,   # commits local is behind remote (0 = up to date)
+        "error": str     # non-empty if fetch failed
+    }
+    """
+    if not is_git_repo(nixos_dir):
+        return {"has_remote": False, "remote_url": "", "behind": 0, "error": ""}
+
+    rc, remote_url = _run(["remote", "get-url", "origin"], cwd=nixos_dir)
+    if rc != 0 or not remote_url:
+        return {"has_remote": False, "remote_url": "", "behind": 0, "error": ""}
+
+    rc, fetch_out = _run(["fetch", "--quiet", "origin"], cwd=nixos_dir, timeout=15)
+    if rc != 0:
+        return {"has_remote": True, "remote_url": remote_url, "behind": 0,
+                "error": f"fetch fehlgeschlagen: {fetch_out}"}
+
+    rc, count_out = _run(["rev-list", "HEAD..@{u}", "--count"], cwd=nixos_dir)
+    if rc != 0:
+        # No upstream tracking branch configured
+        return {"has_remote": True, "remote_url": remote_url, "behind": 0, "error": ""}
+
+    try:
+        behind = int(count_out.strip())
+    except ValueError:
+        behind = 0
+
+    return {"has_remote": True, "remote_url": remote_url, "behind": behind, "error": ""}
+
+
 def get_log(nixos_dir: str, n: int = 30) -> list[dict]:
     """Return the last n commits as a list of {hash, message, date} dicts."""
     if not is_git_repo(nixos_dir):

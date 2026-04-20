@@ -317,6 +317,7 @@
   "git.rollbackDetail": "Файлы Nix будут восстановлены. Будет создан новый коммит –\nистория Git будет полностью сохранена.",
   "git.rollbackSuccess": "Откат выполнен успешно.",
   "git.rollbackError":  "Ошибка отката.",
+  "git.remoteBehind":   "__TODO__",
 
   "toast.saved": "Сохранено.",
   "toast.error": "Ошибка.",

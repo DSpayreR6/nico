@@ -1991,6 +1991,20 @@ pre[class*="language-"] {
   padding: 2px 6px;
 }
 
+.git-remote-banner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: color-mix(in srgb, var(--blue) 15%, var(--mantle));
+  border-bottom: 2px solid var(--blue);
+  color: var(--blue);
+  font-size: 13px;
+  font-weight: 500;
+  padding: 8px 20px;
+}
+.git-remote-banner.hidden { display: none; }
+
 /* ── Toast notifications ─────────────────────────────────────────────────── */
 .toast {
   position: fixed;

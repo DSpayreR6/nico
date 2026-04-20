@@ -317,6 +317,7 @@
   "git.rollbackDetail": "Nix 文件将被恢复。将创建一个新提交 –\nGit 历史将完整保留。",
   "git.rollbackSuccess": "回滚成功。",
   "git.rollbackError":  "回滚失败。",
+  "git.remoteBehind":   "__TODO__",
 
   "toast.saved": "已保存。",
   "toast.error": "错误。",
