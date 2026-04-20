@@ -2854,26 +2854,6 @@ const AI_PROVIDERS = {
   grok:    'https://grok.com/',
 };
 
-function initAiProvider() {
-  const select   = document.getElementById('ai-provider-select');
-  const customIn = document.getElementById('ai-custom-url');
-  const saved    = localStorage.getItem('nico_ai_provider') || 'claude';
-
-  select.value = saved;
-  customIn.classList.toggle('hidden', saved !== 'custom');
-  if (saved === 'custom') {
-    customIn.value = localStorage.getItem('nico_ai_custom_url') || '';
-  }
-
-  select.addEventListener('change', () => {
-    localStorage.setItem('nico_ai_provider', select.value);
-    customIn.classList.toggle('hidden', select.value !== 'custom');
-  });
-
-  customIn.addEventListener('input', () => {
-    localStorage.setItem('nico_ai_custom_url', customIn.value.trim());
-  });
-}
 
 function askAI(sectionName) {
   const question = t('ai.question', sectionName);
@@ -3961,8 +3941,7 @@ function bindUI() {
     document.getElementById('hm-shared-modules-detail')?.classList.toggle('hidden', !this.checked);
   });
 
-  // KI provider selector + per-section buttons + line hints
-  initAiProvider();
+  // Per-section AI buttons
   addAiButtons();
 
   // Ebene-2 Sektionen (aufklappbar innerhalb von Sektionen)
