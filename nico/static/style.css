@@ -53,8 +53,9 @@ body {
   z-index: 50;
 }
 
-/* Dir-Browser liegt immer über anderen Overlays */
+/* Dir-Browser und Sudo-Dialog liegen immer über anderen Overlays */
 #dirbrowser-overlay { z-index: 100; }
+#sudo-overlay       { z-index: 200; }
 
 /* Admin-Bereich: Vollbild-Seite unterhalb des Headers */
 #admin-overlay {
