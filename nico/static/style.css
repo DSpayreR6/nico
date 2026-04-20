@@ -1504,23 +1504,10 @@ textarea:focus {
 }
 
 /* ── Rebuild output ──────────────────────────────────────────────────────── */
-.rebuild-status {
-  font-size: 13px;
-  font-weight: 600;
-  margin: 10px 0 4px;
-  padding: 5px 10px;
-  border-radius: 4px;
-  background: var(--surface0);
-  color: var(--subtext1);
-}
-.rebuild-status.running { color: var(--yellow); }
-.rebuild-status.success { color: var(--green);  }
-.rebuild-status.failed  { color: var(--red);    }
-
-.rebuild-output {
+.rebuild-log {
   background: var(--crust);
   border: 1px solid var(--surface1);
-  border-radius: 6px;
+  border-radius: 6px 6px 0 0;
   padding: 12px 14px;
   font-family: var(--mono);
   font-size: 11px;
@@ -1528,11 +1515,88 @@ textarea:focus {
   color: var(--text);
   white-space: pre-wrap;
   word-break: break-all;
-  min-height: 120px;
-  max-height: 55vh;
+  min-height: 60px;
+  max-height: 38vh;
   overflow-y: auto;
   margin-top: 8px;
 }
+
+.rebuild-monitor {
+  background: var(--mantle);
+  border: 1px solid var(--surface1);
+  border-top: none;
+  border-radius: 0 0 6px 6px;
+  padding: 10px 14px 8px;
+  font-family: var(--mono);
+  font-size: 11px;
+}
+
+.rebuild-monitor-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 5px;
+}
+
+.rebuild-phase {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: var(--blue);
+  min-width: 84px;
+}
+.rebuild-phase.phase-fetching   { color: var(--teal);   }
+.rebuild-phase.phase-building   { color: var(--yellow); }
+.rebuild-phase.phase-activating { color: var(--green);  }
+
+.rebuild-progress {
+  flex: 1;
+  height: 5px;
+  background: var(--surface1);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.rebuild-progress-bar {
+  height: 100%;
+  width: 30%;
+  background: linear-gradient(90deg, transparent, var(--blue), transparent);
+  border-radius: 3px;
+  animation: rebuild-shimmer 1.6s ease-in-out infinite;
+}
+.rebuild-monitor[data-phase="fetching"]   .rebuild-progress-bar { background: linear-gradient(90deg, transparent, var(--teal),   transparent); }
+.rebuild-monitor[data-phase="building"]   .rebuild-progress-bar { background: linear-gradient(90deg, transparent, var(--yellow), transparent); }
+.rebuild-monitor[data-phase="activating"] .rebuild-progress-bar { background: linear-gradient(90deg, transparent, var(--green),  transparent); }
+.rebuild-monitor.done .rebuild-progress-bar { animation: none; opacity: 0.2; }
+
+@keyframes rebuild-shimmer {
+  0%   { transform: translateX(-200%); }
+  100% { transform: translateX(500%); }
+}
+
+.rebuild-pkg {
+  color: var(--subtext0);
+  font-size: 10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-height: 13px;
+  margin-bottom: 4px;
+}
+
+.rebuild-result {
+  font-size: 12px;
+  font-weight: 600;
+  margin-top: 2px;
+  padding: 3px 8px;
+  border-radius: 4px;
+}
+.rebuild-result.result-success { color: var(--green); background: rgba(166,227,161,.08); }
+.rebuild-result.result-failed  { color: var(--red);   background: rgba(243,139,168,.08); }
+
+.log-warning { color: var(--yellow); }
+.log-error   { color: var(--red);   }
 
 /* ── Import-Dialog (Setup-Overlay) ───────────────────────────────────────── */
 .import-details {

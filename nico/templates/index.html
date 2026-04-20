@@ -1530,8 +1530,15 @@
     <div class="modal modal-wide">
       <div class="modal-logo" data-i18n="rebuild.title">NixOS-Rebuild</div>
       <p class="setup-hint" style="margin:0 0 8px" data-i18n="rebuild.restartHint">__TODO__</p>
-      <div id="rebuild-status" class="rebuild-status" data-i18n="rebuild.waiting">Bereit</div>
-      <pre id="rebuild-output" class="rebuild-output"></pre>
+      <pre id="rebuild-log" class="rebuild-log"></pre>
+      <div id="rebuild-monitor" class="rebuild-monitor" data-phase="evaluating">
+        <div class="rebuild-monitor-top">
+          <span id="rebuild-phase" class="rebuild-phase phase-evaluating">Evaluating</span>
+          <div class="rebuild-progress"><div id="rebuild-progress-bar" class="rebuild-progress-bar"></div></div>
+        </div>
+        <div id="rebuild-pkg" class="rebuild-pkg"></div>
+        <div id="rebuild-result" class="rebuild-result hidden"></div>
+      </div>
       <div class="confirm-buttons" style="margin-top:16px">
         <button id="rebuild-close-btn" data-i18n="rebuild.close">Schließen</button>
       </div>

@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Rebuild/Dryrun-Ausgabefenster (nix-output-monitor-Stil)
+- Rebuild-Modal: oberer Scrollbereich für rohen Log-Stream (Warning gelb, Error rot hervorgehoben)
+- Rebuild-Modal: unterer Monitor-Block mit Phasen-Label (Evaluating → Fetching → Building → Activating), animiertem Fortschrittsbalken (Shimmer, phasenfarbig), aktiven Paketnamen und Abschlussstatus (✅/❌)
+- Dryrun-Output: `warning:` / `error:`-Zeilen werden ebenfalls farbig hervorgehoben
+- Hilfsfunktion `_colorizedOutput()` (HTML-sicher, shared für Rebuild-Log und Dryrun)
+- Backend/SSE-Logik unverändert
+
 ### NixOS-Aktionsmenü
 - `dry-run`-Button aus der Header-Leiste entfernt
 - Neues NixOS-Icon-Dropdown in der Header-Leiste mit drei farbkodierten Aktionen: Zwischenstand speichern (grün), Dry-Run (gelb), System-Neubau (rot)

@@ -3152,15 +3152,23 @@ async function openRebuild(mode = 'switch') {
   const sudoNonce = await acquireSudoNonce();
   if (sudoNonce === null) return;  // abgebrochen
 
-  const overlay  = document.getElementById('rebuild-overlay');
-  const statusEl = document.getElementById('rebuild-status');
-  const outputEl = document.getElementById('rebuild-output');
-  const closeBtn = document.getElementById('rebuild-close-btn');
+  const overlay     = document.getElementById('rebuild-overlay');
+  const logEl       = document.getElementById('rebuild-log');
+  const monitorEl   = document.getElementById('rebuild-monitor');
+  const phaseEl     = document.getElementById('rebuild-phase');
+  const pkgEl       = document.getElementById('rebuild-pkg');
+  const resultEl    = document.getElementById('rebuild-result');
+  const closeBtn    = document.getElementById('rebuild-close-btn');
 
   // Reset state
-  outputEl.textContent = '';
-  statusEl.textContent = t('rebuild.running');
-  statusEl.className   = 'rebuild-status running';
+  logEl.innerHTML      = '';
+  phaseEl.textContent  = 'Evaluating';
+  phaseEl.className    = 'rebuild-phase phase-evaluating';
+  pkgEl.textContent    = '';
+  resultEl.className   = 'rebuild-result hidden';
+  resultEl.textContent = '';
+  monitorEl.dataset.phase = 'evaluating';
+  monitorEl.classList.remove('done');
   closeBtn.disabled    = true;
   overlay.classList.remove('hidden');
 
@@ -3174,36 +3182,79 @@ async function openRebuild(mode = 'switch') {
   const es  = new EventSource(url);
   _rebuildES = es;
 
+  const phaseLabels = { evaluating: 'Evaluating', fetching: 'Fetching', building: 'Building', activating: 'Activating' };
+  let isRunning      = true;
+  let firstErrorLine = '';
+
+  function _setPhase(phase) {
+    phaseEl.textContent     = phaseLabels[phase] || phase;
+    phaseEl.className       = 'rebuild-phase phase-' + phase;
+    monitorEl.dataset.phase = phase;
+  }
+
+  function _finishMonitor(success, message) {
+    isRunning = false;
+    pkgEl.textContent = '';
+    monitorEl.classList.add('done');
+    resultEl.className   = 'rebuild-result ' + (success ? 'result-success' : 'result-failed');
+    resultEl.textContent = message;
+    closeBtn.disabled    = false;
+  }
+
   es.onmessage = (event) => {
     let msg;
     try { msg = JSON.parse(event.data); } catch { return; }
 
     if (msg.type === 'output') {
-      outputEl.textContent += msg.line + '\n';
-      outputEl.scrollTop = outputEl.scrollHeight;
+      const line = msg.line;
+
+      // Append colorized line to log
+      const span = document.createElement('span');
+      if (/error:/i.test(line))        span.className = 'log-error';
+      else if (/warning:/i.test(line)) span.className = 'log-warning';
+      span.textContent = line + '\n';
+      logEl.appendChild(span);
+      logEl.scrollTop = logEl.scrollHeight;
+
+      // Phase detection
+      if (/activating the configuration/i.test(line))          _setPhase('activating');
+      else if (/^building the system configuration/i.test(line) ||
+               /^\s*building\s/i.test(line))                   _setPhase('building');
+      else if (/fetching|downloading/i.test(line))             _setPhase('fetching');
+      else if (/evaluating/i.test(line))                       _setPhase('evaluating');
+
+      // Active package name
+      const storeMatch = line.match(/\/nix\/store\/[a-z0-9]+-([^/\s]+)/);
+      const buildMatch = line.match(/building '?([^'\s]+)/i);
+      if (storeMatch)      pkgEl.textContent = storeMatch[1];
+      else if (buildMatch) pkgEl.textContent = buildMatch[1];
+
+      // Track first error line
+      if (!firstErrorLine && /error:/i.test(line)) firstErrorLine = line.trim();
+
     } else if (msg.type === 'done') {
-      statusEl.textContent = msg.success ? t('rebuild.success') : t('rebuild.failed');
-      statusEl.className   = 'rebuild-status ' + (msg.success ? 'success' : 'failed');
-      closeBtn.disabled    = false;
+      const label = msg.success
+        ? '✅ ' + t('rebuild.success')
+        : '❌ ' + t('rebuild.failed') + (firstErrorLine ? ': ' + firstErrorLine.substring(0, 80) : '');
+      _finishMonitor(msg.success, label);
       es.close();
       _rebuildES = null;
     } else if (msg.type === 'error') {
-      statusEl.textContent = t('rebuild.error');
-      statusEl.className   = 'rebuild-status failed';
-      outputEl.textContent += '\n[!] ' + msg.message + '\n';
-      outputEl.scrollTop = outputEl.scrollHeight;
-      closeBtn.disabled    = false;
+      const errText = msg.message || t('rebuild.error');
+      const span = document.createElement('span');
+      span.className   = 'log-error';
+      span.textContent = '\n[!] ' + errText + '\n';
+      logEl.appendChild(span);
+      logEl.scrollTop = logEl.scrollHeight;
+      _finishMonitor(false, '❌ ' + errText);
       es.close();
       _rebuildES = null;
     }
   };
 
   es.onerror = () => {
-    // Only show error if still "running" (not already done/error)
-    if (statusEl.classList.contains('running')) {
-      statusEl.textContent = t('rebuild.connectionError');
-      statusEl.className   = 'rebuild-status failed';
-      closeBtn.disabled    = false;
+    if (isRunning) {
+      _finishMonitor(false, '❌ ' + t('rebuild.connectionError'));
     }
     es.close();
     _rebuildES = null;
@@ -3213,6 +3264,18 @@ async function openRebuild(mode = 'switch') {
 function closeRebuild() {
   if (_rebuildES) { _rebuildES.close(); _rebuildES = null; }
   document.getElementById('rebuild-overlay').classList.add('hidden');
+}
+
+// ── Shared output helpers ─────────────────────────────────────────────────────
+
+// Render plain text into colorized HTML spans (safe: escapes HTML before inserting)
+function _colorizedOutput(text) {
+  return text.split('\n').map(line => {
+    const esc = line.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    if (/error:/i.test(line))   return `<span class="log-error">${esc}</span>`;
+    if (/warning:/i.test(line)) return `<span class="log-warning">${esc}</span>`;
+    return esc;
+  }).join('\n');
 }
 
 // ── Dry-Run / Syntax-Prüfung ─────────────────────────────────────────────────
@@ -3274,8 +3337,8 @@ async function runDryRun() {
 
   if (!res) { output.textContent = t('dryrun.networkError'); return; }
   const data = await res.json();
-  output.textContent = _dryRunHostHeader(body) + (tErr(data.output) || '');
-  output.style.color = data.ok ? 'var(--green)' : 'var(--red)';
+  output.style.color = '';
+  output.innerHTML = _colorizedOutput(_dryRunHostHeader(body) + (tErr(data.output) || ''));
 }
 
 async function runSaveAndDryRun() {
@@ -3306,8 +3369,8 @@ async function runSaveAndDryRun() {
 
   if (!res) { output.textContent = t('dryrun.networkError'); return; }
   const data = await res.json();
-  output.textContent = _dryRunHostHeader(body) + (data.output || (data.ok ? '✓ OK' : t('dryrun.failed')));
-  output.style.color = data.ok ? 'var(--green)' : 'var(--red)';
+  output.style.color = '';
+  output.innerHTML = _colorizedOutput(_dryRunHostHeader(body) + (data.output || (data.ok ? '✓ OK' : t('dryrun.failed'))));
 }
 
 // ── Nix GC options toggle ──────────────────────────────────────────────────
