@@ -754,20 +754,71 @@ button:active { transform: scale(.97); }
 
 .btn-header-icon:hover { opacity: 1; }
 
-/* dry-run header button – rechteckig wie btn-browse, nach btn-header-icon damit border-radius greift */
-#header-dryrun-btn {
-  width: auto;
-  border-radius: 5px;
-  padding: 0 9px;
-  font-size: 12px;
-  background: var(--surface1);
-  border-color: var(--surface2);
-}
-#header-dryrun-btn:hover { background: var(--surface2); color: var(--text); border-color: var(--surface2); }
+/* NixOS action button */
+#nixos-btn { color: var(--subtext0); }
+#nixos-btn:hover { border-color: var(--blue); opacity: 1; }
+#nixos-btn img { display: block; filter: invert(60%); }
+#nixos-btn:hover img { filter: invert(80%); }
 
 #help-btn:hover  { color: var(--blue); border-color: var(--blue); }
 #admin-btn:hover { color: var(--text); border-color: var(--overlay0); }
 #quit-btn:hover  { color: var(--red);  border-color: var(--red); }
+
+/* ── NixOS action dropdown ────────────────────────────────────────────────── */
+.nixos-menu {
+  position: relative;
+}
+
+.nixos-dropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  background: var(--mantle);
+  border: 1px solid var(--surface1);
+  border-radius: 8px;
+  padding: 4px;
+  min-width: 180px;
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  box-shadow: 0 4px 16px rgba(0,0,0,.4);
+}
+
+.nixos-action {
+  width: 100%;
+  text-align: left;
+  padding: 7px 12px 7px 34px;
+  font-size: 13px;
+  background: transparent;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  position: relative;
+}
+
+.nixos-action::before {
+  content: '';
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.nixos-green { color: var(--green); }
+.nixos-green::before { background: var(--green); }
+.nixos-green:hover { background: color-mix(in srgb, var(--green) 15%, var(--surface0)); }
+
+.nixos-yellow { color: var(--yellow); }
+.nixos-yellow::before { background: var(--yellow); }
+.nixos-yellow:hover { background: color-mix(in srgb, var(--yellow) 15%, var(--surface0)); }
+
+.nixos-red { color: var(--red); }
+.nixos-red::before { background: var(--red); }
+.nixos-red:hover { background: color-mix(in srgb, var(--red) 15%, var(--surface0)); }
 
 /* ── Help dropdown menu ───────────────────────────────────────────────────── */
 .help-menu {

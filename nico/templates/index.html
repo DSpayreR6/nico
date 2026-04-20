@@ -173,9 +173,22 @@
           </div>
         </div>
         <div class="header-icon-group">
-          <button id="header-dryrun-btn" class="btn-header-icon btn-dryrun"
-                  data-i18n-title="header.dryRunTitle"
-                  title="Speichern und Konfiguration testen">dry-run</button>
+          <!-- NixOS action menu -->
+          <div class="nixos-menu" id="nixos-menu">
+            <button id="nixos-btn" class="btn-header-icon btn-nixos"
+                    data-i18n-title="header.nixosTitle"
+                    title="NixOS-Aktionen">
+              <img src="/static/nixos.svg" alt="NixOS" width="16" height="16">
+            </button>
+            <div id="nixos-dropdown" class="nixos-dropdown hidden">
+              <button id="nixos-save-btn"    class="nixos-action nixos-green"
+                      data-i18n="header.nixosSave">Zwischenstand speichern</button>
+              <button id="nixos-dryrun-btn"  class="nixos-action nixos-yellow"
+                      data-i18n="header.nixosDryRun">Dry-Run</button>
+              <button id="nixos-rebuild-btn" class="nixos-action nixos-red"
+                      data-i18n="header.nixosRebuild">System-Neubau</button>
+            </div>
+          </div>
           <button id="admin-btn" class="btn-header-icon"
                   data-i18n-title="header.adminTitle"
                   title="Admin-Bereich öffnen">⚙</button>
@@ -1679,9 +1692,7 @@
 
       <!-- Tab-Leiste -->
       <div class="admin-tabs">
-        <button class="admin-tab active" data-admin-tab="aktionen"
-                data-i18n="admin.tab.aktionen">Aktionen</button>
-        <button class="admin-tab" data-admin-tab="einstellungen"
+        <button class="admin-tab active" data-admin-tab="einstellungen"
                 data-i18n="admin.tab.einstellungen">Einstellungen</button>
         <button class="admin-tab" data-admin-tab="administration"
                 data-i18n="admin.tab.administration">Administration</button>
@@ -1689,26 +1700,8 @@
                 data-i18n="admin.tab.zeitmaschine">Zeitmaschine</button>
       </div>
 
-      <!-- ── Tab 1: Aktionen ─────────────────────────────────────────── -->
-      <div class="admin-tab-panel" data-admin-panel="aktionen">
-        <div class="admin-actions">
-          <button type="button" id="admin-write-btn" class="action-btn btn-red"
-                  data-i18n="admin.checkpoint"
-                  data-i18n-title="admin.checkpointTitle"
-                  title="Speichert den aktuellen Stand und legt einen Punkt in der Zeitmaschine an, zu dem du jederzeit zurückspringen kannst">
-            Zwischenstand konservieren
-          </button>
-          <button type="button" id="admin-rebuild-btn" class="action-btn btn-peach"
-                  data-i18n="admin.rebuild"
-                  data-i18n-title="admin.rebuildTitle"
-                  title="Baut das System neu (nixos-rebuild switch) – schreibt Config vorher, braucht root">
-            System neu bauen
-          </button>
-        </div>
-      </div>
-
-      <!-- ── Tab 2: Einstellungen ───────────────────────────────────── -->
-      <div class="admin-tab-panel hidden" data-admin-panel="einstellungen">
+      <!-- ── Tab 1: Einstellungen ───────────────────────────────────── -->
+      <div class="admin-tab-panel" data-admin-panel="einstellungen">
 
         <!-- NiCo-Einstellungen (bleiben am Rechner) -->
         <div class="admin-section">

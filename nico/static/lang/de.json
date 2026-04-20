@@ -28,6 +28,10 @@
   "header.helpTitle":        "Hilfe und Dokumentation öffnen",
   "header.adminTitle":       "Admin-Bereich öffnen",
   "header.quitTitle":        "NiCo-Server beenden – Browser-Tab kann danach geschlossen werden",
+  "header.nixosTitle":       "NixOS-Aktionen",
+  "header.nixosSave":        "Zwischenstand speichern",
+  "header.nixosDryRun":      "Dry-Run",
+  "header.nixosRebuild":     "System-Neubau",
 
   "sections.collapseAll":      "↑ Einklappen",
   "sections.expandAll":        "↓ Aufklappen",

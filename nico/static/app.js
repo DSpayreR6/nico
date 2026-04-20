@@ -674,7 +674,7 @@ async function loadConfig() {
 }
 
 // ── Admin-Bereich ──────────────────────────────────────────────────────────
-let _activeAdminTab = 'aktionen';
+let _activeAdminTab = 'einstellungen';
 
 function openAdmin() {
   _autoSave();
@@ -3997,8 +3997,26 @@ function bindUI() {
     });
   });
 
-  // Header action buttons
-  on('header-dryrun-btn',  'click', runSaveAndDryRun);
+  // NixOS action dropdown
+  (function initNixosMenu() {
+    const menu  = document.getElementById('nixos-menu');
+    const btn   = document.getElementById('nixos-btn');
+    const drop  = document.getElementById('nixos-dropdown');
+    if (!menu || !btn || !drop) return;
+
+    function toggle(e) {
+      e.stopPropagation();
+      drop.classList.toggle('hidden');
+    }
+    function close() { drop.classList.add('hidden'); }
+
+    btn.addEventListener('click', toggle);
+    document.addEventListener('click', e => { if (!menu.contains(e.target)) close(); });
+
+    on('nixos-save-btn',    'click', () => { close(); openWriteConfirm(); });
+    on('nixos-dryrun-btn',  'click', () => { close(); runSaveAndDryRun(); });
+    on('nixos-rebuild-btn', 'click', () => { close(); openRebuild('switch'); });
+  })();
 
   // Admin-Bereich
   on('admin-btn',       'click', openAdmin);
@@ -4013,8 +4031,6 @@ function bindUI() {
   initAdminTabs();
   initSettingsPanel();
   initAdminImportCollapse();
-  on('admin-write-btn',    'click', () => { closeAdmin(); openWriteConfirm(); });
-  on('admin-rebuild-btn',  'click', () => { closeAdmin(); openRebuild('switch'); });
 
   // Rebuild output modal
   on('rebuild-close-btn', 'click', closeRebuild);

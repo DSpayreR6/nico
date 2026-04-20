@@ -2,7 +2,14 @@
 
 ## Unreleased
 
-### Git
+### NixOS-Aktionsmenü
+- `dry-run`-Button aus der Header-Leiste entfernt
+- Neues NixOS-Icon-Dropdown in der Header-Leiste mit drei farbkodierten Aktionen: Zwischenstand speichern (grün), Dry-Run (gelb), System-Neubau (rot)
+- NixOS-SVG lokal unter `nico/static/nixos.svg` (MIT-Lizenz, NixOS-Projekt)
+- Admin-Panel: „Aktionen"-Tab entfernt; Standard-Tab ist jetzt „Einstellungen"
+- Neue i18n-Schlüssel: `header.nixosTitle`, `header.nixosSave`, `header.nixosDryRun`, `header.nixosRebuild`
+
+### Git (ungetestet)
 - Remote-Stand-Prüfung beim Start: falls das lokale Repo hinter dem Remote liegt, erscheint ein blaues Info-Banner mit Anzahl der fehlenden Commits
 - Neuer `GET /api/git/remote-status`-Endpunkt (`git fetch` + `rev-list HEAD..@{u} --count`)
 - Neuer Übersetzungsschlüssel `git.remoteBehind`

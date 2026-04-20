@@ -28,6 +28,10 @@
   "header.helpTitle":        "打开帮助和文档",
   "header.adminTitle":       "打开管理面板",
   "header.quitTitle":        "停止 NiCo 服务器 – 之后可以关闭标签页",
+  "header.nixosTitle":       "__TODO__",
+  "header.nixosSave":        "__TODO__",
+  "header.nixosDryRun":      "__TODO__",
+  "header.nixosRebuild":     "__TODO__",
 
   "sections.collapseAll":      "↑ 收起",
   "sections.expandAll":        "↓ 展开",
