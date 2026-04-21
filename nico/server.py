@@ -1614,15 +1614,18 @@ def create_app() -> Flask:
           mode   – "switch" | "boot" | "test"  (default: "switch")
 
         SSE event types:
-          {"type": "output", "line": "..."}
-          {"type": "done",   "success": true|false, "exit_code": N}
-          {"type": "error",  "message": "..."}
+          {"type": "output",   "line": "..."}
+          {"type": "phase",    "phase": "evaluating|fetching|building|activating", "active": true|false, "pkg": "..."}
+          {"type": "progress", "done": N, "total": M, "pkg": "..."}
+          {"type": "done",     "success": true|false, "exit_code": N}
+          {"type": "error",    "message": "..."}
 
         Architecture note: mode is already a parameter so switch/boot/test
         can be added to the UI later without touching this endpoint.
         """
         import json as _json
         import subprocess as _sp
+        import re as _re
 
         # CSRF via query param (EventSource cannot set headers)
         token = request.args.get('token', '')
@@ -1665,11 +1668,132 @@ def create_app() -> Flask:
                 flake_arg = f".#{hostname}"
             else:
                 flake_arg = f"path:{Path(nixos_dir).resolve().as_posix()}#{hostname}"
-            cmd = ["sudo", "-S", "nixos-rebuild", mode, "--flake", flake_arg]
+            cmd = ["sudo", "-S", "nixos-rebuild", mode, "--flake", flake_arg,
+                   "--log-format", "internal-json", "-v"]
         else:
-            cmd = ["sudo", "-S", "nixos-rebuild", mode, "-I", f"nixos-config={conf_path}"]
+            cmd = ["sudo", "-S", "nixos-rebuild", mode, "-I", f"nixos-config={conf_path}",
+                   "--log-format", "internal-json", "-v"]
 
         def _generate():
+            # Tracks active nix activities: {id: {'phase', 'pkg', 'nix_type', 'dl_done', 'dl_expected'}}
+            active_acts = {}
+            # Aggregated download bytes across all substitute activities
+            dl_state    = {'done': 0, 'expected': 0}
+            # Build derivation counter (counted from actBuild start/stop)
+            build_state = {'done': 0, 'total': 0}
+
+            # nix activity types
+            ACT_BUILD      = 105  # actBuild – individual derivation build
+            ACT_SUBSTITUTE = 107  # actSubstitute – download from binary cache
+
+            def _pkg_from_text(text):
+                m = _re.search(r'/nix/store/[a-z0-9]+-([^/\s\'.]+)', text)
+                return m.group(1) if m else ''
+
+            def _emit_phase(phase, active, pkg=''):
+                return f"data: {_json.dumps({'type': 'phase', 'phase': phase, 'active': active, 'pkg': pkg})}\n\n"
+
+            def _emit_progress():
+                building_pkgs = [v['pkg'] for v in active_acts.values()
+                                 if v['phase'] == 'building' and v['pkg']]
+                pkg = building_pkgs[0] if building_pkgs else ''
+                return f"data: {_json.dumps({'type': 'progress', 'done': build_state['done'], 'total': build_state['total'], 'pkg': pkg})}\n\n"
+
+            def _emit_dl():
+                return f"data: {_json.dumps({'type': 'dl_progress', 'done': dl_state['done'], 'expected': dl_state['expected']})}\n\n"
+
+            def _parse_nix_line(json_str):
+                """Parse a @nix JSON line; yield SSE event strings."""
+                try:
+                    data = _json.loads(json_str)
+                except Exception:
+                    yield f"data: {_json.dumps({'type': 'output', 'line': json_str})}\n\n"
+                    return
+
+                action = data.get('action')
+
+                if action == 'msg':
+                    msg_text = data.get('msg', '')
+                    if msg_text:
+                        yield f"data: {_json.dumps({'type': 'output', 'line': msg_text})}\n\n"
+
+                elif action == 'start':
+                    act_id   = data.get('id')
+                    nix_type = data.get('type', 0)
+                    text     = data.get('text', '')
+
+                    # nix_type takes priority for build/fetch; text handles evaluating + fallback
+                    if nix_type == ACT_BUILD:
+                        phase = 'building'
+                        pkg   = _pkg_from_text(text)
+                    elif nix_type == ACT_SUBSTITUTE:
+                        phase, pkg = 'fetching', ''
+                    elif _re.search(r'evaluating', text, _re.I):
+                        phase, pkg = 'evaluating', ''
+                    elif _re.search(r"building '?/nix/store/", text, _re.I):
+                        phase = 'building'
+                        pkg   = _pkg_from_text(text)
+                    elif _re.search(r'fetch|download|copy', text, _re.I):
+                        phase, pkg = 'fetching', ''
+                    else:
+                        phase, pkg = None, ''
+
+                    if act_id is not None:
+                        was_active = phase and any(v['phase'] == phase for v in active_acts.values())
+                        active_acts[act_id] = {
+                            'phase': phase, 'pkg': pkg, 'nix_type': nix_type,
+                            'dl_done': 0, 'dl_expected': 0,
+                        }
+                        if phase and not was_active:
+                            yield _emit_phase(phase, True, pkg)
+                        if nix_type == ACT_BUILD:
+                            build_state['total'] += 1
+                            if build_state['total'] > 0:
+                                yield _emit_progress()
+
+                elif action == 'stop':
+                    act_id = data.get('id')
+                    if act_id in active_acts:
+                        act      = active_acts.pop(act_id)
+                        nix_type = act['nix_type']
+
+                        if act['phase'] == 'fetching':
+                            # Remove this activity's byte contribution from download totals
+                            dl_state['done']     = max(0, dl_state['done']     - act['dl_done'])
+                            dl_state['expected'] = max(0, dl_state['expected'] - act['dl_expected'])
+
+                        if nix_type == ACT_BUILD:
+                            build_state['done'] += 1
+                            if build_state['total'] > 0:
+                                yield _emit_progress()
+
+                        stopped_phase = act['phase']
+                        if stopped_phase:
+                            still_active = any(v['phase'] == stopped_phase for v in active_acts.values())
+                            if not still_active:
+                                yield _emit_phase(stopped_phase, False)
+
+                elif action == 'result':
+                    result_type = data.get('type')
+                    act_id      = data.get('id')
+                    fields      = data.get('fields', [])
+
+                    if result_type == 105:  # resProgress: [done, expected, running, failed]
+                        act = active_acts.get(act_id)
+                        if act is None or len(fields) < 2:
+                            return
+                        done, expected = fields[0], fields[1]
+                        if act['phase'] == 'fetching' and isinstance(done, int) and isinstance(expected, int):
+                            # Update download byte totals by delta
+                            dl_state['done']     += done     - act['dl_done']
+                            dl_state['expected'] += expected - act['dl_expected']
+                            dl_state['done']      = max(0, dl_state['done'])
+                            dl_state['expected']  = max(0, dl_state['expected'])
+                            act['dl_done']        = done
+                            act['dl_expected']    = expected
+                            if dl_state['expected'] > 0:
+                                yield _emit_dl()
+
             try:
                 staged_with_git = False
                 stage_msg = ""
@@ -1716,7 +1840,14 @@ def create_app() -> Flask:
                 proc.stdin.close()
                 for raw_line in proc.stdout:
                     line = raw_line.rstrip('\n')
-                    yield f"data: {_json.dumps({'type': 'output', 'line': line})}\n\n"
+                    if line.startswith('@nix '):
+                        yield from _parse_nix_line(line[5:])
+                    else:
+                        yield f"data: {_json.dumps({'type': 'output', 'line': line})}\n\n"
+                        # Activating phase detected from raw output (activation scripts
+                        # run outside of nix's logger and write directly to stderr)
+                        if _re.search(r'activating the configuration', line, _re.I):
+                            yield _emit_phase('activating', True)
                 proc.wait()
                 success = proc.returncode == 0
                 yield f"data: {_json.dumps({'type': 'done', 'success': success, 'exit_code': proc.returncode})}\n\n"

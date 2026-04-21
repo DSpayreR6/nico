@@ -190,6 +190,8 @@
 
   "dryrun.title":        "Syntax-Prüfung",
   "dryrun.close":        "Schließen",
+  "dryrun.success":      "Erfolgreich",
+  "dryrun.failed":       "Fehler gefunden",
   "dryrun.networkError": "Netzwerkfehler – Server erreichbar?",
 
   "brix.insertTitle":    "Nix-Brick einfügen",

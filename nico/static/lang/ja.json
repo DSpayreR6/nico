@@ -190,6 +190,8 @@
 
   "dryrun.title":        "構文チェック",
   "dryrun.close":        "閉じる",
+  "dryrun.success":      "__TODO__",
+  "dryrun.failed":       "__TODO__",
   "dryrun.networkError": "ネットワークエラー – サーバーにアクセスできますか？",
 
   "brix.insertTitle":    "Nixブロックを挿入",

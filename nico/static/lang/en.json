@@ -190,6 +190,8 @@
 
   "dryrun.title":        "Syntax check",
   "dryrun.close":        "Close",
+  "dryrun.success":      "__TODO__",
+  "dryrun.failed":       "__TODO__",
   "dryrun.networkError": "Network error – is the server reachable?",
 
   "brix.insertTitle":    "Insert Nix brick",

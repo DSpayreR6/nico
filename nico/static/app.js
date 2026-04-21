@@ -3222,24 +3222,30 @@ async function openRebuild(mode = 'switch') {
   const sudoNonce = await acquireSudoNonce();
   if (sudoNonce === null) return;  // abgebrochen
 
-  const overlay     = document.getElementById('rebuild-overlay');
-  const logEl       = document.getElementById('rebuild-log');
-  const monitorEl   = document.getElementById('rebuild-monitor');
-  const phaseEl     = document.getElementById('rebuild-phase');
-  const pkgEl       = document.getElementById('rebuild-pkg');
-  const resultEl    = document.getElementById('rebuild-result');
-  const closeBtn    = document.getElementById('rebuild-close-btn');
+  const overlay      = document.getElementById('rebuild-overlay');
+  const logEl        = document.getElementById('rebuild-log');
+  const monitorEl    = document.getElementById('rebuild-monitor');
+  const resultEl     = document.getElementById('rebuild-result');
+  const closeBtn     = document.getElementById('rebuild-close-btn');
+  const counterEl    = document.getElementById('rph-build-counter');
+  const buildPkgEl   = document.getElementById('rph-build-pkg');
+  const fetchDoneEl  = document.getElementById('rph-fetch-done');
+  const fetchRemainEl= document.getElementById('rph-fetch-remain');
+
+  function _resetMonitor() {
+    logEl.innerHTML        = '';
+    resultEl.className     = 'rebuild-result hidden';
+    resultEl.textContent   = '';
+    counterEl.textContent  = '';
+    buildPkgEl.textContent = '';
+    fetchDoneEl.textContent   = '';
+    fetchRemainEl.textContent = '';
+    document.querySelectorAll('.rebuild-phase-col').forEach(el => el.classList.remove('active'));
+    closeBtn.disabled = true;
+  }
 
   // Reset state
-  logEl.innerHTML      = '';
-  phaseEl.textContent  = 'Evaluating';
-  phaseEl.className    = 'rebuild-phase phase-evaluating';
-  pkgEl.textContent    = '';
-  resultEl.className   = 'rebuild-result hidden';
-  resultEl.textContent = '';
-  monitorEl.dataset.phase = 'evaluating';
-  monitorEl.classList.remove('done');
-  closeBtn.disabled    = true;
+  _resetMonitor();
   overlay.classList.remove('hidden');
 
   // Close any previous stream
@@ -3252,20 +3258,45 @@ async function openRebuild(mode = 'switch') {
   const es  = new EventSource(url);
   _rebuildES = es;
 
-  const phaseLabels = { evaluating: 'Evaluating', fetching: 'Fetching', building: 'Building', activating: 'Activating' };
   let isRunning      = true;
   let firstErrorLine = '';
 
-  function _setPhase(phase) {
-    phaseEl.textContent     = phaseLabels[phase] || phase;
-    phaseEl.className       = 'rebuild-phase phase-' + phase;
-    monitorEl.dataset.phase = phase;
+  function _phaseCol(phase) {
+    return document.getElementById('rph-' + phase);
+  }
+
+  function _setPhaseActive(phase, active, pkg) {
+    const col = _phaseCol(phase);
+    if (!col) return;
+    if (active) col.classList.add('active');
+    else        col.classList.remove('active');
+  }
+
+  function _fmtBytes(b) {
+    if (b < 1024)       return b + ' B';
+    if (b < 1048576)    return (b / 1024).toFixed(1) + ' KB';
+    if (b < 1073741824) return (b / 1048576).toFixed(1) + ' MB';
+    return (b / 1073741824).toFixed(2) + ' GB';
+  }
+
+  function _setBuildProgress(done, total, pkg) {
+    counterEl.textContent  = total > 0 ? `${done} von ${total}` : '';
+    buildPkgEl.textContent = pkg || '';
+  }
+
+  function _setDlProgress(done, expected) {
+    const remain = Math.max(0, expected - done);
+    fetchDoneEl.textContent   = done > 0     ? '↓ ' + _fmtBytes(done)   : '';
+    fetchRemainEl.textContent = remain > 0   ? '→ ' + _fmtBytes(remain) : '';
   }
 
   function _finishMonitor(success, message) {
     isRunning = false;
-    pkgEl.textContent = '';
-    monitorEl.classList.add('done');
+    counterEl.textContent     = '';
+    buildPkgEl.textContent    = '';
+    fetchDoneEl.textContent   = '';
+    fetchRemainEl.textContent = '';
+    document.querySelectorAll('.rebuild-phase-col').forEach(el => el.classList.remove('active'));
     resultEl.className   = 'rebuild-result ' + (success ? 'result-success' : 'result-failed');
     resultEl.textContent = message;
     closeBtn.disabled    = false;
@@ -3286,21 +3317,17 @@ async function openRebuild(mode = 'switch') {
       logEl.appendChild(span);
       logEl.scrollTop = logEl.scrollHeight;
 
-      // Phase detection
-      if (/activating the configuration/i.test(line))          _setPhase('activating');
-      else if (/^building the system configuration/i.test(line) ||
-               /^\s*building\s/i.test(line))                   _setPhase('building');
-      else if (/fetching|downloading/i.test(line))             _setPhase('fetching');
-      else if (/evaluating/i.test(line))                       _setPhase('evaluating');
-
-      // Active package name
-      const storeMatch = line.match(/\/nix\/store\/[a-z0-9]+-([^/\s]+)/);
-      const buildMatch = line.match(/building '?([^'\s]+)/i);
-      if (storeMatch)      pkgEl.textContent = storeMatch[1];
-      else if (buildMatch) pkgEl.textContent = buildMatch[1];
-
       // Track first error line
       if (!firstErrorLine && /error:/i.test(line)) firstErrorLine = line.trim();
+
+    } else if (msg.type === 'phase') {
+      _setPhaseActive(msg.phase, msg.active, msg.pkg || '');
+
+    } else if (msg.type === 'progress') {
+      _setBuildProgress(msg.done, msg.total, msg.pkg || '');
+
+    } else if (msg.type === 'dl_progress') {
+      _setDlProgress(msg.done, msg.expected);
 
     } else if (msg.type === 'done') {
       const label = msg.success
@@ -3350,6 +3377,23 @@ function _colorizedOutput(text) {
 
 // ── Dry-Run / Syntax-Prüfung ─────────────────────────────────────────────────
 
+function _dryRunResetStatus() {
+  const logo   = document.getElementById('dryrun-logo');
+  const status = document.getElementById('dryrun-status');
+  if (logo)   { logo.className = 'modal-logo'; }
+  if (status) { status.className = 'dryrun-status hidden'; status.textContent = ''; }
+}
+
+function _dryRunShowStatus(ok) {
+  const logo   = document.getElementById('dryrun-logo');
+  const status = document.getElementById('dryrun-status');
+  if (logo)   logo.classList.add(ok ? 'logo-ok' : 'logo-failed');
+  if (status) {
+    status.textContent = ok ? '✓ ' + t('dryrun.success') : '✗ ' + t('dryrun.failed');
+    status.className   = 'dryrun-status ' + (ok ? 'status-ok' : 'status-failed');
+  }
+}
+
 function _dryRunHostHeader(body) {
   if (body.all_hosts) return `Host: ${t('flake.allHosts')}\n\n`;
   if (body.hostname)  return `Host: ${body.hostname}\n\n`;
@@ -3393,6 +3437,7 @@ async function runDryRun() {
   const output  = document.getElementById('dryrun-output');
   output.textContent = '…';
   output.style.color = '';
+  _dryRunResetStatus();
   overlay.classList.remove('hidden');
 
   if (!await Sidebar.flakeSave()) return;
@@ -3409,6 +3454,7 @@ async function runDryRun() {
   const data = await res.json();
   output.style.color = '';
   output.innerHTML = _colorizedOutput(_dryRunHostHeader(body) + (tErr(data.output) || ''));
+  _dryRunShowStatus(data.ok);
 }
 
 async function runSaveAndDryRun() {
@@ -3429,6 +3475,7 @@ async function runSaveAndDryRun() {
   const output  = document.getElementById('dryrun-output');
   output.textContent = '…';
   output.style.color = '';
+  _dryRunResetStatus();
   overlay.classList.remove('hidden');
 
   const res = await csrfFetch('/api/dry-run', {
@@ -3440,7 +3487,8 @@ async function runSaveAndDryRun() {
   if (!res) { output.textContent = t('dryrun.networkError'); return; }
   const data = await res.json();
   output.style.color = '';
-  output.innerHTML = _colorizedOutput(_dryRunHostHeader(body) + (data.output || (data.ok ? '✓ OK' : t('dryrun.failed'))));
+  output.innerHTML = _colorizedOutput(_dryRunHostHeader(body) + (data.output || ''));
+  _dryRunShowStatus(data.ok);
 }
 
 // ── Nix GC options toggle ──────────────────────────────────────────────────

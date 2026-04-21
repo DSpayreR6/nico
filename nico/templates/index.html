@@ -1502,7 +1502,8 @@
   <!-- ── Syntax-Prüfung (Dry-Run) ────────────────────────────────────── -->
   <div id="dryrun-overlay" class="overlay hidden">
     <div class="modal modal-wide">
-      <div class="modal-logo" data-i18n="dryrun.title">Syntax-Prüfung</div>
+      <div id="dryrun-logo" class="modal-logo" data-i18n="dryrun.title">Syntax-Prüfung</div>
+      <div id="dryrun-status" class="dryrun-status hidden"></div>
       <pre id="dryrun-output" class="dryrun-output"></pre>
       <div class="confirm-buttons" style="margin-top:16px">
         <button id="dryrun-close-btn" data-i18n="dryrun.close">Schließen</button>
@@ -1531,12 +1532,29 @@
       <div class="modal-logo" data-i18n="rebuild.title">NixOS-Rebuild</div>
       <p class="setup-hint" style="margin:0 0 8px" data-i18n="rebuild.restartHint">__TODO__</p>
       <pre id="rebuild-log" class="rebuild-log"></pre>
-      <div id="rebuild-monitor" class="rebuild-monitor" data-phase="evaluating">
-        <div class="rebuild-monitor-top">
-          <span id="rebuild-phase" class="rebuild-phase phase-evaluating">Evaluating</span>
-          <div class="rebuild-progress"><div id="rebuild-progress-bar" class="rebuild-progress-bar"></div></div>
+      <div id="rebuild-monitor" class="rebuild-monitor">
+        <div class="rebuild-phases">
+          <div id="rph-evaluating" class="rebuild-phase-col" data-phase="evaluating">
+            <span class="rph-dot"></span>
+            <span class="rph-label">Evaluating</span>
+          </div>
+          <div id="rph-fetching" class="rebuild-phase-col" data-phase="fetching">
+            <span class="rph-dot"></span>
+            <span class="rph-label">Fetching</span>
+            <span id="rph-fetch-done" class="rph-fetch-bytes"></span>
+            <span id="rph-fetch-remain" class="rph-fetch-remain"></span>
+          </div>
+          <div id="rph-building" class="rebuild-phase-col" data-phase="building">
+            <span class="rph-dot"></span>
+            <span class="rph-label">Building</span>
+            <span id="rph-build-counter" class="rph-build-counter"></span>
+            <span id="rph-build-pkg" class="rph-build-pkg"></span>
+          </div>
+          <div id="rph-activating" class="rebuild-phase-col" data-phase="activating">
+            <span class="rph-dot"></span>
+            <span class="rph-label">Activating</span>
+          </div>
         </div>
-        <div id="rebuild-pkg" class="rebuild-pkg"></div>
         <div id="rebuild-result" class="rebuild-result hidden"></div>
       </div>
       <div class="confirm-buttons" style="margin-top:16px">

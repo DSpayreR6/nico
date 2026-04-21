@@ -190,6 +190,8 @@
 
   "dryrun.title":        "Verificación de sintaxis",
   "dryrun.close":        "Cerrar",
+  "dryrun.success":      "__TODO__",
+  "dryrun.failed":       "__TODO__",
   "dryrun.networkError": "Error de red – ¿está el servidor accesible?",
 
   "brix.insertTitle":    "Insertar bloque Nix",
