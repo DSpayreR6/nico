@@ -292,9 +292,9 @@
   "rebuild.optStart":         "開始",
   "rebuild.waiting":          "準備完了",
   "rebuild.running":          "⏳ Rebuild実行中 …",
-  "rebuild.success":          "✅ Rebuild成功",
-  "rebuild.failed":           "❌ Rebuild失敗",
-  "rebuild.error":            "❌ エラー",
+  "rebuild.success":          "Rebuild成功",
+  "rebuild.failed":           "Rebuild失敗",
+  "rebuild.error":            "エラー",
   "rebuild.connectionError":  "❌ サーバーへの接続が切断されました",
   "rebuild.close":            "閉じる",
 

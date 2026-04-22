@@ -292,9 +292,9 @@
   "rebuild.optStart":         "Start",
   "rebuild.waiting":          "Ready",
   "rebuild.running":          "⏳ Rebuild running …",
-  "rebuild.success":          "✅ Rebuild successful",
-  "rebuild.failed":           "❌ Rebuild failed",
-  "rebuild.error":            "❌ Error",
+  "rebuild.success":          "Rebuild successful",
+  "rebuild.failed":           "Rebuild failed",
+  "rebuild.error":            "Error",
   "rebuild.connectionError":  "❌ Connection to server lost",
   "rebuild.close":            "Close",
 
