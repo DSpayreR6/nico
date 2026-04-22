@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Parser: tree-sitter-Pfad für Import
+- `nix_parser.py`: Value-Extraction-Helpers (`extract_string`, `extract_bool`, `extract_int`, `extract_inner_block`, `extract_identifier_list`, `make_kv`)
+- `importer.parse_config()` und `build_rest_brix()` nutzen tree-sitter wenn verfügbar, fallen auf Regex zurück wenn nicht
+- tree-sitter erkennt auch geschachtelte Block-Formen (z.B. `services.pipewire = { alsa.support32Bit = true; }`)
+- `shell.nix` erstellt: `nix-shell` im Projektverzeichnis liefert vollständige Umgebung inkl. `tree-sitter-grammars.tree-sitter-nix`; `TREE_SITTER_NIX_GRAMMAR` wird automatisch gesetzt
+- `start.sh` nutzt `shell.nix` wenn vorhanden
+
 ### Rebuild: nixos-rebuild.log bei Fehler
 - Bei fehlgeschlagenem Rebuild wird `nixos-rebuild.log` im NixOS-Config-Verzeichnis geschrieben (vollständiger Output)
 - Im Rebuild-Fenster erscheint bei Fehler ein Hinweis mit dem Pfad zur Log-Datei
