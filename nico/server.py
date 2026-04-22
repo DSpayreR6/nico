@@ -883,11 +883,6 @@ def create_app() -> Flask:
                             data["hm_brick_blocks"] = brix_content_to_bricks(rest, section="End")
                 except OSError:
                     pass
-            # Inherit username and state_version from system config
-            if not hm.get("username"):
-                hm["username"] = data.get("username", "") or "user"
-            if not hm.get("state_version"):
-                hm["state_version"] = data.get("state_version", "24.11")
             hm["hm_brick_blocks"] = data.get("hm_brick_blocks", {})
             result["home_nix"] = hm_generator.generate_home_nix(hm)
 
@@ -943,10 +938,6 @@ def create_app() -> Flask:
 
         hm = dict(data.get("home_manager") or {})
         if hm.get("enabled"):
-            if not hm.get("username"):
-                hm["username"] = data.get("username", "") or "user"
-            if not hm.get("state_version"):
-                hm["state_version"] = data.get("state_version", "24.11")
             home_file = nixos_path / "home.nix"
             # Analog flake.nix: externe home.nix nicht überschreiben
             _home_nico = (

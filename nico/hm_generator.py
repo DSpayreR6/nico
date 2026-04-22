@@ -81,14 +81,14 @@ HM_DEFAULTS: dict = {
     "enabled":            False,
     "username":           "",
     "home_dir":           "",
-    "state_version":      "24.11",
+    "state_version":      "",
 
     "git_enable":         False,
     "git_name":           "",
     "git_email":          "",
-    "git_default_branch": "main",
+    "git_default_branch": "",
 
-    "shell":              "bash",
+    "shell":              "",
     "shell_init_extra":   "",
 
     "packages":           [],
@@ -96,14 +96,14 @@ HM_DEFAULTS: dict = {
     "firefox":            False,
 
     "xdg_user_dirs":      False,
-    "xdg_download":       "Downloads",
-    "xdg_documents":      "Documents",
-    "xdg_pictures":       "Pictures",
-    "xdg_music":          "Music",
-    "xdg_videos":         "Videos",
-    "xdg_desktop":        "Desktop",
-    "xdg_templates":      "Templates",
-    "xdg_publicshare":    "Public",
+    "xdg_download":       "",
+    "xdg_documents":      "",
+    "xdg_pictures":       "",
+    "xdg_music":          "",
+    "xdg_videos":         "",
+    "xdg_desktop":        "",
+    "xdg_templates":      "",
+    "xdg_publicshare":    "",
 }
 
 
@@ -120,20 +120,21 @@ def _g(data: dict, key: str):
 def generate_home_nix(data: dict) -> str:
     """
     Generate a home.nix string from the given Home Manager config dict.
-    Missing keys fall back to HM_DEFAULTS.
+    Missing keys fall back to HM_DEFAULTS for UI-controlled feature toggles.
+    Identity and stateVersion are only written when explicitly present in data.
     Returns a complete, standalone home.nix that can be imported by
     Home Manager (standalone or as a NixOS module).
     """
-    username      = _g(data, "username")      or "user"
-    home_dir      = _g(data, "home_dir")      or f"/home/{username}"
-    state_version = _g(data, "state_version") or "24.11"
+    username      = (data.get("username") or "").strip()
+    home_dir      = (data.get("home_dir") or "").strip()
+    state_version = (data.get("state_version") or "").strip()
 
     git_enable    = _g(data, "git_enable")
     git_name      = _g(data, "git_name")
     git_email     = _g(data, "git_email")
-    git_branch    = _g(data, "git_default_branch") or "main"
+    git_branch    = _g(data, "git_default_branch")
 
-    shell         = _g(data, "shell") or "bash"
+    shell         = _g(data, "shell")
     shell_extra   = (_g(data, "shell_init_extra") or "").strip()
 
     packages      = _g(data, "packages") or []
@@ -152,10 +153,10 @@ def generate_home_nix(data: dict) -> str:
     ]
 
     # ── Identity ─────────────────────────────────────────────────────────
-    lines += [
-        f'  home.username      = "{username}";',
-        f'  home.homeDirectory = "{home_dir}";',
-    ]
+    if username:
+        lines += [f'  home.username      = "{username}";']
+    if home_dir:
+        lines += [f'  home.homeDirectory = "{home_dir}";']
 
     # ── Packages ─────────────────────────────────────────────────────────
     if packages:
@@ -174,12 +175,13 @@ def generate_home_nix(data: dict) -> str:
             lines += [f'    userName  = "{git_name}";']
         if git_email:
             lines += [f'    userEmail = "{git_email}";']
-        lines += [
-            "    extraConfig = {",
-            f'      init.defaultBranch = "{git_branch}";',
-            "    };",
-            "  };",
-        ]
+        if git_branch:
+            lines += [
+                "    extraConfig = {",
+                f'      init.defaultBranch = "{git_branch}";',
+                "    };",
+            ]
+        lines += ["  };"]
 
     # ── Shell ─────────────────────────────────────────────────────────────
     if shell in ("bash", "zsh", "fish"):
@@ -205,25 +207,33 @@ def generate_home_nix(data: dict) -> str:
 
     # ── XDG user directories ─────────────────────────────────────────────
     if xdg_dirs:
+        xdg_values = [
+            ("download", "xdg_download"),
+            ("documents", "xdg_documents"),
+            ("pictures", "xdg_pictures"),
+            ("music", "xdg_music"),
+            ("videos", "xdg_videos"),
+            ("desktop", "xdg_desktop"),
+            ("templates", "xdg_templates"),
+            ("publicShare", "xdg_publicshare"),
+        ]
         lines += [
             "",
             "  xdg.userDirs = {",
             "    enable     = true;",
             "    createDirectories = true;",
-            f'    download   = "${{config.home.homeDirectory}}/{_g(data, "xdg_download")}";',
-            f'    documents  = "${{config.home.homeDirectory}}/{_g(data, "xdg_documents")}";',
-            f'    pictures   = "${{config.home.homeDirectory}}/{_g(data, "xdg_pictures")}";',
-            f'    music      = "${{config.home.homeDirectory}}/{_g(data, "xdg_music")}";',
-            f'    videos     = "${{config.home.homeDirectory}}/{_g(data, "xdg_videos")}";',
-            f'    desktop    = "${{config.home.homeDirectory}}/{_g(data, "xdg_desktop")}";',
-            f'    templates  = "${{config.home.homeDirectory}}/{_g(data, "xdg_templates")}";',
-            f'    publicShare = "${{config.home.homeDirectory}}/{_g(data, "xdg_publicshare")}";',
-            "  };",
         ]
+        for nix_key, data_key in xdg_values:
+            value = _g(data, data_key)
+            if value:
+                lines += [f'    {nix_key} = "${{config.home.homeDirectory}}/{value}";']
+        lines += ["  };"]
 
-    # ── Required stateVersion ────────────────────────────────────────────
+    # ── stateVersion ────────────────────────────────────────────────────
+    if state_version:
+        lines += ["", f'  home.stateVersion = "{state_version}";']
+
     lines += [
-        f'  home.stateVersion = "{state_version}";',
         _hm_section(HM_SECTION_END),
         "",
         "}",

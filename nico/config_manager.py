@@ -379,10 +379,6 @@ def save_config(nixos_config_dir: str, data: dict) -> None:
                         data["hm_brick_blocks"] = brix_content_to_bricks(rest, section="End")
             except OSError:
                 pass
-        if not hm.get("username"):
-            hm["username"] = data.get("username", "") or "user"
-        if not hm.get("state_version"):
-            hm["state_version"] = data.get("state_version", "24.11")
         hm["hm_brick_blocks"] = data.get("hm_brick_blocks", {})
         home_file.write_text(_hm.generate_home_nix(hm), encoding="utf-8")
 
