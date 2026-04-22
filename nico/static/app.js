@@ -689,6 +689,8 @@ function _loadAdminSettings() {
   fetch('/api/app/settings').then(r => r.json()).then(data => {
     const cb = document.getElementById('setting-code-view-plain');
     if (cb) cb.checked = !!data.code_view_plain;
+    const cbLog = document.getElementById('setting-rebuild-log');
+    if (cbLog) cbLog.checked = !!data.rebuild_log;
   }).catch(() => {});
 
   // Auto-save Checkbox: code_view_plain
@@ -700,6 +702,20 @@ function _loadAdminSettings() {
         method:  'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({ code_view_plain: cbCodeView.checked }),
+      }).then(() => showToast(t('admin.settings.saved'), 'success'))
+        .catch(() => showToast(t('toast.error'), 'error'));
+    });
+  }
+
+  // Auto-save Checkbox: rebuild_log
+  const cbRebuildLog = document.getElementById('setting-rebuild-log');
+  if (cbRebuildLog && !cbRebuildLog.dataset.listenerAttached) {
+    cbRebuildLog.dataset.listenerAttached = '1';
+    cbRebuildLog.addEventListener('change', () => {
+      csrfFetch('/api/app/settings', {
+        method:  'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ rebuild_log: cbRebuildLog.checked }),
       }).then(() => showToast(t('admin.settings.saved'), 'success'))
         .catch(() => showToast(t('toast.error'), 'error'));
     });

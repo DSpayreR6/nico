@@ -546,6 +546,7 @@
   "preview.plainInactive":  "Annotierte Ansicht aktiv – klicken für Plain (ohne Brix-Marker)",
   "preview.plainActive":    "Plain-Ansicht aktiv (ohne Brix-Marker) – klicken für annotierte Ansicht",
   "admin.settings.codeViewPlain": "Code-Ansicht beim Start: Plain (ohne Brix-Annotationen)",
+  "admin.settings.rebuildLog":    "Rebuild-Log immer schreiben (nixos-rebuild.log)",
   "preview.configTab":      "configuration.nix anzeigen",
   "preview.flakeTab":       "flake.nix anzeigen",
   "preview.hmTab":          "home.nix anzeigen",

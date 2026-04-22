@@ -32,6 +32,7 @@ DEFAULT_APP_SETTINGS = {
     "language": "de",
     "theme": "auto",
     "code_view_plain": False,
+    "rebuild_log": False,
 }
 
 # Default config settings (travel with the config)

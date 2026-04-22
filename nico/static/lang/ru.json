@@ -566,6 +566,7 @@
   "preview.plainInactive":  "Аннотированный вид активен – нажмите для простого вида (без меток Brix)",
   "preview.plainActive":    "Простой вид активен (без меток Brix) – нажмите для аннотированного вида",
   "admin.settings.codeViewPlain": "Вид кода при запуске: простой (без аннотаций Brix)",
+  "admin.settings.rebuildLog":    "__TODO__",
   "preview.configTab":      "Показать configuration.nix",
   "preview.flakeTab":       "Показать flake.nix",
   "preview.hmTab":          "Показать home.nix",

@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Rebuild: nixos-rebuild.log bei Fehler
+- Bei fehlgeschlagenem Rebuild wird `nixos-rebuild.log` im NixOS-Config-Verzeichnis geschrieben (vollständiger Output)
+- Im Rebuild-Fenster erscheint bei Fehler ein Hinweis mit dem Pfad zur Log-Datei
+- Neue App-Einstellung „Rebuild-Log immer schreiben": schreibt das Log auch bei erfolgreichem Rebuild (Standard: aus)
+- Neue App-Settings-Schlüssel: `rebuild_log`; i18n-Schlüssel `admin.settings.rebuildLog`
+
 ### Bugfix: Sudo-Dialog hinter Admin-Panel
 - `#sudo-overlay` z-index auf 200 erhöht – erscheint jetzt immer über anderen Overlays
 

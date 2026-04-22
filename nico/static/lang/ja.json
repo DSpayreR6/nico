@@ -566,6 +566,7 @@
   "preview.plainInactive":  "アノテーション表示アクティブ – プレーン表示（Brixマーカーなし）に切り替えるにはクリック",
   "preview.plainActive":    "プレーン表示アクティブ（Brixマーカーなし）– アノテーション表示に切り替えるにはクリック",
   "admin.settings.codeViewPlain": "起動時のコード表示：プレーン（Brixアノテーションなし）",
+  "admin.settings.rebuildLog":    "__TODO__",
   "preview.configTab":      "configuration.nixを表示",
   "preview.flakeTab":       "flake.nixを表示",
   "preview.hmTab":          "home.nixを表示",

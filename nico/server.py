@@ -690,7 +690,7 @@ def create_app() -> Flask:
         """Merge settings into app settings (~/.config/nico/settings.json)."""
         if err := _check_csrf(): return err
 
-        _APP_KEYS = frozenset({"language", "theme", "code_view_plain"})
+        _APP_KEYS = frozenset({"language", "theme", "code_view_plain", "rebuild_log"})
         incoming = request.get_json(silent=True) or {}
         patch    = {k: v for k, v in incoming.items() if k in _APP_KEYS}
         if not patch:
@@ -1674,6 +1674,10 @@ def create_app() -> Flask:
             cmd = ["sudo", "-S", "nixos-rebuild", mode, "-I", f"nixos-config={conf_path}",
                    "--log-format", "internal-json", "-v"]
 
+        app_settings   = config_manager.get_app_settings()
+        rebuild_log_on = bool(app_settings.get("rebuild_log", False))
+        log_path       = Path(nixos_dir) / "nixos-rebuild.log"
+
         def _generate():
             # Tracks active nix activities: {id: {'phase', 'pkg', 'nix_type', 'dl_done', 'dl_expected'}}
             active_acts = {}
@@ -1681,6 +1685,8 @@ def create_app() -> Flask:
             dl_state    = {'done': 0, 'expected': 0}
             # Build derivation counter (counted from actBuild start/stop)
             build_state = {'done': 0, 'total': 0}
+            # Buffer for log output
+            log_lines   = []
 
             # nix activity types
             ACT_BUILD      = 105  # actBuild – individual derivation build
@@ -1840,6 +1846,7 @@ def create_app() -> Flask:
                 proc.stdin.close()
                 for raw_line in proc.stdout:
                     line = raw_line.rstrip('\n')
+                    log_lines.append(line)
                     if line.startswith('@nix '):
                         yield from _parse_nix_line(line[5:])
                     else:
@@ -1850,6 +1857,14 @@ def create_app() -> Flask:
                             yield _emit_phase('activating', True)
                 proc.wait()
                 success = proc.returncode == 0
+                if not success or rebuild_log_on:
+                    try:
+                        with open(log_path, 'w', encoding='utf-8') as _lf:
+                            _lf.write('\n'.join(log_lines))
+                    except Exception:
+                        pass
+                if not success:
+                    yield f"data: {_json.dumps({'type': 'output', 'line': f'── Log gespeichert: {log_path} ──'})}\n\n"
                 yield f"data: {_json.dumps({'type': 'done', 'success': success, 'exit_code': proc.returncode})}\n\n"
             except FileNotFoundError:
                 msg = "nixos-rebuild not found. Is NiCo running on a NixOS system?"

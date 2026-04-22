@@ -567,6 +567,7 @@
   "preview.plainInactive":  "带注释视图已激活 – 点击切换为纯净视图（无 Brix 标记）",
   "preview.plainActive":    "纯净视图已激活（无 Brix 标记）– 点击切换为带注释视图",
   "admin.settings.codeViewPlain": "启动时代码视图：纯净（无 Brix 注释）",
+  "admin.settings.rebuildLog":    "__TODO__",
   "preview.configTab":      "显示 configuration.nix",
   "preview.flakeTab":       "显示 flake.nix",
   "preview.hmTab":          "显示 home.nix",

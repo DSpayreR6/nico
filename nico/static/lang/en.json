@@ -546,6 +546,7 @@
   "preview.plainInactive":  "Annotated view active – click for plain (without Brix markers)",
   "preview.plainActive":    "Plain view active (without Brix markers) – click for annotated view",
   "admin.settings.codeViewPlain": "Code view on start: plain (without Brix annotations)",
+  "admin.settings.rebuildLog":    "__TODO__",
   "preview.configTab":      "Show configuration.nix",
   "preview.flakeTab":       "Show flake.nix",
   "preview.hmTab":          "Show home.nix",
