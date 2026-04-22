@@ -128,12 +128,17 @@ def _ts_parse_config(nix_content: str) -> 'tuple[dict, set[str]] | None':
     r: dict = {}
 
     def _vt(nix_key: str) -> 'str | None':
-        """Flat lookup, then one-level block fallback."""
+        """Flat lookup, then block fallback trying all possible parent prefixes."""
         if nix_key in kv:
             return kv[nix_key]
-        parts = nix_key.rsplit('.', 1)
-        if len(parts) == 2:
-            parent, child = parts
+        # Try every split point from longest parent to shortest.
+        # e.g. services.pipewire.alsa.support32Bit:
+        #   parent=services.pipewire.alsa / child=support32Bit       → not in kv
+        #   parent=services.pipewire     / child=alsa.support32Bit   → in kv → search inner
+        key_parts = nix_key.split('.')
+        for i in range(len(key_parts) - 1, 0, -1):
+            parent = '.'.join(key_parts[:i])
+            child  = '.'.join(key_parts[i:])
             if parent in kv:
                 inner = _np.extract_inner_block(kv[parent])
                 if inner:
