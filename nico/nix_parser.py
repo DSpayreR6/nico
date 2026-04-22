@@ -222,3 +222,52 @@ def _node_source(node, src_bytes: bytes) -> str:
     if node is None:
         return ""
     return src_bytes[node.start_byte:node.end_byte].decode("utf-8")
+
+
+# ── Value extraction helpers (operate on raw value_text strings) ───────────────
+
+def extract_string(value_text: str) -> str | None:
+    """'\"foo\"' → 'foo', None if not a plain string."""
+    m = re.match(r'^\s*"([^"\\]*)"\s*$', value_text.strip())
+    return m.group(1) if m else None
+
+
+def extract_bool(value_text: str) -> bool | None:
+    """'true'/'false' → True/False, None otherwise."""
+    v = value_text.strip()
+    if v == 'true':  return True
+    if v == 'false': return False
+    return None
+
+
+def extract_int(value_text: str) -> int | None:
+    """'42' → 42, None otherwise."""
+    m = re.match(r'^\s*(\d+)\s*$', value_text.strip())
+    return int(m.group(1)) if m else None
+
+
+def extract_inner_block(value_text: str) -> str | None:
+    """'{ ... }' → '...' (content without outer braces), None if not a block."""
+    v = value_text.strip()
+    if v.startswith('{') and v.endswith('}'):
+        return v[1:-1]
+    return None
+
+
+def extract_identifier_list(value_text: str) -> list[str] | None:
+    """
+    Extract identifiers from 'with pkgs; [ a b c ]' or '[ "x" "y" ]'.
+    Returns list of names, or None if value_text doesn't look like a list.
+    """
+    v = value_text.strip()
+    m = re.match(r'with\s+\w+\s*;\s*\[(.*)\]\s*$', v, re.DOTALL)
+    inner = m.group(1) if m else (v[1:-1] if v.startswith('[') else None)
+    if inner is None:
+        return None
+    cleaned = re.sub(r'#[^\n]*', '', inner)
+    return re.findall(r'\b([a-zA-Z][a-zA-Z0-9_.\\-]*)\b', cleaned)
+
+
+def make_kv(result: 'ParseResult') -> dict[str, str]:
+    """Build a flat key→value_text dict from all bindings in a ParseResult."""
+    return {b.key: b.value_text for b in result.known + result.unknown}

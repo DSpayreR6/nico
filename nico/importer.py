@@ -107,6 +107,405 @@ def _bool_multi(text: str, *patterns: str) -> bool | None:
     return None
 
 
+# ── tree-sitter based parse/brix (with regex fallback) ───────────────────────
+
+def _ts_parse_config(nix_content: str) -> 'tuple[dict, set[str]] | None':
+    """
+    Tree-sitter based parse_config.
+    Returns (recognized_dict, consumed_binding_keys) or None when unavailable.
+    consumed_binding_keys: set of top-level binding keys that were mapped.
+    """
+    from . import nix_parser as _np
+    from .brix import strip_brick_blocks
+
+    clean   = strip_brick_blocks(nix_content)
+    result  = _np.parse(clean)
+    if not result.available:
+        return None
+
+    kv: dict[str, str] = _np.make_kv(result)
+    consumed: set[str] = set()
+    r: dict = {}
+
+    def _vt(nix_key: str) -> 'str | None':
+        """Flat lookup, then one-level block fallback."""
+        if nix_key in kv:
+            return kv[nix_key]
+        parts = nix_key.rsplit('.', 1)
+        if len(parts) == 2:
+            parent, child = parts
+            if parent in kv:
+                inner = _np.extract_inner_block(kv[parent])
+                if inner:
+                    m = re.search(
+                        rf'(?<![.\w]){re.escape(child)}'
+                        r'\s*=\s*([^;{]+|\{[^{}]*\})\s*;',
+                        inner,
+                    )
+                    if m:
+                        return m.group(1).strip()
+        return None
+
+    def _mark(nix_key: str):
+        if nix_key in kv:
+            consumed.add(nix_key)
+        else:
+            parts = nix_key.rsplit('.', 1)
+            if len(parts) == 2 and parts[0] in kv:
+                consumed.add(parts[0])
+
+    def s(nico_key, *nix_keys):
+        for nk in nix_keys:
+            vt = _vt(nk)
+            if vt is not None:
+                v = _np.extract_string(vt)
+                if v is not None:
+                    r[nico_key] = v; _mark(nk); return
+
+    def b(nico_key, *nix_keys):
+        for nk in nix_keys:
+            vt = _vt(nk)
+            if vt is not None:
+                v = _np.extract_bool(vt)
+                if v is not None:
+                    r[nico_key] = v; _mark(nk); return
+
+    # ── Module args (regex – not a standard binding) ──────────────────────────
+    m_args = re.search(r'^\s*\{\s*([^}]+)\s*\}\s*:', clean, re.MULTILINE)
+    if m_args:
+        args_clean = ', '.join(a.strip() for a in m_args.group(1).split(',') if a.strip())
+        if args_clean:
+            r['nix_args'] = args_clean
+
+    # ── System ────────────────────────────────────────────────────────────────
+    s('hostname',      'networking.hostName')
+    s('state_version', 'system.stateVersion')
+    b('allowUnfree',   'nixpkgs.config.allowUnfree')
+
+    # ── Lokalisierung ─────────────────────────────────────────────────────────
+    s('timezone', 'time.timeZone')
+    s('locale',   'i18n.defaultLocale')
+
+    vt = _vt('i18n.extraLocaleSettings')
+    if vt is not None:
+        inner = _np.extract_inner_block(vt) or vt
+        m = re.search(r'LC_\w+\s*=\s*"([^"]*)"', inner)
+        if m:
+            r['extra_locale'] = m.group(1); _mark('i18n.extraLocaleSettings')
+
+    xkb_vt = _vt('services.xserver.xkb')
+    if xkb_vt:
+        inner = _np.extract_inner_block(xkb_vt) or ''
+        for attr, nico_k in [('layout', 'keyboard_layout'), ('variant', 'keyboard_variant')]:
+            m = re.search(rf'{attr}\s*=\s*"([^"]*)"', inner)
+            if m:
+                r[nico_k] = m.group(1); _mark('services.xserver.xkb')
+    else:
+        s('keyboard_layout',  'services.xserver.xkb.layout')
+        s('keyboard_variant', 'services.xserver.xkb.variant')
+    s('keyboard_console', 'console.keyMap')
+
+    # ── Boot ──────────────────────────────────────────────────────────────────
+    for loader_key, loader_name in [
+        ('boot.loader.systemd-boot.enable', 'systemd-boot'),
+        ('boot.loader.grub.enable',         'grub'),
+    ]:
+        vt = _vt(loader_key)
+        if vt and _np.extract_bool(vt):
+            r['boot_loader'] = loader_name; _mark(loader_key); break
+
+    b('boot_efi_can_touch',   'boot.loader.efi.canTouchEfiVariables')
+    s('boot_efi_mount_point', 'boot.loader.efi.efiSysMountPoint')
+    vt = _vt('boot.loader.systemd-boot.configurationLimit')
+    if vt:
+        v = _np.extract_int(vt)
+        if v is not None:
+            r['boot_config_limit'] = v; _mark('boot.loader.systemd-boot.configurationLimit')
+
+    # ── Netzwerk ──────────────────────────────────────────────────────────────
+    b('networkmanager', 'networking.networkmanager.enable')
+    b('ssh',            'services.openssh.enable')
+
+    vt = _vt('networking.firewall.enable')
+    if vt and _np.extract_bool(vt) is False:
+        r['firewall_disable'] = True; _mark('networking.firewall.enable')
+
+    for nico_tcp_udp, fw_key in [
+        (('firewall_tcp_ports', 'firewall_tcp_enable'), 'networking.firewall.allowedTCPPorts'),
+        (('firewall_udp_ports', 'firewall_udp_enable'), 'networking.firewall.allowedUDPPorts'),
+    ]:
+        ports_nico, enable_nico = nico_tcp_udp
+        vt = kv.get(fw_key)
+        if vt is not None:
+            nums = re.findall(r'\d+', re.sub(r'#[^\n]*', '', vt))
+            ports = ' '.join(nums)
+            if ports:
+                r[ports_nico] = ports; r[enable_nico] = True
+                consumed.add(fw_key)
+
+    # ── Services ──────────────────────────────────────────────────────────────
+    b('printing', 'services.printing.enable')
+    b('avahi',    'services.avahi.enable')
+    b('bluetooth','hardware.bluetooth.enable')
+    b('blueman',  'services.blueman.enable')
+    b('libinput', 'services.libinput.enable')
+    b('fprintd',  'services.fprintd.enable')
+    b('pcscd',    'services.pcscd.enable')
+    b('sunshine', 'services.sunshine.enable')
+
+    # ── Audio ─────────────────────────────────────────────────────────────────
+    b('pipewire',       'services.pipewire.enable')
+    b('pipewire_32bit', 'services.pipewire.alsa.support32Bit')
+
+    # ── Desktop ───────────────────────────────────────────────────────────────
+    for de_name, de_key in [
+        ('gnome',    'services.xserver.desktopManager.gnome.enable'),
+        ('kde',      'services.desktopManager.plasma6.enable'),
+        ('plasma5',  'services.xserver.desktopManager.plasma5.enable'),
+        ('xfce',     'services.xserver.desktopManager.xfce.enable'),
+        ('mate',     'services.xserver.desktopManager.mate.enable'),
+        ('lxqt',     'services.xserver.desktopManager.lxqt.enable'),
+        ('i3',       'services.xserver.windowManager.i3.enable'),
+        ('sway',     'programs.sway.enable'),
+        ('hyprland', 'programs.hyprland.enable'),
+    ]:
+        vt = _vt(de_key)
+        if vt and _np.extract_bool(vt):
+            r['desktop_environment'] = de_name; _mark(de_key); break
+
+    vt = _vt('services.displayManager.autoLogin')
+    if vt:
+        inner = _np.extract_inner_block(vt) or ''
+        m = re.search(r'user\s*=\s*"([^"]*)"', inner)
+        if m:
+            r['autologin_user'] = m.group(1); _mark('services.displayManager.autoLogin')
+    else:
+        s('autologin_user',
+          'services.displayManager.autoLogin.user',
+          'services.xserver.displayManager.autoLogin.user')
+
+    # ── System-Programme ──────────────────────────────────────────────────────
+    b('steam',    'programs.steam.enable')
+    b('appimage', 'programs.appimage.enable')
+
+    ff_vt = _vt('programs.firefox')
+    if ff_vt:
+        inner = _np.extract_inner_block(ff_vt) or ''
+        m = re.search(r'enable\s*=\s*(true|false)', inner)
+        if m:
+            r['firefox'] = (m.group(1) == 'true'); _mark('programs.firefox')
+        m2 = re.search(r'languagePacks\s*=\s*\[([^\]]*)\]', inner)
+        if m2:
+            packs = re.findall(r'"([^"]+)"', m2.group(1))
+            if packs: r['firefox_lang_packs'] = ', '.join(packs)
+        m2 = re.search(r'preferences\s*=\s*\{([^}]*)\}', inner, re.DOTALL)
+        if m2:
+            lines = [l.strip() for l in m2.group(1).splitlines() if l.strip()]
+            if lines: r['firefox_prefs'] = '\n'.join(lines)
+    else:
+        b('firefox', 'programs.firefox.enable')
+
+    # ── Pakete ────────────────────────────────────────────────────────────────
+    if 'environment.systemPackages' in kv:
+        pkgs_list = _np.extract_identifier_list(kv['environment.systemPackages']) or []
+        r['packages'] = [{"attr": p, "enabled": True} for p in sorted(set(pkgs_list))]
+        consumed.add('environment.systemPackages')
+
+    # ── Schriftarten ──────────────────────────────────────────────────────────
+    if 'fonts.packages' in kv:
+        fonts_list = _np.extract_identifier_list(kv['fonts.packages']) or []
+        if fonts_list:
+            r['fonts'] = sorted(set(fonts_list))
+        consumed.add('fonts.packages')
+
+    # ── Nix & System ──────────────────────────────────────────────────────────
+    b('nix_optimize_store', 'nix.settings.auto-optimise-store')
+
+    vt = _vt('nix.settings.experimental-features')
+    if vt and 'flakes' in vt:
+        r['flakes'] = True; _mark('nix.settings.experimental-features')
+
+    gc_vt = _vt('nix.gc')
+    if gc_vt:
+        inner = _np.extract_inner_block(gc_vt) or ''
+        m = re.search(r'automatic\s*=\s*(true|false)', inner)
+        if m: r['nix_gc'] = (m.group(1) == 'true')
+        m = re.search(r'dates\s*=\s*"([^"]*)"', inner)
+        if m: r['nix_gc_frequency'] = m.group(1)
+        m = re.search(r'options\s*=\s*"--delete-older-than\s+([^"]+)"', inner)
+        if m: r['nix_gc_age'] = m.group(1).strip()
+        _mark('nix.gc')
+    else:
+        b('nix_gc', 'nix.gc.automatic')
+        s('nix_gc_frequency', 'nix.gc.dates')
+        vt = _vt('nix.gc.options')
+        if vt:
+            m = re.search(r'--delete-older-than\s+(\S+)', vt)
+            if m: r['nix_gc_age'] = m.group(1); _mark('nix.gc.options')
+
+    # ── Hardware ──────────────────────────────────────────────────────────────
+    b('enable_all_firmware', 'hardware.enableAllFirmware')
+    b('opengl',     'hardware.opengl.enable',        'hardware.graphics.enable')
+    b('opengl_32bit','hardware.opengl.driSupport32Bit','hardware.graphics.enable32Bit')
+    b('zram_swap',  'zramSwap.enable')
+    b('openrgb',    'services.hardware.openrgb.enable')
+    b('ledger',     'hardware.ledger.enable')
+    b('ratbagd',    'services.ratbagd.enable')
+
+    for cpu_type in ('intel', 'amd'):
+        vt = _vt(f'hardware.cpu.{cpu_type}.updateMicrocode')
+        if vt and _np.extract_bool(vt):
+            r['cpu_microcode'] = cpu_type
+            _mark(f'hardware.cpu.{cpu_type}.updateMicrocode')
+            break
+
+    # ── Virtualisierung ───────────────────────────────────────────────────────
+    b('docker',               'virtualisation.docker.enable')
+    b('docker_rootless',      'virtualisation.docker.rootless.enable')
+    b('podman',               'virtualisation.podman.enable')
+    b('podman_docker_compat', 'virtualisation.podman.dockerCompat')
+    b('virtualbox_host',      'virtualisation.virtualbox.host.enable')
+    b('virtualbox_guest',     'virtualisation.virtualbox.guest.enable')
+    b('virtualbox_guest_drag_drop', 'virtualisation.virtualbox.guest.dragAndDrop')
+    b('libvirtd',             'virtualisation.libvirtd.enable')
+    b('virt_manager',         'programs.virt-manager.enable')
+
+    # ── Dateisystem & Backup ──────────────────────────────────────────────────
+    b('btrfs_scrub', 'services.btrfs.autoScrub.enable')
+
+    for cfg_name, nico_key in [('home', 'snapper_home'), ('root', 'snapper_root')]:
+        sn_key = f'services.snapper.configs.{cfg_name}'
+        if sn_key in kv:
+            r[nico_key] = True
+            consumed.add(sn_key)
+            inner = _np.extract_inner_block(kv[sn_key]) or kv[sn_key]
+            for fld, limit_key in [
+                ('snapper_timeline_hourly',  'TIMELINE_LIMIT_HOURLY'),
+                ('snapper_timeline_daily',   'TIMELINE_LIMIT_DAILY'),
+                ('snapper_timeline_weekly',  'TIMELINE_LIMIT_WEEKLY'),
+                ('snapper_timeline_monthly', 'TIMELINE_LIMIT_MONTHLY'),
+                ('snapper_timeline_yearly',  'TIMELINE_LIMIT_YEARLY'),
+            ]:
+                m2 = re.search(rf'{limit_key}\s*=\s*(\d+)', inner)
+                if m2: r[fld] = int(m2.group(1))
+
+    # ── Benutzer ──────────────────────────────────────────────────────────────
+    _EXCL   = {'root', 'nobody', 'guest', 'gast'}
+    _SHELLS = {'pkgs.zsh': 'zsh', 'pkgs.fish': 'fish',
+               'pkgs.bash': 'bash', 'pkgs.nushell': 'nushell'}
+
+    user_bindings = sorted(
+        [(k, v) for k, v in kv.items()
+         if k.startswith('users.users.') and k.count('.') == 2],
+        key=lambda x: x[0]
+    )
+    primary_done = False
+    extra_users: list[dict] = []
+
+    for user_key, user_vt in user_bindings:
+        uname = user_key.split('.')[-1]
+        if uname in _EXCL:
+            continue
+        inner = _np.extract_inner_block(user_vt) or user_vt
+        consumed.add(user_key)
+
+        def _ue(pattern, text=inner):
+            m = re.search(pattern, text)
+            return m.group(1) if m else None
+
+        if not primary_done:
+            primary_done = True
+            r['username'] = uname
+            v = _ue(r'description\s*=\s*"([^"]*)"')
+            if v: r['user_description'] = v
+            v = _ue(r'initialPassword\s*=\s*"([^"]*)"')
+            if v: r['user_initial_password'] = v
+            v = _ue(r'\buid\s*=\s*(\d+)')
+            if v: r['user_uid'] = v
+            v = _ue(r'\bshell\s*=\s*(pkgs\.\w+)')
+            if v: r['user_shell'] = _SHELLS.get(v, 'bash')
+            m = re.search(r'extraGroups\s*=\s*\[([^\]]*)\]', inner)
+            if m:
+                groups = re.findall(r'"(\w+)"', m.group(1))
+                if groups: r['user_groups'] = groups
+        else:
+            eu: dict = {'username': uname}
+            v = _ue(r'description\s*=\s*"([^"]*)"')
+            if v: eu['description'] = v
+            v = _ue(r'initialPassword\s*=\s*"([^"]*)"')
+            if v: eu['initial_password'] = v
+            v = _ue(r'\buid\s*=\s*(\d+)')
+            if v: eu['uid'] = int(v)
+            v = _ue(r'\bshell\s*=\s*(pkgs\.\w+)')
+            if v: eu['shell'] = _SHELLS.get(v, 'bash')
+            m = re.search(r'extraGroups\s*=\s*\[([^\]]*)\]', inner)
+            if m:
+                groups = re.findall(r'"(\w+)"', m.group(1))
+                if groups: eu['groups'] = groups
+            extra_users.append(eu)
+
+    if extra_users:
+        r['extra_users'] = extra_users
+
+    if 'users.users.gast' in kv:
+        r['guest_user'] = True; consumed.add('users.users.gast')
+
+    # ── Home Manager ──────────────────────────────────────────────────────────
+    b('hm_use_global_pkgs',   'home-manager.useGlobalPkgs')
+    b('hm_use_user_packages', 'home-manager.useUserPackages')
+
+    if 'home-manager.sharedModules' in kv:
+        vt = kv['home-manager.sharedModules']
+        entries = re.findall(r'(\S+)', re.sub(r'[\[\]]', '', vt))
+        if entries:
+            plasma = 'plasma-manager.homeModules.plasma-manager'
+            if plasma in entries:
+                r['hm_plasma_manager'] = True
+                extras = [e for e in entries if e != plasma]
+            else:
+                extras = entries
+            if extras:
+                r['hm_shared_modules_extra'] = '\n'.join(extras)
+        consumed.add('home-manager.sharedModules')
+
+    return r, consumed
+
+
+def _ts_build_rest_brix(nix_content: str, consumed: set[str]) -> 'str | None':
+    """
+    Tree-sitter based build_rest_brix.
+    Wraps all unclaimed top-level bindings as brix blocks.
+    Returns formatted string or None when unavailable.
+    """
+    from . import nix_parser as _np
+    from .brix import strip_brick_blocks
+
+    clean  = strip_brick_blocks(nix_content).strip()
+    result = _np.parse(clean)
+    if not result.available:
+        return None
+
+    all_bindings = result.known + result.unknown
+    unclaimed    = [bi for bi in all_bindings if bi.key not in consumed]
+
+    if not unclaimed:
+        return ''
+
+    used: dict[str, int] = {}
+    parts = []
+    for bi in unclaimed:
+        base = _brix_name_from_stmt(bi.full_text)
+        if base in used:
+            used[base] += 1
+            name = f'{base}-{used[base]}'
+        else:
+            used[base] = 1
+            name = base
+        parts.append(f'# <brix: {name}>\n{bi.full_text}\n# </brix: {name}>\n')
+
+    return '\n'.join(parts)
+
+
 # ── public API ────────────────────────────────────────────────────────────────
 
 def check_import_available() -> bool:
@@ -126,7 +525,12 @@ def parse_config(nix_content: str) -> dict:
     Extrahiert alle bekannten Felder aus nix_content.
     Gibt ein flaches Dict zurück das direkt in nico.json gemergt werden kann.
     Nur gefundene Schlüssel sind enthalten (keine Defaults).
+    Tree-sitter wird bevorzugt; Regex-Fallback wenn nicht verfügbar.
     """
+    ts = _ts_parse_config(nix_content)
+    if ts is not None:
+        return ts[0]
+
     r: dict = {}
     c = nix_content  # Kurzname
 
@@ -503,7 +907,14 @@ def build_rest_brix(nix_content: str, recognized: dict) -> str:
     Gibt den Konfigurationsinhalt zurück nachdem alle erkannten Optionen entfernt wurden.
     Das Ergebnis wird in Brix-Marker eingewickelt.
     Gibt leeren String zurück wenn nichts Sinnvolles übrig bleibt.
+    Tree-sitter wird bevorzugt; Regex-Fallback wenn nicht verfügbar.
     """
+    ts = _ts_parse_config(nix_content)
+    if ts is not None:
+        result = _ts_build_rest_brix(nix_content, ts[1])
+        if result is not None:
+            return result
+
     # Brick/Brix-Marker immer zuerst entfernen – egal ob der Aufrufer das bereits
     # getan hat oder nicht.  So landen keine alten Marker im Body des neuen Bricks.
     content = strip_brick_blocks(nix_content).strip()
