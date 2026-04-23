@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+### Sichererer Datei- und Hostwechsel
+Beim Wechsel zwischen `configuration.nix` und Host-Dateien schützt NiCo jetzt besser vor Datenverlust. Speichern und Auto-Save laufen nur noch, wenn das Formular vollständig zur aktuell geöffneten Datei geladen wurde. Außerdem wird die Filterauswahl der Sektionen als Programmeinstellung gespeichert und beim nächsten Start wiederhergestellt.
+
+### Sektionen filtern
+Im linken Panel gibt es jetzt ein Filter-Icon neben den Einklappen/Aufklappen-Buttons. Ein Klick öffnet drei Optionen: alle Sektionen anzeigen, nur Sektionen mit Inhalt anzeigen oder eine selbst konfigurierte Auswahl verwenden. Die gewählte Ansicht bleibt beim nächsten Start erhalten. Sektionen mit Inhalt werden unabhängig vom Filter immer angezeigt.
+
+### Sektionen anpassen
+Unter Admin → Einstellungen → NiCo-Einstellungen lässt sich per „Sektionen anpassen" festlegen, welche Sektionen beim Filter „Sektionen lt. Einstellungen" sichtbar sein sollen. Die Auswahl funktioniert wie die Validierungsregeln: Toggles pro Sektion, gespeichert in den Programmeinstellungen auf dem Rechner.
+
+### Einstellungen-Tab neu gegliedert
+Der Admin-Tab „Einstellungen" ist jetzt in zwei Sub-Tabs aufgeteilt: **NiCo-Einstellungen** (maschinenlokal) und **Config-Einstellungen** (wandern mit der Config). Das trennt klar, was wo gespeichert wird.
+
 ### Validierung vor Rebuild
 Vor dem Rebuild lässt sich die Konfiguration jetzt auf häufige Probleme prüfen – per neuem „Validierung"-Button im NixOS-Menü. NiCo schaut dabei zum Beispiel, ob der aktuelle Benutzer in der Config angelegt ist, ob alle Import-Pfade auf der Platte existieren, ob die Hardware-Konfiguration eingebunden ist und ob Disk-UUIDs zum aktuellen System passen. Bei Flake-Configs mit mehreren Hosts fragt NiCo vorher, welcher Host geprüft werden soll – Hardware-Checks beziehen sich dann gezielt auf diesen Host. Welche Prüfungen aktiv sind, lässt sich in den Admin-Einstellungen unter „Validierung anpassen" individuell ein- oder ausschalten – die Auswahl wandert mit der Config.
 

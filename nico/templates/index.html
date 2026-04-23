@@ -223,6 +223,19 @@
                     data-i18n="sections.expandAll"
                     data-i18n-title="sections.expandAllTitle"
                     title="Alle Sektionen aufklappen">↓ Aufklappen</button>
+            <div class="sec-filter-wrap" style="margin-left:auto;position:relative">
+              <button type="button" id="sec-filter-btn" class="sec-filter-btn"
+                      data-i18n-title="sections.filterTitle"
+                      title="Sektionen filtern">⊙</button>
+              <div id="sec-filter-dropdown" class="sec-filter-dropdown hidden">
+                <button type="button" class="sec-filter-option" data-filter="all"
+                        data-i18n="sections.filterAll">Alle Sektionen</button>
+                <button type="button" class="sec-filter-option" data-filter="non-empty"
+                        data-i18n="sections.filterNonEmpty">Genutzte Sektionen</button>
+                <button type="button" class="sec-filter-option" data-filter="settings"
+                        data-i18n="sections.filterSettings">Laut Einstellungen</button>
+              </div>
+            </div>
           </div>
 
           <!-- 1. System -->
@@ -1715,89 +1728,112 @@
       <!-- ── Tab 1: Einstellungen ───────────────────────────────────── -->
       <div class="admin-tab-panel" data-admin-panel="einstellungen">
 
-        <!-- NiCo-Einstellungen (bleiben am Rechner) -->
-        <div class="admin-section">
-          <div class="admin-section-title" data-i18n="admin.settings.nicoTitle">NiCo-Einstellungen</div>
-          <p class="raw-panel-hint" style="margin-top:4px;margin-bottom:8px" data-i18n="admin.settings.nicoHint">
-            Programmeinstellungen – bleiben auf diesem Rechner.
-          </p>
-          <!-- Sprache wird über den Header-Switcher eingestellt -->
-          <!-- Theme: Platzhalter für später -->
-          <label style="display:flex;align-items:center;gap:8px;margin-top:8px;cursor:pointer">
-            <input type="checkbox" id="setting-code-view-plain">
-            <span data-i18n="admin.settings.codeViewPlain">Code-Ansicht beim Start: Plain (ohne Brix-Annotationen)</span>
-          </label>
-          <label style="display:flex;align-items:center;gap:8px;margin-top:8px;cursor:pointer">
-            <input type="checkbox" id="setting-rebuild-log">
-            <span data-i18n="admin.settings.rebuildLog">Rebuild-Log immer schreiben (nixos-rebuild.log)</span>
-          </label>
+        <!-- Sub-Tab-Leiste -->
+        <div class="settings-subtabs">
+          <button class="settings-subtab active" data-subtab="nico"
+                  data-i18n="admin.settings.subtabNico">NiCo-Einstellungen</button>
+          <button class="settings-subtab" data-subtab="config"
+                  data-i18n="admin.settings.subtabConfig">Config-Einstellungen</button>
         </div>
 
-        <!-- Config-Einstellungen (wandern mit der Config) -->
-        <div class="admin-section">
-          <div class="admin-section-title" data-i18n="admin.settings.configTitle">Config-Einstellungen</div>
-          <p class="raw-panel-hint" style="margin-top:4px;margin-bottom:8px" data-i18n="admin.settings.configHint">
-            Diese Einstellungen gehören zur Konfiguration und wandern beim Kopieren mit.
-          </p>
-
-          <!-- Hosts-Verzeichnis -->
-          <label for="settings-hosts-dir" data-i18n="admin.settings.hostsDir">Hosts-Verzeichnis</label>
-          <div style="display:flex;gap:8px;align-items:center;margin-top:6px">
-            <input type="text" id="settings-hosts-dir" class="settings-path-input"
-                   style="flex:1" placeholder="hosts" spellcheck="false" autocomplete="off">
-          </div>
-          <p class="raw-panel-hint" style="margin-top:4px" data-i18n="admin.settings.hostsDirHint">
-            Unterverzeichnis für Host-Konfigurationen (Standard: hosts)
-          </p>
-
-          <!-- Modules-Verzeichnis -->
-          <label for="settings-modules-dir" style="margin-top:12px" data-i18n="admin.settings.modulesDir">Module-Verzeichnis</label>
-          <div style="display:flex;gap:8px;align-items:center;margin-top:6px">
-            <input type="text" id="settings-modules-dir" class="settings-path-input"
-                   style="flex:1" placeholder="modules" spellcheck="false" autocomplete="off">
-          </div>
-          <p class="raw-panel-hint" style="margin-top:4px" data-i18n="admin.settings.modulesDirHint">
-            Unterverzeichnis für NixOS-Module (Standard: modules)
-          </p>
-
-          <!-- Home-Manager-Verzeichnis -->
-          <label for="settings-hm-dir" style="margin-top:12px" data-i18n="admin.settings.hmDir">Home-Manager-Verzeichnis</label>
-          <div style="display:flex;gap:8px;align-items:center;margin-top:6px">
-            <input type="text" id="settings-hm-dir" class="settings-path-input"
-                   style="flex:1" placeholder="home" spellcheck="false" autocomplete="off">
-          </div>
-          <p class="raw-panel-hint" style="margin-top:4px" data-i18n="admin.settings.hmDirHint">
-            Unterverzeichnis für Home-Manager-Dateien (Standard: home)
-          </p>
-
-          <!-- Flake-Update -->
-          <div style="margin-top:16px" id="flake-update-row">
-            <label class="toggle-row" style="cursor:pointer">
-              <span data-i18n="admin.flakeUpdate">Flake aktualisieren vor Rebuild/Dry-Run</span>
-              <span class="toggle-wrap">
-                <input type="checkbox" id="flake-update-toggle">
-                <span class="toggle-track"><span class="toggle-thumb"></span></span>
-              </span>
+        <!-- Sub-Tab: NiCo-Einstellungen (bleiben am Rechner) -->
+        <div class="settings-subtab-panel" data-subtab-panel="nico">
+          <div class="admin-section">
+            <div class="admin-section-title" data-i18n="admin.settings.nicoTitle">NiCo-Einstellungen</div>
+            <p class="raw-panel-hint" style="margin-top:4px;margin-bottom:8px" data-i18n="admin.settings.nicoHint">
+              Programmeinstellungen – bleiben auf diesem Rechner.
+            </p>
+            <!-- Sprache wird über den Header-Switcher eingestellt -->
+            <!-- Theme: Platzhalter für später -->
+            <label style="display:flex;align-items:center;gap:8px;margin-top:8px;cursor:pointer">
+              <input type="checkbox" id="setting-code-view-plain">
+              <span data-i18n="admin.settings.codeViewPlain">Code-Ansicht beim Start: Plain (ohne Brix-Annotationen)</span>
+            </label>
+            <label style="display:flex;align-items:center;gap:8px;margin-top:8px;cursor:pointer">
+              <input type="checkbox" id="setting-rebuild-log">
+              <span data-i18n="admin.settings.rebuildLog">Rebuild-Log immer schreiben (nixos-rebuild.log)</span>
             </label>
           </div>
 
-          <!-- Speichern-Button -->
-          <div style="margin-top:16px">
-            <button id="settings-config-save" class="btn-surface btn-small"
-                    data-i18n="admin.settings.save">Speichern</button>
+          <!-- Sektionen-Einstellungen -->
+          <div class="admin-section">
+            <div class="admin-section-title" data-i18n="admin.sections.settingsTitle">Sektionen anpassen</div>
+            <p class="raw-panel-hint" style="margin-top:4px;margin-bottom:10px"
+               data-i18n="admin.sections.settingsHint">
+              Sektionen die standardmäßig sichtbar sein sollen. Sektionen mit Inhalt werden immer angezeigt.
+            </p>
+            <button id="sections-settings-btn" class="btn-surface btn-small"
+                    data-i18n="admin.sections.settingsBtn">Sektionen anpassen</button>
           </div>
         </div>
 
-        <!-- Validierungsregeln -->
-        <div class="admin-section">
-          <div class="admin-section-title" data-i18n="admin.validation.title">Validierung</div>
-          <p class="raw-panel-hint" style="margin-top:4px;margin-bottom:10px"
-             data-i18n="admin.validation.hint">
-            Legt fest welche statischen Prüfungen vor Rebuild/Dry-Run ausgeführt werden.
-            Die Einstellung wandert mit der Config.
-          </p>
-          <button id="validation-settings-btn" class="btn-surface btn-small"
-                  data-i18n="admin.validation.settingsBtn">Validierung anpassen</button>
+        <!-- Sub-Tab: Config-Einstellungen (wandern mit der Config) -->
+        <div class="settings-subtab-panel hidden" data-subtab-panel="config">
+          <div class="admin-section">
+            <div class="admin-section-title" data-i18n="admin.settings.configTitle">Config-Einstellungen</div>
+            <p class="raw-panel-hint" style="margin-top:4px;margin-bottom:8px" data-i18n="admin.settings.configHint">
+              Diese Einstellungen gehören zur Konfiguration und wandern beim Kopieren mit.
+            </p>
+
+            <!-- Hosts-Verzeichnis -->
+            <label for="settings-hosts-dir" data-i18n="admin.settings.hostsDir">Hosts-Verzeichnis</label>
+            <div style="display:flex;gap:8px;align-items:center;margin-top:6px">
+              <input type="text" id="settings-hosts-dir" class="settings-path-input"
+                     style="flex:1" placeholder="hosts" spellcheck="false" autocomplete="off">
+            </div>
+            <p class="raw-panel-hint" style="margin-top:4px" data-i18n="admin.settings.hostsDirHint">
+              Unterverzeichnis für Host-Konfigurationen (Standard: hosts)
+            </p>
+
+            <!-- Modules-Verzeichnis -->
+            <label for="settings-modules-dir" style="margin-top:12px" data-i18n="admin.settings.modulesDir">Module-Verzeichnis</label>
+            <div style="display:flex;gap:8px;align-items:center;margin-top:6px">
+              <input type="text" id="settings-modules-dir" class="settings-path-input"
+                     style="flex:1" placeholder="modules" spellcheck="false" autocomplete="off">
+            </div>
+            <p class="raw-panel-hint" style="margin-top:4px" data-i18n="admin.settings.modulesDirHint">
+              Unterverzeichnis für NixOS-Module (Standard: modules)
+            </p>
+
+            <!-- Home-Manager-Verzeichnis -->
+            <label for="settings-hm-dir" style="margin-top:12px" data-i18n="admin.settings.hmDir">Home-Manager-Verzeichnis</label>
+            <div style="display:flex;gap:8px;align-items:center;margin-top:6px">
+              <input type="text" id="settings-hm-dir" class="settings-path-input"
+                     style="flex:1" placeholder="home" spellcheck="false" autocomplete="off">
+            </div>
+            <p class="raw-panel-hint" style="margin-top:4px" data-i18n="admin.settings.hmDirHint">
+              Unterverzeichnis für Home-Manager-Dateien (Standard: home)
+            </p>
+
+            <!-- Flake-Update -->
+            <div style="margin-top:16px" id="flake-update-row">
+              <label class="toggle-row" style="cursor:pointer">
+                <span data-i18n="admin.flakeUpdate">Flake bei Rebuild immer aktualisieren</span>
+                <span class="toggle-wrap">
+                  <input type="checkbox" id="flake-update-toggle">
+                  <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                </span>
+              </label>
+            </div>
+
+            <!-- Speichern-Button -->
+            <div style="margin-top:16px">
+              <button id="settings-config-save" class="btn-surface btn-small"
+                      data-i18n="admin.settings.save">Speichern</button>
+            </div>
+          </div>
+
+          <!-- Validierungsregeln -->
+          <div class="admin-section">
+            <div class="admin-section-title" data-i18n="admin.validation.title">Validierung</div>
+            <p class="raw-panel-hint" style="margin-top:4px;margin-bottom:10px"
+               data-i18n="admin.validation.hint">
+              Legt fest welche statischen Prüfungen vor Rebuild/Dry-Run ausgeführt werden.
+              Die Einstellung wandert mit der Config.
+            </p>
+            <button id="validation-settings-btn" class="btn-surface btn-small"
+                    data-i18n="admin.validation.settingsBtn">Validierung anpassen</button>
+          </div>
         </div>
 
       </div>
@@ -2001,6 +2037,26 @@
                 style="flex:1;min-height:400px;font-family:monospace;font-size:0.82rem;resize:vertical;padding:8px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text)"></textarea>
       <div id="file-viewer-actions" class="confirm-buttons hidden" style="margin-top:12px">
         <button id="file-viewer-save" class="btn-primary" data-i18n="write.confirm">Speichern</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Sektionen-Einstellungen-Overlay ─────────────────────────────────── -->
+  <div id="sections-settings-overlay" class="overlay hidden" style="z-index:120">
+    <div class="admin-panel" style="max-width:540px">
+      <div class="admin-panel-header">
+        <span class="admin-panel-title" data-i18n="admin.sections.settingsTitle">Sektionen anpassen</span>
+        <button id="sections-settings-close" class="btn-icon" title="Schließen">✕</button>
+      </div>
+      <div style="padding:16px 20px 20px">
+        <p class="raw-panel-hint" style="margin-bottom:14px" data-i18n="admin.sections.settingsHint">
+          Sektionen die standardmäßig sichtbar sein sollen. Sektionen mit Inhalt werden immer angezeigt.
+        </p>
+        <div id="sections-settings-list"></div>
+        <div style="margin-top:18px;display:flex;gap:10px;flex-wrap:wrap">
+          <button id="sections-settings-save" class="btn-surface btn-small"
+                  data-i18n="admin.sections.save">Speichern</button>
+        </div>
       </div>
     </div>
   </div>

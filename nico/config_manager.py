@@ -33,6 +33,7 @@ DEFAULT_APP_SETTINGS = {
     "theme": "auto",
     "code_view_plain": False,
     "rebuild_log": False,
+    "section_filter": "all",
 }
 
 # Default config settings (travel with the config)

@@ -354,6 +354,95 @@ header {
   opacity: 1;
 }
 
+/* ── Section filter ──────────────────────────────────────────────────────── */
+.sec-filter-btn {
+  background: transparent;
+  color: var(--overlay0);
+  border: 1px solid transparent;
+  font-size: 13px;
+  padding: 2px 7px;
+  border-radius: 4px;
+  cursor: pointer;
+  line-height: 1.4;
+  transition: color .15s, border-color .15s;
+}
+.sec-filter-btn:hover,
+.sec-filter-btn.active {
+  color: var(--blue);
+  border-color: var(--surface1);
+}
+.sec-filter-dropdown {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  background: var(--surface0);
+  border: 1px solid var(--surface1);
+  border-radius: 6px;
+  padding: 4px 0;
+  min-width: 210px;
+  z-index: 20;
+  box-shadow: 0 4px 12px rgba(0,0,0,.3);
+}
+.sec-filter-option {
+  display: block;
+  width: 100%;
+  background: transparent;
+  border: none;
+  text-align: left;
+  padding: 7px 14px;
+  font-size: 12px;
+  color: var(--subtext0);
+  cursor: pointer;
+  transition: background .1s, color .1s;
+}
+.sec-filter-option:hover {
+  background: var(--surface1);
+  color: var(--text);
+}
+.sec-filter-option.active {
+  color: var(--blue);
+  font-weight: 600;
+}
+section.collapsible.sec-hidden {
+  display: none;
+}
+
+/* ── Admin Settings Sub-Tabs ─────────────────────────────────────────────── */
+.settings-subtabs {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  box-sizing: border-box;
+  margin-top: 1em;
+  border-bottom: 1px solid var(--surface1);
+  padding: 0 20px;
+  background: var(--base);
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+.settings-subtab {
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--subtext0);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  padding: 10px 14px 8px;
+  cursor: pointer;
+  transition: color .15s;
+  margin-bottom: -1px;
+}
+.settings-subtab:hover { color: var(--text); }
+.settings-subtab.active {
+  color: var(--blue);
+  border-bottom-color: var(--blue);
+}
+
 /* ── Settings panel (left) ───────────────────────────────────────────────── */
 .settings-panel {
   width: var(--panel-w);

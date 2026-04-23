@@ -640,6 +640,8 @@ def create_app() -> Flask:
             return err
 
         incoming = request.get_json(silent=True) or {}
+        if not incoming.get("_co_ready") or incoming.get("_co_path") != "configuration.nix":
+            return jsonify({"error": "ERR_STALE_FORM"}), 409
         existing = config_manager.load_config(nixos_dir) or {}
 
         # These fields are managed by dedicated endpoints – never overwrite from the form
@@ -652,6 +654,8 @@ def create_app() -> Flask:
             if key.startswith("flake_"):
                 incoming[key] = existing[key]
 
+        incoming.pop("_co_path", None)
+        incoming.pop("_co_ready", None)
         config_manager.save_config(nixos_dir, incoming)
         return jsonify({"success": True})
 
@@ -715,7 +719,7 @@ def create_app() -> Flask:
         """Merge settings into app settings (~/.config/nico/settings.json)."""
         if err := _check_csrf(): return err
 
-        _APP_KEYS = frozenset({"language", "theme", "code_view_plain", "rebuild_log"})
+        _APP_KEYS = frozenset({"language", "theme", "code_view_plain", "rebuild_log", "hidden_sections", "section_filter"})
         incoming = request.get_json(silent=True) or {}
         patch    = {k: v for k, v in incoming.items() if k in _APP_KEYS}
         if not patch:
@@ -1013,6 +1017,11 @@ def create_app() -> Flask:
         if err:
             return err
         data = request.get_json(silent=True) or {}
+        expected = f"hosts/{host_name}/default.nix"
+        if not data.get("_co_ready") or data.get("_co_path") != expected:
+            return jsonify({"error": "ERR_STALE_FORM"}), 409
+        data.pop("_co_path", None)
+        data.pop("_co_ready", None)
         config_manager.save_host_config(nixos_dir, host_name, data)
         return jsonify({"success": True})
 
@@ -1137,7 +1146,7 @@ def create_app() -> Flask:
         from flask import send_file
         import io
 
-        _EXPORTABLE = {"language", "theme", "code_view_plain", "rebuild_log"}
+        _EXPORTABLE = {"language", "theme", "code_view_plain", "rebuild_log", "hidden_sections", "section_filter"}
         all_settings = config_manager.get_app_settings()
         exported = {k: v for k, v in all_settings.items() if k in _EXPORTABLE}
 
@@ -1155,7 +1164,7 @@ def create_app() -> Flask:
         """
         import json as _json
 
-        _IMPORTABLE = {"language", "theme", "code_view_plain", "rebuild_log"}
+        _IMPORTABLE = {"language", "theme", "code_view_plain", "rebuild_log", "hidden_sections", "section_filter"}
 
         if err := _check_csrf(): return err
 

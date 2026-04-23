@@ -134,6 +134,12 @@ let activeTab       = 'configuration';
 let previewDebounce = null;
 let plainCodeView   = false;   // true = Brix-/Sektions-Marker aus Code ausgeblendet
 
+// Section filter: 'all' | 'non-empty' | 'settings'
+let sectionFilter  = localStorage.getItem('nico-section-filter') || 'all';
+let hiddenSections = [];   // section names to hide when filter = 'settings'
+let _coFormReady   = false;
+let _coLoadedPath  = 'configuration.nix';
+
 // ── Brix target file – tracks which .nix file brix operations affect ────────
 let _brixTargetFile  = 'configuration.nix';   // changes when flake panel opens
 let _brixContextFile = 'configuration.nix';   // set when a dialog opens from context menu
@@ -173,12 +179,18 @@ document.addEventListener('DOMContentLoaded', async () => {
     .then(r => r.ok ? r.json() : {})
     .then(data => { _sectionLinks = data; initNixosLinks(); })  // re-run for sections that need _sectionLinks (e.g. flake)
     .catch(() => { /* section links optional, fallback to options URL */ });
-  // Load app settings (code view default)
+  // Load app settings (code view default, hidden sections)
   try {
     const appCfg = await fetch('/api/app/settings').then(r => r.json());
     plainCodeView = !!(appCfg.code_view_plain);
-  } catch { /* Fallback: false */ }
+    if (Array.isArray(appCfg.hidden_sections)) hiddenSections = appCfg.hidden_sections;
+    if (typeof appCfg.section_filter === 'string') {
+      sectionFilter = appCfg.section_filter;
+      localStorage.setItem('nico-section-filter', sectionFilter);
+    }
+  } catch { /* Fallback */ }
   applyPlainCodeViewBtn();
+  updateSectionVisibility();
   bindUI();
   checkStatus();
 });
@@ -691,6 +703,10 @@ function _loadAdminSettings() {
     if (cb) cb.checked = !!data.code_view_plain;
     const cbLog = document.getElementById('setting-rebuild-log');
     if (cbLog) cbLog.checked = !!data.rebuild_log;
+    if (Array.isArray(data.hidden_sections)) {
+      hiddenSections = data.hidden_sections;
+      updateSectionVisibility();
+    }
   }).catch(() => {});
 
   // Auto-save Checkbox: code_view_plain
@@ -762,6 +778,14 @@ function _loadAdminSettings() {
         .catch(() => showToast(t('toast.error'), 'error'));
     });
   }
+}
+
+function _expectedCoPath() {
+  return _activeHost ? `hosts/${_activeHost}/default.nix` : 'configuration.nix';
+}
+
+function _canSaveCurrentCoForm() {
+  return _coFormReady && _coLoadedPath === _expectedCoPath();
 }
 
 function closeAdmin() {
@@ -1022,6 +1046,60 @@ async function saveValidationSettings() {
   }
 }
 
+// ── Sections settings overlay ──────────────────────────────────────────────
+
+// All hideable configuration sections (System is always visible)
+const _ALL_SECTIONS = [
+  'Boot', 'Lokalisierung', 'Netzwerk', 'Services', 'Desktop', 'Audio',
+  'Benutzer', 'Programme', 'Schriftarten', 'Nix & System', 'Home Manager',
+  'Hardware', 'Virtualisierung', 'Dateisystem & Backup',
+];
+
+function openSectionsSettings() {
+  const list = document.getElementById('sections-settings-list');
+  if (!list) return;
+  list.innerHTML = '';
+
+  for (const name of _ALL_SECTIONS) {
+    const hidden = hiddenSections.includes(name);
+    const row = document.createElement('label');
+    row.className = 'toggle-row';
+    row.style.cssText = 'margin-bottom:8px';
+    row.innerHTML = `
+      <span style="flex:1">${_esc(name)}</span>
+      <span class="toggle-wrap" style="margin-left:12px;flex-shrink:0">
+        <input type="checkbox" data-section-name="${_esc(name)}" ${hidden ? '' : 'checked'}>
+        <span class="toggle-track"><span class="toggle-thumb"></span></span>
+      </span>`;
+    list.appendChild(row);
+  }
+
+  document.getElementById('sections-settings-overlay').classList.remove('hidden');
+}
+
+function closeSectionsSettings() {
+  document.getElementById('sections-settings-overlay').classList.add('hidden');
+}
+
+async function saveSectionsSettings() {
+  const checks = document.querySelectorAll('#sections-settings-list input[data-section-name]');
+  const newHidden = [];
+  checks.forEach(cb => { if (!cb.checked) newHidden.push(cb.dataset.sectionName); });
+  try {
+    await csrfFetch('/api/app/settings', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ hidden_sections: newHidden }),
+    });
+    hiddenSections = newHidden;
+    updateSectionVisibility();
+    showToast(t('admin.sections.saved'), 'success');
+    closeSectionsSettings();
+  } catch (e) {
+    showToast(String(e), 'error');
+  }
+}
+
 /** POST /api/validate and show the results overlay. */
 async function runValidation() {
   // For flake configs with multiple hosts, ask which host to validate
@@ -1265,6 +1343,7 @@ function renderAllUsers(users) {
   if (!list) return;
   const isOnly = users.length <= 1;
   list.innerHTML = users.map((u, i) => _userCard(i, u, isOnly)).join('');
+  updateSectionVisibility();
 
   // First card starts expanded
   const firstCard = list.querySelector('.extra-user-card');
@@ -1564,6 +1643,10 @@ function hideIntegrityWarning() {
 }
 
 async function saveConfig() {
+  if (!_canSaveCurrentCoForm()) {
+    showToast(t('toast.error'), 'error');
+    return;
+  }
   const payload = getFormData();
   const isHostMode = !!_activeHost;
   if (isHostMode) delete payload._host;
@@ -1586,6 +1669,7 @@ async function saveConfig() {
 
 // Silent auto-save: saves to JSON, no success toast, only error toast
 async function _autoSave() {
+  if (!_canSaveCurrentCoForm()) return false;
   const payload = getFormData();
   const isHostMode = !!_activeHost;
   if (isHostMode) delete payload._host;
@@ -1626,6 +1710,10 @@ async function _writeNix() {
 }
 
 async function saveAndWrite() {
+  if (!_canSaveCurrentCoForm()) {
+    showToast(t('toast.error'), 'error');
+    return false;
+  }
   const payload = getFormData();
   const isHostMode = !!_activeHost;
   if (isHostMode) delete payload._host;
@@ -1644,7 +1732,7 @@ async function saveAndWrite() {
   const cfgData = await cfgRes.json();
   if (!cfgData.success) {
     showToast(tErr(cfgData.error) || t('toast.error'), 'error');
-    return;
+    return false;
   }
   const writeRes  = await csrfFetch(writeUrl, {
     method:  'POST',
@@ -1656,7 +1744,9 @@ async function saveAndWrite() {
             writeData.success ? 'success' : 'error');
   if (writeData.success) {
     document.dispatchEvent(new CustomEvent('nico:config-saved'));
+    return true;
   }
+  return false;
 }
 
 // ── Write Nix files ────────────────────────────────────────────────────────
@@ -2477,6 +2567,81 @@ function applySectionCollapse() {
   });
 }
 
+// ── Section filter & visibility ────────────────────────────────────────────
+
+/** Returns true if a left-panel section has no user-configured values. */
+function isSectionEmpty(sec) {
+  // System is always considered non-empty (fundamental settings)
+  if (sec.dataset.section === 'System') return false;
+
+  const body = sec.querySelector('.sec-body');
+  if (!body) return false;
+
+  // Helper: is this element inside a .hidden container within the section body?
+  function insideHidden(el) {
+    let p = el.parentElement;
+    while (p && p !== body) {
+      if (p.classList.contains('hidden')) return true;
+      p = p.parentElement;
+    }
+    return false;
+  }
+
+  for (const inp of body.querySelectorAll('input[type=checkbox]')) {
+    if (!insideHidden(inp) && inp.checked) return false;
+  }
+  for (const inp of body.querySelectorAll('input[type=text], input[type=number], textarea')) {
+    if (!insideHidden(inp) && inp.value.trim()) return false;
+  }
+  for (const sel of body.querySelectorAll('select')) {
+    if (!insideHidden(sel) && sel.value && sel.value !== 'none') return false;
+  }
+
+  // Dynamic content areas
+  const usersList = body.querySelector('#users-list');
+  if (usersList && usersList.children.length > 0) return false;
+  const pkgList = body.querySelector('#packages-list');
+  if (pkgList && pkgList.children.length > 0) return false;
+
+  return true;
+}
+
+/** Apply the current sectionFilter to all left-panel sections. */
+function updateSectionVisibility() {
+  document.querySelectorAll('section.collapsible[data-section]').forEach(sec => {
+    let hide = false;
+    if (sectionFilter === 'non-empty') {
+      hide = isSectionEmpty(sec);
+    } else if (sectionFilter === 'settings') {
+      const name = sec.dataset.section;
+      hide = hiddenSections.includes(name) && isSectionEmpty(sec);
+    }
+    sec.classList.toggle('sec-hidden', hide);
+  });
+  // Sync filter button active state
+  const btn = document.getElementById('sec-filter-btn');
+  if (btn) btn.classList.toggle('active', sectionFilter !== 'all');
+  // Sync dropdown option highlights
+  document.querySelectorAll('.sec-filter-option').forEach(opt => {
+    opt.classList.toggle('active', opt.dataset.filter === sectionFilter);
+  });
+}
+
+/** Toggle section filter dropdown. */
+function _toggleFilterDropdown(e) {
+  e.stopPropagation();
+  const dd = document.getElementById('sec-filter-dropdown');
+  if (dd) dd.classList.toggle('hidden');
+}
+
+/** Close filter dropdown when clicking outside. */
+function _closeFilterDropdown(e) {
+  const wrap = document.querySelector('.sec-filter-wrap');
+  if (wrap && !wrap.contains(e.target)) {
+    document.getElementById('sec-filter-dropdown')?.classList.add('hidden');
+  }
+}
+
 // ── Tab switching ──────────────────────────────────────────────────────────
 function switchTab(tab) {
   activeTab = tab;
@@ -2519,6 +2684,7 @@ function renderPackageList(packages) {
     item.querySelector('.pkg-delete').addEventListener('click', () => removePackage(pkg.attr, item));
     list.appendChild(item);
   });
+  updateSectionVisibility();
 }
 
 function getPackageListData() {
@@ -3987,6 +4153,8 @@ function getFormData() {
 
     // Multi-host context: tells the preview endpoint which host is active
     _host: _activeHost,
+    _co_path: _coLoadedPath,
+    _co_ready: _coFormReady,
   };
 }
 
@@ -3996,8 +4164,7 @@ function getFormData() {
 async function switchHost(hostName) {
   if (hostName === _activeHost) return;
 
-  if (hostName !== '') {
-    // Warn: defaults should be saved first
+  if (_formDirty || _flakeFormDirty) {
     const ok = await confirmHostSwitch();
     if (!ok) return;
   }
@@ -4032,8 +4199,8 @@ async function confirmHostSwitch() {
 
     overlay.querySelector('#host-switch-save').addEventListener('click', async () => {
       document.body.removeChild(overlay);
-      await saveAndWrite();
-      resolve(true);
+      const ok = await saveAndWrite();
+      resolve(!!ok);
     });
     overlay.querySelector('#host-switch-continue').addEventListener('click', () => {
       document.body.removeChild(overlay);
@@ -4172,6 +4339,7 @@ function populateFormFromData(data) {
     !!document.getElementById('snapper_home')?.checked
     || !!document.getElementById('snapper_root')?.checked
   );
+  updateSectionVisibility();
 }
 
 /** Setzt alle CO-Formularfelder auf leer/unchecked zurück. */
@@ -4229,6 +4397,7 @@ function clearCoForm() {
   toggleLibvirtdOptions(false);
   toggleVboxGuestOptions(false);
   toggleSnapperTimeline(false);
+  updateSectionVisibility();
 }
 
 /**
@@ -4237,12 +4406,19 @@ function clearCoForm() {
  * bleiben leer – nico.json-Werte werden nicht eingemischt.
  */
 async function _populateCoFormFromFile(path, _content) {
+  _coFormReady = false;
+  _coLoadedPath = path;
   clearCoForm();
+  let loaded = false;
   try {
     const res  = await fetch(`/api/parse/co?path=${encodeURIComponent(path)}`);
     const data = await res.json();
-    if (!data.error) populateFormFromData(data);
+    if (!data.error) {
+      populateFormFromData(data);
+      loaded = true;
+    }
   } catch { /* non-fatal: leeres Formular ist besser als falsche Werte */ }
+  _coFormReady = loaded;
 }
 
 function escHtml(str) {
@@ -4317,9 +4493,11 @@ function bindUI() {
     document.getElementById('import-overlay').classList.add('hidden');
   });
 
-  // Form → live preview
+  // Form → live preview + section visibility update
   on('config-form', 'input',  schedulePreviewUpdate);
   on('config-form', 'change', schedulePreviewUpdate);
+  on('config-form', 'change', updateSectionVisibility);
+  on('config-form', 'input',  updateSectionVisibility);
 
   // GC sub-options visibility
   on('nix_gc', 'change', e => toggleGcOptions(e.target.checked));
@@ -4385,6 +4563,44 @@ function bindUI() {
   // Sektionen-Steuerleiste
   on('collapse-all-btn', 'click', collapseAll);
   on('expand-all-btn',   'click', expandAll);
+
+  // Section filter dropdown
+  on('sec-filter-btn', 'click', _toggleFilterDropdown);
+  document.addEventListener('click', _closeFilterDropdown);
+  document.querySelectorAll('.sec-filter-option').forEach(opt => {
+    opt.addEventListener('click', () => {
+      sectionFilter = opt.dataset.filter;
+      localStorage.setItem('nico-section-filter', sectionFilter);
+      csrfFetch('/api/app/settings', {
+        method:  'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ section_filter: sectionFilter }),
+      }).catch(() => {});
+      document.getElementById('sec-filter-dropdown')?.classList.add('hidden');
+      updateSectionVisibility();
+    });
+  });
+  // Init dropdown active state
+  updateSectionVisibility();
+
+  // Section settings overlay
+  on('sections-settings-btn',   'click', openSectionsSettings);
+  on('sections-settings-close', 'click', closeSectionsSettings);
+  on('sections-settings-overlay','click', e => {
+    if (e.target === document.getElementById('sections-settings-overlay')) closeSectionsSettings();
+  });
+  on('sections-settings-save',  'click', saveSectionsSettings);
+
+  // Admin settings sub-tabs
+  document.querySelectorAll('.settings-subtab').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.settings-subtab').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.settings-subtab-panel').forEach(p => p.classList.add('hidden'));
+      btn.classList.add('active');
+      document.querySelector(`.settings-subtab-panel[data-subtab-panel="${btn.dataset.subtab}"]`)
+        ?.classList.remove('hidden');
+    });
+  });
 
   // Left panel section toggles (click on h3)
   document.querySelectorAll('.sec-toggle').forEach(h3 => {
