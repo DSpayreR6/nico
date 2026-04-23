@@ -166,11 +166,13 @@
               <img src="/static/nixos.png" alt="NixOS" width="20" height="20">
             </button>
             <div id="nixos-dropdown" class="nixos-dropdown hidden">
-              <button id="nixos-save-btn"    class="nixos-action nixos-green"
+              <button id="nixos-save-btn"     class="nixos-action nixos-green"
                       data-i18n="header.nixosSave">Zwischenstand speichern</button>
-              <button id="nixos-dryrun-btn"  class="nixos-action nixos-yellow"
+              <button id="nixos-validate-btn" class="nixos-action nixos-green"
+                      data-i18n="header.nixosValidate">Validierung</button>
+              <button id="nixos-dryrun-btn"   class="nixos-action nixos-yellow"
                       data-i18n="header.nixosDryRun">Dry-Run</button>
-              <button id="nixos-rebuild-btn" class="nixos-action nixos-red"
+              <button id="nixos-rebuild-btn"  class="nixos-action nixos-red"
                       data-i18n="header.nixosRebuild">System-Neubau</button>
             </div>
           </div>
@@ -1786,6 +1788,18 @@
           </div>
         </div>
 
+        <!-- Validierungsregeln -->
+        <div class="admin-section">
+          <div class="admin-section-title" data-i18n="admin.validation.title">Validierung</div>
+          <p class="raw-panel-hint" style="margin-top:4px;margin-bottom:10px"
+             data-i18n="admin.validation.hint">
+            Legt fest welche statischen Prüfungen vor Rebuild/Dry-Run ausgeführt werden.
+            Die Einstellung wandert mit der Config.
+          </p>
+          <button id="validation-settings-btn" class="btn-surface btn-small"
+                  data-i18n="admin.validation.settingsBtn">Validierung anpassen</button>
+        </div>
+
       </div>
 
       <!-- ── Tab 2: Administration ───────────────────────────────────── -->
@@ -1950,6 +1964,40 @@
       <div id="file-viewer-actions" class="confirm-buttons hidden" style="margin-top:12px">
         <button id="file-viewer-save" class="btn-primary" data-i18n="write.confirm">Speichern</button>
       </div>
+    </div>
+  </div>
+
+  <!-- ── Validierungseinstellungen-Overlay ───────────────────────────────── -->
+  <div id="validation-settings-overlay" class="overlay hidden" style="z-index:120">
+    <div class="admin-panel" style="max-width:540px">
+      <div class="admin-panel-header">
+        <span class="admin-panel-title" data-i18n="admin.validation.settingsTitle">Validierung anpassen</span>
+        <button id="validation-settings-close" class="btn-icon" title="Schließen">✕</button>
+      </div>
+      <div style="padding:16px 20px 20px">
+        <p class="raw-panel-hint" style="margin-bottom:14px" data-i18n="admin.validation.settingsHint">
+          Aktive Regeln werden bei jeder Validierung geprüft. Flake-Regeln erscheinen nur bei Flake-Configs.
+        </p>
+        <div id="validation-rules-list"></div>
+        <div style="margin-top:18px;display:flex;gap:10px;flex-wrap:wrap">
+          <button id="validation-settings-save" class="btn-surface btn-small"
+                  data-i18n="admin.validation.save">Speichern</button>
+          <button id="validation-run-btn" class="btn-surface btn-small"
+                  data-i18n="admin.validation.runBtn">Jetzt prüfen</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Validierungsergebnis-Overlay ─────────────────────────────────────── -->
+  <div id="validation-results-overlay" class="overlay hidden" style="z-index:120">
+    <div class="admin-panel" style="max-width:580px">
+      <div class="admin-panel-header">
+        <span class="admin-panel-title" data-i18n="admin.validation.resultsTitle">Validierungsergebnis</span>
+        <button id="validation-results-close" class="btn-icon" title="Schließen">✕</button>
+      </div>
+      <div id="validation-results-body"
+           style="padding:16px 20px 20px;overflow-y:auto;max-height:70vh"></div>
     </div>
   </div>
 

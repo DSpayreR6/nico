@@ -938,6 +938,141 @@ function initSettingsPanel() {
 }
 
 
+// ── Validierung ────────────────────────────────────────────────────────────────
+
+let _validationRules = [];     // Rule metadata from /api/validate/rules
+let _isFlakeConfig   = false;  // Set on config load
+
+/** Load rule metadata once (cached in _validationRules). */
+async function _ensureValidationRules() {
+  if (_validationRules.length) return;
+  try {
+    const res = await fetch('/api/validate/rules');
+    if (res.ok) _validationRules = await res.json();
+  } catch (e) { /* ignore */ }
+}
+
+/** Open the validation-settings overlay and render rule toggles. */
+async function openValidationSettings() {
+  await _ensureValidationRules();
+
+  // Load current settings
+  let enabled = {};
+  try {
+    const res = await fetch('/api/config/settings');
+    if (res.ok) {
+      const s = await res.json();
+      enabled = s.validation_rules || {};
+    }
+  } catch (e) { /* ignore */ }
+
+  const list = document.getElementById('validation-rules-list');
+  if (!list) return;
+  list.innerHTML = '';
+
+  for (const rule of _validationRules) {
+    // Hide flake-only rules when the config is not a flake
+    const hidden = rule.flake_only && !_isFlakeConfig;
+    const checked = enabled[rule.id] !== false;  // default: on
+
+    const severityColors = { error: 'var(--red)', warning: 'var(--yellow)', info: 'var(--blue)' };
+    const dot = `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;
+                 background:${severityColors[rule.severity] || 'var(--subtext0)'};
+                 margin-right:6px;flex-shrink:0;margin-top:6px"></span>`;
+
+    const row = document.createElement('label');
+    row.className = 'toggle-row';
+    row.style.cssText = 'margin-bottom:10px;align-items:flex-start;' + (hidden ? 'display:none' : '');
+    row.dataset.ruleId = rule.id;
+    row.innerHTML = `
+      <span style="display:flex;flex-direction:column;gap:2px;flex:1;min-width:0">
+        <span style="display:flex;align-items:center">${dot}<strong>${_esc(rule.label)}</strong>
+          ${rule.flake_only ? '<span class="badge" style="margin-left:6px;font-size:10px;padding:1px 5px;background:var(--surface1);border-radius:4px">Flake</span>' : ''}
+        </span>
+        <span class="raw-panel-hint" style="margin:0 0 0 14px">${_esc(rule.description)}</span>
+      </span>
+      <span class="toggle-wrap" style="margin-left:12px;flex-shrink:0">
+        <input type="checkbox" data-rule="${rule.id}" ${checked ? 'checked' : ''}>
+        <span class="toggle-track"><span class="toggle-thumb"></span></span>
+      </span>`;
+    list.appendChild(row);
+  }
+
+  document.getElementById('validation-settings-overlay').classList.remove('hidden');
+}
+
+function closeValidationSettings() {
+  document.getElementById('validation-settings-overlay').classList.add('hidden');
+}
+
+/** Save the current toggle state to config.json. */
+async function saveValidationSettings() {
+  const checks = document.querySelectorAll('#validation-rules-list input[data-rule]');
+  const rules = {};
+  checks.forEach(cb => { rules[cb.dataset.rule] = cb.checked; });
+  try {
+    await csrfFetch('/api/config/settings', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ validation_rules: rules }),
+    });
+    showToast(t('admin.validation.saved'), 'success');
+  } catch (e) {
+    showToast(String(e), 'error');
+  }
+}
+
+/** POST /api/validate and show the results overlay. */
+async function runValidation() {
+  let findings;
+  try {
+    const res  = await csrfFetch('/api/validate', { method: 'POST' });
+    const data = await res.json();
+    findings   = data.findings || [];
+  } catch (e) {
+    showToast(String(e), 'error');
+    return;
+  }
+
+  _showValidationResults(findings);
+}
+
+function _showValidationResults(findings) {
+  const body = document.getElementById('validation-results-body');
+  if (!body) return;
+
+  if (!findings.length) {
+    body.innerHTML = `<p style="color:var(--green);font-weight:600"
+      data-i18n="admin.validation.noFindings">${t('admin.validation.noFindings')}</p>`;
+  } else {
+    const icons = { error: '✖', warning: '⚠', info: 'ℹ' };
+    const colors = { error: 'var(--red)', warning: 'var(--yellow)', info: 'var(--blue)' };
+    body.innerHTML = findings.map(f => {
+      const icon  = icons[f.severity]  || '•';
+      const color = colors[f.severity] || 'var(--text)';
+      const detail = f.detail
+        ? `<div style="margin-top:4px;color:var(--subtext0);font-size:12px">${_esc(f.detail)}</div>`
+        : '';
+      return `<div style="display:flex;gap:10px;margin-bottom:14px;align-items:flex-start">
+        <span style="color:${color};font-size:16px;flex-shrink:0;margin-top:1px">${icon}</span>
+        <div>
+          <div style="font-size:13px">${_esc(f.message)}</div>${detail}
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  document.getElementById('validation-results-overlay').classList.remove('hidden');
+}
+
+function closeValidationResults() {
+  document.getElementById('validation-results-overlay').classList.add('hidden');
+}
+
+function _esc(s) {
+  return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
 // ── Admin: Import section collapse ─────────────────────────────────────────────
 function initAdminImportCollapse() {
   const toggle  = document.getElementById('admin-import-toggle');
@@ -1812,6 +1947,8 @@ async function updatePreview() {
   const data = await res.json();
 
   renderCodePreview(data.configuration_nix || '', 'preview-configuration', _brixTargetFile || 'configuration.nix');
+
+  _isFlakeConfig = !!data.flake_nix;
 
   const flakeTab = document.getElementById('flake-tab');
   if (data.flake_nix) {
@@ -4190,6 +4327,7 @@ function bindUI() {
     document.addEventListener('click', e => { if (!menu.contains(e.target)) close(); });
 
     on('nixos-save-btn',    'click', () => { close(); openWriteConfirm(); });
+    on('nixos-validate-btn', 'click', () => { close(); runValidation(); });
     on('nixos-dryrun-btn',  'click', () => { close(); runSaveAndDryRun(); });
     on('nixos-rebuild-btn', 'click', () => { close(); openRebuild('switch'); });
   })();
@@ -4200,6 +4338,19 @@ function bindUI() {
   on('admin-overlay',   'click', e => { if (e.target.id === 'admin-overlay') closeAdmin(); });
   on('admin-export-btn',   'click', exportZip);
   on('admin-symlink-btn',  'click', doAdminSymlink);
+
+  // Validierungseinstellungen
+  on('validation-settings-btn',   'click', openValidationSettings);
+  on('validation-settings-close', 'click', closeValidationSettings);
+  on('validation-settings-overlay','click', e => {
+    if (e.target.id === 'validation-settings-overlay') closeValidationSettings();
+  });
+  on('validation-settings-save',  'click', saveValidationSettings);
+  on('validation-run-btn',        'click', () => { closeValidationSettings(); runValidation(); });
+  on('validation-results-close',  'click', closeValidationResults);
+  on('validation-results-overlay','click', e => {
+    if (e.target.id === 'validation-results-overlay') closeValidationResults();
+  });
 
   on('admin-import-btn', 'click', runAdminImport);
   initImportBrowse();

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Validierung vor Rebuild
+
+Vor dem Rebuild lässt sich die Konfiguration jetzt auf häufige Probleme prüfen – per neuem „Validierung"-Button im NixOS-Menü. NiCo schaut dabei zum Beispiel, ob der aktuelle Benutzer in der Config angelegt ist, ob alle Import-Pfade auf der Platte existieren, ob die Hardware-Konfiguration eingebunden ist und ob Disk-UUIDs zum aktuellen System passen. Welche Prüfungen aktiv sind, lässt sich in den Admin-Einstellungen unter „Validierung anpassen" individuell ein- oder ausschalten – die Auswahl wandert mit der Config.
+
 ### Parser: tree-sitter-Pfad für Import
 - `nix_parser.py`: Value-Extraction-Helpers (`extract_string`, `extract_bool`, `extract_int`, `extract_inner_block`, `extract_identifier_list`, `make_kv`)
 - `importer.parse_config()` und `build_rest_brix()` nutzen tree-sitter wenn verfügbar, fallen auf Regex zurück wenn nicht
@@ -15,8 +19,6 @@
 - Neue App-Einstellung „Rebuild-Log immer schreiben": schreibt das Log auch bei erfolgreichem Rebuild (Standard: aus)
 - Neue App-Settings-Schlüssel: `rebuild_log`; i18n-Schlüssel `admin.settings.rebuildLog`
 
-### Bugfix: Sudo-Dialog hinter Admin-Panel
-- `#sudo-overlay` z-index auf 200 erhöht – erscheint jetzt immer über anderen Overlays
 
 ### Admin: Symlink /etc/nixos anlegen
 - Neuer Abschnitt „Symlink /etc/nixos" im Admin-Bereich → Tab „Administration" unter dem Config-Pfad
@@ -55,7 +57,7 @@
 - Neue Root-Datei `THIRD_PARTY_LICENSES.md` dokumentiert Prism.js, Version, Quelle und MIT-Lizenztext
 - „Über NiCo“ nennt Prism.js jetzt explizit als verwendete Drittkomponente für Syntax-Highlighting
 
-## 0.0.2 (2026-04-08)
+## 0.9.1 (2026-04-08)
 
 ### Startschema & Kategorisierung
 - Neuer `/api/categorize`-Endpunkt: schreibt `# nico-version: type#hash`-Header in alle `.nix`-Dateien beim Start, nach Import und nach manueller Kategorisierung

@@ -30,6 +30,7 @@
   "header.quitTitle":        "Остановить сервер NiCo – после этого можно закрыть вкладку",
   "header.nixosTitle":       "__TODO__",
   "header.nixosSave":        "__TODO__",
+  "header.nixosValidate":    "__TODO__",
   "header.nixosDryRun":      "__TODO__",
   "header.nixosRebuild":     "__TODO__",
 
@@ -648,6 +649,17 @@
   "admin.settings.hmDirHint":    "Подкаталог для файлов Home Manager (по умолчанию: home)",
   "admin.settings.save":         "Сохранить",
   "admin.settings.saved":        "Настройки сохранены",
+
+  "admin.validation.title": "__TODO__",
+  "admin.validation.hint": "__TODO__",
+  "admin.validation.settingsBtn": "__TODO__",
+  "admin.validation.settingsTitle": "__TODO__",
+  "admin.validation.settingsHint": "__TODO__",
+  "admin.validation.save": "__TODO__",
+  "admin.validation.saved": "__TODO__",
+  "admin.validation.runBtn": "__TODO__",
+  "admin.validation.resultsTitle": "__TODO__",
+  "admin.validation.noFindings": "__TODO__",
 
   "admin.fileInfo":      "ℹ Инфо о файле",
   "admin.fileInfoTitle": "Информация об управляемых файлах",

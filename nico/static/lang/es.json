@@ -30,6 +30,7 @@
   "header.quitTitle":        "Detener el servidor NiCo – puedes cerrar la pestaña después",
   "header.nixosTitle":       "__TODO__",
   "header.nixosSave":        "__TODO__",
+  "header.nixosValidate":    "__TODO__",
   "header.nixosDryRun":      "__TODO__",
   "header.nixosRebuild":     "__TODO__",
 
@@ -648,6 +649,17 @@
   "admin.settings.hmDirHint":    "Subdirectorio para archivos de Home Manager (por defecto: home)",
   "admin.settings.save":         "Guardar",
   "admin.settings.saved":        "Configuración guardada",
+
+  "admin.validation.title": "__TODO__",
+  "admin.validation.hint": "__TODO__",
+  "admin.validation.settingsBtn": "__TODO__",
+  "admin.validation.settingsTitle": "__TODO__",
+  "admin.validation.settingsHint": "__TODO__",
+  "admin.validation.save": "__TODO__",
+  "admin.validation.saved": "__TODO__",
+  "admin.validation.runBtn": "__TODO__",
+  "admin.validation.resultsTitle": "__TODO__",
+  "admin.validation.noFindings": "__TODO__",
 
   "admin.fileInfo":      "ℹ Info de archivo",
   "admin.fileInfoTitle": "Información sobre archivos gestionados",

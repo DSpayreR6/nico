@@ -671,7 +671,10 @@ def create_app() -> Flask:
         if err:
             return err
 
-        _CONFIG_KEYS = frozenset({"hosts_dir", "modules_dir", "hm_dir", "flake_update_on_rebuild"})
+        _CONFIG_KEYS = frozenset({
+            "hosts_dir", "modules_dir", "hm_dir",
+            "flake_update_on_rebuild", "validation_rules",
+        })
         incoming = request.get_json(silent=True) or {}
         patch    = {k: v for k, v in incoming.items() if k in _CONFIG_KEYS}
         if not patch:
@@ -679,6 +682,26 @@ def create_app() -> Flask:
 
         config_manager.save_config_settings(nixos_dir, patch)
         return jsonify({"success": True})
+
+    @app.route("/api/validate/rules", methods=["GET"])
+    def get_validate_rules():
+        """Return metadata for all validation rules (label, description, severity, flake_only)."""
+        from . import validator as _val
+        return jsonify(_val.rules_as_dicts())
+
+    @app.route("/api/validate", methods=["POST"])
+    def run_validate():
+        """Run enabled validation rules and return a list of findings."""
+        if err := _check_csrf(): return err
+        nixos_dir, err = _require_setup()
+        if err:
+            return err
+        from . import validator as _val
+        cfg_settings  = config_manager.load_config_settings(nixos_dir)
+        enabled_rules = cfg_settings.get("validation_rules") or _val.default_validation_rules()
+        config        = config_manager.load_config(nixos_dir)
+        findings      = _val.run_validation(nixos_dir, enabled_rules, config)
+        return jsonify({"findings": findings})
 
     @app.route("/api/app/settings", methods=["GET"])
     def get_app_settings():

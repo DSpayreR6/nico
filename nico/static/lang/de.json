@@ -30,6 +30,7 @@
   "header.quitTitle":        "NiCo-Server beenden – Browser-Tab kann danach geschlossen werden",
   "header.nixosTitle":       "NixOS-Aktionen",
   "header.nixosSave":        "Zwischenstand speichern",
+  "header.nixosValidate":    "Validierung",
   "header.nixosDryRun":      "Dry-Run",
   "header.nixosRebuild":     "System-Neubau",
 
@@ -628,6 +629,17 @@
   "admin.settings.hmDirHint":    "Unterverzeichnis für Home-Manager-Dateien (Standard: home)",
   "admin.settings.save":         "Speichern",
   "admin.settings.saved":        "Einstellungen gespeichert",
+
+  "admin.validation.title":        "Validierung",
+  "admin.validation.hint":         "Legt fest welche statischen Prüfungen vor Rebuild/Dry-Run ausgeführt werden. Die Einstellung wandert mit der Config.",
+  "admin.validation.settingsBtn":  "Validierung anpassen",
+  "admin.validation.settingsTitle":"Validierung anpassen",
+  "admin.validation.settingsHint": "Aktive Regeln werden bei jeder Validierung geprüft. Flake-Regeln erscheinen nur bei Flake-Configs.",
+  "admin.validation.save":         "Speichern",
+  "admin.validation.saved":        "Validierungsregeln gespeichert",
+  "admin.validation.runBtn":       "Jetzt prüfen",
+  "admin.validation.resultsTitle": "Validierungsergebnis",
+  "admin.validation.noFindings":   "Keine Probleme gefunden.",
 
   "admin.fileInfo":      "ℹ Datei-Info",
   "admin.fileInfoTitle": "Informationen zu verwalteten Dateien",
