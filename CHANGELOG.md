@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+---
+
+## 0.9.2 (2026-04-23)
+
 ### Sichererer Datei- und Hostwechsel
 Beim Wechsel zwischen `configuration.nix` und Host-Dateien schützt NiCo jetzt besser vor Datenverlust. Speichern und Auto-Save laufen nur noch, wenn das Formular vollständig zur aktuell geöffneten Datei geladen wurde. Außerdem wird die Filterauswahl der Sektionen als Programmeinstellung gespeichert und beim nächsten Start wiederhergestellt.
 
@@ -43,8 +47,6 @@ Im Admin-Bereich unter „Exportieren" lassen sich die NiCo-Programmeinstellunge
 
 ### Interner Verbesserung: Parser
 Der Nix-Import-Parser nutzt jetzt tree-sitter für eine genauere Erkennung von Konfigurationsoptionen und fällt nur bei fehlender Umgebung auf den bisherigen Regex-Parser zurück.
-
----
 
 ## 0.9.1 (2026-04-08)
 
