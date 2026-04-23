@@ -3,94 +3,37 @@
 ## Unreleased
 
 ### Validierung vor Rebuild
-
 Vor dem Rebuild lässt sich die Konfiguration jetzt auf häufige Probleme prüfen – per neuem „Validierung"-Button im NixOS-Menü. NiCo schaut dabei zum Beispiel, ob der aktuelle Benutzer in der Config angelegt ist, ob alle Import-Pfade auf der Platte existieren, ob die Hardware-Konfiguration eingebunden ist und ob Disk-UUIDs zum aktuellen System passen. Welche Prüfungen aktiv sind, lässt sich in den Admin-Einstellungen unter „Validierung anpassen" individuell ein- oder ausschalten – die Auswahl wandert mit der Config.
 
-### Parser: tree-sitter-Pfad für Import
-- `nix_parser.py`: Value-Extraction-Helpers (`extract_string`, `extract_bool`, `extract_int`, `extract_inner_block`, `extract_identifier_list`, `make_kv`)
-- `importer.parse_config()` und `build_rest_brix()` nutzen tree-sitter wenn verfügbar, fallen auf Regex zurück wenn nicht
-- tree-sitter erkennt auch geschachtelte Block-Formen (z.B. `services.pipewire = { alsa.support32Bit = true; }`)
-- `shell.nix` erstellt: `nix-shell` im Projektverzeichnis liefert vollständige Umgebung inkl. `tree-sitter-grammars.tree-sitter-nix`; `TREE_SITTER_NIX_GRAMMAR` wird automatisch gesetzt
-- `start.sh` nutzt `shell.nix` wenn vorhanden
+### NixOS-Aktionen im Header
+Der einzelne Dry-Run-Button wurde durch ein übersichtlicheres NixOS-Menü ersetzt. Ein Klick auf das NixOS-Logo öffnet drei farbkodierte Aktionen: Zwischenstand speichern (grün), Dry-Run (gelb) und System-Neubau (rot).
 
-### Rebuild: nixos-rebuild.log bei Fehler
-- Bei fehlgeschlagenem Rebuild wird `nixos-rebuild.log` im NixOS-Config-Verzeichnis geschrieben (vollständiger Output)
-- Im Rebuild-Fenster erscheint bei Fehler ein Hinweis mit dem Pfad zur Log-Datei
-- Neue App-Einstellung „Rebuild-Log immer schreiben": schreibt das Log auch bei erfolgreichem Rebuild (Standard: aus)
-- Neue App-Settings-Schlüssel: `rebuild_log`; i18n-Schlüssel `admin.settings.rebuildLog`
+### Bessere Rebuild-Ausgabe
+Das Rebuild-Fenster zeigt jetzt sowohl den rohen Ausgabe-Stream als auch einen kompakten Status-Monitor mit Fortschrittsbalken und aktuellem Bauprozess – ähnlich wie nix-output-monitor. Warnungen und Fehler werden farbig hervorgehoben.
 
+### Rebuild-Log bei Fehler
+Schlägt ein Rebuild fehl, schreibt NiCo automatisch eine vollständige Log-Datei (`nixos-rebuild.log`) in das Config-Verzeichnis. In den Einstellungen lässt sich das auch für erfolgreiche Rebuilds aktivieren.
 
-### Admin: Symlink /etc/nixos anlegen
-- Neuer Abschnitt „Symlink /etc/nixos" im Admin-Bereich → Tab „Administration" unter dem Config-Pfad
-- Zeigt aktuellen Status: Symlink aktiv/fremdes Ziel, normales Verzeichnis, nicht vorhanden
-- Button „Symlink anlegen" erscheint nur wenn /etc/nixos ein normales Verzeichnis ist
-- Ablauf: Sudo-Passwort abfragen → /etc/nixos nach /etc/nixos.bak verschieben → Symlink setzen
-- Backend-Endpoint `/api/symlink/create` war bereits vorhanden; nur Frontend-Anbindung neu
+### Rebuild ohne Git-Repository
+Flake-Rebuilds funktionieren jetzt auch wenn das Config-Verzeichnis kein Git-Repository ist. NiCo erkennt das automatisch und übergibt den absoluten Pfad direkt an Nix.
 
-### Rebuild: path:-Prefix ohne Git-Repository
-- Vor jedem Rebuild-Start wird geprüft ob das Config-Verzeichnis ein Git-Repository ist (`git_manager.is_git_repo`)
-- Ohne Git: `--flake path:/abs/pfad#hostname` – Nix liest direkt vom Dateisystem statt über den Git-Index
-- Mit Git: Verhalten unverändert (`--flake .#hostname`)
-- Dryrun verwendet `path:` bereits immer – keine Änderung nötig
+### Symlink /etc/nixos anlegen
+Im Admin-Bereich lässt sich ein Symlink von `/etc/nixos` auf das NiCo-Verzeichnis einrichten. Dann funktionieren NixOS-Tools wie `nixos-rebuild` ohne Pfadangabe. Das Original wird als `/etc/nixos.bak` gesichert.
 
-### Rebuild/Dryrun-Ausgabefenster (nix-output-monitor-Stil)
-- Rebuild-Modal: oberer Scrollbereich für rohen Log-Stream (Warning gelb, Error rot hervorgehoben)
-- Rebuild-Modal: unterer Monitor-Block mit Phasen-Label (Evaluating → Fetching → Building → Activating), animiertem Fortschrittsbalken (Shimmer, phasenfarbig), aktiven Paketnamen und Abschlussstatus (✅/❌)
-- Dryrun-Output: `warning:` / `error:`-Zeilen werden ebenfalls farbig hervorgehoben
-- Hilfsfunktion `_colorizedOutput()` (HTML-sicher, shared für Rebuild-Log und Dryrun)
-- Backend/SSE-Logik unverändert
+### Remote-Stand im Git-Banner (experimentell)
+Liegt das lokale Git-Repository hinter dem Remote zurück, erscheint beim Start ein blaues Info-Banner mit der Anzahl fehlender Commits.
 
-### NixOS-Aktionsmenü
-- `dry-run`-Button aus der Header-Leiste entfernt
-- Neues NixOS-Icon-Dropdown in der Header-Leiste mit drei farbkodierten Aktionen: Zwischenstand speichern (grün), Dry-Run (gelb), System-Neubau (rot)
-- NixOS-SVG lokal unter `nico/static/nixos.svg` (MIT-Lizenz, NixOS-Projekt)
-- Admin-Panel: „Aktionen"-Tab entfernt; Standard-Tab ist jetzt „Einstellungen"
-- Neue i18n-Schlüssel: `header.nixosTitle`, `header.nixosSave`, `header.nixosDryRun`, `header.nixosRebuild`
+### Prism.js jetzt lokal
+Der Syntax-Highlighter Prism.js wird nicht mehr von einem externen CDN geladen, sondern direkt aus NiCo heraus ausgeliefert. Lizenz und Herkunft sind in `THIRD_PARTY_LICENSES.md` dokumentiert.
 
-### Git (ungetestet)
-- Remote-Stand-Prüfung beim Start: falls das lokale Repo hinter dem Remote liegt, erscheint ein blaues Info-Banner mit Anzahl der fehlenden Commits
-- Neuer `GET /api/git/remote-status`-Endpunkt (`git fetch` + `rev-list HEAD..@{u} --count`)
-- Neuer Übersetzungsschlüssel `git.remoteBehind`
+### Interner Verbesserung: Parser
+Der Nix-Import-Parser nutzt jetzt tree-sitter für eine genauere Erkennung von Konfigurationsoptionen und fällt nur bei fehlender Umgebung auf den bisherigen Regex-Parser zurück.
 
-### Frontend & Lizenzen
-- Prism.js wird nicht mehr per CDN geladen, sondern lokal aus `nico/static/vendor/prism/`
-- Neue Root-Datei `THIRD_PARTY_LICENSES.md` dokumentiert Prism.js, Version, Quelle und MIT-Lizenztext
-- „Über NiCo“ nennt Prism.js jetzt explizit als verwendete Drittkomponente für Syntax-Highlighting
+---
 
 ## 0.9.1 (2026-04-08)
 
-### Startschema & Kategorisierung
-- Neuer `/api/categorize`-Endpunkt: schreibt `# nico-version: type#hash`-Header in alle `.nix`-Dateien beim Start, nach Import und nach manueller Kategorisierung
-- Datei-Typen: `co` (configuration.nix / default.nix), `fl` (flake.nix), `hw` (hardware-configuration.nix), `hm` (home.nix), `nd` (sonstige .nix), `fx` (flake.lock, intern)
-- Hash-Berechnung für `co`-Dateien korrigiert: kanonischer Inhalt = `_NICO_HEADER + content`
-
-### Import
-- Vor dem Import wird geprüft ob das Zielverzeichnis relevante Dateien enthält; wenn ja, Backup-Bestätigung mit ZIP-Sicherung
-- `nico.json` und ZIP-Dateien lösen keine Backup-Nachfrage aus
-- `backup_to_zip()`: erstellt `nixos-config-YYYY-MM-DD-HHmmss.zip`
-- Backup-Bestätigungsflow für automatischen Import (/etc/nixos) und manuellen Import
-- Admin-Import: `_doAdminImport()`-Helfer mit vollständigem Backup-Bestätigungsflow
-- Fehlermeldung `ERR_IMPORT_PERMISSION` erklärt fehlende Root-Rechte auf /etc/nixos
-- Importergebnisliste nach erfolgreichem Import entfernt
-
-### Sidebar
-- `flake.lock` aus dem Seitenbaum ausgeblendet (JSON, kein `#`-Kommentar möglich)
-- Sidebar beim Start standardmäßig geöffnet
-
-### Header & Navigation
-- Sprachumschalter als Dropdown (statt zwei Buttons)
-- Neuer 💾-Button (Speichern) in der Icon-Leiste
-- Neuer `dry-run`-Button in der Icon-Leiste (Stil: rechteckig wie „Verzeichnis auswählen")
-- Button-Reihenfolge: 💾 → dry-run → ⚙ Admin → ? Hilfe → ⏻ Ausschalten
-- `dry-run` speichert zuerst, dann Syntaxprüfung (statt nur Syntaxprüfung)
-
-### Panels & Admin-Bereich
-- Speichern- und Admin-Bereich-Button aus dem linken Konfigurationspanel entfernt
-- Speichern- und Konfiguration-testen-Button aus Admin „Aktionen" entfernt
-- Admin-Bereich: Tabs und Inhalte horizontal zentriert
-
-### Export
-- ZIP-Export enthält jetzt alle sichtbaren Dateien aus dem nixos-Verzeichnis (rekursiv, nicht-versteckt), inkl. Import-Sicherungs-ZIPs; `.git` automatisch ausgeschlossen
+Backup vor dem Import, Sidebar mit Dateibaum, überarbeitete Header-Navigation, ZIP-Export aller Config-Dateien und automatische Dateikategorisierung beim Start.
 
 ---
 
