@@ -1127,6 +1127,57 @@ def create_app() -> Flask:
         return send_file(buf, mimetype="application/zip",
                          as_attachment=True, download_name=filename)
 
+    # ------------------------------------------------- app-settings export/import
+
+    @app.route("/api/settings/app/export")
+    def export_app_settings():
+        """Download app preferences (excluding nixos_config_dir) as JSON."""
+        import json as _json
+        from datetime import date
+        from flask import send_file
+        import io
+
+        _EXPORTABLE = {"language", "theme", "code_view_plain", "rebuild_log"}
+        all_settings = config_manager.get_app_settings()
+        exported = {k: v for k, v in all_settings.items() if k in _EXPORTABLE}
+
+        buf = io.BytesIO(_json.dumps(exported, indent=2, ensure_ascii=False).encode("utf-8"))
+        buf.seek(0)
+        filename = f"nico-settings-{date.today()}.json"
+        return send_file(buf, mimetype="application/json",
+                         as_attachment=True, download_name=filename)
+
+    @app.route("/api/settings/app/import", methods=["POST"])
+    def import_app_settings():
+        """
+        Accept a JSON file with exported app preferences.
+        Only known exportable keys are accepted; nixos_config_dir is never touched.
+        """
+        import json as _json
+
+        _IMPORTABLE = {"language", "theme", "code_view_plain", "rebuild_log"}
+
+        if err := _check_csrf(): return err
+
+        file = request.files.get("file")
+        if not file:
+            return jsonify({"error": "ERR_NO_FILE"}), 400
+
+        try:
+            data = _json.loads(file.read().decode("utf-8"))
+        except Exception:
+            return jsonify({"error": "ERR_INVALID_JSON"}), 400
+
+        if not isinstance(data, dict):
+            return jsonify({"error": "ERR_INVALID_JSON"}), 400
+
+        patch = {k: v for k, v in data.items() if k in _IMPORTABLE}
+        if not patch:
+            return jsonify({"error": "ERR_NO_VALID_KEYS"}), 400
+
+        config_manager.save_app_settings(patch)
+        return jsonify({"ok": True, "imported": list(patch.keys())})
+
     # ------------------------------------------------------------ zip-import
 
     @app.route("/api/import/zip/check", methods=["POST"])

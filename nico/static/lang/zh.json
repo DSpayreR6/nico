@@ -519,6 +519,14 @@
   "errors.ERR_NOT_A_SYMLINK":        "/etc/nixos 不是符号链接。",
   "errors.ERR_NO_BACKUP":            "未找到 /etc/nixos.bak – 没有可恢复的备份。",
 
+  "admin.settingsExportTitle":   "__TODO__",
+  "admin.settingsExport":        "__TODO__",
+  "admin.settingsImport":        "__TODO__",
+  "admin.settingsImportYes":     "__TODO__",
+  "admin.settingsImportConfirm": "__TODO__",
+  "admin.settingsImportSuccess": "__TODO__",
+  "admin.settingsImportErrJson": "__TODO__",
+
     "admin.zipImport":         "从 ZIP 导入",
   "admin.zipChecking":       "检查 ZIP…",
   "admin.zipImporting":      "导入中…",

@@ -498,6 +498,14 @@
   "errors.ERR_NOT_A_SYMLINK":        "/etc/nixos ist kein Symlink.",
   "errors.ERR_NO_BACKUP":            "/etc/nixos.bak nicht gefunden – kein Backup zum Wiederherstellen.",
 
+  "admin.settingsExportTitle":   "Programmeinstellungen sichern (Sprache, Theme, Ansichtsoptionen – ohne Config-Pfad)",
+  "admin.settingsExport":        "Einstellungen exportieren",
+  "admin.settingsImport":        "Einstellungen importieren",
+  "admin.settingsImportYes":     "Übernehmen",
+  "admin.settingsImportConfirm": "Einstellungen aus Datei übernehmen? Der Config-Pfad bleibt unverändert.",
+  "admin.settingsImportSuccess": "Einstellungen übernommen.",
+  "admin.settingsImportErrJson": "Ungültige JSON-Datei.",
+
   "admin.zipImport":         "Aus ZIP importieren",
   "admin.zipChecking":       "Prüfe ZIP…",
   "admin.zipImporting":      "Importiere…",

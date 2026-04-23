@@ -519,6 +519,14 @@
   "errors.ERR_NOT_A_SYMLINK":        "/etc/nixos не является символической ссылкой.",
   "errors.ERR_NO_BACKUP":            "/etc/nixos.bak не найден – резервной копии для восстановления нет.",
 
+  "admin.settingsExportTitle":   "__TODO__",
+  "admin.settingsExport":        "__TODO__",
+  "admin.settingsImport":        "__TODO__",
+  "admin.settingsImportYes":     "__TODO__",
+  "admin.settingsImportConfirm": "__TODO__",
+  "admin.settingsImportSuccess": "__TODO__",
+  "admin.settingsImportErrJson": "__TODO__",
+
     "admin.zipImport":         "Импорт из ZIP",
   "admin.zipChecking":       "Проверка ZIP…",
   "admin.zipImporting":      "Импорт…",

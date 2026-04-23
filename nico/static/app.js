@@ -1846,6 +1846,74 @@ async function _doZipApply(confirmed) {
   showToast(t('import.success'), 'success');
 }
 
+// ── Settings Export/Import ─────────────────────────────────────────────────
+
+function exportAppSettings() {
+  window.location.href = '/api/settings/app/export';
+}
+
+function _settingsImportReset() {
+  document.getElementById('admin-settings-import-state').classList.add('hidden');
+  ['admin-settings-import-confirm', 'admin-settings-import-error']
+    .forEach(id => document.getElementById(id)?.classList.add('hidden'));
+}
+
+function initSettingsImport() {
+  on('admin-settings-export-btn', 'click', exportAppSettings);
+
+  on('admin-settings-import-btn', 'click', () => {
+    _settingsImportReset();
+    document.getElementById('admin-settings-import-input').value = '';
+    document.getElementById('admin-settings-import-input').click();
+  });
+
+  document.getElementById('admin-settings-import-input')?.addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    let data;
+    try {
+      data = JSON.parse(await file.text());
+    } catch {
+      document.getElementById('admin-settings-import-state').classList.remove('hidden');
+      document.getElementById('admin-settings-import-error-text').textContent = t('admin.settingsImportErrJson');
+      document.getElementById('admin-settings-import-error').classList.remove('hidden');
+      return;
+    }
+
+    document.getElementById('admin-settings-import-confirm-text').textContent =
+      t('admin.settingsImportConfirm');
+    document.getElementById('admin-settings-import-state').classList.remove('hidden');
+    document.getElementById('admin-settings-import-confirm').classList.remove('hidden');
+
+    on('admin-settings-import-yes', 'click', async () => {
+      const fd = new FormData();
+      fd.append('file', file);
+      let res, result;
+      try {
+        res    = await csrfFetch('/api/settings/app/import', { method: 'POST', body: fd });
+        result = await res.json();
+      } catch {
+        showToast(t('toast.error'), 'error');
+        _settingsImportReset();
+        return;
+      }
+      _settingsImportReset();
+      if (!res.ok || result.error) {
+        showToast(tErr(result?.error) || t('toast.error'), 'error');
+        return;
+      }
+      showToast(t('admin.settingsImportSuccess'), 'success');
+      // Reload to apply language/theme changes
+      setTimeout(() => location.reload(), 800);
+    }, { once: true });
+
+    on('admin-settings-import-cancel', 'click', _settingsImportReset, { once: true });
+  });
+
+  on('admin-settings-import-error-cancel', 'click', _settingsImportReset);
+}
+
 // ── Admin-Import ───────────────────────────────────────────────────────────
 
 function initImportBrowse() {
@@ -4371,6 +4439,7 @@ function bindUI() {
   initImportBrowse();
   initImportManual();
   initZipImport();
+  initSettingsImport();
   initAdminTabs();
   initSettingsPanel();
   initAdminImportCollapse();

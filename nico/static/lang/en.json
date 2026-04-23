@@ -498,6 +498,14 @@
   "errors.ERR_NOT_A_SYMLINK":        "/etc/nixos is not a symlink.",
   "errors.ERR_NO_BACKUP":            "/etc/nixos.bak not found – no backup to restore.",
 
+  "admin.settingsExportTitle":   "__TODO__",
+  "admin.settingsExport":        "__TODO__",
+  "admin.settingsImport":        "__TODO__",
+  "admin.settingsImportYes":     "__TODO__",
+  "admin.settingsImportConfirm": "__TODO__",
+  "admin.settingsImportSuccess": "__TODO__",
+  "admin.settingsImportErrJson": "__TODO__",
+
     "admin.zipImport":         "Import from ZIP",
   "admin.zipChecking":       "Checking ZIP…",
   "admin.zipImporting":      "Importing…",

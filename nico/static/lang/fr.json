@@ -519,6 +519,14 @@
   "errors.ERR_NOT_A_SYMLINK":        "/etc/nixos n'est pas un lien symbolique.",
   "errors.ERR_NO_BACKUP":            "/etc/nixos.bak introuvable – aucune sauvegarde à restaurer.",
 
+  "admin.settingsExportTitle":   "__TODO__",
+  "admin.settingsExport":        "__TODO__",
+  "admin.settingsImport":        "__TODO__",
+  "admin.settingsImportYes":     "__TODO__",
+  "admin.settingsImportConfirm": "__TODO__",
+  "admin.settingsImportSuccess": "__TODO__",
+  "admin.settingsImportErrJson": "__TODO__",
+
     "admin.zipImport":         "Importer depuis un ZIP",
   "admin.zipChecking":       "Vérification du ZIP…",
   "admin.zipImporting":      "Importation…",

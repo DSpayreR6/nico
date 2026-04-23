@@ -1848,14 +1848,14 @@
           <div class="admin-section-title" data-i18n="admin.exportTitle">Exportieren</div>
           <div class="admin-actions">
             <div style="display:flex;gap:8px">
-              <button type="button" id="admin-export-btn" class="action-btn btn-yellow"
+              <button type="button" id="admin-export-btn" class="action-btn btn-green"
                       style="flex:1;width:auto"
                       data-i18n="admin.export"
                       data-i18n-title="admin.exportTitle"
                       title="Erstellt eine ZIP-Datei mit allen Config-Dateien zum Mitnehmen oder Sichern">
                 Als ZIP exportieren
               </button>
-              <button type="button" id="admin-zip-import-btn" class="action-btn btn-blue"
+              <button type="button" id="admin-zip-import-btn" class="action-btn btn-red"
                       style="flex:1;width:auto"
                       data-i18n="admin.zipImport">
                 Aus ZIP importieren
@@ -1889,6 +1889,44 @@
                 <button type="button" id="admin-zip-fallback-btn" class="btn-surface"
                         data-i18n="admin.zipFallbackBtn">Manuell suchen</button>
                 <button type="button" id="admin-zip-invalid-cancel" class="btn-surface"
+                        data-i18n="admin.zipCancel">Abbrechen</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Settings Export/Import -->
+        <div class="admin-section">
+          <div class="admin-section-title" data-i18n="admin.settingsExportTitle">Programmeinstellungen</div>
+          <div class="admin-actions">
+            <div style="display:flex;gap:8px">
+              <button type="button" id="admin-settings-export-btn" class="action-btn btn-green"
+                      style="flex:1;width:auto"
+                      data-i18n="admin.settingsExport">
+                Einstellungen exportieren
+              </button>
+              <button type="button" id="admin-settings-import-btn" class="action-btn btn-red"
+                      style="flex:1;width:auto"
+                      data-i18n="admin.settingsImport">
+                Einstellungen importieren
+              </button>
+            </div>
+            <input type="file" id="admin-settings-import-input" accept=".json" class="hidden">
+          </div>
+          <div id="admin-settings-import-state" class="hidden" style="margin-top:10px">
+            <div id="admin-settings-import-confirm" class="hidden">
+              <p id="admin-settings-import-confirm-text" class="admin-hint"></p>
+              <div class="confirm-buttons">
+                <button type="button" id="admin-settings-import-yes" class="action-btn btn-red"
+                        data-i18n="admin.settingsImportYes">Übernehmen</button>
+                <button type="button" id="admin-settings-import-cancel" class="btn-surface"
+                        data-i18n="admin.zipCancel">Abbrechen</button>
+              </div>
+            </div>
+            <div id="admin-settings-import-error" class="hidden">
+              <p id="admin-settings-import-error-text" class="admin-hint import-err"></p>
+              <div class="confirm-buttons">
+                <button type="button" id="admin-settings-import-error-cancel" class="btn-surface"
                         data-i18n="admin.zipCancel">Abbrechen</button>
               </div>
             </div>

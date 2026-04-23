@@ -26,6 +26,9 @@ Liegt das lokale Git-Repository hinter dem Remote zurück, erscheint beim Start 
 ### Prism.js jetzt lokal
 Der Syntax-Highlighter Prism.js wird nicht mehr von einem externen CDN geladen, sondern direkt aus NiCo heraus ausgeliefert. Lizenz und Herkunft sind in `THIRD_PARTY_LICENSES.md` dokumentiert.
 
+### Programmeinstellungen sichern und wiederherstellen
+Im Admin-Bereich unter „Exportieren" lassen sich die NiCo-Programmeinstellungen (Sprache, Theme, Ansichtsoptionen) als JSON-Datei herunterladen und auf einem anderen Gerät wieder einspielen. Der Config-Pfad bleibt beim Import bewusst unangetastet – er ist maschinenspezifisch und wandert nicht mit.
+
 ### Interner Verbesserung: Parser
 Der Nix-Import-Parser nutzt jetzt tree-sitter für eine genauere Erkennung von Konfigurationsoptionen und fällt nur bei fehlender Umgebung auf den bisherigen Regex-Parser zurück.
 

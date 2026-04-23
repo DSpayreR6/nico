@@ -519,6 +519,14 @@
   "errors.ERR_NOT_A_SYMLINK":        "/etc/nixosはシンボリックリンクではありません。",
   "errors.ERR_NO_BACKUP":            "/etc/nixos.bakが見つかりません – 復元するバックアップがありません。",
 
+  "admin.settingsExportTitle":   "__TODO__",
+  "admin.settingsExport":        "__TODO__",
+  "admin.settingsImport":        "__TODO__",
+  "admin.settingsImportYes":     "__TODO__",
+  "admin.settingsImportConfirm": "__TODO__",
+  "admin.settingsImportSuccess": "__TODO__",
+  "admin.settingsImportErrJson": "__TODO__",
+
     "admin.zipImport":         "ZIPからインポート",
   "admin.zipChecking":       "ZIPを確認中…",
   "admin.zipImporting":      "インポート中…",
