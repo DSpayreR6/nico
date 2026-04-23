@@ -124,19 +124,32 @@ def run_validation(
 
 def _extract_imports(nix_content: str) -> list[str]:
     """Return file paths found inside imports = [...] in nix_content."""
+    return [p for p, _ in _extract_imports_with_lines(nix_content)]
+
+
+def _extract_imports_with_lines(nix_content: str) -> list[tuple[str, int]]:
+    """Return (path, line_number) tuples from imports = [...] in nix_content."""
     from .brix import strip_brick_blocks
     clean = strip_brick_blocks(nix_content)
     m = re.search(r'imports\s*=\s*\[([^\]]*)\]', clean, re.DOTALL)
     if not m:
         return []
-    inner = re.sub(r'#[^\n]*', '', m.group(1))
-    # ./relative/path  or  "/absolute/path.nix"  or  "relative.nix"
-    paths = re.findall(r'\.\/[\w./\-]+', inner)
-    paths += re.findall(r'"([^"]+\.nix)"', inner)
-    return [p.strip() for p in paths if p.strip()]
+    base_line = clean[:m.start(1)].count('\n') + 1
+    results: list[tuple[str, int]] = []
+    for offset, line in enumerate(m.group(1).split('\n')):
+        line_clean = re.sub(r'#[^\n]*', '', line)
+        line_no = base_line + offset
+        for path in re.findall(r'\.\/[\w./\-]+', line_clean):
+            results.append((path.strip(), line_no))
+        for path in re.findall(r'"([^"]+\.nix)"', line_clean):
+            results.append((path.strip(), line_no))
+    return [(p, l) for p, l in results if p]
 
 
 # ── Rule implementations ───────────────────────────────────────────────────────
+
+_EXCL_USERS = frozenset({'root', 'nobody', 'guest', 'gast'})
+
 
 def _rule_user_in_config(nixos_dir: str, config: dict, is_flake: bool) -> list[Finding]:
     try:
@@ -150,21 +163,28 @@ def _rule_user_in_config(nixos_dir: str, config: dict, is_flake: bool) -> list[F
     except Exception:
         return []
 
-    if not current or current == "root":
+    if not current or current in _EXCL_USERS:
         return []
 
+    # Scan ALL .nix files – catches users defined in host configs too
     known: set[str] = set()
-    if config.get("username"):
-        known.add(config["username"])
-    for eu in config.get("extra_users") or []:
-        if eu.get("username"):
-            known.add(eu["username"])
+    for nix_file in sorted(Path(nixos_dir).rglob("*.nix")):
+        if ".git" in nix_file.parts:
+            continue
+        try:
+            content = nix_file.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        for m in re.finditer(r'users\.users\.([\w]+)\s*[={]', content):
+            uname = m.group(1)
+            if uname not in _EXCL_USERS:
+                known.add(uname)
 
     if current not in known:
         return [Finding(
             rule_id="user_in_config",
             severity="error",
-            message=f'Benutzer "{current}" ist nicht in der NixOS-Config angelegt.',
+            message=f'Benutzer "{current}" ist in keiner Config-Datei angelegt.',
             detail="Nach einem Rebuild wäre kein Login möglich. "
                    f"Benutzer unter users.users.{current} eintragen.",
         )]
@@ -279,23 +299,30 @@ def _rule_duplicate_attrs(nixos_dir: str, config: dict, is_flake: bool) -> list[
         from . import nix_parser as _np
         from .brix import strip_brick_blocks
 
+        # key → list of line numbers where it appears
+        seen: dict[str, list[int]] = {}
         result = _np.parse(strip_brick_blocks(content))
         if result.available:
-            keys = [b.key for b in result.known + result.unknown]
+            for b in result.known + result.unknown:
+                seen.setdefault(b.key, []).append(b.start_line)
         else:
-            # Regex fallback: simple top-level pattern
-            keys = re.findall(r'^\s*([\w.\-]+)\s*=', content, re.MULTILINE)
+            # Regex fallback: capture line numbers manually
+            for m in re.finditer(r'^\s*([\w.\-]+)\s*=', content, re.MULTILINE):
+                key = m.group(1)
+                line_no = content[:m.start()].count('\n') + 1
+                seen.setdefault(key, []).append(line_no)
 
-        seen: dict[str, int] = {}
-        for k in keys:
-            seen[k] = seen.get(k, 0) + 1
-        dupes = [k for k, n in seen.items() if n > 1]
+        dupes = {k: lines for k, lines in seen.items() if len(lines) > 1}
         if dupes:
+            parts = [
+                f"'{k}' mehrfach: " + ", ".join(f"Zeile {l}" for l in lines)
+                for k, lines in sorted(dupes.items())
+            ]
             findings.append(Finding(
                 rule_id="duplicate_attrs",
                 severity="error",
-                message=f"{nix_file.name}: Doppelte Top-Level-Attribute gefunden.",
-                detail="Betrifft: " + ", ".join(dupes),
+                message=f"{nix_file.name}: Doppelte Attribute gefunden.",
+                detail="\n".join(parts),
             ))
     return findings
 
@@ -313,13 +340,13 @@ def _rule_imports_exist(nixos_dir: str, config: dict, is_flake: bool) -> list[Fi
         except OSError:
             continue
 
-        for raw_path in _extract_imports(content):
+        for raw_path, line_no in _extract_imports_with_lines(content):
             resolved = (nix_file.parent / raw_path).resolve()
             if not resolved.exists():
                 findings.append(Finding(
                     rule_id="imports_exist",
                     severity="error",
-                    message=f"{nix_file.name}: Import-Pfad nicht gefunden: {raw_path}",
+                    message=f"Fehlende Datei in {nix_file.name}, Zeile {line_no}: {raw_path}",
                     detail=str(resolved),
                 ))
     return findings

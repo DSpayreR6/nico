@@ -1051,7 +1051,7 @@ function _showValidationResults(findings) {
       const icon  = icons[f.severity]  || '•';
       const color = colors[f.severity] || 'var(--text)';
       const detail = f.detail
-        ? `<div style="margin-top:4px;color:var(--subtext0);font-size:12px">${_esc(f.detail)}</div>`
+        ? `<div style="margin-top:4px;color:var(--subtext0);font-size:12px;white-space:pre-line">${_esc(f.detail)}</div>`
         : '';
       return `<div style="display:flex;gap:10px;margin-bottom:14px;align-items:flex-start">
         <span style="color:${color};font-size:16px;flex-shrink:0;margin-top:1px">${icon}</span>
