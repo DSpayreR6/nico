@@ -1,8 +1,11 @@
 """
 NiCo configuration validator.
 
-Each rule is a callable that receives (nixos_dir, config, is_flake) and returns
-a list of Finding objects.  run_validation() executes the enabled subset.
+Each rule is a callable that receives (nixos_dir, config, is_flake, host) and
+returns a list of Finding objects.  run_validation() executes the enabled subset.
+
+host: optional host name for multi-host flake configs.  When provided, hardware
+rules check the host's own files; otherwise the root config files are used.
 """
 from __future__ import annotations
 
@@ -87,10 +90,13 @@ def run_validation(
     nixos_dir: str,
     enabled_rules: dict[str, bool],
     config: dict,
+    host: str | None = None,
 ) -> list[dict]:
     """
     Execute all enabled (and applicable) rules and return a list of finding
     dicts: {rule_id, severity, message, detail}.
+
+    host: when given, hardware rules check that host's files specifically.
     """
     is_flake = (Path(nixos_dir) / "flake.nix").exists()
     findings: list[Finding] = []
@@ -104,12 +110,12 @@ def run_validation(
         if fn is None:
             continue
         try:
-            findings.extend(fn(nixos_dir, config, is_flake))
+            findings.extend(fn(nixos_dir, config, is_flake, host))
         except Exception as exc:
             findings.append(Finding(
                 rule_id=rule.id,
                 severity="info",
-                message=f"Regel '{rule.id}' konnte nicht ausgeführt werden.",
+                message=f"Regel '{rule.id}' konnte nicht ausgefuehrt werden.",
                 detail=str(exc),
             ))
 
@@ -128,7 +134,12 @@ def _extract_imports(nix_content: str) -> list[str]:
 
 
 def _extract_imports_with_lines(nix_content: str) -> list[tuple[str, int]]:
-    """Return (path, line_number) tuples from imports = [...] in nix_content."""
+    """Return (path, line_number) tuples from imports = [...] in nix_content.
+
+    Only plain relative paths (./foo) are returned.  Expression paths like
+    (modulesPath + "...") and channel paths like <nixpkgs/...> are skipped –
+    they cannot be resolved as plain filesystem paths.
+    """
     from .brix import strip_brick_blocks
     clean = strip_brick_blocks(nix_content)
     m = re.search(r'imports\s*=\s*\[([^\]]*)\]', clean, re.DOTALL)
@@ -137,11 +148,15 @@ def _extract_imports_with_lines(nix_content: str) -> list[tuple[str, int]]:
     base_line = clean[:m.start(1)].count('\n') + 1
     results: list[tuple[str, int]] = []
     for offset, line in enumerate(m.group(1).split('\n')):
+        # Remove comments
         line_clean = re.sub(r'#[^\n]*', '', line)
         line_no = base_line + offset
-        for path in re.findall(r'\.\/[\w./\-]+', line_clean):
+        # Only match unquoted ./relative or quoted "./relative" – never absolute or
+        # expression paths.  This avoids false positives from (modulesPath + "...")
+        # patterns that hardware-configuration.nix commonly contains.
+        for path in re.findall(r'(?<!["\w])(\.\/[\w./\-]+)', line_clean):
             results.append((path.strip(), line_no))
-        for path in re.findall(r'"([^"]+\.nix)"', line_clean):
+        for path in re.findall(r'"(\./[^"]+)"', line_clean):
             results.append((path.strip(), line_no))
     return [(p, l) for p, l in results if p]
 
@@ -151,7 +166,17 @@ def _extract_imports_with_lines(nix_content: str) -> list[tuple[str, int]]:
 _EXCL_USERS = frozenset({'root', 'nobody', 'guest', 'gast'})
 
 
-def _rule_user_in_config(nixos_dir: str, config: dict, is_flake: bool) -> list[Finding]:
+def _host_paths(nixos_dir: str, config: dict, host: str | None) -> tuple[Path, str]:
+    """Return (base_dir, config_filename) for the given host (or root config)."""
+    base = Path(nixos_dir)
+    if host:
+        hosts_dir = config.get("hosts_dir", "hosts")
+        return base / hosts_dir / host, "default.nix"
+    return base, "configuration.nix"
+
+
+def _rule_user_in_config(nixos_dir: str, config: dict, is_flake: bool,
+                         host: str | None = None) -> list[Finding]:
     try:
         current = (
             os.environ.get("USER")
@@ -191,12 +216,14 @@ def _rule_user_in_config(nixos_dir: str, config: dict, is_flake: bool) -> list[F
     return []
 
 
-def _rule_flake_host_exists(nixos_dir: str, config: dict, is_flake: bool) -> list[Finding]:
+def _rule_flake_host_exists(nixos_dir: str, config: dict, is_flake: bool,
+                            host: str | None = None) -> list[Finding]:
     flake_path = Path(nixos_dir) / "flake.nix"
     if not flake_path.exists():
         return []
 
-    hosts: list[str] = config.get("flake_hosts") or []
+    # When a specific host is selected, only check that one
+    hosts: list[str] = [host] if host else (config.get("flake_hosts") or [])
     if not hosts:
         return []
 
@@ -218,12 +245,13 @@ def _rule_flake_host_exists(nixos_dir: str, config: dict, is_flake: bool) -> lis
     return findings
 
 
-def _rule_hardware_imported(nixos_dir: str, config: dict, is_flake: bool) -> list[Finding]:
-    hw = Path(nixos_dir) / "hardware-configuration.nix"
+def _rule_hardware_imported(nixos_dir: str, config: dict, is_flake: bool,
+                            host: str | None = None) -> list[Finding]:
+    base, co_name = _host_paths(nixos_dir, config, host)
+    hw = base / "hardware-configuration.nix"
+    co = base / co_name
     if not hw.exists():
         return []
-
-    co = Path(nixos_dir) / "configuration.nix"
     if not co.exists():
         return []
 
@@ -237,14 +265,16 @@ def _rule_hardware_imported(nixos_dir: str, config: dict, is_flake: bool) -> lis
         return [Finding(
             rule_id="hardware_imported",
             severity="warning",
-            message="hardware-configuration.nix existiert, ist aber nicht in imports eingebunden.",
+            message=f"hardware-configuration.nix existiert, ist aber nicht in {co_name} eingebunden.",
             detail="In imports = [ ./hardware-configuration.nix ] aufnehmen.",
         )]
     return []
 
 
-def _rule_hardware_matches(nixos_dir: str, config: dict, is_flake: bool) -> list[Finding]:
-    hw = Path(nixos_dir) / "hardware-configuration.nix"
+def _rule_hardware_matches(nixos_dir: str, config: dict, is_flake: bool,
+                           host: str | None = None) -> list[Finding]:
+    base, _ = _host_paths(nixos_dir, config, host)
+    hw = base / "hardware-configuration.nix"
     if not hw.exists():
         return []
 
@@ -282,7 +312,8 @@ def _rule_hardware_matches(nixos_dir: str, config: dict, is_flake: bool) -> list
     return []
 
 
-def _rule_duplicate_attrs(nixos_dir: str, config: dict, is_flake: bool) -> list[Finding]:
+def _rule_duplicate_attrs(nixos_dir: str, config: dict, is_flake: bool,
+                          host: str | None = None) -> list[Finding]:
     findings = []
     targets = [Path(nixos_dir) / "configuration.nix"]
     if is_flake:
@@ -306,11 +337,18 @@ def _rule_duplicate_attrs(nixos_dir: str, config: dict, is_flake: bool) -> list[
             for b in result.known + result.unknown:
                 seen.setdefault(b.key, []).append(b.start_line)
         else:
-            # Regex fallback: capture line numbers manually
-            for m in re.finditer(r'^\s*([\w.\-]+)\s*=', content, re.MULTILINE):
-                key = m.group(1)
-                line_no = content[:m.start()].count('\n') + 1
-                seen.setdefault(key, []).append(line_no)
+            # Regex fallback with depth tracking – only collect attributes at
+            # brace depth 1 (the body of the outermost NixOS module { ... }).
+            # This avoids false positives from nested blocks like snapper configs
+            # or fileSystems entries.
+            depth = 0
+            for i, line in enumerate(content.split('\n'), start=1):
+                # Check depth BEFORE counting braces on this line
+                if depth == 1:
+                    m = re.match(r'\s*([\w.\-"]+(?:\.[\w.\-"]+)*)\s*=\s*(?!=)', line)
+                    if m:
+                        seen.setdefault(m.group(1), []).append(i)
+                depth += line.count('{') - line.count('}')
 
         dupes = {k: lines for k, lines in seen.items() if len(lines) > 1}
         if dupes:
@@ -327,7 +365,8 @@ def _rule_duplicate_attrs(nixos_dir: str, config: dict, is_flake: bool) -> list[
     return findings
 
 
-def _rule_imports_exist(nixos_dir: str, config: dict, is_flake: bool) -> list[Finding]:
+def _rule_imports_exist(nixos_dir: str, config: dict, is_flake: bool,
+                        host: str | None = None) -> list[Finding]:
     findings = []
     base = Path(nixos_dir)
 
@@ -352,7 +391,8 @@ def _rule_imports_exist(nixos_dir: str, config: dict, is_flake: bool) -> list[Fi
     return findings
 
 
-def _rule_brix_redundant(nixos_dir: str, config: dict, is_flake: bool) -> list[Finding]:
+def _rule_brix_redundant(nixos_dir: str, config: dict, is_flake: bool,
+                         host: str | None = None) -> list[Finding]:
     from . import importer as _imp
     from .brix import extract_brick_blocks
 

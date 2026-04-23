@@ -3,7 +3,7 @@
 ## Unreleased
 
 ### Validierung vor Rebuild
-Vor dem Rebuild lässt sich die Konfiguration jetzt auf häufige Probleme prüfen – per neuem „Validierung"-Button im NixOS-Menü. NiCo schaut dabei zum Beispiel, ob der aktuelle Benutzer in der Config angelegt ist, ob alle Import-Pfade auf der Platte existieren, ob die Hardware-Konfiguration eingebunden ist und ob Disk-UUIDs zum aktuellen System passen. Welche Prüfungen aktiv sind, lässt sich in den Admin-Einstellungen unter „Validierung anpassen" individuell ein- oder ausschalten – die Auswahl wandert mit der Config.
+Vor dem Rebuild lässt sich die Konfiguration jetzt auf häufige Probleme prüfen – per neuem „Validierung"-Button im NixOS-Menü. NiCo schaut dabei zum Beispiel, ob der aktuelle Benutzer in der Config angelegt ist, ob alle Import-Pfade auf der Platte existieren, ob die Hardware-Konfiguration eingebunden ist und ob Disk-UUIDs zum aktuellen System passen. Bei Flake-Configs mit mehreren Hosts fragt NiCo vorher, welcher Host geprüft werden soll – Hardware-Checks beziehen sich dann gezielt auf diesen Host. Welche Prüfungen aktiv sind, lässt sich in den Admin-Einstellungen unter „Validierung anpassen" individuell ein- oder ausschalten – die Auswahl wandert mit der Config.
 
 ### NixOS-Aktionen im Header
 Der einzelne Dry-Run-Button wurde durch ein übersichtlicheres NixOS-Menü ersetzt. Ein Klick auf das NixOS-Logo öffnet drei farbkodierte Aktionen: Zwischenstand speichern (grün), Dry-Run (gelb) und System-Neubau (rot).

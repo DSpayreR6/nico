@@ -700,7 +700,9 @@ def create_app() -> Flask:
         cfg_settings  = config_manager.load_config_settings(nixos_dir)
         enabled_rules = cfg_settings.get("validation_rules") or _val.default_validation_rules()
         config        = config_manager.load_config(nixos_dir)
-        findings      = _val.run_validation(nixos_dir, enabled_rules, config)
+        body          = request.get_json(silent=True) or {}
+        host          = body.get("host") or None
+        findings      = _val.run_validation(nixos_dir, enabled_rules, config, host=host)
         return jsonify({"findings": findings})
 
     @app.route("/api/app/settings", methods=["GET"])

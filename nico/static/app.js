@@ -1024,9 +1024,25 @@ async function saveValidationSettings() {
 
 /** POST /api/validate and show the results overlay. */
 async function runValidation() {
+  // For flake configs with multiple hosts, ask which host to validate
+  let host = null;
+  if (_isFlakeConfig) {
+    const hostInfo = await _fetchFlakeHosts();
+    if (hostInfo.hosts && hostInfo.hosts.length > 1) {
+      host = await _showHostPicker(hostInfo.hosts, { allowAll: false });
+      if (host === null) return; // cancelled
+    } else if (hostInfo.hosts && hostInfo.hosts.length === 1) {
+      host = typeof hostInfo.hosts[0] === 'object' ? hostInfo.hosts[0].name : hostInfo.hosts[0];
+    }
+  }
+
   let findings;
   try {
-    const res  = await csrfFetch('/api/validate', { method: 'POST' });
+    const res  = await csrfFetch('/api/validate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ host }),
+    });
     const data = await res.json();
     findings   = data.findings || [];
   } catch (e) {
@@ -4346,7 +4362,6 @@ function bindUI() {
     if (e.target.id === 'validation-settings-overlay') closeValidationSettings();
   });
   on('validation-settings-save',  'click', saveValidationSettings);
-  on('validation-run-btn',        'click', () => { closeValidationSettings(); runValidation(); });
   on('validation-results-close',  'click', closeValidationResults);
   on('validation-results-overlay','click', e => {
     if (e.target.id === 'validation-results-overlay') closeValidationResults();
