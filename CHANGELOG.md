@@ -6,54 +6,54 @@
 
 ## 0.9.2 (2026-04-23)
 
-### Sichererer Datei- und Hostwechsel
-Beim Wechsel zwischen `configuration.nix` und Host-Dateien schützt NiCo jetzt besser vor Datenverlust. Speichern und Auto-Save laufen nur noch, wenn das Formular vollständig zur aktuell geöffneten Datei geladen wurde. Außerdem wird die Filterauswahl der Sektionen als Programmeinstellung gespeichert und beim nächsten Start wiederhergestellt.
+### Safer file and host switching
+When switching between `configuration.nix` and host files, NiCo now protects more reliably against data loss. Save and auto-save only run when the form has been fully loaded for the currently open file. The section filter selection is also stored as a program setting and restored on the next start.
 
-### Sektionen filtern
-Im linken Panel gibt es jetzt ein Filter-Icon neben den Einklappen/Aufklappen-Buttons. Ein Klick öffnet drei Optionen: alle Sektionen anzeigen, nur Sektionen mit Inhalt anzeigen oder eine selbst konfigurierte Auswahl verwenden. Die gewählte Ansicht bleibt beim nächsten Start erhalten. Sektionen mit Inhalt werden unabhängig vom Filter immer angezeigt.
+### Filter sections
+The left panel now has a filter icon next to the collapse/expand buttons. Clicking it opens three options: show all sections, show only sections with content, or use a custom selection. The chosen view is preserved for the next start. Sections with content are always shown regardless of the filter.
 
-### Sektionen anpassen
-Unter Admin → Einstellungen → NiCo-Einstellungen lässt sich per „Sektionen anpassen" festlegen, welche Sektionen beim Filter „Sektionen lt. Einstellungen" sichtbar sein sollen. Die Auswahl funktioniert wie die Validierungsregeln: Toggles pro Sektion, gespeichert in den Programmeinstellungen auf dem Rechner.
+### Adjust sections
+Under Admin → Settings → NiCo Settings, “Adjust sections” can now be used to define which sections should be visible for the “According to settings” filter. The selection works like the validation rules: toggles per section, stored in the machine-local program settings.
 
-### Einstellungen-Tab neu gegliedert
-Der Admin-Tab „Einstellungen" ist jetzt in zwei Sub-Tabs aufgeteilt: **NiCo-Einstellungen** (maschinenlokal) und **Config-Einstellungen** (wandern mit der Config). Das trennt klar, was wo gespeichert wird.
+### Settings tab reorganized
+The admin tab “Settings” is now split into two sub-tabs: **NiCo Settings** (machine-local) and **Config Settings** (travel with the config). This clearly separates what is stored where.
 
-### Validierung vor Rebuild
-Vor dem Rebuild lässt sich die Konfiguration jetzt auf häufige Probleme prüfen – per neuem „Validierung"-Button im NixOS-Menü. NiCo schaut dabei zum Beispiel, ob der aktuelle Benutzer in der Config angelegt ist, ob alle Import-Pfade auf der Platte existieren, ob die Hardware-Konfiguration eingebunden ist und ob Disk-UUIDs zum aktuellen System passen. Bei Flake-Configs mit mehreren Hosts fragt NiCo vorher, welcher Host geprüft werden soll – Hardware-Checks beziehen sich dann gezielt auf diesen Host. Welche Prüfungen aktiv sind, lässt sich in den Admin-Einstellungen unter „Validierung anpassen" individuell ein- oder ausschalten – die Auswahl wandert mit der Config.
+### Validation before rebuild
+Before a rebuild, the configuration can now be checked for common problems via a new “Validation” button in the NixOS menu. NiCo checks, for example, whether the current user exists in the config, whether all import paths exist on disk, whether the hardware configuration is imported, and whether disk UUIDs match the current system. For flake configs with multiple hosts, NiCo first asks which host should be validated, and hardware checks then target that host specifically. Which checks are active can be configured individually under “Adjust validation” in the admin settings, and that selection travels with the config.
 
-### NixOS-Aktionen im Header
-Der einzelne Dry-Run-Button wurde durch ein übersichtlicheres NixOS-Menü ersetzt. Ein Klick auf das NixOS-Logo öffnet drei farbkodierte Aktionen: Zwischenstand speichern (grün), Dry-Run (gelb) und System-Neubau (rot).
+### NixOS actions in the header
+The single dry-run button has been replaced with a clearer NixOS menu. Clicking the NixOS logo opens three color-coded actions: save snapshot (green), dry run (yellow), and system rebuild (red).
 
-### Bessere Rebuild-Ausgabe
-Das Rebuild-Fenster zeigt jetzt sowohl den rohen Ausgabe-Stream als auch einen kompakten Status-Monitor mit Fortschrittsbalken und aktuellem Bauprozess – ähnlich wie nix-output-monitor. Warnungen und Fehler werden farbig hervorgehoben.
+### Better rebuild output
+The rebuild window now shows both the raw output stream and a compact status monitor with progress bars and the current build process, similar to `nix-output-monitor`. Warnings and errors are highlighted in color.
 
-### Rebuild-Log bei Fehler
-Schlägt ein Rebuild fehl, schreibt NiCo automatisch eine vollständige Log-Datei (`nixos-rebuild.log`) in das Config-Verzeichnis. In den Einstellungen lässt sich das auch für erfolgreiche Rebuilds aktivieren.
+### Rebuild log on failure
+If a rebuild fails, NiCo now automatically writes a complete log file (`nixos-rebuild.log`) into the config directory. This can also be enabled for successful rebuilds in the settings.
 
-### Rebuild ohne Git-Repository
-Flake-Rebuilds funktionieren jetzt auch wenn das Config-Verzeichnis kein Git-Repository ist. NiCo erkennt das automatisch und übergibt den absoluten Pfad direkt an Nix.
+### Rebuild without a Git repository
+Flake rebuilds now also work when the config directory is not a Git repository. NiCo detects this automatically and passes the absolute path directly to Nix.
 
-### Symlink /etc/nixos anlegen
-Im Admin-Bereich lässt sich ein Symlink von `/etc/nixos` auf das NiCo-Verzeichnis einrichten. Dann funktionieren NixOS-Tools wie `nixos-rebuild` ohne Pfadangabe. Das Original wird als `/etc/nixos.bak` gesichert.
+### Create `/etc/nixos` symlink
+In the admin area, a symlink from `/etc/nixos` to the NiCo directory can now be created. This allows NixOS tools such as `nixos-rebuild` to work without an explicit path. The original is backed up as `/etc/nixos.bak`.
 
-### Remote-Stand im Git-Banner (experimentell)
-Liegt das lokale Git-Repository hinter dem Remote zurück, erscheint beim Start ein blaues Info-Banner mit der Anzahl fehlender Commits.
+### Remote status in the Git banner (experimental)
+If the local Git repository is behind the remote, a blue info banner appears on startup showing the number of missing commits.
 
-### Prism.js jetzt lokal
-Der Syntax-Highlighter Prism.js wird nicht mehr von einem externen CDN geladen, sondern direkt aus NiCo heraus ausgeliefert. Lizenz und Herkunft sind in `THIRD_PARTY_LICENSES.md` dokumentiert.
+### Prism.js is now local
+The Prism.js syntax highlighter is no longer loaded from an external CDN. It is now served directly by NiCo. License and attribution are documented in `THIRD_PARTY_LICENSES.md`.
 
-### Programmeinstellungen sichern und wiederherstellen
-Im Admin-Bereich unter „Exportieren" lassen sich die NiCo-Programmeinstellungen (Sprache, Theme, Ansichtsoptionen) als JSON-Datei herunterladen und auf einem anderen Gerät wieder einspielen. Der Config-Pfad bleibt beim Import bewusst unangetastet – er ist maschinenspezifisch und wandert nicht mit.
+### Back up and restore program settings
+In the admin area under “Export”, NiCo program settings (language, theme, view options) can now be downloaded as a JSON file and imported again on another device. The config path is intentionally left untouched during import because it is machine-specific and should not travel.
 
-### Interner Verbesserung: Parser
-Der Nix-Import-Parser nutzt jetzt tree-sitter für eine genauere Erkennung von Konfigurationsoptionen und fällt nur bei fehlender Umgebung auf den bisherigen Regex-Parser zurück.
+### Internal improvement: parser
+The Nix import parser now uses tree-sitter for more accurate detection of configuration options and only falls back to the previous regex parser when the environment does not support it.
 
 ## 0.9.1 (2026-04-08)
 
-Backup vor dem Import, Sidebar mit Dateibaum, überarbeitete Header-Navigation, ZIP-Export aller Config-Dateien und automatische Dateikategorisierung beim Start.
+Backup before import, sidebar with file tree, revised header navigation, ZIP export of all config files, and automatic file categorization on startup.
 
 ---
 
 ## 0.0.1 (2026-04-07)
 
-Erstes lauffähiges Grundgerüst: Flask-Backend, Konfigurationsgenerator, Panel-UI, Import, Brix-System, Git-Zeitmaschine, Home Manager, Mehrsprachigkeit (DE/EN).
+First working foundation: Flask backend, configuration generator, panel UI, import, Brix system, Git time machine, Home Manager, and multilingual support (DE/EN).
