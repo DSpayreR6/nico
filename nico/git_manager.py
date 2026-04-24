@@ -143,6 +143,132 @@ def check_remote_status(nixos_dir: str) -> dict:
     return {"has_remote": True, "remote_url": remote_url, "behind": behind, "error": ""}
 
 
+def check_start_guard(nixos_dir: str) -> dict:
+    """
+    Inspect the local repository before NiCo loads and normalizes files.
+    Returns a state machine for the startup guard dialog.
+    States:
+      not_git | no_remote | clean_up_to_date | dirty | behind | ahead | diverged | error
+    """
+    import shutil
+
+    if shutil.which("git") is None:
+        return {
+            "state": "error",
+            "git_installed": False,
+            "has_git": False,
+            "has_remote": False,
+            "dirty": False,
+            "ahead": 0,
+            "behind": 0,
+            "remote_url": "",
+            "detail": "git not found",
+        }
+
+    if not is_git_repo(nixos_dir):
+        return {
+            "state": "not_git",
+            "git_installed": True,
+            "has_git": False,
+            "has_remote": False,
+            "dirty": False,
+            "ahead": 0,
+            "behind": 0,
+            "remote_url": "",
+            "detail": "",
+        }
+
+    rc, remote_url = _run(["remote", "get-url", "origin"], cwd=nixos_dir)
+    if rc != 0 or not remote_url:
+        return {
+            "state": "no_remote",
+            "git_installed": True,
+            "has_git": True,
+            "has_remote": False,
+            "dirty": False,
+            "ahead": 0,
+            "behind": 0,
+            "remote_url": "",
+            "detail": "",
+        }
+
+    rc, status_out = _run(["status", "--porcelain"], cwd=nixos_dir)
+    dirty = bool(status_out.strip()) if rc == 0 else False
+
+    rc, upstream = _run(["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"], cwd=nixos_dir)
+    if rc != 0 or not upstream:
+        return {
+            "state": "no_remote",
+            "git_installed": True,
+            "has_git": True,
+            "has_remote": True,
+            "dirty": dirty,
+            "ahead": 0,
+            "behind": 0,
+            "remote_url": remote_url,
+            "detail": "",
+        }
+
+    rc, fetch_out = _run(["fetch", "--quiet", "origin"], cwd=nixos_dir, timeout=15)
+    if rc != 0:
+        return {
+            "state": "error",
+            "git_installed": True,
+            "has_git": True,
+            "has_remote": True,
+            "dirty": dirty,
+            "ahead": 0,
+            "behind": 0,
+            "remote_url": remote_url,
+            "detail": fetch_out,
+        }
+
+    rc, count_out = _run(["rev-list", "--left-right", "--count", "HEAD...@{u}"], cwd=nixos_dir)
+    if rc != 0:
+        return {
+            "state": "error",
+            "git_installed": True,
+            "has_git": True,
+            "has_remote": True,
+            "dirty": dirty,
+            "ahead": 0,
+            "behind": 0,
+            "remote_url": remote_url,
+            "detail": count_out,
+        }
+
+    parts = count_out.split()
+    try:
+        ahead = int(parts[0]) if len(parts) >= 1 else 0
+        behind = int(parts[1]) if len(parts) >= 2 else 0
+    except ValueError:
+        ahead = 0
+        behind = 0
+
+    if ahead > 0 and behind > 0:
+        state = "diverged"
+    elif behind > 0:
+        state = "behind"
+    elif dirty:
+        state = "dirty"
+    elif ahead > 0:
+        state = "ahead"
+    else:
+        state = "clean_up_to_date"
+
+    return {
+        "state": state,
+        "git_installed": True,
+        "has_git": True,
+        "has_remote": True,
+        "dirty": dirty,
+        "ahead": ahead,
+        "behind": behind,
+        "remote_url": remote_url,
+        "detail": "",
+    }
+
+
 def get_log(nixos_dir: str, n: int = 30) -> list[dict]:
     """Return the last n commits as a list of {hash, message, date} dicts."""
     if not is_git_repo(nixos_dir):

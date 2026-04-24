@@ -139,6 +139,7 @@ function applyTranslations() {
 let activeTab       = 'configuration';
 let previewDebounce = null;
 let plainCodeView   = false;   // true = Brix-/Sektions-Marker aus Code ausgeblendet
+let _startGuardApproved = '';
 
 // Section filter: 'all' | 'non-empty' | 'settings'
 let sectionFilter  = localStorage.getItem('nico-section-filter') || 'all';
@@ -275,11 +276,14 @@ async function checkStatus() {
     const res  = await csrfFetch('/api/status');
     const data = await res.json();
     if (data.setup_complete) {
-      showApp(data.nixos_config_dir);
       if (data.needs_import) {
+        showApp(data.nixos_config_dir);
         // Verzeichnis vorhanden, aber kein configuration.nix / flake.nix
         await showImportOverlay(false);
       } else {
+        const ok = await ensureGitStartGuard(data.nixos_config_dir);
+        if (!ok) return;
+        showApp(data.nixos_config_dir);
         await loadConfig().catch(e => console.error('loadConfig:', e));
         Sidebar.setActiveFile('configuration.nix', 'configuration.nix');
         checkGitStatus();
@@ -388,6 +392,9 @@ async function _finishSetup(data, skipImport = false) {
 
   // Kategorisiere alle vorhandenen .nix-Dateien (no-op für leere Verzeichnisse)
   await categorizeFiles();
+
+  const ok = await ensureGitStartGuard(data.nixos_config_dir);
+  if (!ok) return;
 
   showApp(data.nixos_config_dir);
   await loadConfig();
@@ -694,6 +701,114 @@ async function loadConfig() {
 
 // ── Admin-Bereich ──────────────────────────────────────────────────────────
 let _activeAdminTab = 'einstellungen';
+
+async function fetchGitStartCheck() {
+  const res = await csrfFetch('/api/git/start-check');
+  return await res.json();
+}
+
+function _gitGuardNeedsDialog(check) {
+  return ['dirty', 'behind', 'diverged', 'error'].includes(check?.state);
+}
+
+function _gitGuardSeverity(check) {
+  if (check.state === 'diverged') return 'diverged';
+  if (check.state === 'behind') return 'behind';
+  if (check.state === 'dirty') return 'dirty';
+  return 'error';
+}
+
+function _gitGuardMessage(check) {
+  if (check.state === 'behind') {
+    return {
+      title: t('git.startGuardBehindTitle'),
+      body: t('git.startGuardBehindBody', check.behind),
+      recommendation: t('git.startGuardSyncRecommendation'),
+    };
+  }
+  if (check.state === 'diverged') {
+    return {
+      title: t('git.startGuardDivergedTitle'),
+      body: t('git.startGuardDivergedBody', check.ahead, check.behind),
+      recommendation: t('git.startGuardSyncRecommendation'),
+    };
+  }
+  if (check.state === 'dirty') {
+    return {
+      title: t('git.startGuardDirtyTitle'),
+      body: t('git.startGuardDirtyBody'),
+      recommendation: t('git.startGuardDirtyRecommendation'),
+    };
+  }
+  return {
+    title: t('git.startGuardErrorTitle'),
+    body: t('git.startGuardErrorBody', check.detail || 'git fetch'),
+    recommendation: t('git.startGuardErrorRecommendation'),
+  };
+}
+
+function showGitStartGuard(check) {
+  return new Promise(resolve => {
+    const msg = _gitGuardMessage(check);
+    const sev = _gitGuardSeverity(check);
+    const overlay = document.createElement('div');
+    overlay.className = 'overlay';
+    overlay.innerHTML = `
+      <div class="modal">
+        <div class="modal-logo">${escHtml(msg.title)}</div>
+        <p>${escHtml(msg.body)}</p>
+        <p class="confirm-text" style="border-left-color:${sev === 'dirty' ? 'var(--yellow)' : 'var(--red)'}">${escHtml(msg.recommendation)}</p>
+        <div class="confirm-buttons">
+          <button type="button" id="_git-start-cancel" class="btn-surface">${escHtml(t('git.startGuardCancel'))}</button>
+          <button type="button" id="_git-start-open" class="action-btn ${sev === 'dirty' ? 'btn-yellow' : 'btn-red'}">${escHtml(t('git.startGuardProceed'))}</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+
+    const finish = proceed => {
+      overlay.remove();
+      resolve(proceed);
+    };
+    overlay.querySelector('#_git-start-cancel')?.addEventListener('click', () => finish(false));
+    overlay.querySelector('#_git-start-open')?.addEventListener('click', () => finish(true));
+    overlay.addEventListener('click', e => {
+      if (e.target === overlay) finish(false);
+    });
+  });
+}
+
+async function ensureGitStartGuard(configDir) {
+  if (_startGuardApproved === configDir) return true;
+
+  let check;
+  try {
+    check = await fetchGitStartCheck();
+  } catch {
+    check = {
+      state: 'error',
+      detail: 'start-check failed',
+      ahead: 0,
+      behind: 0,
+      dirty: false,
+    };
+  }
+
+  if (!_gitGuardNeedsDialog(check)) {
+    _startGuardApproved = configDir;
+    return true;
+  }
+
+  const proceed = await showGitStartGuard(check);
+  if (proceed) {
+    _startGuardApproved = configDir;
+    return true;
+  }
+
+  showSetupOverlay();
+  document.getElementById('nixos-dir-input').value = configDir || '';
+  return false;
+}
 
 function openAdmin() {
   _autoSave();
