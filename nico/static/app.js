@@ -11,6 +11,12 @@
 
 'use strict';
 
+// ── Icon helper ───────────────────────────────────────────────────────────
+/** Returns an HTML string for a Lucide icon span. Theme-swappable via icons.css. */
+function niIcon(name) {
+  return `<span class="ni-icon ni-icon-${name}" aria-hidden="true"></span>`;
+}
+
 // ── CSRF ──────────────────────────────────────────────────────────────────
 const CSRF_TOKEN = document.querySelector('meta[name="csrf-token"]')?.content ?? '';
 
@@ -840,10 +846,10 @@ async function loadAdminSymlinkStatus() {
     const res  = await csrfFetch('/api/symlink/status');
     const data = await res.json();
     if (data.status === 'symlink' && data.points_to_nico) {
-      label.textContent = '✅ Symlink aktiv → ' + data.target;
+      label.innerHTML = niIcon('check-circle') + ' Symlink aktiv → ' + escHtml(data.target);
       hint.textContent  = baseHint;
     } else if (data.status === 'symlink') {
-      label.textContent = '⚠ Symlink zeigt auf ' + data.target + ' (nicht NiCo-Verzeichnis)';
+      label.innerHTML = niIcon('alert-triangle') + ' Symlink zeigt auf ' + escHtml(data.target) + ' (nicht NiCo-Verzeichnis)';
       hint.textContent  = baseHint;
     } else if (data.status === 'dir') {
       label.textContent = '';
@@ -1139,10 +1145,10 @@ function _showValidationResults(findings) {
     body.innerHTML = `<p style="color:var(--green);font-weight:600"
       data-i18n="admin.validation.noFindings">${t('admin.validation.noFindings')}</p>`;
   } else {
-    const icons = { error: '✖', warning: '⚠', info: 'ℹ' };
+    const iconNames = { error: 'x-circle', warning: 'alert-triangle', info: 'info' };
     const colors = { error: 'var(--red)', warning: 'var(--yellow)', info: 'var(--blue)' };
     body.innerHTML = findings.map(f => {
-      const icon  = icons[f.severity]  || '•';
+      const icon  = niIcon(iconNames[f.severity] || 'info');
       const color = colors[f.severity] || 'var(--text)';
       const detail = f.detail
         ? `<div style="margin-top:4px;color:var(--subtext0);font-size:12px;white-space:pre-line">${_esc(f.detail)}</div>`
@@ -1286,9 +1292,9 @@ function _userCard(idx, user, isOnly) {
     <div class="extra-user-header eu-toggle" data-eu-idx="${idx}">
       <span class="extra-user-label">${uname || t('field.newUser')}</span>
       <span class="eu-header-actions">
-        <span class="eu-chevron">▾</span>
+        ${niIcon('chevron-down').replace('class="', 'class="eu-chevron ')}
         <button type="button" class="eu-remove-btn" data-eu-idx="${idx}"
-                ${isOnly ? 'disabled' : ''} title="${delTitle}">✕</button>
+                ${isOnly ? 'disabled' : ''} title="${delTitle}">${niIcon('x')}</button>
       </span>
     </div>
     <div class="extra-user-body">
@@ -1491,7 +1497,7 @@ function showGitRemoteBanner(behind) {
   text.textContent = t('git.remoteBehind', behind);
   el.appendChild(text);
   const dismiss = document.createElement('button');
-  dismiss.textContent = '×';
+  dismiss.innerHTML   = niIcon('x');
   dismiss.className   = 'git-warning-dismiss';
   dismiss.onclick     = () => el.classList.add('hidden');
   el.appendChild(dismiss);
@@ -1553,7 +1559,7 @@ function showGitWarning(msg, showInitBtn) {
     el.appendChild(btn);
   }
   const dismiss = document.createElement('button');
-  dismiss.textContent = '×';
+  dismiss.innerHTML = niIcon('x');
   dismiss.className = 'git-warning-dismiss';
   dismiss.onclick = hideGitWarning;
   el.appendChild(dismiss);
@@ -1624,7 +1630,7 @@ function showIntegrityWarning(files) {
     // Dismiss button
     const btn = document.createElement('button');
     btn.className = 'integrity-dismiss-btn';
-    btn.textContent = '✕';
+    btn.innerHTML = niIcon('x');
     btn.addEventListener('click', hideIntegrityWarning);
     el.appendChild(btn);
     const msg = document.createElement('span');
@@ -1788,7 +1794,7 @@ async function writeFiles() {
       return;
     }
     const dd = await dr.json();
-    dryResultEl.textContent = dd.output || (dd.ok ? '✓ OK' : t('dryrun.failed'));
+    dryResultEl.textContent = dd.output || (dd.ok ? '✓ OK' : t('dryrun.failed'));  // '✓' kept intentionally (text output)
     dryResultEl.style.color = dd.ok ? 'var(--green)' : 'var(--red)';
     if (!dd.ok) return;  // stop – show error, let user decide
   }
@@ -2176,9 +2182,10 @@ function stripAnnotations(code) {
 function applyPlainCodeViewBtn() {
   const btn = document.getElementById('preview-mode-btn');
   if (!btn) return;
-  // Nur anpassen wenn wir im Panel-Modus sind (nicht im Raw-Edit-Modus mit ✏)
-  if (btn.textContent.trim() === '✏') return;
-  btn.textContent = '👁';
+  // Nur anpassen wenn wir im Panel-Modus sind (nicht im Raw-Edit-Modus)
+  if (btn.dataset.mode === 'edit') return;
+  btn.innerHTML = niIcon('eye');
+  btn.dataset.mode = 'view';
   if (plainCodeView) {
     btn.style.color  = 'var(--red, #e05252)';
     btn.title        = t('preview.plainActive');
@@ -2433,7 +2440,7 @@ function renderAnnotatedPreview(code, containerId = 'preview-configuration', fil
       // ⋮ context menu button
       const menuBtn = document.createElement('button');
       menuBtn.className = 'brix-menu-btn';
-      menuBtn.textContent = '⋮';
+      menuBtn.innerHTML = niIcon('more-vertical');
       menuBtn.title = t('brix.menuTitle');
 
       const menu = document.createElement('div');
@@ -2678,7 +2685,7 @@ function renderPackageList(packages) {
         <div class="pkg-item-name">${escHtml(pkg.pname || pkg.attr)}</div>
         <div class="pkg-item-desc">${escHtml(pkg.description || pkg.attr)}</div>
       </div>
-      <button type="button" class="pkg-delete" title="${escHtml(t('pkg.removeTitle'))}">✕</button>
+      <button type="button" class="pkg-delete" title="${escHtml(t('pkg.removeTitle'))}">${niIcon('x')}</button>
     `;
 
     item.querySelector('.pkg-delete').addEventListener('click', () => removePackage(pkg.attr, item));
@@ -2777,7 +2784,7 @@ async function runPkgSearch(query) {
       </div>
       <div class="pkg-result-actions">
         <a class="pkg-link" href="${escHtml(pkg.url)}" target="_blank" rel="noopener"
-           title="Details auf search.nixos.org">↗</a>
+           title="Details auf search.nixos.org">${niIcon('external-link')}</a>
         <button class="pkg-add-btn" ${already ? 'disabled' : ''}>
           ${already ? escHtml(t('pkg.alreadyAdded')) : escHtml(t('pkg.add'))}
         </button>
@@ -3424,7 +3431,7 @@ function initNixosLinks() {
     btn.type        = 'button';
     btn.className   = 'sec-nixos-link';
     btn.title       = t('section.nixosLink');
-    btn.textContent = '⧉';
+    btn.innerHTML = niIcon('copy');
     wrap.appendChild(btn);
 
     btn.addEventListener('click', e => {
@@ -3700,8 +3707,8 @@ async function openRebuild(mode = 'switch') {
     fetchDoneEl.textContent   = '';
     fetchRemainEl.textContent = '';
     document.querySelectorAll('.rebuild-phase-col').forEach(el => el.classList.remove('active'));
-    resultEl.className   = 'rebuild-result ' + (success ? 'result-success' : 'result-failed');
-    resultEl.textContent = message;
+    resultEl.className  = 'rebuild-result ' + (success ? 'result-success' : 'result-failed');
+    resultEl.innerHTML  = message;
     closeBtn.disabled    = false;
   }
 
@@ -3734,8 +3741,8 @@ async function openRebuild(mode = 'switch') {
 
     } else if (msg.type === 'done') {
       const label = msg.success
-        ? '✅ ' + t('rebuild.success')
-        : '❌ ' + t('rebuild.failed') + (firstErrorLine ? ': ' + firstErrorLine.substring(0, 80) : '');
+        ? niIcon('check-circle') + ' ' + t('rebuild.success')
+        : niIcon('x-circle') + ' ' + t('rebuild.failed') + (firstErrorLine ? ': ' + firstErrorLine.substring(0, 80) : '');
       _finishMonitor(msg.success, label);
       es.close();
       _rebuildES = null;
@@ -3746,7 +3753,7 @@ async function openRebuild(mode = 'switch') {
       span.textContent = '\n[!] ' + errText + '\n';
       logEl.appendChild(span);
       logEl.scrollTop = logEl.scrollHeight;
-      _finishMonitor(false, '❌ ' + errText);
+      _finishMonitor(false, niIcon('x-circle') + ' ' + errText);
       es.close();
       _rebuildES = null;
     }
@@ -3754,7 +3761,7 @@ async function openRebuild(mode = 'switch') {
 
   es.onerror = () => {
     if (isRunning) {
-      _finishMonitor(false, '❌ ' + t('rebuild.connectionError'));
+      _finishMonitor(false, niIcon('x-circle') + ' ' + t('rebuild.connectionError'));
     }
     es.close();
     _rebuildES = null;
@@ -3792,7 +3799,7 @@ function _dryRunShowStatus(ok) {
   const status = document.getElementById('dryrun-status');
   if (logo)   logo.classList.add(ok ? 'logo-ok' : 'logo-failed');
   if (status) {
-    status.textContent = ok ? '✓ ' + t('dryrun.success') : '✗ ' + t('dryrun.failed');
+    status.innerHTML = (ok ? niIcon('check') : niIcon('x-circle')) + ' ' + escHtml(ok ? t('dryrun.success') : t('dryrun.failed'));
     status.className   = 'dryrun-status ' + (ok ? 'status-ok' : 'status-failed');
   }
 }
@@ -5052,7 +5059,7 @@ const Sidebar = (() => {
       if (entry.type === 'dir') {
         const dirEl = document.createElement('div');
         dirEl.className = 'tree-dir';
-        dirEl.innerHTML = `<span class="tree-dir-toggle">▸</span>${escHtml(entry.name)}`;
+        dirEl.innerHTML = `<span class="tree-dir-toggle ni-icon ni-icon-chevron-right"></span>${escHtml(entry.name)}`;
 
         const childEl = document.createElement('div');
         childEl.className = 'tree-children';
@@ -5300,7 +5307,7 @@ const Sidebar = (() => {
     const argsRowsHtml = customArgs.map(a => `
       <div class="hm-arg-row">
         <input type="text" class="hm-arg-name mono-input" value="${escHtml(a)}" placeholder="Argument (z.B. lib, osConfig)" spellcheck="false">
-        <button type="button" class="fh-item-remove" title="Entfernen">✕</button>
+        <button type="button" class="fh-item-remove" title="Entfernen">${niIcon('x')}</button>
       </div>`).join('');
 
     container.innerHTML = `
@@ -5308,11 +5315,10 @@ const Sidebar = (() => {
         <button type="button" id="hm-collapse-all-btn"
                 data-i18n="sections.collapseAll"
                 data-i18n-title="sections.collapseAllTitle"
-                title="Alle Sektionen einklappen">↑ Einklappen</button>
+                title="Alle Sektionen einklappen">${niIcon('chevron-up')} <span data-i18n="sections.collapseAll">Einklappen</span></button>
         <button type="button" id="hm-expand-all-btn"
-                data-i18n="sections.expandAll"
                 data-i18n-title="sections.expandAllTitle"
-                title="Alle Sektionen aufklappen">↓ Aufklappen</button>
+                title="Alle Sektionen aufklappen">${niIcon('chevron-down')} <span data-i18n="sections.expandAll">Aufklappen</span></button>
       </div>
       <section class="collapsible hm-section" data-section="Start">
         <h3 class="sec-toggle"><span data-i18n="hm.argsSection">Argumente</span></h3>
@@ -5383,7 +5389,7 @@ const Sidebar = (() => {
       row.className = 'hm-arg-row';
       row.innerHTML = `
         <input type="text" class="hm-arg-name mono-input" value="" placeholder="Argument (z.B. lib, osConfig)" spellcheck="false">
-        <button type="button" class="fh-item-remove" title="Entfernen">✕</button>
+        <button type="button" class="fh-item-remove" title="Entfernen">${niIcon('x')}</button>
       `;
       argsList.appendChild(row);
       row.querySelector('.hm-arg-name').focus();
@@ -5654,14 +5660,14 @@ const Sidebar = (() => {
     const specialArgsHtml = specialArgsList.length
       ? specialArgsList.map(v => `<div class="fh-list-item">
           <input type="text" class="fh-special-arg-item mono-input" value="${escHtml(v)}" spellcheck="false">
-          <button type="button" class="fh-item-remove" title="Entfernen">✕</button>
+          <button type="button" class="fh-item-remove" title="Entfernen">${niIcon('x')}</button>
         </div>`).join('')
       : '';
 
     const modulesHtml = modulesList.length
       ? modulesList.map(v => `<div class="fh-list-item">
           <input type="text" class="fh-module-item mono-input" value="${escHtml(v)}" spellcheck="false">
-          <button type="button" class="fh-item-remove" title="Entfernen">✕</button>
+          <button type="button" class="fh-item-remove" title="Entfernen">${niIcon('x')}</button>
         </div>`).join('')
       : '';
 
@@ -5669,9 +5675,9 @@ const Sidebar = (() => {
       <div class="flake-host-header fh-toggle">
         <span class="flake-host-label">${h}</span>
         <span class="fh-header-actions">
-          <span class="fh-chevron">▾</span>
+          <span class="fh-chevron ni-icon ni-icon-chevron-down"></span>
           <button type="button" class="fh-remove-btn" data-host="${h}"
-                  title="${escHtml(t('fl.hosts.deleteTitle'))}">✕</button>
+                  title="${escHtml(t('fl.hosts.deleteTitle'))}">${niIcon('x')}</button>
         </span>
       </div>
       <div class="flake-host-body">
@@ -5763,7 +5769,7 @@ const Sidebar = (() => {
         item.className = 'fh-list-item';
         item.innerHTML = `
           <input type="text" class="${itemClass} mono-input" value="" placeholder="${placeholder}" spellcheck="false">
-          <button type="button" class="fh-item-remove" title="Entfernen">✕</button>
+          <button type="button" class="fh-item-remove" title="Entfernen">${niIcon('x')}</button>
         `;
         list.appendChild(item);
         item.querySelector('input')?.focus();
@@ -5975,7 +5981,7 @@ const Sidebar = (() => {
     const rawSaveTabBtn = document.getElementById('raw-save-tab-btn');
     if (rawSaveTabBtn) { rawSaveTabBtn.classList.remove('hidden'); rawSaveTabBtn.onclick = _saveRawFile; }
     const modBtn = document.getElementById('preview-mode-btn');
-    if (modBtn) { modBtn.textContent = '✏'; modBtn.title = t('preview.modeRaw'); }
+    if (modBtn) { modBtn.innerHTML = niIcon('pencil'); modBtn.dataset.mode = 'edit'; modBtn.title = t('preview.modeRaw'); }
   }
 
   async function _saveRawFile() {
@@ -6061,6 +6067,8 @@ const Sidebar = (() => {
     });
     const rawSaveTabBtn = document.getElementById('raw-save-tab-btn');
     if (rawSaveTabBtn) { rawSaveTabBtn.classList.add('hidden'); rawSaveTabBtn.onclick = null; }
+    const modBtn = document.getElementById('preview-mode-btn');
+    if (modBtn) delete modBtn.dataset.mode;
     applyPlainCodeViewBtn();
   }
 

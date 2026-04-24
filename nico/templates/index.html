@@ -8,6 +8,7 @@
   <!-- Prism.js – vendored locally -->
   <link rel="stylesheet" href="/static/vendor/prism/prism-tomorrow.min.css?v={{ static_v }}">
   <link rel="stylesheet" href="/static/style.css?v={{ static_v }}">
+  <link id="ni-theme-icons" rel="stylesheet" href="/static/themes/default/icons.css?v={{ static_v }}">
 </head>
 <body>
 
@@ -178,7 +179,7 @@
           </div>
           <button id="admin-btn" class="btn-header-icon"
                   data-i18n-title="header.adminTitle"
-                  title="Admin-Bereich öffnen">⚙</button>
+                  title="Admin-Bereich öffnen"><span class="ni-icon ni-icon-settings" aria-hidden="true"></span></button>
           <div class="help-menu" id="help-menu">
             <button id="help-btn" class="btn-header-icon"
                     data-i18n-title="header.helpTitle"
@@ -190,7 +191,7 @@
           </div>
           <button id="quit-btn"  class="btn-header-icon"
                   data-i18n-title="header.quitTitle"
-                  title="NiCo-Server beenden – Browser-Tab kann danach geschlossen werden">&#x23FB;</button>
+                  title="NiCo-Server beenden – Browser-Tab kann danach geschlossen werden"><span class="ni-icon ni-icon-power" aria-hidden="true"></span></button>
         </div>
       </div>
     </header>
@@ -218,15 +219,14 @@
             <button type="button" id="collapse-all-btn"
                     data-i18n="sections.collapseAll"
                     data-i18n-title="sections.collapseAllTitle"
-                    title="Alle Sektionen einklappen">↑ Einklappen</button>
+                    title="Alle Sektionen einklappen"><span class="ni-icon ni-icon-chevron-up" aria-hidden="true"></span> <span data-i18n="sections.collapseAll">Einklappen</span></button>
             <button type="button" id="expand-all-btn"
-                    data-i18n="sections.expandAll"
                     data-i18n-title="sections.expandAllTitle"
-                    title="Alle Sektionen aufklappen">↓ Aufklappen</button>
+                    title="Alle Sektionen aufklappen"><span class="ni-icon ni-icon-chevron-down" aria-hidden="true"></span> <span data-i18n="sections.expandAll">Aufklappen</span></button>
             <div class="sec-filter-wrap" style="margin-left:auto;position:relative">
               <button type="button" id="sec-filter-btn" class="sec-filter-btn"
                       data-i18n-title="sections.filterTitle"
-                      title="Sektionen filtern">⊙</button>
+                      title="Sektionen filtern"><span class="ni-icon ni-icon-filter" aria-hidden="true"></span></button>
               <div id="sec-filter-dropdown" class="sec-filter-dropdown hidden">
                 <button type="button" class="sec-filter-option" data-filter="all"
                         data-i18n="sections.filterAll">Alle Sektionen</button>
@@ -1164,10 +1164,9 @@
           <div class="section-controls">
             <button type="button" id="flake-collapse-all-btn"
                     data-i18n="sections.collapseAll"
-                    title="Alle Sektionen einklappen">↑ Einklappen</button>
+                    title="Alle Sektionen einklappen"><span class="ni-icon ni-icon-chevron-up" aria-hidden="true"></span> <span data-i18n="sections.collapseAll">Einklappen</span></button>
             <button type="button" id="flake-expand-all-btn"
-                    data-i18n="sections.expandAll"
-                    title="Alle Sektionen aufklappen">↓ Aufklappen</button>
+                    title="Alle Sektionen aufklappen"><span class="ni-icon ni-icon-chevron-down" aria-hidden="true"></span> <span data-i18n="sections.expandAll">Aufklappen</span></button>
           </div>
 
           <!-- Allgemein -->
@@ -1282,7 +1281,7 @@
         <!-- Raw-Panel: wird angezeigt wenn eine nicht-verwaltete Datei aktiv ist -->
         <div id="raw-panel" class="raw-panel hidden">
           <div id="raw-panel-hw-warn" class="raw-panel-hw-warn hidden">
-            <span data-i18n="sidebar.hwWarnIcon">⚠</span>
+            <span class="ni-icon ni-icon-alert-triangle" aria-hidden="true"></span>
             <span data-i18n="sidebar.hwWarnText">hardware-configuration.nix wird von NixOS automatisch generiert. Manuelle Änderungen können das System destabilisieren.</span>
           </div>
           <p class="raw-panel-hint" data-i18n="sidebar.rawPanelHint">Diese Datei wird nicht von NiCo verwaltet. Du kannst sie rechts direkt bearbeiten und speichern.</p>
@@ -1296,7 +1295,7 @@
           </div>
           <div class="type-panel-content">
             <div class="type-panel-warnbox">
-              <span>⚠</span>
+              <span class="ni-icon ni-icon-alert-triangle" aria-hidden="true"></span>
               <span data-i18n="panel.nd.info">__TODO__</span>
             </div>
           </div>
@@ -1316,7 +1315,7 @@
           </div>
           <div class="type-panel-content">
             <div class="type-panel-warnbox">
-              <span>⚠</span>
+              <span class="ni-icon ni-icon-alert-triangle" aria-hidden="true"></span>
               <span data-i18n="panel.hw.info">hardware-configuration.nix wird von NixOS automatisch generiert. Manuelle Änderungen können das System destabilisieren.</span>
             </div>
             <a class="type-panel-link" href="https://wiki.nixos.org/wiki/NixOS_Installation_Guide" target="_blank" rel="noopener" data-i18n="panel.hw.link">NixOS Wiki: Installation Guide →</a>
@@ -1355,13 +1354,13 @@
           <div id="active-file-label" class="active-file-label"></div>
           <button id="preview-mode-btn" class="preview-mode-btn"
                   data-i18n-title="preview.modePanel"
-                  title="Bearbeitung nur über Panel möglich">👁</button>
+                  title="Bearbeitung nur über Panel möglich"><span class="ni-icon ni-icon-eye" aria-hidden="true"></span></button>
           <div class="tab-actions">
             <!-- Wrench-Tools-Dropdown -->
             <div class="tools-menu" id="tools-menu">
               <button id="tools-btn" class="tab-action-btn"
                       data-i18n-title="tools.title"
-                      title="Werkzeuge">🔧</button>
+                      title="Werkzeuge"><span class="ni-icon ni-icon-wrench" aria-hidden="true"></span></button>
               <div id="tools-dropdown" class="tools-dropdown hidden">
                 <button id="tool-reload"      class="tools-item" data-i18n="tools.reload">Datei neu laden</button>
                 <button id="tool-code-search" class="tools-item" data-i18n="tools.codeSearch">Im Code suchen</button>
@@ -1373,15 +1372,15 @@
             <!-- Alle speichern (nur sichtbar wenn Tabs offen) -->
             <button id="save-all-btn" class="tab-action-btn hidden"
                     data-i18n-title="sidebar.saveAllTitle"
-                    title="Alle Änderungen speichern">💾</button>
+                    title="Alle Änderungen speichern"><span class="ni-icon ni-icon-save" aria-hidden="true"></span></button>
             <!-- Raw-Datei speichern (nur sichtbar im Raw-Edit-Modus) -->
             <button id="raw-save-tab-btn" class="tab-action-btn hidden"
                     data-i18n-title="sidebar.rawSave"
-                    title="Datei speichern">💾</button>
+                    title="Datei speichern"><span class="ni-icon ni-icon-save" aria-hidden="true"></span></button>
             <!-- Sidebar-Toggle -->
             <button id="sidebar-toggle-btn" class="tab-action-btn"
                     data-i18n-title="sidebar.toggleTitle"
-                    title="Dateibaum öffnen/schließen">◧</button>
+                    title="Dateibaum öffnen/schließen"><span class="ni-icon ni-icon-panel-left" aria-hidden="true"></span></button>
           </div>
         </div>
 
@@ -1390,9 +1389,9 @@
           <input type="text" id="find-input" class="find-input"
                  placeholder="Suchen …" spellcheck="false" autocomplete="off">
           <span id="find-count" class="find-count"></span>
-          <button id="find-prev-btn" class="find-nav-btn" title="Vorheriger Treffer">↑</button>
-          <button id="find-next-btn" class="find-nav-btn" title="Nächster Treffer">↓</button>
-          <button id="find-close-btn" class="find-close-btn" title="Suche schließen">×</button>
+          <button id="find-prev-btn" class="find-nav-btn" title="Vorheriger Treffer"><span class="ni-icon ni-icon-arrow-up" aria-hidden="true"></span></button>
+          <button id="find-next-btn" class="find-nav-btn" title="Nächster Treffer"><span class="ni-icon ni-icon-arrow-down" aria-hidden="true"></span></button>
+          <button id="find-close-btn" class="find-close-btn" title="Suche schließen"><span class="ni-icon ni-icon-x" aria-hidden="true"></span></button>
         </div>
 
         <!-- Vorschau/Preview -->
@@ -1418,13 +1417,13 @@
             <span id="search-count" class="search-count"></span>
             <button id="search-prev" class="search-nav-btn"
                     data-i18n-title="search.prevTitle"
-                    title="Vorheriger Treffer (Umschalt+Enter)">↑</button>
+                    title="Vorheriger Treffer (Umschalt+Enter)"><span class="ni-icon ni-icon-arrow-up" aria-hidden="true"></span></button>
             <button id="search-next" class="search-nav-btn"
                     data-i18n-title="search.nextTitle"
-                    title="Nächster Treffer (Enter)">↓</button>
+                    title="Nächster Treffer (Enter)"><span class="ni-icon ni-icon-arrow-down" aria-hidden="true"></span></button>
             <button id="search-close" class="search-close-btn"
                     data-i18n-title="search.closeTitle"
-                    title="Suche schließen (Esc)">✕</button>
+                    title="Suche schließen (Esc)"><span class="ni-icon ni-icon-x" aria-hidden="true"></span></button>
           </div>
 
           <div class="preview-content">
@@ -1441,11 +1440,11 @@
         <div class="sidebar-header">
           <span class="sidebar-title" data-i18n="sidebar.title">Dateien</span>
           <button id="sidebar-expand-all-btn" class="sidebar-icon-btn"
-                  data-i18n-title="sidebar.expandAllTitle" title="Alle aufklappen">↓</button>
+                  data-i18n-title="sidebar.expandAllTitle" title="Alle aufklappen"><span class="ni-icon ni-icon-arrow-down" aria-hidden="true"></span></button>
           <button id="sidebar-collapse-all-btn" class="sidebar-icon-btn"
-                  data-i18n-title="sidebar.collapseAllTitle" title="Alle einklappen">↑</button>
+                  data-i18n-title="sidebar.collapseAllTitle" title="Alle einklappen"><span class="ni-icon ni-icon-arrow-up" aria-hidden="true"></span></button>
           <button id="sidebar-refresh-btn" class="sidebar-icon-btn"
-                  data-i18n-title="sidebar.refreshTitle" title="Aktualisieren">↻</button>
+                  data-i18n-title="sidebar.refreshTitle" title="Aktualisieren"><span class="ni-icon ni-icon-refresh-cw" aria-hidden="true"></span></button>
         </div>
         <div id="sidebar-tree" class="sidebar-tree"></div>
       </div>
@@ -1458,7 +1457,7 @@
     <div class="modal modal-wide">
       <div class="modal-header">
         <h2 data-i18n="pkg.modalTitle">Paket suchen</h2>
-        <button id="pkg-close-btn" class="btn-icon" title="Schließen">✕</button>
+        <button id="pkg-close-btn" class="btn-icon" title="Schließen"><span class="ni-icon ni-icon-x" aria-hidden="true"></span></button>
       </div>
       <input type="text" id="pkg-search-input"
              data-i18n-placeholder="pkg.searchPlaceholder"
@@ -1709,10 +1708,10 @@
     <div class="admin-panel">
 
       <div class="admin-panel-header">
-        <span class="admin-panel-title" data-i18n="admin.title">⚙ Admin-Bereich</span>
+        <span class="admin-panel-title"><span class="ni-icon ni-icon-settings" aria-hidden="true"></span> <span data-i18n="admin.title">Admin-Bereich</span></span>
         <button id="admin-close-btn" class="btn-icon"
                 data-i18n-title="admin.closeTitle"
-                title="Zurück zum Editor">✕</button>
+                title="Zurück zum Editor"><span class="ni-icon ni-icon-x" aria-hidden="true"></span></button>
       </div>
 
       <!-- Tab-Leiste -->
@@ -1973,7 +1972,7 @@
         <div class="admin-section" id="admin-import-section">
           <div class="admin-section-title admin-section-toggle" id="admin-import-toggle">
             <span data-i18n="admin.importTitle">Import</span>
-            <span class="admin-section-chevron">▸</span>
+            <span class="admin-section-chevron ni-icon ni-icon-chevron-right"></span>
           </div>
           <div id="admin-import-body" class="admin-import-body">
             <p class="admin-hint" data-i18n="admin.importHint"></p>
@@ -2046,7 +2045,7 @@
     <div class="admin-panel" style="max-width:540px">
       <div class="admin-panel-header">
         <span class="admin-panel-title" data-i18n="admin.sections.settingsTitle">Sektionen anpassen</span>
-        <button id="sections-settings-close" class="btn-icon" title="Schließen">✕</button>
+        <button id="sections-settings-close" class="btn-icon" title="Schließen"><span class="ni-icon ni-icon-x" aria-hidden="true"></span></button>
       </div>
       <div style="padding:16px 20px 20px">
         <p class="raw-panel-hint" style="margin-bottom:14px" data-i18n="admin.sections.settingsHint">
@@ -2066,7 +2065,7 @@
     <div class="admin-panel" style="max-width:540px">
       <div class="admin-panel-header">
         <span class="admin-panel-title" data-i18n="admin.validation.settingsTitle">Validierung anpassen</span>
-        <button id="validation-settings-close" class="btn-icon" title="Schließen">✕</button>
+        <button id="validation-settings-close" class="btn-icon" title="Schließen"><span class="ni-icon ni-icon-x" aria-hidden="true"></span></button>
       </div>
       <div style="padding:16px 20px 20px">
         <p class="raw-panel-hint" style="margin-bottom:14px" data-i18n="admin.validation.settingsHint">
@@ -2086,7 +2085,7 @@
     <div class="admin-panel" style="max-width:580px">
       <div class="admin-panel-header">
         <span class="admin-panel-title" data-i18n="admin.validation.resultsTitle">Validierungsergebnis</span>
-        <button id="validation-results-close" class="btn-icon" title="Schließen">✕</button>
+        <button id="validation-results-close" class="btn-icon" title="Schließen"><span class="ni-icon ni-icon-x" aria-hidden="true"></span></button>
       </div>
       <div id="validation-results-body"
            style="padding:16px 20px 20px;overflow-y:auto;max-height:70vh"></div>

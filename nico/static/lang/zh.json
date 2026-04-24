@@ -238,7 +238,7 @@
   "write.btn": "写入",
   "write.cancel": "取消",
   "write.success": "已写入：{0}",
-  "admin.title": "⚙ 管理面板",
+  "admin.title": "管理面板",
   "admin.closeTitle": "返回编辑器",
   "admin.tab.aktionen": "操作",
   "admin.tab.einstellungen": "设置",

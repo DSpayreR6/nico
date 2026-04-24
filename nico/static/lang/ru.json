@@ -238,7 +238,7 @@
   "write.btn": "Записать",
   "write.cancel": "Отмена",
   "write.success": "Записано: {0}",
-  "admin.title": "⚙ Панель администратора",
+  "admin.title": "Панель администратора",
   "admin.closeTitle": "Вернуться в редактор",
   "admin.tab.aktionen": "Действия",
   "admin.tab.einstellungen": "Настройки",

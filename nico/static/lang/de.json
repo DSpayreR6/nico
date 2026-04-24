@@ -254,7 +254,7 @@
   "write.cancel":         "Abbrechen",
   "write.success":        "Geschrieben: {0}",
 
-  "admin.title":               "⚙ Admin-Bereich",
+  "admin.title":               "Admin-Bereich",
   "admin.closeTitle":          "Zurück zum Editor",
   "admin.tab.aktionen":        "Aktionen",
   "admin.tab.einstellungen":   "Einstellungen",

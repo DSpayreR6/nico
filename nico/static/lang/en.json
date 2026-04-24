@@ -254,7 +254,7 @@
   "write.cancel":         "Cancel",
   "write.success":        "Written: {0}",
 
-  "admin.title":               "⚙ Admin panel",
+  "admin.title":               "Admin panel",
   "admin.closeTitle":          "Back to editor",
   "admin.tab.aktionen":        "Actions",
   "admin.tab.einstellungen":   "Settings",

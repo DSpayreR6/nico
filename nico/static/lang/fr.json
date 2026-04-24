@@ -238,7 +238,7 @@
   "write.btn": "Écrire",
   "write.cancel": "Annuler",
   "write.success": "Écrit : {0}",
-  "admin.title": "⚙ Panneau d'administration",
+  "admin.title": "Panneau d'administration",
   "admin.closeTitle": "Retour à l'éditeur",
   "admin.tab.aktionen": "Actions",
   "admin.tab.einstellungen": "Paramètres",

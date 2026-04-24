@@ -2667,8 +2667,8 @@ button:disabled {
   gap: 2px;
 }
 .eu-chevron {
+  --ni-icon-size: 12px;
   display: inline-block;
-  font-size: 12px;
   color: var(--overlay0);
   transition: transform .2s ease;
   line-height: 1;
@@ -2737,8 +2737,8 @@ button:disabled {
   gap: 2px;
 }
 .fh-chevron {
+  --ni-icon-size: 12px;
   display: inline-block;
-  font-size: 12px;
   color: var(--overlay0);
   transition: transform .2s ease;
   line-height: 1;
@@ -3051,8 +3051,8 @@ button:disabled {
 }
 
 .tree-dir-toggle {
+  --ni-icon-size: 12px;
   display: inline-block;
-  width: 12px;
   transition: transform 0.15s;
 }
 .tree-dir-toggle.open {

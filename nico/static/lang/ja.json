@@ -238,7 +238,7 @@
   "write.btn": "書き込む",
   "write.cancel": "キャンセル",
   "write.success": "書き込み完了：{0}",
-  "admin.title": "⚙ 管理パネル",
+  "admin.title": "管理パネル",
   "admin.closeTitle": "エディターに戻る",
   "admin.tab.aktionen": "アクション",
   "admin.tab.einstellungen": "設定",
