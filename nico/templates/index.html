@@ -175,6 +175,8 @@
                       data-i18n="header.nixosDryRun">Dry-Run</button>
               <button id="nixos-rebuild-btn"  class="nixos-action nixos-red"
                       data-i18n="header.nixosRebuild">System-Neubau</button>
+              <button id="nixos-git-push-btn" class="nixos-action nixos-blue hidden"
+                      data-i18n="header.nixosGitPush">Git Push</button>
             </div>
           </div>
           <button id="admin-btn" class="btn-header-icon"
@@ -1815,6 +1817,25 @@
               </label>
             </div>
 
+            <!-- Git Push -->
+            <div id="git-push-settings-row" class="hidden" style="margin-top:16px">
+              <p class="raw-panel-hint" style="margin-bottom:6px" data-i18n="admin.settings.pushSection">Git Push</p>
+              <label class="toggle-row" style="cursor:pointer">
+                <span data-i18n="admin.settings.pushAfterSave">Nach dem Speichern automatisch pushen</span>
+                <span class="toggle-wrap">
+                  <input type="checkbox" id="push-after-save-toggle">
+                  <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                </span>
+              </label>
+              <label class="toggle-row" style="cursor:pointer;margin-top:6px">
+                <span data-i18n="admin.settings.pushAfterRebuild">Nach erfolgreichem Rebuild automatisch pushen</span>
+                <span class="toggle-wrap">
+                  <input type="checkbox" id="push-after-rebuild-toggle">
+                  <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                </span>
+              </label>
+            </div>
+
             <!-- Speichern-Button -->
             <div style="margin-top:16px">
               <button id="settings-config-save" class="btn-surface btn-small"
@@ -1871,7 +1892,7 @@
           <p id="admin-symlink-hint" class="raw-panel-hint" style="margin:4px 0 8px">/etc/nixos wird vorher nach /etc/nixos.bak gesichert.</p>
           <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:4px">
             <span id="admin-symlink-status-label" class="admin-hint" style="margin:0"></span>
-            <button type="button" id="admin-symlink-btn" class="action-btn btn-red btn-small hidden">
+            <button type="button" id="admin-symlink-btn" class="action-btn btn-red hidden">
               Anlegen
             </button>
           </div>

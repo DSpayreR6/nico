@@ -42,6 +42,8 @@ DEFAULT_CONFIG_SETTINGS = {
     "modules_dir": "modules",
     "hm_dir": "home",
     "flake_update_on_rebuild": False,
+    "push_after_save":    False,
+    "push_after_rebuild": False,
     # Validation rules: all enabled by default; keys match validator.ALL_RULES ids
     "validation_rules": {
         "user_in_config":    True,

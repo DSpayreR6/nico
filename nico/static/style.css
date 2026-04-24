@@ -868,6 +868,50 @@ button:active { transform: scale(.97); }
 .nixos-red::before { background: var(--red); }
 .nixos-red:hover { background: color-mix(in srgb, var(--red) 15%, var(--surface0)); }
 
+.nixos-blue { color: var(--blue); }
+.nixos-blue::before { background: var(--blue); }
+.nixos-blue:hover { background: color-mix(in srgb, var(--blue) 15%, var(--surface0)); }
+
+/* ── Git Guard action cards ──────────────────────────────────────────────── */
+.git-guard-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 12px 0 4px;
+}
+.git-guard-card {
+  border: 1px solid var(--surface2);
+  border-radius: 6px;
+  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.git-guard-card--warn {
+  border-color: color-mix(in srgb, var(--red) 40%, var(--surface2));
+  background: color-mix(in srgb, var(--red) 6%, var(--surface0));
+}
+.git-guard-card-info { flex: 1; min-width: 0; }
+.git-guard-card-title {
+  font-weight: 600;
+  font-size: 0.88rem;
+  margin-bottom: 2px;
+}
+.git-guard-card-desc {
+  font-size: 0.8rem;
+  color: var(--subtext0);
+  line-height: 1.35;
+}
+.git-guard-secondary {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--surface1);
+}
+
 /* ── Help dropdown menu ───────────────────────────────────────────────────── */
 .help-menu {
   position: relative;

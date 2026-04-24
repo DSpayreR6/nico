@@ -1039,7 +1039,7 @@ def create_app() -> Flask:
             except Exception:
                 pass
 
-        return jsonify({"success": True, "written": written})
+        return jsonify({"success": True, "written": written, **_maybe_auto_push(nixos_dir)})
 
     # ── Multi-Host Support ────────────────────────────────────────────────
 
@@ -1102,7 +1102,7 @@ def create_app() -> Flask:
             except Exception:
                 pass
 
-        return jsonify({"success": True, "written": [f"hosts/{host_name}/default.nix"]})
+        return jsonify({"success": True, "written": [f"hosts/{host_name}/default.nix"], **_maybe_auto_push(nixos_dir)})
 
     # ── Datei-Viewer / Roh-Editor ─────────────────────────────────────────────
     # Erlaubte Suffixe für GET (lesen) und POST (schreiben)
@@ -1144,7 +1144,7 @@ def create_app() -> Flask:
         content = body.get("content", "")
         target.write_text(content, encoding="utf-8")
         git_manager.auto_commit(nixos_dir, label=body.get("label", ""))
-        return jsonify({"success": True})
+        return jsonify({"success": True, **_maybe_auto_push(nixos_dir)})
 
     # ------------------------------------------------------------------ export
 
@@ -2341,6 +2341,17 @@ def create_app() -> Flask:
             return jsonify({"commits": []})
         return jsonify({"commits": git_manager.get_log(nixos_dir)})
 
+    def _maybe_auto_push(nixos_dir: str) -> dict:
+        """Push after save if push_after_save is enabled. Returns extra response fields."""
+        try:
+            cfg = config_manager.load_config_settings(nixos_dir)
+            if not cfg.get("push_after_save"):
+                return {}
+            ok, msg = git_manager.git_push(nixos_dir)
+            return {"pushed": ok, "push_error": "" if ok else msg}
+        except Exception:
+            return {}
+
     @app.route("/api/git/pull", methods=["POST"])
     def git_pull():
         if err := _check_csrf(): return err
@@ -2348,6 +2359,33 @@ def create_app() -> Flask:
         if err:
             return err
         ok, msg = git_manager.git_pull(nixos_dir)
+        return jsonify({"success": ok, "message": msg})
+
+    @app.route("/api/git/push", methods=["POST"])
+    def git_push():
+        if err := _check_csrf(): return err
+        nixos_dir, err = _require_setup()
+        if err:
+            return err
+        ok, msg = git_manager.git_push(nixos_dir)
+        return jsonify({"success": ok, "message": msg})
+
+    @app.route("/api/git/reset-hard", methods=["POST"])
+    def git_reset_hard():
+        if err := _check_csrf(): return err
+        nixos_dir, err = _require_setup()
+        if err:
+            return err
+        ok, msg = git_manager.git_reset_hard(nixos_dir)
+        return jsonify({"success": ok, "message": msg})
+
+    @app.route("/api/git/commit-push", methods=["POST"])
+    def git_commit_push():
+        if err := _check_csrf(): return err
+        nixos_dir, err = _require_setup()
+        if err:
+            return err
+        ok, msg = git_manager.git_commit_push(nixos_dir)
         return jsonify({"success": ok, "message": msg})
 
     @app.route("/api/git/rollback", methods=["POST"])

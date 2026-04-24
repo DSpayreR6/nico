@@ -121,6 +121,45 @@ def git_pull(nixos_dir: str) -> tuple[bool, str]:
     return True, out
 
 
+def git_push(nixos_dir: str) -> tuple[bool, str]:
+    """Run git push on the current branch."""
+    if not is_git_repo(nixos_dir):
+        return False, "Kein Git-Repository."
+    rc, out = _run(["push"], cwd=nixos_dir, timeout=30)
+    if rc != 0:
+        return False, out or "git push fehlgeschlagen"
+    return True, out
+
+
+def git_reset_hard(nixos_dir: str) -> tuple[bool, str]:
+    """Reset to origin/<current-branch> and remove untracked files."""
+    if not is_git_repo(nixos_dir):
+        return False, "Kein Git-Repository."
+    rc, branch = _run(["rev-parse", "--abbrev-ref", "HEAD"], cwd=nixos_dir)
+    if rc != 0 or not branch or branch.strip() == "HEAD":
+        return False, "Branch nicht ermittelbar oder HEAD detached."
+    branch = branch.strip()
+    rc, out = _run(["reset", "--hard", f"origin/{branch}"], cwd=nixos_dir)
+    if rc != 0:
+        return False, out or "git reset fehlgeschlagen"
+    _run(["clean", "-fd"], cwd=nixos_dir)
+    return True, out
+
+
+def git_commit_push(nixos_dir: str) -> tuple[bool, str]:
+    """Commit all local changes and push to remote."""
+    if not is_git_repo(nixos_dir):
+        return False, "Kein Git-Repository."
+    _ensure_identity(nixos_dir)
+    ok_commit, msg_commit = auto_commit(nixos_dir, label="NiCo: Lokale Änderungen")
+    if not ok_commit and "nothing to commit" not in msg_commit:
+        return False, msg_commit
+    ok_push, msg_push = git_push(nixos_dir)
+    if not ok_push:
+        return False, msg_push
+    return True, ""
+
+
 def check_remote_status(nixos_dir: str) -> dict:
     """
     Check whether the local repo is behind its remote.

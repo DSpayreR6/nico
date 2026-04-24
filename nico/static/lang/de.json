@@ -340,6 +340,40 @@
   "git.startGuardPullError": "Pull fehlgeschlagen: {0}",
   "git.startGuardDivergedClose": "OK",
 
+  "git.guard.aheadTitle": "Lokale Commits nicht synchronisiert",
+  "git.guard.aheadBody": "Das lokale Repository ist {0} Commit(s) voraus. Diese wurden noch nicht zum Remote hochgeladen.",
+
+  "git.guard.cardPull.title": "Online-Stand holen",
+  "git.guard.cardPull.desc": "{0} neue Commit(s) vom Remote laden. Lokale Dateien werden aktualisiert.",
+  "git.guard.cardPull.btn": "Jetzt holen",
+
+  "git.guard.cardReset.title": "Lokalen Stand verwerfen",
+  "git.guard.cardReset.desc": "Setzt alle Dateien auf den Online-Stand zurück. Lokale Änderungen gehen unwiederbringlich verloren.",
+  "git.guard.cardResetAhead.desc": "Verwirft alle lokalen Commits unwiederbringlich und setzt auf den Remote-Stand zurück.",
+  "git.guard.cardReset.btn": "Verwerfen",
+
+  "git.guard.cardUpload.title": "Aktuellen Stand hochladen",
+  "git.guard.cardUpload.desc": "Committet lokale Änderungen und pusht sie zum Remote.",
+  "git.guard.cardUpload.btn": "Hochladen",
+
+  "git.guard.cardPush.title": "Lokale Commits hochladen",
+  "git.guard.cardPush.desc": "{0} lokale Commit(s) zum Remote pushen.",
+  "git.guard.cardPush.btn": "Hochladen",
+
+  "git.guard.resetError": "Reset fehlgeschlagen: {0}",
+  "git.guard.uploadError": "Hochladen fehlgeschlagen: {0}",
+  "git.guard.pushError": "Push fehlgeschlagen: {0}",
+
+  "git.pushSuccess": "Erfolgreich gepusht.",
+  "git.pushAutoSuccess": "Gespeichert und gepusht.",
+  "git.pushFailedTitle": "Push fehlgeschlagen",
+
+  "header.nixosGitPush": "Git Push",
+
+  "admin.settings.pushSection": "Git-Synchronisation",
+  "admin.settings.pushAfterSave": "Nach dem Speichern automatisch pushen",
+  "admin.settings.pushAfterRebuild": "Nach erfolgreichem Rebuild automatisch pushen",
+
   "toast.saved": "Gespeichert.",
   "toast.error": "Fehler.",
 

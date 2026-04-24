@@ -708,13 +708,14 @@ async function fetchGitStartCheck() {
 }
 
 function _gitGuardNeedsDialog(check) {
-  return ['dirty', 'behind', 'diverged', 'error'].includes(check?.state);
+  return ['dirty', 'behind', 'ahead', 'diverged', 'error'].includes(check?.state);
 }
 
 function _gitGuardSeverity(check) {
   if (check.state === 'diverged') return 'diverged';
-  if (check.state === 'behind') return 'behind';
-  if (check.state === 'dirty') return 'dirty';
+  if (check.state === 'behind')   return 'behind';
+  if (check.state === 'dirty')    return 'dirty';
+  if (check.state === 'ahead')    return 'ahead';
   return 'error';
 }
 
@@ -733,6 +734,13 @@ function _gitGuardMessage(check) {
       recommendation: t('git.startGuardDivergedRecommendation'),
     };
   }
+  if (check.state === 'ahead') {
+    return {
+      title: t('git.guard.aheadTitle'),
+      body: t('git.guard.aheadBody', check.ahead),
+      recommendation: '',
+    };
+  }
   if (check.state === 'dirty') {
     return {
       title: t('git.startGuardDirtyTitle'),
@@ -749,28 +757,57 @@ function _gitGuardMessage(check) {
 
 function showGitStartGuard(check) {
   return new Promise(resolve => {
-    const msg       = _gitGuardMessage(check);
-    const sev       = _gitGuardSeverity(check);
+    const msg        = _gitGuardMessage(check);
     const isDiverged = check.state === 'diverged';
-    const isBehind   = check.state === 'behind';
-    const borderColor = sev === 'dirty' ? 'var(--yellow)' : 'var(--red)';
+    const isError    = check.state === 'error';
 
-    let buttonsHtml;
+    // Build action cards per state
+    const cards = [];
+    if (check.state === 'behind') {
+      cards.push({ id: 'pull',   warn: false, btnClass: 'btn-green',
+        title: t('git.guard.cardPull.title'),
+        desc:  t('git.guard.cardPull.desc', check.behind),
+        btn:   t('git.guard.cardPull.btn') });
+    } else if (check.state === 'dirty') {
+      cards.push({ id: 'reset',  warn: true,  btnClass: 'btn-red',
+        title: t('git.guard.cardReset.title'),
+        desc:  t('git.guard.cardReset.desc'),
+        btn:   t('git.guard.cardReset.btn') });
+      cards.push({ id: 'upload', warn: false, btnClass: 'btn-blue',
+        title: t('git.guard.cardUpload.title'),
+        desc:  t('git.guard.cardUpload.desc'),
+        btn:   t('git.guard.cardUpload.btn') });
+    } else if (check.state === 'ahead') {
+      cards.push({ id: 'push',   warn: false, btnClass: 'btn-blue',
+        title: t('git.guard.cardPush.title'),
+        desc:  t('git.guard.cardPush.desc', check.ahead),
+        btn:   t('git.guard.cardPush.btn') });
+      cards.push({ id: 'reset',  warn: true,  btnClass: 'btn-red',
+        title: t('git.guard.cardReset.title'),
+        desc:  t('git.guard.cardResetAhead.desc'),
+        btn:   t('git.guard.cardReset.btn') });
+    }
+
+    const cardsHtml = cards.map(c => `
+      <div class="git-guard-card${c.warn ? ' git-guard-card--warn' : ''}">
+        <div class="git-guard-card-info">
+          <div class="git-guard-card-title">${escHtml(c.title)}</div>
+          <div class="git-guard-card-desc">${escHtml(c.desc)}</div>
+        </div>
+        <button type="button" data-card="${escHtml(c.id)}"
+                class="action-btn ${c.btnClass}">${escHtml(c.btn)}</button>
+      </div>`).join('');
+
+    const showRec  = isDiverged || isError;
+    const recHtml  = showRec ? `<p class="confirm-text" style="border-left-color:var(--red)">${escHtml(msg.recommendation)}</p>` : '';
+
+    let secondaryHtml;
     if (isDiverged) {
-      buttonsHtml = `
-        <button type="button" id="_git-start-ok" class="action-btn btn-red">${escHtml(t('git.startGuardDivergedClose'))}</button>
-      `;
-    } else if (isBehind) {
-      buttonsHtml = `
-        <button type="button" id="_git-start-cancel" class="btn-surface">${escHtml(t('git.startGuardCancel'))}</button>
-        <button type="button" id="_git-start-open" class="action-btn btn-red">${escHtml(t('git.startGuardProceed'))}</button>
-        <button type="button" id="_git-start-pull" class="action-btn btn-green">${escHtml(t('git.startGuardPull'))}</button>
-      `;
+      secondaryHtml = `<button type="button" id="_gs-ok" class="action-btn btn-red">${escHtml(t('git.startGuardDivergedClose'))}</button>`;
     } else {
-      buttonsHtml = `
-        <button type="button" id="_git-start-cancel" class="btn-surface">${escHtml(t('git.startGuardCancel'))}</button>
-        <button type="button" id="_git-start-open" class="action-btn ${sev === 'dirty' ? 'btn-yellow' : 'btn-red'}">${escHtml(t('git.startGuardProceed'))}</button>
-      `;
+      secondaryHtml = `
+        <button type="button" id="_gs-cancel" class="btn-surface">${escHtml(t('git.startGuardCancel'))}</button>
+        <button type="button" id="_gs-open"   class="btn-surface">${escHtml(t('git.startGuardProceed'))}</button>`;
     }
 
     const overlay = document.createElement('div');
@@ -779,46 +816,57 @@ function showGitStartGuard(check) {
       <div class="modal">
         <div class="modal-logo">${escHtml(msg.title)}</div>
         <p>${escHtml(msg.body)}</p>
-        <p class="confirm-text" style="border-left-color:${borderColor}">${escHtml(msg.recommendation)}</p>
-        <p id="_git-pull-error" style="color:var(--red);display:none"></p>
-        <div class="confirm-buttons" id="_git-guard-buttons">
-          ${buttonsHtml}
-        </div>
-      </div>
-    `;
+        ${recHtml}
+        <p id="_gs-err" style="color:var(--red);display:none;margin-top:8px"></p>
+        <div class="git-guard-cards">${cardsHtml}</div>
+        <div class="git-guard-secondary">${secondaryHtml}</div>
+      </div>`;
     document.body.appendChild(overlay);
 
-    const finish = proceed => {
-      overlay.remove();
-      resolve(proceed);
-    };
+    const errEl  = overlay.querySelector('#_gs-err');
+    const finish = proceed => { overlay.remove(); resolve(proceed); };
 
-    overlay.querySelector('#_git-start-ok')?.addEventListener('click', () => finish(false));
-    overlay.querySelector('#_git-start-cancel')?.addEventListener('click', () => finish(false));
-    overlay.querySelector('#_git-start-open')?.addEventListener('click', () => finish(true));
-    overlay.querySelector('#_git-start-pull')?.addEventListener('click', async () => {
-      const pullBtn  = overlay.querySelector('#_git-start-pull');
-      const errEl    = overlay.querySelector('#_git-pull-error');
-      pullBtn.disabled = true;
-      pullBtn.textContent = '…';
-      errEl.style.display = 'none';
-      try {
-        const res  = await csrfFetch('/api/git/pull', { method: 'POST' });
-        const data = await res.json();
-        if (data.success) {
-          location.reload();
-        } else {
-          errEl.textContent    = t('git.startGuardPullError', data.message || '');
-          errEl.style.display  = '';
-          pullBtn.disabled     = false;
-          pullBtn.textContent  = t('git.startGuardPull');
+    overlay.querySelector('#_gs-ok')?.addEventListener('click',     () => finish(false));
+    overlay.querySelector('#_gs-cancel')?.addEventListener('click', () => finish(false));
+    overlay.querySelector('#_gs-open')?.addEventListener('click',   () => finish(true));
+
+    overlay.querySelectorAll('[data-card]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const cardId   = btn.dataset.card;
+        const origText = btn.textContent;
+        btn.disabled = true;
+        btn.textContent = '…';
+        errEl.style.display = 'none';
+        try {
+          const endpointMap = {
+            pull:   '/api/git/pull',
+            reset:  '/api/git/reset-hard',
+            upload: '/api/git/commit-push',
+            push:   '/api/git/push',
+          };
+          const errKeyMap = {
+            pull:   'git.startGuardPullError',
+            reset:  'git.guard.resetError',
+            upload: 'git.guard.uploadError',
+            push:   'git.guard.pushError',
+          };
+          const res  = await csrfFetch(endpointMap[cardId], { method: 'POST' });
+          const data = await res.json();
+          if (data.success) {
+            location.reload();
+          } else {
+            errEl.textContent   = t(errKeyMap[cardId], data.message || '');
+            errEl.style.display = '';
+            btn.disabled        = false;
+            btn.textContent     = origText;
+          }
+        } catch (e) {
+          errEl.textContent   = String(e);
+          errEl.style.display = '';
+          btn.disabled        = false;
+          btn.textContent     = origText;
         }
-      } catch (e) {
-        errEl.textContent   = t('git.startGuardPullError', String(e));
-        errEl.style.display = '';
-        pullBtn.disabled    = false;
-        pullBtn.textContent = t('git.startGuardPull');
-      }
+      });
     });
 
     overlay.addEventListener('click', e => {
@@ -913,6 +961,33 @@ function _loadAdminSettings() {
     // Flake-Update-Toggle
     const toggle = document.getElementById('flake-update-toggle');
     if (toggle) toggle.checked = !!data.flake_update_on_rebuild;
+
+    // Push-Toggles + NixOS-Push-Button – nur anzeigen wenn Remote vorhanden
+    csrfFetch('/api/git/remote-status').then(r => r.json()).then(rs => {
+      if (!rs.has_remote) return;
+      // NixOS-Menü Push-Button einblenden
+      document.getElementById('nixos-git-push-btn')?.classList.remove('hidden');
+      // Push-Settings-Sektion einblenden
+      const pushRow = document.getElementById('git-push-settings-row');
+      if (pushRow) pushRow.classList.remove('hidden');
+      const pas = document.getElementById('push-after-save-toggle');
+      const par = document.getElementById('push-after-rebuild-toggle');
+      if (pas) pas.checked = !!data.push_after_save;
+      if (par) par.checked = !!data.push_after_rebuild;
+      [['push-after-save-toggle', 'push_after_save'], ['push-after-rebuild-toggle', 'push_after_rebuild']].forEach(([id, key]) => {
+        const el = document.getElementById(id);
+        if (el && !el.dataset.listenerAttached) {
+          el.dataset.listenerAttached = '1';
+          el.addEventListener('change', () => {
+            csrfFetch('/api/config/settings', {
+              method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ [key]: el.checked }),
+            }).then(() => showToast(t('admin.settings.saved'), 'success'))
+              .catch(() => showToast(t('toast.error'), 'error'));
+          });
+        }
+      });
+    }).catch(() => {});
 
     // Hosts-Verzeichnis
     const hostsDirInput = document.getElementById('settings-hosts-dir');
@@ -1976,8 +2051,16 @@ async function writeFiles() {
     body:    JSON.stringify({ label }),
   });
   const data = await res.json();
-  if (data.success) showToast(t('write.success', data.written.join(', ')));
-  else showToast(tErr(data.error) || t('toast.error'), 'error');
+  if (data.success) {
+    if (data.pushed) {
+      showToast(t('git.pushAutoSuccess'), 'success');
+    } else {
+      showToast(t('write.success', data.written.join(', ')));
+      if (data.push_error) _showGitPushErrorModal(data.push_error);
+    }
+  } else {
+    showToast(tErr(data.error) || t('toast.error'), 'error');
+  }
 }
 
 // ── Export ZIP ─────────────────────────────────────────────────────────────
@@ -3906,6 +3989,16 @@ async function openRebuild(mode = 'switch') {
       _finishMonitor(msg.success, label);
       es.close();
       _rebuildES = null;
+      if (msg.success) {
+        csrfFetch('/api/config/settings').then(r => r.json()).then(cfg => {
+          if (cfg.push_after_rebuild) {
+            csrfFetch('/api/git/push', { method: 'POST' }).then(r => r.json()).then(d => {
+              if (d.success) showToast(t('git.pushSuccess'), 'success');
+              else _showGitPushErrorModal(d.message || t('toast.error'));
+            }).catch(() => {});
+          }
+        }).catch(() => {});
+      }
     } else if (msg.type === 'error') {
       const errText = msg.message || t('rebuild.error');
       const span = document.createElement('span');
@@ -4796,11 +4889,42 @@ function bindUI() {
     btn.addEventListener('click', toggle);
     document.addEventListener('click', e => { if (!menu.contains(e.target)) close(); });
 
-    on('nixos-save-btn',    'click', () => { close(); openWriteConfirm(); });
+    on('nixos-save-btn',     'click', () => { close(); openWriteConfirm(); });
     on('nixos-validate-btn', 'click', () => { close(); runValidation(); });
-    on('nixos-dryrun-btn',  'click', () => { close(); runSaveAndDryRun(); });
-    on('nixos-rebuild-btn', 'click', () => { close(); openRebuild('switch'); });
+    on('nixos-dryrun-btn',   'click', () => { close(); runSaveAndDryRun(); });
+    on('nixos-rebuild-btn',  'click', () => { close(); openRebuild('switch'); });
+    on('nixos-git-push-btn', 'click', () => { close(); gitPushManual(); });
   })();
+
+  async function gitPushManual() {
+    try {
+      const res  = await csrfFetch('/api/git/push', { method: 'POST' });
+      const data = await res.json();
+      if (data.success) {
+        showToast(t('git.pushSuccess'), 'success');
+      } else {
+        _showGitPushErrorModal(data.message || t('toast.error'));
+      }
+    } catch (e) {
+      _showGitPushErrorModal(String(e));
+    }
+  }
+
+  function _showGitPushErrorModal(msg) {
+    const overlay = document.createElement('div');
+    overlay.className = 'overlay';
+    overlay.innerHTML = `
+      <div class="modal">
+        <div class="modal-logo">${escHtml(t('git.pushFailedTitle'))}</div>
+        <p style="white-space:pre-wrap;font-size:0.85rem;color:var(--red)">${escHtml(msg)}</p>
+        <div class="confirm-buttons">
+          <button type="button" id="_push-err-ok" class="action-btn btn-red">OK</button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+    overlay.querySelector('#_push-err-ok').addEventListener('click', () => overlay.remove());
+    overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+  }
 
   // Admin-Bereich
   on('admin-btn',       'click', openAdmin);
