@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+### Pull button in startup guard
+When the local Git repository is behind the remote, the startup guard dialog now offers a "Pull & Neu laden" button in addition to "Abbrechen" and "Trotzdem lokal öffnen". Clicking it runs `git pull` and reloads NiCo on success; on failure, the error message is shown inline. For `diverged` repositories (local commits ahead *and* behind), the dialog is now a hard stop with only an "OK" button that returns to the setup screen – a pull would risk merge conflicts and NiCo cannot safely work in that state.
+
 ### Detach config from NiCo
 The active configuration can now be detached from NiCo. NiCo creates a ZIP backup of the current config, removes NiCo-specific comment and marker lines from all `.nix` files, deletes the config metadata JSON, clears the stored config path, and returns to the initial setup state.
 
