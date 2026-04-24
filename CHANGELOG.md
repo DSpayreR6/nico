@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+### Lucide icon set
+All Unicode/emoji icons throughout the UI have been replaced with a consistent set of Lucide SVG icons (v1.9.0, ISC license). Icons are rendered via CSS `mask-image` with `background-color: currentColor`, so they inherit the surrounding text color and are fully theme-swappable. Icon sizes can be overridden per context via the `--ni-icon-size` CSS custom property. The 24 used SVGs are vendored locally under `nico/static/vendor/lucide/`; the theme stylesheet lives at `nico/static/themes/default/icons.css`. The NixOS logo and language flag emojis are intentionally unchanged.
+
 ### Security audit & CI
 Initial security audit covering bandit, pip-audit, and a manual code review. No CVEs found in dependencies. One path-traversal bug in the brick file editor was fixed: `_modify_brick_in_file` now validates that the target path stays inside the config directory. GitHub Actions workflows for automated scanning (bandit + pip-audit on every push) and CodeQL analysis added. Dependabot enabled for Python dependencies and Actions versions.
 
