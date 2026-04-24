@@ -1,7 +1,7 @@
 """
 Config management for NiCo.  Three layers:
 
-  1. App settings  (~/.config/nico/settings.json)
+  1. App settings  (<nico-root>/nico-settings.json)
      Program-level preferences that stay on the machine:
        - nixos_config_dir: path to the config directory
        - language: UI language (de, en, ...)
@@ -24,7 +24,7 @@ import re
 import subprocess
 from pathlib import Path
 
-APP_SETTINGS_FILE = Path.home() / ".config" / "nico" / "settings.json"
+APP_SETTINGS_FILE = Path(__file__).parent.parent / "nico-settings.json"
 
 # Default app settings (program-level, stay on the machine)
 DEFAULT_APP_SETTINGS = {
@@ -220,7 +220,6 @@ def save_app_settings(settings: dict) -> None:
     import json
     import os
     import tempfile
-    APP_SETTINGS_FILE.parent.mkdir(parents=True, exist_ok=True)
     existing = get_app_settings()
     existing.update(settings)
     with tempfile.NamedTemporaryFile(

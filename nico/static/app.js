@@ -755,7 +755,7 @@ function _gitGuardMessage(check) {
   };
 }
 
-function showGitStartGuard(check) {
+function showGitStartGuard(check, configDir) {
   return new Promise(resolve => {
     const msg        = _gitGuardMessage(check);
     const isDiverged = check.state === 'diverged';
@@ -810,11 +810,16 @@ function showGitStartGuard(check) {
         <button type="button" id="_gs-open"   class="btn-surface">${escHtml(t('git.startGuardProceed'))}</button>`;
     }
 
+    const pathHtml = configDir
+      ? `<p class="git-guard-path">${escHtml(configDir)}</p>`
+      : '';
+
     const overlay = document.createElement('div');
     overlay.className = 'overlay';
     overlay.innerHTML = `
       <div class="modal">
         <div class="modal-logo">${escHtml(msg.title)}</div>
+        ${pathHtml}
         <p>${escHtml(msg.body)}</p>
         ${recHtml}
         <p id="_gs-err" style="color:var(--red);display:none;margin-top:8px"></p>
@@ -896,7 +901,7 @@ async function ensureGitStartGuard(configDir) {
     return true;
   }
 
-  const proceed = await showGitStartGuard(check);
+  const proceed = await showGitStartGuard(check, configDir);
   if (proceed) {
     _startGuardApproved = configDir;
     return true;

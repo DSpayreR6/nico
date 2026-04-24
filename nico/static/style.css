@@ -911,6 +911,19 @@ button:active { transform: scale(.97); }
   padding-top: 10px;
   border-top: 1px solid var(--surface1);
 }
+.git-guard-card .action-btn {
+  width: auto;
+  flex-shrink: 0;
+}
+.git-guard-path {
+  font-size: 0.78rem;
+  color: var(--subtext0);
+  word-break: break-all;
+  margin: -4px 0 8px;
+  padding: 4px 8px;
+  background: var(--surface0);
+  border-radius: 4px;
+}
 
 /* ── Help dropdown menu ───────────────────────────────────────────────────── */
 .help-menu {
