@@ -737,6 +737,38 @@ def create_app() -> Flask:
         config_manager.save_app_settings(patch)
         return jsonify({"success": True})
 
+    @app.route("/api/config/detach", methods=["POST"])
+    def detach_config():
+        """Back up the current config and detach it from NiCo management."""
+        if err := _check_csrf(): return err
+        nixos_dir, err = _require_setup()
+        if err:
+            return err
+
+        root = Path(nixos_dir)
+        try:
+            backup_name = importer.backup_to_zip(root)
+            cleaned_files = importer.scrub_nico_comments_in_tree(root)
+
+            removed_json: list[str] = []
+            for rel_name in ("config.json", "nico.json"):
+                target = root / rel_name
+                if target.exists():
+                    target.unlink()
+                    removed_json.append(rel_name)
+
+            config_manager.save_app_settings({"nixos_config_dir": ""})
+        except OSError:
+            return jsonify({"error": "ERR_DETACH_FAILED"}), 500
+
+        return jsonify({
+            "ok": True,
+            "backup": backup_name,
+            "cleaned_files": cleaned_files,
+            "removed_json": removed_json,
+            "restart_setup": True,
+        })
+
     @app.route("/api/config/flake", methods=["POST"])
     def save_flake_config():
         """Apply incoming flake_* fields and write flake.nix to disk immediately.

@@ -2011,6 +2011,34 @@ function initSettingsImport() {
   on('admin-settings-import-error-cancel', 'click', _settingsImportReset);
 }
 
+async function detachConfig() {
+  if (!confirm(t('admin.detachConfirm'))) return;
+
+  try {
+    await _autoSave();
+    await Sidebar.flakeSave();
+  } catch {
+    // Best effort only – detach should still be possible.
+  }
+
+  let res, data;
+  try {
+    res = await csrfFetch('/api/config/detach', { method: 'POST' });
+    data = await res.json();
+  } catch {
+    showToast(t('toast.error'), 'error');
+    return;
+  }
+
+  if (!res.ok || data.error) {
+    showToast(tErr(data.error) || t('toast.error'), 'error');
+    return;
+  }
+
+  showToast(t('admin.detachSuccess', data.backup), 'success');
+  setTimeout(() => location.reload(), 900);
+}
+
 // ── Admin-Import ───────────────────────────────────────────────────────────
 
 function initImportBrowse() {
@@ -4634,6 +4662,7 @@ function bindUI() {
   initImportManual();
   initZipImport();
   initSettingsImport();
+  on('admin-detach-btn', 'click', detachConfig);
   initAdminTabs();
   initSettingsPanel();
   initAdminImportCollapse();

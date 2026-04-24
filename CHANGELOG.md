@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+### Detach config from NiCo
+The active configuration can now be detached from NiCo. NiCo creates a ZIP backup of the current config, removes NiCo-specific comment and marker lines from all `.nix` files, deletes the config metadata JSON, clears the stored config path, and returns to the initial setup state.
+
 ### Sidebar file manager and hardware import
 The sidebar file tree now has hover and context menus for files and directories. Files can be renamed or deleted directly in the tree; directories can additionally create files/directories and import a `hardware-configuration.nix`. Hardware import now supports both known local system paths and a manually entered file or directory path, and an existing target file is backed up as `.bak` before replacement.
 

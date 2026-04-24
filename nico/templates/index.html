@@ -1968,6 +1968,20 @@
           </div>
         </div>
 
+        <div class="admin-section">
+          <div class="admin-section-title" data-i18n="admin.detachTitle">Aus NiCo lösen</div>
+          <p class="raw-panel-hint" style="margin:4px 0 8px" data-i18n="admin.detachHint">
+            Erstellt eine ZIP-Sicherung, entfernt NiCo-Kommentarzeilen aus allen .nix-Dateien und löscht die NiCo-Metadatei der Config. Eigene Dateien bleiben erhalten.
+          </p>
+          <p class="raw-panel-hint" style="margin:0 0 10px" data-i18n="admin.detachWarn">
+            Danach ist kein Config-Pfad mehr in NiCo hinterlegt und der Startdialog erscheint wieder.
+          </p>
+          <button type="button" id="admin-detach-btn" class="action-btn btn-red"
+                  data-i18n="admin.detachBtn">
+            Config aus NiCo lösen
+          </button>
+        </div>
+
         <!-- Import -->
         <div class="admin-section" id="admin-import-section">
           <div class="admin-section-title admin-section-toggle" id="admin-import-toggle">
