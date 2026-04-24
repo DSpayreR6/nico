@@ -2341,6 +2341,15 @@ def create_app() -> Flask:
             return jsonify({"commits": []})
         return jsonify({"commits": git_manager.get_log(nixos_dir)})
 
+    @app.route("/api/git/pull", methods=["POST"])
+    def git_pull():
+        if err := _check_csrf(): return err
+        nixos_dir, err = _require_setup()
+        if err:
+            return err
+        ok, msg = git_manager.git_pull(nixos_dir)
+        return jsonify({"success": ok, "message": msg})
+
     @app.route("/api/git/rollback", methods=["POST"])
     def git_rollback():
         if err := _check_csrf(): return err

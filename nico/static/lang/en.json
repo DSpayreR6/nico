@@ -333,8 +333,12 @@
   "git.startGuardSyncRecommendation": "__TODO__",
   "git.startGuardDirtyRecommendation": "__TODO__",
   "git.startGuardErrorRecommendation": "__TODO__",
+  "git.startGuardDivergedRecommendation": "The repository must be cleaned up outside NiCo first (e.g. git rebase or git merge in the terminal). NiCo cannot work safely in this state.",
   "git.startGuardCancel": "__TODO__",
   "git.startGuardProceed": "__TODO__",
+  "git.startGuardPull": "Pull & Reload",
+  "git.startGuardPullError": "Pull failed: {0}",
+  "git.startGuardDivergedClose": "OK",
 
   "toast.saved": "Saved.",
   "toast.error": "Error.",

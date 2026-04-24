@@ -333,8 +333,12 @@
   "git.startGuardSyncRecommendation": "Empfehlung: erst außerhalb von NiCo synchronisieren, zum Beispiel per git pull, und danach erneut öffnen.",
   "git.startGuardDirtyRecommendation": "Empfehlung: erst prüfen oder committen, damit NiCo nicht auf einem unbeabsichtigten Zwischenstand arbeitet.",
   "git.startGuardErrorRecommendation": "Empfehlung: Git-Status zuerst manuell prüfen. Du kannst die Config trotzdem lokal öffnen, aber NiCo lädt dann ohne sichere Remote-Einordnung.",
+  "git.startGuardDivergedRecommendation": "Das Repository muss zuerst außerhalb von NiCo bereinigt werden (z.\u202fB. git rebase oder git merge im Terminal). NiCo kann in diesem Zustand nicht sicher arbeiten.",
   "git.startGuardCancel": "Abbrechen",
   "git.startGuardProceed": "Trotzdem lokal öffnen",
+  "git.startGuardPull": "Pull & Neu laden",
+  "git.startGuardPullError": "Pull fehlgeschlagen: {0}",
+  "git.startGuardDivergedClose": "OK",
 
   "toast.saved": "Gespeichert.",
   "toast.error": "Fehler.",

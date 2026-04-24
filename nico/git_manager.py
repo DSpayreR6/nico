@@ -108,6 +108,19 @@ def auto_commit(nixos_dir: str, label: str = "") -> tuple[bool, str]:
     return True, msg
 
 
+def git_pull(nixos_dir: str) -> tuple[bool, str]:
+    """
+    Run git pull on the current branch.
+    Returns (success, output_message).
+    """
+    if not is_git_repo(nixos_dir):
+        return False, "Kein Git-Repository."
+    rc, out = _run(["pull"], cwd=nixos_dir, timeout=30)
+    if rc != 0:
+        return False, out or "git pull fehlgeschlagen"
+    return True, out
+
+
 def check_remote_status(nixos_dir: str) -> dict:
     """
     Check whether the local repo is behind its remote.

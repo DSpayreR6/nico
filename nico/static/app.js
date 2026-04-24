@@ -730,7 +730,7 @@ function _gitGuardMessage(check) {
     return {
       title: t('git.startGuardDivergedTitle'),
       body: t('git.startGuardDivergedBody', check.ahead, check.behind),
-      recommendation: t('git.startGuardSyncRecommendation'),
+      recommendation: t('git.startGuardDivergedRecommendation'),
     };
   }
   if (check.state === 'dirty') {
@@ -749,18 +749,40 @@ function _gitGuardMessage(check) {
 
 function showGitStartGuard(check) {
   return new Promise(resolve => {
-    const msg = _gitGuardMessage(check);
-    const sev = _gitGuardSeverity(check);
+    const msg       = _gitGuardMessage(check);
+    const sev       = _gitGuardSeverity(check);
+    const isDiverged = check.state === 'diverged';
+    const isBehind   = check.state === 'behind';
+    const borderColor = sev === 'dirty' ? 'var(--yellow)' : 'var(--red)';
+
+    let buttonsHtml;
+    if (isDiverged) {
+      buttonsHtml = `
+        <button type="button" id="_git-start-ok" class="action-btn btn-red">${escHtml(t('git.startGuardDivergedClose'))}</button>
+      `;
+    } else if (isBehind) {
+      buttonsHtml = `
+        <button type="button" id="_git-start-cancel" class="btn-surface">${escHtml(t('git.startGuardCancel'))}</button>
+        <button type="button" id="_git-start-open" class="action-btn btn-red">${escHtml(t('git.startGuardProceed'))}</button>
+        <button type="button" id="_git-start-pull" class="action-btn btn-green">${escHtml(t('git.startGuardPull'))}</button>
+      `;
+    } else {
+      buttonsHtml = `
+        <button type="button" id="_git-start-cancel" class="btn-surface">${escHtml(t('git.startGuardCancel'))}</button>
+        <button type="button" id="_git-start-open" class="action-btn ${sev === 'dirty' ? 'btn-yellow' : 'btn-red'}">${escHtml(t('git.startGuardProceed'))}</button>
+      `;
+    }
+
     const overlay = document.createElement('div');
     overlay.className = 'overlay';
     overlay.innerHTML = `
       <div class="modal">
         <div class="modal-logo">${escHtml(msg.title)}</div>
         <p>${escHtml(msg.body)}</p>
-        <p class="confirm-text" style="border-left-color:${sev === 'dirty' ? 'var(--yellow)' : 'var(--red)'}">${escHtml(msg.recommendation)}</p>
-        <div class="confirm-buttons">
-          <button type="button" id="_git-start-cancel" class="btn-surface">${escHtml(t('git.startGuardCancel'))}</button>
-          <button type="button" id="_git-start-open" class="action-btn ${sev === 'dirty' ? 'btn-yellow' : 'btn-red'}">${escHtml(t('git.startGuardProceed'))}</button>
+        <p class="confirm-text" style="border-left-color:${borderColor}">${escHtml(msg.recommendation)}</p>
+        <p id="_git-pull-error" style="color:var(--red);display:none"></p>
+        <div class="confirm-buttons" id="_git-guard-buttons">
+          ${buttonsHtml}
         </div>
       </div>
     `;
@@ -770,10 +792,37 @@ function showGitStartGuard(check) {
       overlay.remove();
       resolve(proceed);
     };
+
+    overlay.querySelector('#_git-start-ok')?.addEventListener('click', () => finish(false));
     overlay.querySelector('#_git-start-cancel')?.addEventListener('click', () => finish(false));
     overlay.querySelector('#_git-start-open')?.addEventListener('click', () => finish(true));
+    overlay.querySelector('#_git-start-pull')?.addEventListener('click', async () => {
+      const pullBtn  = overlay.querySelector('#_git-start-pull');
+      const errEl    = overlay.querySelector('#_git-pull-error');
+      pullBtn.disabled = true;
+      pullBtn.textContent = '…';
+      errEl.style.display = 'none';
+      try {
+        const res  = await csrfFetch('/api/git/pull', { method: 'POST' });
+        const data = await res.json();
+        if (data.success) {
+          location.reload();
+        } else {
+          errEl.textContent    = t('git.startGuardPullError', data.message || '');
+          errEl.style.display  = '';
+          pullBtn.disabled     = false;
+          pullBtn.textContent  = t('git.startGuardPull');
+        }
+      } catch (e) {
+        errEl.textContent   = t('git.startGuardPullError', String(e));
+        errEl.style.display = '';
+        pullBtn.disabled    = false;
+        pullBtn.textContent = t('git.startGuardPull');
+      }
+    });
+
     overlay.addEventListener('click', e => {
-      if (e.target === overlay) finish(false);
+      if (e.target === overlay && !isDiverged) finish(false);
     });
   });
 }
