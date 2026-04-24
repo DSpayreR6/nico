@@ -1,0 +1,53 @@
+name: Security Audit
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["**"]
+  schedule:
+    # Weekly on Monday 06:00 UTC
+    - cron: "0 6 * * 1"
+
+jobs:
+  security:
+    name: Run Security Scanners
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install audit tools
+        run: pip install bandit pip-audit
+
+      - name: Create requirements.txt for pip-audit
+        run: |
+          cat > requirements-audit.txt <<'EOF'
+          flask
+          tree-sitter
+          EOF
+
+      - name: Run bandit
+        run: |
+          bandit -r nico/ -f json -o bandit-report.json || true
+          bandit -r nico/ || true
+
+      - name: Run pip-audit
+        run: |
+          pip-audit -r requirements-audit.txt -f json -o pip-audit-report.json || true
+          pip-audit -r requirements-audit.txt || true
+
+      - name: Upload security reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-reports
+          path: |
+            bandit-report.json
+            pip-audit-report.json
+          retention-days: 90

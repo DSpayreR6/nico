@@ -329,7 +329,12 @@ def _modify_brick_in_file(
     inject new_blocks, recompute hash, write back.
     Returns (success, error_key_or_empty).
     """
-    fpath = Path(nixos_dir) / fname
+    root  = Path(nixos_dir).resolve()
+    fpath = (root / fname).resolve()
+    try:
+        fpath.relative_to(root)
+    except ValueError:
+        return False, "ERR_SYSTEM_PATH"
     if not fpath.exists():
         return False, "ERR_FILE_NOT_FOUND"
     try:

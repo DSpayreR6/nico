@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+### Security audit & CI
+Initial security audit covering bandit, pip-audit, and a manual code review. No CVEs found in dependencies. One path-traversal bug in the brick file editor was fixed: `_modify_brick_in_file` now validates that the target path stays inside the config directory. GitHub Actions workflows for automated scanning (bandit + pip-audit on every push) and CodeQL analysis added. Dependabot enabled for Python dependencies and Actions versions.
+
 ---
 
 ## 0.9.2 (2026-04-23)
