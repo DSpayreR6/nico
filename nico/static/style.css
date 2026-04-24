@@ -291,27 +291,6 @@ header {
 }
 
 
-/* ── KI-fragen Button in Sektions-Headern ────────────────────────────────── */
-.btn-ai-ask {
-  margin-left: auto;
-  background: transparent;
-  color: var(--overlay0);
-  border: 1px solid transparent;
-  border-radius: 4px;
-  font-size: 10px;
-  font-weight: 600;
-  padding: 1px 6px;
-  cursor: pointer;
-  white-space: nowrap;
-  flex-shrink: 0;
-}
-
-.btn-ai-ask:hover {
-  color: var(--blue);
-  border-color: var(--blue);
-  opacity: 1;
-}
-
 /* ── Main layout ─────────────────────────────────────────────────────────── */
 #app {
   display: flex;
@@ -523,9 +502,7 @@ section:last-of-type { border-bottom: none; }
 }
 
 .sec-docs-popup {
-  position: absolute;
-  top: calc(100% + 4px);
-  right: 0;
+  position: fixed;
   background: var(--surface0);
   border: 1px solid var(--surface1);
   border-radius: 7px;
@@ -3023,9 +3000,7 @@ button:disabled {
   margin: 1px 4px;
   transition: background 0.1s;
   user-select: none;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  min-width: 0;
 }
 
 .tree-dir {
@@ -3033,6 +3008,12 @@ button:disabled {
   font-weight: 500;
 }
 
+.tree-root {
+  color: var(--text, #cdd6f4);
+  font-weight: 600;
+}
+
+.tree-dir:hover,
 .tree-file:hover {
   background: var(--surface1, #45475a);
 }
@@ -3046,17 +3027,98 @@ button:disabled {
   color: var(--red, #f38ba8);
 }
 
+.tree-entry-name {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tree-entry-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.tree-action-btn {
+  --ni-icon-size: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--subtext0, #a6adc8);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+
+.tree-dir:hover .tree-action-btn,
+.tree-dir:focus-within .tree-action-btn,
+.tree-file:hover .tree-action-btn,
+.tree-file:focus-within .tree-action-btn,
+.tree-action-btn[aria-expanded="true"] {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.tree-action-btn:hover {
+  background: var(--surface1, #45475a);
+  color: var(--text, #cdd6f4);
+}
+
 .tree-children {
   padding-left: 16px;
 }
 
 .tree-dir-toggle {
   --ni-icon-size: 12px;
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: currentColor;
   transition: transform 0.15s;
 }
 .tree-dir-toggle.open {
   transform: rotate(90deg);
+}
+
+.tree-context-menu {
+  position: fixed;
+  z-index: 260;
+  min-width: 220px;
+  padding: 4px 0;
+  background: var(--surface0, #313244);
+  border: 1px solid var(--surface2, #585b70);
+  border-radius: 8px;
+  box-shadow: 0 10px 24px rgba(0,0,0,.24);
+}
+
+.tree-menu-item {
+  display: block;
+  width: 100%;
+  padding: 8px 12px;
+  border: none;
+  background: transparent;
+  color: var(--text, #cdd6f4);
+  text-align: left;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.tree-menu-item:hover {
+  background: var(--surface1, #45475a);
 }
 
 .sidebar-empty {
@@ -3530,4 +3592,40 @@ button:disabled {
   gap: 8px;
   margin-top: 16px;
   flex-wrap: wrap;
+}
+
+.tree-import-dialog .dialog-info {
+  margin-bottom: 12px;
+}
+
+.tree-import-manual {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.tree-import-manual input[type="text"] {
+  flex: 1;
+  min-width: 0;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--surface1);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
+.tree-import-manual input[type="text"]:focus {
+  outline: none;
+  border-color: var(--blue);
+  box-shadow: 0 0 0 2px rgba(137, 180, 250, 0.2);
+}
+
+.tree-import-status {
+  margin-bottom: 10px;
+  font-size: 12px;
+  color: var(--subtext0);
+}
+
+.tree-import-status.error {
+  color: var(--red);
 }

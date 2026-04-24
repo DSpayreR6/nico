@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### Sidebar file manager and hardware import
+The sidebar file tree now has hover and context menus for files and directories. Files can be renamed or deleted directly in the tree; directories can additionally create files/directories and import a `hardware-configuration.nix`. Hardware import now supports both known local system paths and a manually entered file or directory path, and an existing target file is backed up as `.bak` before replacement.
+
+### Section docs popup
+The section documentation popup (Wiki / Options) now opens to the right of its anchor instead of expanding left into short section headers.
+
+### Removed early AI UI
+The premature “Ask AI” buttons were removed from the panels. AI stays a long-term goal in the manifest instead of appearing as an unfinished UI feature.
+
 ### Lucide icon set
 All Unicode/emoji icons throughout the UI have been replaced with a consistent set of Lucide SVG icons (v1.9.0, ISC license). Icons are rendered via CSS `mask-image` with `background-color: currentColor`, so they inherit the surrounding text color and are fully theme-swappable. Icon sizes can be overridden per context via the `--ni-icon-size` CSS custom property. The 24 used SVGs are vendored locally under `nico/static/vendor/lucide/`; the theme stylesheet lives at `nico/static/themes/default/icons.css`. The NixOS logo and language flag emojis are intentionally unchanged.
 

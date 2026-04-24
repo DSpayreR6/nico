@@ -154,10 +154,13 @@ def _ts_parse_config(nix_content: str) -> 'tuple[dict, set[str]] | None':
     def _mark(nix_key: str):
         if nix_key in kv:
             consumed.add(nix_key)
-        else:
-            parts = nix_key.rsplit('.', 1)
-            if len(parts) == 2 and parts[0] in kv:
-                consumed.add(parts[0])
+            return
+        parts = nix_key.split('.')
+        for i in range(len(parts) - 1, 0, -1):
+            parent = '.'.join(parts[:i])
+            if parent in kv:
+                consumed.add(parent)
+                return
 
     def s(nico_key, *nix_keys):
         for nk in nix_keys:
@@ -263,6 +266,17 @@ def _ts_parse_config(nix_content: str) -> 'tuple[dict, set[str]] | None':
     b('pipewire_32bit', 'services.pipewire.alsa.support32Bit')
 
     # ── Desktop ───────────────────────────────────────────────────────────────
+    desktop_extra_keys = {
+        'gnome':   ['services.xserver.enable', 'services.xserver.displayManager.gdm.enable'],
+        'kde':     ['services.xserver.enable', 'services.displayManager.sddm.enable'],
+        'plasma5': ['services.xserver.enable'],
+        'xfce':    ['services.xserver.enable', 'services.xserver.displayManager.lightdm.enable'],
+        'mate':    ['services.xserver.enable'],
+        'lxqt':    ['services.xserver.enable'],
+        'i3':      ['services.xserver.enable'],
+        'sway':    [],
+        'hyprland': [],
+    }
     for de_name, de_key in [
         ('gnome',    'services.xserver.desktopManager.gnome.enable'),
         ('kde',      'services.desktopManager.plasma6.enable'),
@@ -276,7 +290,15 @@ def _ts_parse_config(nix_content: str) -> 'tuple[dict, set[str]] | None':
     ]:
         vt = _vt(de_key)
         if vt and _np.extract_bool(vt):
-            r['desktop_environment'] = de_name; _mark(de_key); break
+            r['desktop_environment'] = de_name
+            _mark(de_key)
+            for extra_key in desktop_extra_keys.get(de_name, []):
+                _mark(extra_key)
+            break
+
+    if r.get('pipewire'):
+        _mark('services.pulseaudio.enable')
+        _mark('security.rtkit.enable')
 
     vt = _vt('services.displayManager.autoLogin')
     if vt:
@@ -288,6 +310,9 @@ def _ts_parse_config(nix_content: str) -> 'tuple[dict, set[str]] | None':
         s('autologin_user',
           'services.displayManager.autoLogin.user',
           'services.xserver.displayManager.autoLogin.user')
+    if 'autologin_user' in r:
+        _mark('services.displayManager.autoLogin.enable')
+        _mark('services.xserver.displayManager.autoLogin.enable')
 
     # ── System-Programme ──────────────────────────────────────────────────────
     b('steam',    'programs.steam.enable')
@@ -429,6 +454,8 @@ def _ts_parse_config(nix_content: str) -> 'tuple[dict, set[str]] | None':
             if v: r['user_uid'] = v
             v = _ue(r'\bshell\s*=\s*(pkgs\.\w+)')
             if v: r['user_shell'] = _SHELLS.get(v, 'bash')
+            if r.get('user_shell') in ('zsh', 'fish'):
+                _mark(f"programs.{r['user_shell']}.enable")
             m = re.search(r'extraGroups\s*=\s*\[([^\]]*)\]', inner)
             if m:
                 groups = re.findall(r'"(\w+)"', m.group(1))
@@ -1450,7 +1477,59 @@ def _flake_split_attrs(block_content: str) -> list[str]:
     entries: list[str] = []
     depth = 0
     current: list[str] = []
-    for ch in block_content:
+    in_string = False
+    in_indent_string = False
+    in_comment = False
+    i = 0
+    while i < len(block_content):
+        ch = block_content[i]
+
+        if in_comment:
+            current.append(ch)
+            if ch == '\n':
+                in_comment = False
+            i += 1
+            continue
+
+        if in_string:
+            current.append(ch)
+            if ch == '\\' and i + 1 < len(block_content):
+                current.append(block_content[i + 1])
+                i += 2
+                continue
+            if ch == '"':
+                in_string = False
+            i += 1
+            continue
+
+        if in_indent_string:
+            if block_content.startswith("''", i):
+                current.append("''")
+                in_indent_string = False
+                i += 2
+                continue
+            current.append(ch)
+            i += 1
+            continue
+
+        if block_content.startswith("''", i):
+            current.append("''")
+            in_indent_string = True
+            i += 2
+            continue
+
+        if ch == '#':
+            current.append(ch)
+            in_comment = True
+            i += 1
+            continue
+
+        if ch == '"':
+            current.append(ch)
+            in_string = True
+            i += 1
+            continue
+
         if ch in '{[(':
             depth += 1
         elif ch in '}])':
@@ -1461,6 +1540,7 @@ def _flake_split_attrs(block_content: str) -> list[str]:
             if text:
                 entries.append(text)
             current = []
+        i += 1
     leftover = ''.join(current).strip()
     if leftover:
         entries.append(leftover)
@@ -1644,3 +1724,45 @@ def copy_hardware_config(nixos_dir: str, src_path: str | None = None) -> bool:
     dst = Path(nixos_dir) / "hardware-configuration.nix"
     shutil.copy2(src, dst)
     return True
+
+
+def find_hardware_configs() -> list[str]:
+    """Return existing hardware-configuration.nix candidates from known local paths."""
+    candidates: list[Path] = []
+    seen: set[str] = set()
+
+    direct_paths = [
+        ETC_NIXOS / "hardware-configuration.nix",
+    ]
+    search_roots = [
+        Path("/etc/nixos"),
+        Path("/run/current-system"),
+        Path("/nix/var/nix/profiles"),
+    ]
+
+    for path in direct_paths:
+        try:
+            if path.is_file():
+                resolved = str(path.resolve())
+                if resolved not in seen:
+                    seen.add(resolved)
+                    candidates.append(path.resolve())
+        except OSError:
+            continue
+
+    for root in search_roots:
+        try:
+            if not root.exists():
+                continue
+            for path in root.rglob("hardware-configuration.nix"):
+                if not path.is_file():
+                    continue
+                resolved = str(path.resolve())
+                if resolved in seen:
+                    continue
+                seen.add(resolved)
+                candidates.append(path.resolve())
+        except (OSError, PermissionError):
+            continue
+
+    return [str(path) for path in sorted(candidates, key=lambda p: str(p))]

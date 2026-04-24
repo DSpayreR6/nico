@@ -165,6 +165,7 @@ let searchMatches  = [];   // visible .search-match elements in active tab
 let searchMatchIdx = -1;
 let searchDebounce = null;
 let pkgDebounce     = null;
+let _treeContextMenu = null;
 
 // Section names that are currently collapsed – always start fully collapsed
 const collapsedSections = new Set();
@@ -3325,50 +3326,14 @@ function searchStep(dir) {
   updateSearchCount();
 }
 
-// ── KI-Assistenz ────────────────────────────────────────────────────────────
-
-const AI_PROVIDERS = {
-  claude:  'https://claude.ai/new',
-  chatgpt: 'https://chatgpt.com/',
-  gemini:  'https://gemini.google.com/app',
-  grok:    'https://grok.com/',
-};
-
-
-function askAI(sectionName) {
-  const question = t('ai.question', sectionName);
-  navigator.clipboard.writeText(question).catch(() => {});
-
-  const provider = localStorage.getItem('nico_ai_provider') || 'claude';
-  const url = provider === 'custom'
-    ? (localStorage.getItem('nico_ai_custom_url') || AI_PROVIDERS.claude)
-    : (AI_PROVIDERS[provider] || AI_PROVIDERS.claude);
-
-  window.open(url, '_blank');
-  showToast(t('ai.copied'));
-}
-
-function addAiButtons() {
+function addSectionLineHints() {
   document.querySelectorAll('.sec-toggle').forEach(h3 => {
     const section = h3.closest('section');
     if (!section?.dataset.section) return;
-
-    // Line range hint (updated after each preview render)
+    if (h3.querySelector('.sec-line-hint')) return;
     const hint = document.createElement('small');
     hint.className = 'sec-line-hint';
     h3.appendChild(hint);
-
-    // KI button
-    const btn = document.createElement('button');
-    btn.type        = 'button';
-    btn.className   = 'btn-ai-ask';
-    btn.textContent = t('ai.btnText');
-    btn.title = t('ai.btnTitle', section.dataset.section);
-    btn.addEventListener('click', e => {
-      e.stopPropagation();
-      askAI(section.dataset.section);
-    });
-    h3.appendChild(btn);
   });
 }
 
@@ -3469,7 +3434,10 @@ function initNixosLinks() {
         a.addEventListener('click', () => _closeSecDocsPopup());
       });
 
-      wrap.appendChild(popup);
+      document.body.appendChild(popup);
+      const rect = btn.getBoundingClientRect();
+      popup.style.top = `${rect.bottom + 4}px`;
+      popup.style.left = `${rect.left}px`;
       _activeSecDocsPopup = popup;
     });
 
@@ -4463,6 +4431,10 @@ function bindUI() {
   });
   document.addEventListener('click', () => {
     document.getElementById('lang-dropdown')?.classList.add('hidden');
+    Sidebar.closeTreeContextMenu();
+  });
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') Sidebar.closeTreeContextMenu();
   });
 
   // Setup
@@ -4544,8 +4516,7 @@ function bindUI() {
     document.getElementById('hm-shared-modules-detail')?.classList.toggle('hidden', !this.checked);
   });
 
-  // Per-section AI buttons
-  addAiButtons();
+  addSectionLineHints();
 
   // Ebene-2 Sektionen (aufklappbar innerhalb von Sektionen)
   initLvl2Sections();
@@ -5028,6 +4999,7 @@ const Sidebar = (() => {
 
   async function loadTree() {
     elTree.innerHTML = '';
+    _closeTreeContextMenu();
     try {
       const res  = await fetch('/api/files');
       const data = await res.json();
@@ -5039,7 +5011,15 @@ const Sidebar = (() => {
         elTree.innerHTML = `<div class="sidebar-empty">${t('sidebar.empty')}</div>`;
         return;
       }
-      renderTree(data.tree, elTree);
+      const rootName = (data.root || '').split('/').filter(Boolean).pop() || t('sidebar.rootLabel');
+      renderTree([{
+        name: rootName,
+        type: 'dir',
+        path: '',
+        is_root: true,
+        open: true,
+        children: data.tree,
+      }], elTree);
     } catch (e) {
       elTree.innerHTML = `<div class="sidebar-empty">${t('sidebar.loadError')}</div>`;
     }
@@ -5054,44 +5034,375 @@ const Sidebar = (() => {
     });
   }
 
+  function _closeTreeContextMenu() {
+    if (_treeContextMenu) {
+      if (_treeContextMenu._triggerBtn) {
+        _treeContextMenu._triggerBtn.setAttribute('aria-expanded', 'false');
+      }
+      _treeContextMenu.remove();
+      _treeContextMenu = null;
+    }
+  }
+
+  function _openTreeContextMenu(triggerBtn, buildItems) {
+    if (_treeContextMenu?._triggerBtn === triggerBtn) {
+      _closeTreeContextMenu();
+      return;
+    }
+    _closeTreeContextMenu();
+
+    const menu = document.createElement('div');
+    menu.className = 'tree-context-menu';
+    menu.addEventListener('click', e => e.stopPropagation());
+    buildItems(menu);
+    const rect = triggerBtn.getBoundingClientRect();
+    menu.style.top = `${Math.min(rect.bottom + 4, window.innerHeight - 12)}px`;
+    menu.style.left = `${Math.max(12, rect.right - 220)}px`;
+    menu._triggerBtn = triggerBtn;
+    triggerBtn.setAttribute('aria-expanded', 'true');
+    document.body.appendChild(menu);
+    _treeContextMenu = menu;
+  }
+
+  function _appendTreeMenuItem(menu, label, onClick) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'tree-menu-item';
+    btn.textContent = label;
+    btn.addEventListener('click', async e => {
+      e.stopPropagation();
+      _closeTreeContextMenu();
+      await onClick();
+    });
+    menu.appendChild(btn);
+  }
+
+  async function _pickHardwareConfigForDir(targetDir, targetLabel = '') {
+    let data;
+    try {
+      const res = await fetch('/api/files/hardware-configs');
+      data = await res.json();
+    } catch (e) {
+      showToast(t('sidebar.loadError'), 'error');
+      return;
+    }
+
+    if (data.error) {
+      showToast(tErr(data.error), 'error');
+      return;
+    }
+
+    const configs = Array.isArray(data.configs)
+      ? data.configs.filter(item => !item.inside_config)
+      : [];
+
+    const selected = await new Promise(resolve => {
+      const overlay = document.createElement('div');
+      overlay.className = 'overlay';
+      const renderOptions = () => {
+        const filtered = configs.filter(item => !item.inside_config);
+        return filtered.length
+          ? filtered.map(cfg => `<option value="${escHtml(cfg.path)}">${escHtml(cfg.label)}</option>`).join('')
+          : `<option value="">${escHtml(t('sidebar.hwImportEmptyList'))}</option>`;
+      };
+      overlay.innerHTML = `
+        <div class="dialog tree-import-dialog">
+          <h2 class="dialog-title">${escHtml(t('sidebar.hwImportTitle'))}</h2>
+          <p class="dialog-info">${escHtml(t('sidebar.hwImportInfo').replace('{dir}', targetLabel || t('sidebar.rootLabel')))}</p>
+          <div class="tree-import-manual">
+            <input id="tree-hw-import-path" type="text" value="" placeholder="${escHtml(t('sidebar.hwImportPathPlaceholder'))}" spellcheck="false">
+            <button id="tree-hw-import-browse" type="button" class="btn-secondary">${t('sidebar.hwImportBrowse')}</button>
+          </div>
+          <div id="tree-hw-import-status" class="tree-import-status hidden"></div>
+          <select id="tree-hw-import-select" class="brix-select">
+            ${renderOptions()}
+          </select>
+          <div class="dialog-actions">
+            <button id="tree-hw-import-ok" class="btn-primary">${t('sidebar.hwImportAction')}</button>
+            <button id="tree-hw-import-cancel" class="btn-secondary">${t('unsaved.cancel')}</button>
+          </div>
+        </div>`;
+      document.body.appendChild(overlay);
+      const selectEl = overlay.querySelector('#tree-hw-import-select');
+      const inputEl = overlay.querySelector('#tree-hw-import-path');
+      const statusEl = overlay.querySelector('#tree-hw-import-status');
+      const setStatus = (message, isError = false) => {
+        if (!statusEl) return;
+        statusEl.textContent = message;
+        statusEl.classList.remove('hidden', 'error');
+        if (isError) statusEl.classList.add('error');
+      };
+      const refreshOptions = () => {
+        const filtered = configs.filter(item => !item.inside_config);
+        if (!selectEl) return;
+        selectEl.innerHTML = filtered.length
+          ? filtered.map(cfg => `<option value="${escHtml(cfg.path)}">${escHtml(cfg.label)}</option>`).join('')
+          : `<option value="">${escHtml(t('sidebar.hwImportEmptyList'))}</option>`;
+        selectEl.disabled = !filtered.length;
+      };
+
+      overlay.querySelector('#tree-hw-import-browse')?.addEventListener('click', async () => {
+        const raw = inputEl?.value?.trim() || '';
+        if (!raw) {
+          setStatus(tErr('ERR_NO_PATH'), true);
+          return;
+        }
+        try {
+          const res = await csrfFetch('/api/files/hardware-configs/check', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ path: raw }),
+          });
+          const result = await res.json();
+          if (result.error) {
+            setStatus(tErr(result.error), true);
+            return;
+          }
+          const cfg = result.config;
+          if (!cfg || cfg.inside_config) {
+            setStatus(t('sidebar.hwImportAlreadyListed'), true);
+            return;
+          }
+          if (!configs.some(item => item.path === cfg.path)) {
+            configs.unshift(cfg);
+          }
+          refreshOptions();
+          selectEl.value = cfg.path;
+          setStatus(t('sidebar.hwImportAdded'));
+        } catch (e) {
+          setStatus(t('toast.error'), true);
+        }
+      });
+      overlay.querySelector('#tree-hw-import-ok')?.addEventListener('click', () => {
+        const value = selectEl?.value || '';
+        document.body.removeChild(overlay);
+        resolve(value || null);
+      });
+      overlay.querySelector('#tree-hw-import-cancel')?.addEventListener('click', () => {
+        document.body.removeChild(overlay);
+        resolve(null);
+      });
+    });
+
+    if (!selected) return;
+
+    try {
+      const res = await csrfFetch('/api/files/import-hardware', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          target_dir: targetDir,
+          source_path: selected,
+        }),
+      });
+      const result = await res.json();
+      if (result.error) {
+        showToast(tErr(result.error), 'error');
+        return;
+      }
+      showToast(
+        result.backup_created ? t('sidebar.hwImportSuccessBackup') : t('sidebar.hwImportSuccess'),
+        'success',
+      );
+      await loadTree();
+      if (result.target_path) {
+        const fileName = result.target_path.split('/').pop();
+        await selectFile(result.target_path, fileName, { force: true });
+      }
+    } catch (e) {
+      showToast(t('toast.error'), 'error');
+    }
+  }
+
+  async function _createTreeEntry(parentPath, type) {
+    const label = type === 'dir' ? t('sidebar.newDirPrompt') : t('sidebar.newFilePrompt');
+    const value = window.prompt(label, type === 'dir' ? '' : 'default.nix');
+    if (!value) return;
+
+    try {
+      const res = await csrfFetch('/api/files/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          parent_path: parentPath,
+          name: value.trim(),
+          type,
+        }),
+      });
+      const data = await res.json();
+      if (data.error) {
+        showToast(tErr(data.error), 'error');
+        return;
+      }
+      await loadTree();
+      if (data.type === 'file' && data.path) {
+        const fileName = data.path.split('/').pop();
+        await selectFile(data.path, fileName, { force: true });
+      }
+    } catch (e) {
+      showToast(t('toast.error'), 'error');
+    }
+  }
+
+  async function _renameTreeEntry(entry) {
+    const label = window.prompt(t('sidebar.renamePrompt'), entry.name);
+    if (!label || label.trim() === entry.name) return;
+
+    try {
+      const res = await csrfFetch('/api/files/rename', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          path: entry.path,
+          new_name: label.trim(),
+        }),
+      });
+      const data = await res.json();
+      if (data.error) {
+        showToast(tErr(data.error), 'error');
+        return;
+      }
+      await loadTree();
+      if (activeFile?.path === entry.path && data.new_path) {
+        const fileName = data.new_path.split('/').pop();
+        await selectFile(data.new_path, fileName, { force: true });
+      }
+    } catch (e) {
+      showToast(t('toast.error'), 'error');
+    }
+  }
+
+  async function _deleteTreeEntry(entry) {
+    if (!confirm(t('sidebar.deleteConfirm').replace('{name}', entry.name))) return;
+
+    try {
+      const res = await csrfFetch('/api/files/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: entry.path }),
+      });
+      const data = await res.json();
+      if (data.error) {
+        showToast(tErr(data.error), 'error');
+        return;
+      }
+      if (activeFile?.path === entry.path || activeFile?.path?.startsWith(`${entry.path}/`)) {
+        activeFile = null;
+        _updateActiveFileLabel();
+      }
+      await loadTree();
+    } catch (e) {
+      showToast(t('toast.error'), 'error');
+    }
+  }
+
+  function _openEntryMenu(entry, triggerBtn) {
+    _openTreeContextMenu(triggerBtn, menu => {
+      if (entry.type === 'dir') {
+        _appendTreeMenuItem(menu, t('sidebar.newDir'), async () => _createTreeEntry(entry.path, 'dir'));
+        _appendTreeMenuItem(menu, t('sidebar.newFile'), async () => _createTreeEntry(entry.path, 'file'));
+        _appendTreeMenuItem(menu, t('sidebar.hwImportMenu'), async () => _pickHardwareConfigForDir(entry.path, entry.name));
+      }
+      if (!entry.is_root) {
+        _appendTreeMenuItem(menu, t('sidebar.rename'), async () => _renameTreeEntry(entry));
+        _appendTreeMenuItem(menu, t('sidebar.delete'), async () => _deleteTreeEntry(entry));
+      }
+    });
+  }
+
+  function _buildTreeActions(entry, rowEl) {
+    const actions = document.createElement('div');
+    actions.className = 'tree-entry-actions';
+
+    const menuBtn = document.createElement('button');
+    menuBtn.type = 'button';
+    menuBtn.className = 'tree-action-btn tree-menu-btn';
+    menuBtn.title = entry.type === 'dir' ? t('sidebar.dirMenuTitle') : t('sidebar.fileMenuTitle');
+    menuBtn.setAttribute('aria-expanded', 'false');
+    menuBtn.innerHTML = niIcon('more-vertical');
+    menuBtn.addEventListener('click', e => {
+      e.stopPropagation();
+      _openEntryMenu(entry, menuBtn);
+    });
+
+    rowEl.addEventListener('contextmenu', e => {
+      e.preventDefault();
+      e.stopPropagation();
+      _openEntryMenu(entry, menuBtn);
+    });
+
+    actions.appendChild(menuBtn);
+    return actions;
+  }
+
+  function _buildDirRow(entry, childEl) {
+    const dirEl = document.createElement('div');
+    dirEl.className = 'tree-dir';
+    dirEl.dataset.path = entry.path;
+
+    const toggle = document.createElement('button');
+    toggle.type = 'button';
+    toggle.className = 'tree-dir-toggle ni-icon ni-icon-chevron-right';
+    toggle.setAttribute('aria-label', entry.name);
+
+    const name = document.createElement('span');
+    name.className = 'tree-entry-name';
+    name.textContent = entry.name;
+    if (entry.is_root) dirEl.classList.add('tree-root');
+
+    dirEl.addEventListener('click', e => {
+      e.stopPropagation();
+      const open = childEl.style.display !== 'none';
+      childEl.style.display = open ? 'none' : 'block';
+      toggle.classList.toggle('open', !open);
+      _closeTreeContextMenu();
+    });
+
+    dirEl.appendChild(toggle);
+    dirEl.appendChild(name);
+    dirEl.appendChild(_buildTreeActions(entry, dirEl));
+    return dirEl;
+  }
+
+  function _buildFileRow(entry) {
+    const fileEl = document.createElement('div');
+    const ftype = entry.file_type || 'unknown';
+    fileEl.className = `tree-file ft-${ftype}`;
+    fileEl.dataset.path = entry.path;
+    fileEl.dataset.fileType = ftype;
+
+    const name = document.createElement('span');
+    name.className = 'tree-entry-name';
+    name.textContent = entry.name;
+    fileEl.appendChild(name);
+    fileEl.appendChild(_buildTreeActions(entry, fileEl));
+
+    if (activeFile && activeFile.path === entry.path) {
+      fileEl.classList.add('active');
+    }
+
+    fileEl.addEventListener('click', () => {
+      _closeTreeContextMenu();
+      selectFile(entry.path, entry.name);
+    });
+    return fileEl;
+  }
+
   function renderTree(entries, container) {
     entries.forEach(entry => {
       if (entry.type === 'dir') {
-        const dirEl = document.createElement('div');
-        dirEl.className = 'tree-dir';
-        dirEl.innerHTML = `<span class="tree-dir-toggle ni-icon ni-icon-chevron-right"></span>${escHtml(entry.name)}`;
-
         const childEl = document.createElement('div');
         childEl.className = 'tree-children';
-        childEl.style.display = 'none';
+        childEl.style.display = entry.open ? 'block' : 'none';
         renderTree(entry.children, childEl);
-
-        dirEl.addEventListener('click', e => {
-          e.stopPropagation();
-          const toggle = dirEl.querySelector('.tree-dir-toggle');
-          const open   = childEl.style.display !== 'none';
-          childEl.style.display = open ? 'none' : 'block';
-          toggle.classList.toggle('open', !open);
-        });
+        const dirEl = _buildDirRow(entry, childEl);
+        dirEl.querySelector('.tree-dir-toggle')?.classList.toggle('open', !!entry.open);
 
         container.appendChild(dirEl);
         container.appendChild(childEl);
-      } else {
-        const fileEl = document.createElement('div');
-        const ftype  = entry.file_type || 'unknown';
-        fileEl.className = `tree-file ft-${ftype}`;
-        fileEl.dataset.path = entry.path;
-        fileEl.dataset.fileType = ftype;
-        fileEl.innerHTML    = escHtml(entry.name);
-
-        // Highlight if already active
-        if (activeFile && activeFile.path === entry.path) {
-          fileEl.classList.add('active');
-        }
-
-        fileEl.addEventListener('click', () => selectFile(entry.path, entry.name));
-        container.appendChild(fileEl);
+        return;
       }
+      container.appendChild(_buildFileRow(entry));
     });
   }
 
@@ -6124,6 +6435,7 @@ const Sidebar = (() => {
     openFileViewer,
     flakeSave: _flakeSave,
     setActiveFile,
+    closeTreeContextMenu: _closeTreeContextMenu,
     updateFlakePreview: _updateFlakePreview,
     togglePlainCodeView: _togglePlainCodeViewInSidebar,
   };

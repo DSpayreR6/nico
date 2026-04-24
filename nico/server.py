@@ -7,6 +7,7 @@ import hashlib
 import os
 import re
 import secrets
+import shutil
 import threading
 from pathlib import Path
 
@@ -127,6 +128,9 @@ def _set_type_in_content(content: str, ftype: str) -> str:
     h = hashlib.sha256(content.encode()).hexdigest()[:8]
     nico_line = f"# nico-version: {ftype}#{h}\n"
     return f"{nico_line}{content}"
+
+
+_SAFE_NAME_RE = re.compile(r"^[^/\\]+$")
 
 
 # Filesystem prefixes that NiCo must never write to
@@ -2347,6 +2351,280 @@ def create_app() -> Flask:
             return entries
 
         return jsonify({"tree": build_tree(root), "root": str(root)})
+
+    def _hardware_config_meta(candidate: Path, root: Path) -> dict:
+        inside_config = False
+        try:
+            candidate.relative_to(root)
+            inside_config = True
+        except ValueError:
+            inside_config = False
+        stat = candidate.stat()
+        return {
+            "path": str(candidate),
+            "label": str(candidate),
+            "mtime": int(stat.st_mtime),
+            "inside_config": inside_config,
+        }
+
+    def _resolve_importable_hardware_config(raw_path: str) -> Path:
+        try:
+            base = Path(raw_path).expanduser().resolve()
+        except OSError as exc:
+            raise ValueError("ERR_INVALID_PATH") from exc
+
+        candidate = base / "hardware-configuration.nix" if base.is_dir() else base
+        if candidate.name != "hardware-configuration.nix":
+            raise ValueError("ERR_INVALID_PATH")
+        if not candidate.exists() or not candidate.is_file():
+            raise ValueError("ERR_FILE_NOT_FOUND")
+        return candidate
+
+    @app.route("/api/files/hardware-configs")
+    def list_hardware_config_candidates():
+        """Return importable hardware-configuration.nix candidates from known local paths."""
+        nixos_dir, err = _require_setup()
+        if err:
+            return err
+
+        root = Path(nixos_dir).resolve()
+        configs = []
+        for raw in importer.find_hardware_configs():
+            try:
+                path = _resolve_importable_hardware_config(raw)
+                configs.append(_hardware_config_meta(path, root))
+            except (OSError, ValueError):
+                continue
+
+        return jsonify({"configs": configs})
+
+    @app.route("/api/files/hardware-configs/check", methods=["POST"])
+    def check_manual_hardware_config_candidate():
+        """Check a manual file or directory path for a direct hardware-configuration.nix candidate."""
+        if err := _check_csrf():
+            return err
+        nixos_dir, err = _require_setup()
+        if err:
+            return err
+
+        body = request.get_json(silent=True) or {}
+        raw_path = (body.get("path") or "").strip()
+        if not raw_path:
+            return jsonify({"error": "ERR_NO_PATH"}), 400
+
+        root = Path(nixos_dir).resolve()
+        inside_config = False
+        try:
+            candidate = _resolve_importable_hardware_config(raw_path)
+            candidate.relative_to(root)
+            inside_config = True
+        except ValueError as exc:
+            code = str(exc)
+            if code in {"ERR_INVALID_PATH", "ERR_FILE_NOT_FOUND"}:
+                return jsonify({"error": code}), 400 if code == "ERR_INVALID_PATH" else 404
+            inside_config = False
+            try:
+                candidate = _resolve_importable_hardware_config(raw_path)
+            except ValueError as inner_exc:
+                code = str(inner_exc)
+                return jsonify({"error": code}), 400 if code == "ERR_INVALID_PATH" else 404
+        except OSError as exc:
+            return jsonify({"error": "ERR_FILE_READ", "detail": str(exc)}), 500
+
+        try:
+            return jsonify({"config": _hardware_config_meta(candidate, root)})
+        except OSError as exc:
+            return jsonify({"error": "ERR_FILE_READ", "detail": str(exc)}), 500
+
+    @app.route("/api/files/import-hardware", methods=["POST"])
+    def import_hardware_config_to_dir():
+        """Copy a chosen hardware-configuration.nix into a target config directory."""
+        if err := _check_csrf():
+            return err
+        nixos_dir, err = _require_setup()
+        if err:
+            return err
+
+        body = request.get_json(silent=True) or {}
+        if "target_dir" not in body:
+            return jsonify({"error": "ERR_NO_DIR"}), 400
+        rel_dir_raw = body.get("target_dir")
+        rel_dir = rel_dir_raw.strip() if isinstance(rel_dir_raw, str) else ""
+        src_path = (body.get("source_path") or "").strip()
+        if not src_path:
+            return jsonify({"error": "ERR_NO_PATH"}), 400
+
+        root = Path(nixos_dir).resolve()
+        target_dir = (root / rel_dir).resolve()
+        try:
+            target_dir.relative_to(root)
+        except ValueError:
+            return jsonify({"error": "ERR_SYSTEM_PATH"}), 403
+        if not target_dir.exists() or not target_dir.is_dir():
+            return jsonify({"error": "ERR_NOT_A_DIR"}), 400
+
+        try:
+            src = _resolve_importable_hardware_config(src_path)
+        except ValueError as exc:
+            code = str(exc)
+            return jsonify({"error": code}), 400 if code == "ERR_INVALID_PATH" else 404
+
+        dst = target_dir / "hardware-configuration.nix"
+        backup = target_dir / "hardware-configuration.nix.bak"
+
+        try:
+            if dst.exists():
+                if backup.exists():
+                    backup.unlink()
+                dst.replace(backup)
+            shutil.copy2(src, dst)
+        except PermissionError:
+            return jsonify({"error": "ERR_IMPORT_PERMISSION"}), 403
+        except OSError as exc:
+            return jsonify({"error": "ERR_FILE_WRITE", "detail": str(exc)}), 500
+
+        return jsonify({
+            "success": True,
+            "target_path": str(dst.relative_to(root)),
+            "backup_created": backup.exists(),
+            "source_path": str(src),
+        })
+
+    def _resolve_config_rel(root: Path, rel_path: str) -> Path:
+        target = (root / rel_path).resolve()
+        target.relative_to(root)
+        return target
+
+    def _validate_entry_name(name: str, *, file_name: bool = False) -> str | None:
+        cleaned = (name or "").strip()
+        if not cleaned or cleaned in {".", ".."}:
+            return None
+        if not _SAFE_NAME_RE.fullmatch(cleaned):
+            return None
+        if file_name and not cleaned.endswith((".nix", ".lock")):
+            return None
+        return cleaned
+
+    @app.route("/api/files/create", methods=["POST"])
+    def create_file_entry():
+        if err := _check_csrf():
+            return err
+        nixos_dir, err = _require_setup()
+        if err:
+            return err
+
+        body = request.get_json(silent=True) or {}
+        parent_rel = (body.get("parent_path") or "").strip()
+        entry_name = _validate_entry_name(body.get("name", ""), file_name=(body.get("type") == "file"))
+        entry_type = (body.get("type") or "").strip()
+        if entry_type not in {"file", "dir"}:
+            return jsonify({"error": "ERR_INVALID_PATH"}), 400
+        if not entry_name:
+            return jsonify({"error": "ERR_INVALID_NAME"}), 400
+
+        root = Path(nixos_dir).resolve()
+        try:
+            parent = _resolve_config_rel(root, parent_rel)
+        except ValueError:
+            return jsonify({"error": "ERR_SYSTEM_PATH"}), 403
+        if not parent.exists() or not parent.is_dir():
+            return jsonify({"error": "ERR_NOT_A_DIR"}), 400
+
+        target = parent / entry_name
+        if target.exists():
+            return jsonify({"error": "ERR_FILE_EXISTS"}), 409
+
+        try:
+            if entry_type == "dir":
+                target.mkdir(parents=False, exist_ok=False)
+            else:
+                target.write_text("", encoding="utf-8")
+        except OSError as exc:
+            return jsonify({"error": "ERR_FILE_WRITE", "detail": str(exc)}), 500
+
+        return jsonify({
+            "success": True,
+            "path": str(target.relative_to(root)),
+            "type": entry_type,
+        })
+
+    @app.route("/api/files/rename", methods=["POST"])
+    def rename_file_entry():
+        if err := _check_csrf():
+            return err
+        nixos_dir, err = _require_setup()
+        if err:
+            return err
+
+        body = request.get_json(silent=True) or {}
+        rel = (body.get("path") or "").strip()
+        if not rel:
+            return jsonify({"error": "ERR_NO_PATH"}), 400
+
+        root = Path(nixos_dir).resolve()
+        try:
+            target = _resolve_config_rel(root, rel)
+        except ValueError:
+            return jsonify({"error": "ERR_SYSTEM_PATH"}), 403
+        if not target.exists():
+            return jsonify({"error": "ERR_FILE_NOT_FOUND"}), 404
+
+        is_file = target.is_file()
+        new_name = _validate_entry_name(body.get("new_name", ""), file_name=is_file)
+        if not new_name:
+            return jsonify({"error": "ERR_INVALID_NAME"}), 400
+
+        dest = target.with_name(new_name)
+        try:
+            dest.relative_to(root)
+        except ValueError:
+            return jsonify({"error": "ERR_SYSTEM_PATH"}), 403
+        if dest.exists():
+            return jsonify({"error": "ERR_FILE_EXISTS"}), 409
+
+        try:
+            target.rename(dest)
+        except OSError as exc:
+            return jsonify({"error": "ERR_FILE_WRITE", "detail": str(exc)}), 500
+
+        return jsonify({
+            "success": True,
+            "old_path": rel,
+            "new_path": str(dest.relative_to(root)),
+        })
+
+    @app.route("/api/files/delete", methods=["POST"])
+    def delete_file_entry():
+        if err := _check_csrf():
+            return err
+        nixos_dir, err = _require_setup()
+        if err:
+            return err
+
+        body = request.get_json(silent=True) or {}
+        rel = (body.get("path") or "").strip()
+        if not rel:
+            return jsonify({"error": "ERR_NO_PATH"}), 400
+
+        root = Path(nixos_dir).resolve()
+        try:
+            target = _resolve_config_rel(root, rel)
+        except ValueError:
+            return jsonify({"error": "ERR_SYSTEM_PATH"}), 403
+        if target == root:
+            return jsonify({"error": "ERR_SYSTEM_PATH"}), 403
+        if not target.exists():
+            return jsonify({"error": "ERR_FILE_NOT_FOUND"}), 404
+
+        try:
+            if target.is_dir():
+                shutil.rmtree(target)
+            else:
+                target.unlink()
+        except OSError as exc:
+            return jsonify({"error": "ERR_FILE_WRITE", "detail": str(exc)}), 500
+
+        return jsonify({"success": True, "deleted_path": rel})
 
     @app.route("/api/files/info")
     def files_info():
