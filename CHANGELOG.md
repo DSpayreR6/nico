@@ -2,8 +2,21 @@
 
 ## Unreleased
 
-### Pull button in startup guard
-When the local Git repository is behind the remote, the startup guard dialog now offers a "Pull & Neu laden" button in addition to "Abbrechen" and "Trotzdem lokal öffnen". Clicking it runs `git pull` and reloads NiCo on success; on failure, the error message is shown inline. For `diverged` repositories (local commits ahead *and* behind), the dialog is now a hard stop with only an "OK" button that returns to the setup screen – a pull would risk merge conflicts and NiCo cannot safely work in that state.
+### Git push/pull workflow
+The startup guard dialog now covers all git states with actionable cards before NiCo loads the config:
+- **`behind`**: "Online-Stand holen" card (git pull, green) – reloads on success
+- **`dirty`**: "Lokal verwerfen" card (git reset --hard + clean, red) and "Aktuellen Stand hochladen" card (auto-commit + push, blue)
+- **`ahead`**: "Lokale Commits hochladen" card (git push, blue) and "Lokal verwerfen" card (red)
+- **`diverged`**: hard stop, info only – no action possible, must be resolved manually in the terminal
+- All card actions reload NiCo on success; errors shown inline in the dialog
+
+**Git Push button** added to the NixOS action menu (blue, visible only when a remote is configured). On failure, an error modal with OK button is shown.
+
+**Auto-push settings** added to Admin → Config-Settings (travels with the config, only visible when remote is present):
+- Push automatically after every save
+- Push automatically after a successful rebuild
+
+The save endpoints (`/api/config/write`, host write, raw file write) return `pushed`/`push_error` fields when auto-push is enabled; the frontend shows a combined "Gespeichert und gepusht" toast or a push error modal.
 
 ### Detach config from NiCo
 The active configuration can now be detached from NiCo. NiCo creates a ZIP backup of the current config, removes NiCo-specific comment and marker lines from all `.nix` files, deletes the config metadata JSON, clears the stored config path, and returns to the initial setup state.
