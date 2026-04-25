@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Bug fixes
+
+- **Auto-Reload nach Pfad-Änderung**: Nach dem Speichern eines neuen NixOS-Config-Pfads in den App-Settings lädt NiCo jetzt automatisch neu, sodass die neue Konfiguration sofort aktiv wird.
+- **Sektion-Header für reine Brix-Blöcke**: Wenn eine Sektion (z. B. „Hardware") nur Nix-Brix enthält, aber keine Formularfelder gesetzt sind, wurde bisher kein Sektions-Header in `configuration.nix` erzeugt – dadurch konnte das rechte Code-Panel nicht mit dem linken Panel synchronisiert werden. Der Generator emittiert jetzt immer einen Sektions-Header, wenn für die Sektion Brix vorhanden sind.
+- **Cross-Token-Suche**: Prism.js zerlegt NixOS-Attribute wie `services.printing` in mehrere DOM-Knoten (Punkt als eigenes Token). Die Suche konnte daher solche Begriffe nicht finden. Die Implementierung von `markTextInElement` wurde auf eine positionsbasierte Methode umgestellt, die den vollständigen Text über alle Knoten hinweg durchsucht und Treffer präzise zurückschreibt.
+
 ### Git push/pull workflow
 The startup guard dialog now covers all git states with actionable cards before NiCo loads the config:
 - **`behind`**: "Online-Stand holen" card (git pull, green) – reloads on success

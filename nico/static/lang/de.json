@@ -364,6 +364,24 @@
   "git.guard.uploadError": "Hochladen fehlgeschlagen: {0}",
   "git.guard.pushError": "Push fehlgeschlagen: {0}",
 
+  "git.guard.s2.fetchTitle": "Alles vom Remote holen",
+  "git.guard.s2.fetchDesc": "Der lokale Stand wird vollständig durch den Remote-Stand ersetzt. Lokale Commits und Änderungen gehen unwiederbringlich verloren.",
+  "git.guard.s2.fetchBtn": "Jetzt holen",
+  "git.guard.s2.sendTitle": "Lokalen Stand erzwungen senden",
+  "git.guard.s2.sendDesc": "Der lokale Stand wird erzwungen zum Remote geschrieben. Remote-Änderungen gehen unwiederbringlich verloren.",
+  "git.guard.s2.sendBtn": "Jetzt senden",
+  "git.guard.s2.abort": "Abbrechen – ohne Config öffnen",
+  "git.guard.s2.fetchError": "Holen fehlgeschlagen: {0}",
+  "git.guard.s2.sendError": "Senden fehlgeschlagen: {0}",
+
+  "git.aborted.info": "NiCo wurde ohne geladene Config geöffnet.\nÜber das NixOS-Menü kann eine Config neu konfiguriert werden.",
+
+  "git.closePrompt.title": "Lokale Änderungen noch nicht gepusht",
+  "git.closePrompt.body": "Es gibt lokale Commits oder uncommittete Änderungen die noch nicht online sind. Jetzt pushen bevor NiCo beendet wird?",
+  "git.closePrompt.yes": "Ja, pushen",
+  "git.closePrompt.no": "Nein, nur beenden",
+  "git.closePrompt.error": "Push fehlgeschlagen: {0}",
+
   "git.pushSuccess": "Erfolgreich gepusht.",
   "git.pushAutoSuccess": "Gespeichert und gepusht.",
   "git.pushFailedTitle": "Push fehlgeschlagen",

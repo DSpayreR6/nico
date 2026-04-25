@@ -708,14 +708,13 @@ async function fetchGitStartCheck() {
 }
 
 function _gitGuardNeedsDialog(check) {
-  return ['dirty', 'behind', 'ahead', 'diverged', 'error'].includes(check?.state);
+  return ['dirty', 'behind', 'diverged', 'error'].includes(check?.state);
 }
 
 function _gitGuardSeverity(check) {
   if (check.state === 'diverged') return 'diverged';
   if (check.state === 'behind')   return 'behind';
   if (check.state === 'dirty')    return 'dirty';
-  if (check.state === 'ahead')    return 'ahead';
   return 'error';
 }
 
@@ -755,64 +754,60 @@ function _gitGuardMessage(check) {
   };
 }
 
+function showAbortedState(configDir) {
+  window._nicoAborted = true;
+  showApp(configDir || '');
+  document.querySelector('aside.settings-panel')?.style.setProperty('display', 'none');
+  document.getElementById('sidebar')?.style.setProperty('display', 'none');
+  document.querySelector('.tab-bar')?.style.setProperty('display', 'none');
+  const previewPanel = document.getElementById('preview-panel');
+  if (previewPanel) {
+    previewPanel.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--subtext0);font-family:monospace;padding:2rem;text-align:center;white-space:pre-line">${escHtml(t('git.aborted.info'))}</div>`;
+  }
+}
+
 function showGitStartGuard(check, configDir) {
   return new Promise(resolve => {
-    const msg        = _gitGuardMessage(check);
-    const isDiverged = check.state === 'diverged';
-    const isError    = check.state === 'error';
-
-    // Build action cards per state
-    const cards = [];
-    if (check.state === 'behind') {
-      cards.push({ id: 'pull',   warn: false, btnClass: 'btn-green',
-        title: t('git.guard.cardPull.title'),
-        desc:  t('git.guard.cardPull.desc', check.behind),
-        btn:   t('git.guard.cardPull.btn') });
-    } else if (check.state === 'dirty') {
-      cards.push({ id: 'reset',  warn: true,  btnClass: 'btn-red',
-        title: t('git.guard.cardReset.title'),
-        desc:  t('git.guard.cardReset.desc'),
-        btn:   t('git.guard.cardReset.btn') });
-      cards.push({ id: 'upload', warn: false, btnClass: 'btn-blue',
-        title: t('git.guard.cardUpload.title'),
-        desc:  t('git.guard.cardUpload.desc'),
-        btn:   t('git.guard.cardUpload.btn') });
-    } else if (check.state === 'ahead') {
-      cards.push({ id: 'push',   warn: false, btnClass: 'btn-blue',
-        title: t('git.guard.cardPush.title'),
-        desc:  t('git.guard.cardPush.desc', check.ahead),
-        btn:   t('git.guard.cardPush.btn') });
-      cards.push({ id: 'reset',  warn: true,  btnClass: 'btn-red',
-        title: t('git.guard.cardReset.title'),
-        desc:  t('git.guard.cardResetAhead.desc'),
-        btn:   t('git.guard.cardReset.btn') });
-    }
-
-    const cardsHtml = cards.map(c => `
-      <div class="git-guard-card${c.warn ? ' git-guard-card--warn' : ''}">
-        <div class="git-guard-card-info">
-          <div class="git-guard-card-title">${escHtml(c.title)}</div>
-          <div class="git-guard-card-desc">${escHtml(c.desc)}</div>
-        </div>
-        <button type="button" data-card="${escHtml(c.id)}"
-                class="action-btn ${c.btnClass}">${escHtml(c.btn)}</button>
-      </div>`).join('');
-
-    const showRec  = isDiverged || isError;
-    const recHtml  = showRec ? `<p class="confirm-text" style="border-left-color:var(--red)">${escHtml(msg.recommendation)}</p>` : '';
-
-    let secondaryHtml;
-    if (isDiverged) {
-      secondaryHtml = `<button type="button" id="_gs-ok" class="action-btn btn-red">${escHtml(t('git.startGuardDivergedClose'))}</button>`;
-    } else {
-      secondaryHtml = `
-        <button type="button" id="_gs-cancel" class="btn-surface">${escHtml(t('git.startGuardCancel'))}</button>
-        <button type="button" id="_gs-open"   class="btn-surface">${escHtml(t('git.startGuardProceed'))}</button>`;
-    }
+    const msg     = _gitGuardMessage(check);
+    const isError = check.state === 'error';
+    // Scenario 2: behind / dirty / diverged → two action cards + abort
+    const isScenario2 = ['behind', 'dirty', 'diverged'].includes(check.state);
 
     const pathHtml = configDir
       ? `<p class="git-guard-path">${escHtml(configDir)}</p>`
       : '';
+
+    let cardsHtml = '';
+    let secondaryHtml = '';
+
+    if (isScenario2) {
+      cardsHtml = `
+        <div class="git-guard-card">
+          <div class="git-guard-card-info">
+            <div class="git-guard-card-title">${escHtml(t('git.guard.s2.fetchTitle'))}</div>
+            <div class="git-guard-card-desc">${escHtml(t('git.guard.s2.fetchDesc'))}</div>
+          </div>
+          <button type="button" data-card="fetch" class="action-btn btn-green">${escHtml(t('git.guard.s2.fetchBtn'))}</button>
+        </div>
+        <div class="git-guard-card git-guard-card--warn">
+          <div class="git-guard-card-info">
+            <div class="git-guard-card-title">${escHtml(t('git.guard.s2.sendTitle'))}</div>
+            <div class="git-guard-card-desc">${escHtml(t('git.guard.s2.sendDesc'))}</div>
+          </div>
+          <button type="button" data-card="send" class="action-btn btn-red">${escHtml(t('git.guard.s2.sendBtn'))}</button>
+        </div>`;
+      secondaryHtml = `<button type="button" id="_gs-abort" class="btn-surface">${escHtml(t('git.guard.s2.abort'))}</button>`;
+    } else {
+      // error state: offer local open or abort
+      secondaryHtml = `
+        <button type="button" id="_gs-abort"  class="btn-surface">${escHtml(t('git.startGuardCancel'))}</button>
+        <button type="button" id="_gs-open"   class="btn-surface">${escHtml(t('git.startGuardProceed'))}</button>`;
+    }
+
+    const recHtml = isError
+      ? `<p class="confirm-text" style="border-left-color:var(--red)">${escHtml(msg.recommendation)}</p>`
+      : '';
+    const bodyHtml = isScenario2 ? '' : `<p>${escHtml(msg.body)}</p>`;
 
     const overlay = document.createElement('div');
     overlay.className = 'overlay';
@@ -820,7 +815,7 @@ function showGitStartGuard(check, configDir) {
       <div class="modal">
         <div class="modal-logo">${escHtml(msg.title)}</div>
         ${pathHtml}
-        <p>${escHtml(msg.body)}</p>
+        ${bodyHtml}
         ${recHtml}
         <p id="_gs-err" style="color:var(--red);display:none;margin-top:8px"></p>
         <div class="git-guard-cards">${cardsHtml}</div>
@@ -829,11 +824,10 @@ function showGitStartGuard(check, configDir) {
     document.body.appendChild(overlay);
 
     const errEl  = overlay.querySelector('#_gs-err');
-    const finish = proceed => { overlay.remove(); resolve(proceed); };
+    const finish = result => { overlay.remove(); resolve(result); };
 
-    overlay.querySelector('#_gs-ok')?.addEventListener('click',     () => finish(false));
-    overlay.querySelector('#_gs-cancel')?.addEventListener('click', () => finish(false));
-    overlay.querySelector('#_gs-open')?.addEventListener('click',   () => finish(true));
+    overlay.querySelector('#_gs-abort')?.addEventListener('click', () => finish('aborted'));
+    overlay.querySelector('#_gs-open')?.addEventListener('click',  () => finish(true));
 
     overlay.querySelectorAll('[data-card]').forEach(btn => {
       btn.addEventListener('click', async () => {
@@ -844,17 +838,22 @@ function showGitStartGuard(check, configDir) {
         errEl.style.display = 'none';
         try {
           const endpointMap = {
-            pull:   '/api/git/pull',
-            reset:  '/api/git/reset-hard',
-            upload: '/api/git/commit-push',
-            push:   '/api/git/push',
+            fetch: '/api/git/reset-hard',   // reset to origin then pull
+            send:  '/api/git/commit-push-force',
           };
           const errKeyMap = {
-            pull:   'git.startGuardPullError',
-            reset:  'git.guard.resetError',
-            upload: 'git.guard.uploadError',
-            push:   'git.guard.pushError',
+            fetch: 'git.guard.s2.fetchError',
+            send:  'git.guard.s2.sendError',
           };
+          // For fetch: reset-hard brings us to origin, then pull gets latest
+          if (cardId === 'fetch') {
+            const r1 = await csrfFetch('/api/git/reset-hard', { method: 'POST' });
+            const d1 = await r1.json();
+            if (!d1.success) throw new Error(d1.message || '');
+            await csrfFetch('/api/git/pull', { method: 'POST' }).catch(() => {});
+            location.reload();
+            return;
+          }
           const res  = await csrfFetch(endpointMap[cardId], { method: 'POST' });
           const data = await res.json();
           if (data.success) {
@@ -872,10 +871,6 @@ function showGitStartGuard(check, configDir) {
           btn.textContent     = origText;
         }
       });
-    });
-
-    overlay.addEventListener('click', e => {
-      if (e.target === overlay && !isDiverged) finish(false);
     });
   });
 }
@@ -901,12 +896,16 @@ async function ensureGitStartGuard(configDir) {
     return true;
   }
 
-  const proceed = await showGitStartGuard(check, configDir);
-  if (proceed) {
+  const result = await showGitStartGuard(check, configDir);
+  if (result === true) {
     _startGuardApproved = configDir;
     return true;
   }
-
+  if (result === 'aborted') {
+    showAbortedState(configDir);
+    return false;
+  }
+  // error state: user cancelled → back to setup
   showSetupOverlay();
   document.getElementById('nixos-dir-input').value = configDir || '';
   return false;
@@ -1202,9 +1201,8 @@ function initSettingsPanel() {
           return;
         }
       }
-      changeRow.classList.add('hidden');
-      await loadSettingsPath();
       showToast(t('toast.saved'), 'success');
+      setTimeout(() => location.reload(), 800);
     } catch (e) {
       errorDiv.textContent = t('toast.error');
       errorDiv.classList.remove('hidden');
@@ -2486,8 +2484,9 @@ async function togglePlainCodeView() {
 // ── Code preview – section-aware & brick-aware rendering ──────────────────
 const SECTION_RE    = /^\s*# ── (.+?) [─]+\s*$/;
 // New brick format: # <brick: SectionName / #N brick-name>
-const BRICK_START_RE = /^# <brick:\s*([^/]+?)\s*\/\s*#(\d+)\s+([\w\-]+)\s*>/;
-const BRICK_END_RE   = /^# <\/brick:\s*([\w\-]+)\s*>/;
+// \s* handles legacy files where markers were indented (e.g. "  # <brick: ...>")
+const BRICK_START_RE = /^\s*# <brick:\s*([^/]+?)\s*\/\s*#(\d+)\s+([\w\-]+)\s*>/;
+const BRICK_END_RE   = /^\s*# <\/brick:\s*([\w\-]+)\s*>/;
 
 // Canonical list of NiCo sections (mirrors brix.py SECTION_ORDER)
 const BRICK_SECTIONS = [
@@ -2822,8 +2821,9 @@ const _SECTION_SYNC_MAP = {
 };
 
 function toggleSection(name) {
-  if (collapsedSections.has(name)) collapsedSections.delete(name);
-  else                              collapsedSections.add(name);
+  const wasCollapsed = collapsedSections.has(name);
+  if (wasCollapsed) collapsedSections.delete(name);
+  else              collapsedSections.add(name);
 
   const syncName = _SECTION_SYNC_MAP[name];
   if (syncName) {
@@ -2833,6 +2833,12 @@ function toggleSection(name) {
 
   localStorage.setItem('nico-collapsed', JSON.stringify([...collapsedSections]));
   applySectionCollapse();
+
+  // Scroll the code section into view when expanding
+  if (wasCollapsed) {
+    const codeSection = document.querySelector(`.code-section[data-section="${name.replace(/"/g, '\\"')}"]`);
+    if (codeSection) setTimeout(() => codeSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 50);
+  }
 }
 
 function toggleBrix(name, wrapEl) {
@@ -3472,37 +3478,81 @@ async function saveBrixInline(name, content, file = 'configuration.nix') {
 // pushing additional entries into currentFiles – no search logic changes.
 
 /**
- * Walk all text nodes inside `root` and wrap matches with <mark class="search-match">.
- * Returns the number of matches found.
+ * Walk all text nodes inside `root`, find regex matches in the full plain text
+ * (ignoring Prism token boundaries), and wrap matched segments with
+ * <mark class="search-match">.  Returns the number of logical matches found.
+ *
+ * Handles matches that span multiple Prism span elements (e.g. "services.printing"
+ * where "." is a separate punctuation token) by marking each segment individually.
  */
 function markTextInElement(root, re) {
+  // Collect all text nodes and their positions in the concatenated plain text
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-  const nodes  = [];
+  const textNodes = [];
   let node;
-  while ((node = walker.nextNode())) nodes.push(node);
+  while ((node = walker.nextNode())) textNodes.push(node);
+  if (textNodes.length === 0) return 0;
 
-  let count = 0;
-  for (const tn of nodes) {
+  let pos = 0;
+  const nodeRanges = textNodes.map(tn => {
+    const start = pos;
+    pos += tn.textContent.length;
+    return { node: tn, start, end: pos };
+  });
+
+  const fullText = textNodes.map(tn => tn.textContent).join('');
+
+  // Find all match positions in the full plain text
+  re.lastIndex = 0;
+  const matches = [];
+  let m;
+  while ((m = re.exec(fullText)) !== null) {
+    matches.push({ start: m.index, end: m.index + m[0].length });
+  }
+  if (matches.length === 0) return 0;
+
+  // For each text node, collect local intervals to mark
+  const nodeIntervals = textNodes.map(() => []);
+  for (const { start: mStart, end: mEnd } of matches) {
+    for (let ni = 0; ni < nodeRanges.length; ni++) {
+      const nr = nodeRanges[ni];
+      if (nr.end <= mStart || nr.start >= mEnd) continue;
+      nodeIntervals[ni].push({
+        localStart: Math.max(0, mStart - nr.start),
+        localEnd:   Math.min(nr.end - nr.start, mEnd - nr.start),
+      });
+    }
+  }
+
+  // Apply marks to each text node in reverse DOM order (avoids position shifts)
+  for (let ni = textNodes.length - 1; ni >= 0; ni--) {
+    const intervals = nodeIntervals[ni];
+    if (intervals.length === 0) continue;
+
+    const tn   = textNodes[ni];
     const text = tn.textContent;
-    re.lastIndex = 0;
-    if (!re.test(text)) { re.lastIndex = 0; continue; }
-    re.lastIndex = 0;
 
-    const frag = document.createDocumentFragment();
-    let last = 0, m;
-    while ((m = re.exec(text)) !== null) {
-      frag.appendChild(document.createTextNode(text.slice(last, m.index)));
+    // Sort intervals by start desc so we can process right-to-left
+    intervals.sort((a, b) => b.localStart - a.localStart);
+
+    const parts = [];
+    let lastEnd = text.length;
+    for (const { localStart, localEnd } of intervals) {
+      if (localEnd < lastEnd) parts.unshift(document.createTextNode(text.slice(localEnd, lastEnd)));
       const mark = document.createElement('mark');
       mark.className   = 'search-match';
-      mark.textContent = m[0];
-      frag.appendChild(mark);
-      last = m.index + m[0].length;
-      count++;
+      mark.textContent = text.slice(localStart, localEnd);
+      parts.unshift(mark);
+      lastEnd = localStart;
     }
-    frag.appendChild(document.createTextNode(text.slice(last)));
+    if (lastEnd > 0) parts.unshift(document.createTextNode(text.slice(0, lastEnd)));
+
+    const frag = document.createDocumentFragment();
+    for (const p of parts) frag.appendChild(p);
     tn.parentNode.replaceChild(frag, tn);
   }
-  return count;
+
+  return matches.length;
 }
 
 /** Remove all search marks from the DOM (restores plain text nodes). */
@@ -3561,13 +3611,20 @@ function updateSearchCount() {
   const el = document.getElementById('search-count');
   if (!el) return;
 
-  const totalInTab = searchMatches.length;
+  // Use raw-content match count for display (immune to Prism token splitting).
+  // searchMatches.length can be inflated when a match spans multiple Prism tokens.
+  const activeFile = currentFiles.find(f => f.tabId === activeTab);
+  const totalInTab = activeFile?.matchCount ?? 0;
   if (!activeSearch) { el.textContent = ''; return; }
   if (totalInTab === 0) {
     const totalAll = currentFiles.reduce((s, f) => s + f.matchCount, 0);
     el.textContent = totalAll === 0 ? t('search.noResults') : t('search.noResultsHere');
   } else {
-    el.textContent = `${searchMatchIdx + 1}/${totalInTab}`;
+    // For navigation index, clamp to totalInTab so display never shows e.g. "4/2"
+    const displayIdx = searchMatches.length > 0
+      ? Math.min(searchMatchIdx + 1, totalInTab)
+      : 1;
+    el.textContent = `${displayIdx}/${totalInTab}`;
   }
 
   // Hint for matches in other files
@@ -5006,6 +5063,30 @@ function bindUI() {
     if (!confirm(t('quit.confirm'))) return;
     await _autoSave();
     await Sidebar.flakeSave();
+
+    // Close-check: prompt push if remote exists and local is ahead/dirty,
+    // but only when NiCo loaded a config normally (not in aborted state).
+    if (!window._nicoAborted) {
+      try {
+        const ccRes  = await csrfFetch('/api/git/close-check');
+        const ccData = await ccRes.json();
+        if (ccData.has_remote && ccData.needs_push) {
+          const doPush = confirm(
+            t('git.closePrompt.title') + '\n\n' +
+            t('git.closePrompt.body') + '\n\n' +
+            t('git.closePrompt.yes') + ' / ' + t('git.closePrompt.no')
+          );
+          if (doPush) {
+            const pushRes  = await csrfFetch('/api/git/commit-push', { method: 'POST' });
+            const pushData = await pushRes.json();
+            if (!pushData.success) {
+              alert(t('git.closePrompt.error', pushData.message || ''));
+            }
+          }
+        }
+      } catch (_) { /* network down – proceed with shutdown */ }
+    }
+
     await csrfFetch('/api/shutdown', { method: 'POST' }).catch(() => {});
     window.close();
     document.body.innerHTML = `<p style="font-family:monospace;padding:2rem;color:#cdd6f4">${escHtml(t('quit.done'))}</p>`;

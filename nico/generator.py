@@ -61,6 +61,11 @@ def _section(name: str) -> str:
     return f"\n  # ── {name} {dashes}"
 
 
+def _has_section_brix(brix: dict, section: str) -> bool:
+    """Return True if any brick block belongs to *section*."""
+    return any(b.get("section") == section for b in brix.values())
+
+
 _DE_SNIPPETS: dict[str, str] = {
     "none": "",
     "gnome": """\
@@ -161,18 +166,19 @@ def generate_configuration_nix(data: dict) -> str:
     boot_efi_mount     = (data.get("boot_efi_mount_point", "/boot") or "/boot").strip()
     boot_config_limit  = int(data.get("boot_config_limit",  5) or 5)
 
-    if boot_loader != "none":
+    if boot_loader != "none" or _has_section_brix(brix, "Boot"):
         lines += [_section("Boot")]
-        if boot_loader == "systemd-boot":
-            lines += [
-                "  boot.loader.systemd-boot.enable = true;",
-                f"  boot.loader.systemd-boot.configurationLimit = {boot_config_limit};",
-            ]
-        elif boot_loader == "grub":
-            lines += ["  boot.loader.grub.enable = true;"]
-        lines += [f'  boot.loader.efi.canTouchEfiVariables = {"true" if boot_efi_can_touch else "false"};']
-        if boot_efi_mount != "/boot":
-            lines += [f'  boot.loader.efi.efiSysMountPoint = "{boot_efi_mount}";']
+        if boot_loader != "none":
+            if boot_loader == "systemd-boot":
+                lines += [
+                    "  boot.loader.systemd-boot.enable = true;",
+                    f"  boot.loader.systemd-boot.configurationLimit = {boot_config_limit};",
+                ]
+            elif boot_loader == "grub":
+                lines += ["  boot.loader.grub.enable = true;"]
+            lines += [f'  boot.loader.efi.canTouchEfiVariables = {"true" if boot_efi_can_touch else "false"};']
+            if boot_efi_mount != "/boot":
+                lines += [f'  boot.loader.efi.efiSysMountPoint = "{boot_efi_mount}";']
 
     # ── System ────────────────────────────────────────────────────────────
     lines += [_section("System")]
@@ -214,12 +220,12 @@ def generate_configuration_nix(data: dict) -> str:
         ]
     if kb_console:
         loc_lines += [f'  console.keyMap = "{kb_console}";']
-    if loc_lines:
+    if loc_lines or _has_section_brix(brix, "Lokalisierung"):
         lines += [_section("Lokalisierung")] + loc_lines
 
     # ── Netzwerk ───────────────────────────────────────────────────────────
     fw_has_content = fw_disable or fw_tcp or fw_udp
-    if networkmanager or ssh or fw_has_content:
+    if networkmanager or ssh or fw_has_content or _has_section_brix(brix, "Netzwerk"):
         lines += [_section("Netzwerk")]
         if networkmanager:
             lines += ["  networking.networkmanager.enable = true;"]
@@ -233,8 +239,10 @@ def generate_configuration_nix(data: dict) -> str:
             lines += [f"  networking.firewall.allowedUDPPorts = [ {' '.join(fw_udp)} ];"]
 
     # ── Services ───────────────────────────────────────────────────────────
-    if printing or avahi or bluetooth:
+    _svc_header_added = False
+    if printing or avahi or bluetooth or _has_section_brix(brix, "Services"):
         lines += [_section("Services")]
+        _svc_header_added = True
         if printing:
             lines += ["  services.printing.enable = true;"]
         if avahi:
@@ -264,13 +272,13 @@ def generate_configuration_nix(data: dict) -> str:
     if sunshine:
         svc2_lines += ["  services.sunshine.enable = true;"]
     if svc2_lines:
-        if not (printing or avahi or bluetooth):
+        if not _svc_header_added:
             lines += [_section("Services")]
         lines += svc2_lines
 
     # ── Desktop ────────────────────────────────────────────────────────────
     de_snippet = _DE_SNIPPETS.get(de, "")
-    if de_snippet or autologin_user:
+    if de_snippet or autologin_user or _has_section_brix(brix, "Desktop"):
         lines += [_section("Desktop")]
         if de_snippet:
             lines += [de_snippet]
@@ -284,19 +292,20 @@ def generate_configuration_nix(data: dict) -> str:
 
     # ── Audio ──────────────────────────────────────────────────────────────
     pipewire_32bit   = data.get("pipewire_32bit", False)
-    if pipewire:
-        lines += [
-            _section("Audio"),
-            "  services.pulseaudio.enable = false;",
-            "  security.rtkit.enable = true;",
-            "  services.pipewire = {",
-            "    enable = true;",
-            "    alsa.enable = true;",
-            "    pulse.enable = true;",
-            "  };",
-        ]
-        if pipewire_32bit:
-            lines += ["  services.pipewire.alsa.support32Bit = true;"]
+    if pipewire or _has_section_brix(brix, "Audio"):
+        lines += [_section("Audio")]
+        if pipewire:
+            lines += [
+                "  services.pulseaudio.enable = false;",
+                "  security.rtkit.enable = true;",
+                "  services.pipewire = {",
+                "    enable = true;",
+                "    alsa.enable = true;",
+                "    pulse.enable = true;",
+                "  };",
+            ]
+            if pipewire_32bit:
+                lines += ["  services.pipewire.alsa.support32Bit = true;"]
 
     # ── Benutzer ───────────────────────────────────────────────────────────
     if username:
@@ -330,6 +339,8 @@ def generate_configuration_nix(data: dict) -> str:
                 '    initialPassword = "";',
                 '  };',
             ]
+    elif _has_section_brix(brix, "Benutzer"):
+        lines += [_section("Benutzer")]
 
     # ── Weitere Benutzer ───────────────────────────────────────────────────
     for eu in extra_users:
@@ -401,7 +412,7 @@ def generate_configuration_nix(data: dict) -> str:
             pkg_lines,
             "  ];",
         ]
-    if prog_lines:
+    if prog_lines or _has_section_brix(brix, "Programme"):
         lines += [_section("Programme")] + prog_lines
 
     # ── Schriftarten ──────────────────────────────────────────────────────
@@ -413,6 +424,8 @@ def generate_configuration_nix(data: dict) -> str:
             font_lines,
             "  ];",
         ]
+    elif _has_section_brix(brix, "Schriftarten"):
+        lines += [_section("Schriftarten")]
 
     # ── Nix & System ──────────────────────────────────────────────────────
     nix_lines = []
@@ -430,7 +443,7 @@ def generate_configuration_nix(data: dict) -> str:
             f'    options = "--delete-older-than {nix_gc_age}";',
             "  };",
         ]
-    if nix_lines:
+    if nix_lines or _has_section_brix(brix, "Nix & System"):
         lines += [_section("Nix & System")] + nix_lines
 
     # ── Hardware ──────────────────────────────────────────────────────────────
@@ -462,7 +475,7 @@ def generate_configuration_nix(data: dict) -> str:
         hw_lines += ["  hardware.ledger.enable = true;"]
     if ratbagd:
         hw_lines += ["  services.ratbagd.enable = true;"]
-    if hw_lines:
+    if hw_lines or _has_section_brix(brix, "Hardware"):
         lines += [_section("Hardware")] + hw_lines
 
     # ── Virtualisierung ───────────────────────────────────────────────────────
@@ -500,7 +513,7 @@ def generate_configuration_nix(data: dict) -> str:
         virt_lines += ["  virtualisation.libvirtd.enable = true;"]
         if virt_manager:
             virt_lines += ["  programs.virt-manager.enable = true;"]
-    if virt_lines:
+    if virt_lines or _has_section_brix(brix, "Virtualisierung"):
         lines += [_section("Virtualisierung")] + virt_lines
 
     # ── Dateisystem & Backup ──────────────────────────────────────────────────
@@ -534,7 +547,7 @@ def generate_configuration_nix(data: dict) -> str:
         backup_lines += _snapper_cfg("home", "/home")
     if snapper_root:
         backup_lines += _snapper_cfg("root", "/")
-    if backup_lines:
+    if backup_lines or _has_section_brix(brix, "Dateisystem & Backup"):
         lines += [_section("Dateisystem & Backup")] + backup_lines
 
     # ── Home Manager NixOS-Modul ──────────────────────────────────────────
@@ -545,7 +558,7 @@ def generate_configuration_nix(data: dict) -> str:
     hm_extra_mods  = [l.strip() for l in hm_extra_raw.splitlines() if l.strip()]
     hm_shared_mods = (["plasma-manager.homeModules.plasma-manager"] if hm_plasma else []) + hm_extra_mods
 
-    if hm_use_global or hm_use_user or hm_shared_mods:
+    if hm_use_global or hm_use_user or hm_shared_mods or _has_section_brix(brix, "Home Manager"):
         lines += [_section("Home Manager")]
         if hm_shared_mods:
             lines += ["  home-manager.sharedModules = ["]
@@ -589,21 +602,22 @@ def generate_host_nix(data: dict, host_name: str, hw_config: bool = False) -> st
 
     # Boot
     boot_loader = data.get("boot_loader", "none") or "none"
-    if boot_loader != "none":
+    if boot_loader != "none" or _has_section_brix(brix, "Boot"):
         boot_efi_can_touch = data.get("boot_efi_can_touch", False)
         boot_efi_mount = (data.get("boot_efi_mount_point", "/boot") or "/boot").strip()
         boot_config_limit = int(data.get("boot_config_limit", 5) or 5)
         lines += [_section("Boot")]
-        if boot_loader == "systemd-boot":
-            lines += [
-                "  boot.loader.systemd-boot.enable = true;",
-                f"  boot.loader.systemd-boot.configurationLimit = {boot_config_limit};",
-            ]
-        elif boot_loader == "grub":
-            lines += ["  boot.loader.grub.enable = true;"]
-        lines += [f'  boot.loader.efi.canTouchEfiVariables = {"true" if boot_efi_can_touch else "false"};']
-        if boot_efi_mount != "/boot":
-            lines += [f'  boot.loader.efi.efiSysMountPoint = "{boot_efi_mount}";']
+        if boot_loader != "none":
+            if boot_loader == "systemd-boot":
+                lines += [
+                    "  boot.loader.systemd-boot.enable = true;",
+                    f"  boot.loader.systemd-boot.configurationLimit = {boot_config_limit};",
+                ]
+            elif boot_loader == "grub":
+                lines += ["  boot.loader.grub.enable = true;"]
+            lines += [f'  boot.loader.efi.canTouchEfiVariables = {"true" if boot_efi_can_touch else "false"};']
+            if boot_efi_mount != "/boot":
+                lines += [f'  boot.loader.efi.efiSysMountPoint = "{boot_efi_mount}";']
 
     # System
     sys_lines = []
@@ -645,7 +659,7 @@ def generate_host_nix(data: dict, host_name: str, hw_config: bool = False) -> st
         ]
     if data.get("keyboard_console"):
         loc_lines += [f'  console.keyMap = "{data["keyboard_console"]}";']
-    if loc_lines:
+    if loc_lines or _has_section_brix(brix, "Lokalisierung"):
         lines += [_section("Lokalisierung")] + loc_lines
 
     # Netzwerk
@@ -666,7 +680,7 @@ def generate_host_nix(data: dict, host_name: str, hw_config: bool = False) -> st
         fw_udp = [p for p in fw_udp_raw.split() if p.isdigit()]
         if fw_udp:
             net_lines += [f"  networking.firewall.allowedUDPPorts = [ {' '.join(fw_udp)} ];"]
-    if net_lines:
+    if net_lines or _has_section_brix(brix, "Netzwerk"):
         lines += [_section("Netzwerk")] + net_lines
 
     # Services
@@ -693,14 +707,14 @@ def generate_host_nix(data: dict, host_name: str, hw_config: bool = False) -> st
         svc_lines += ["  services.pcscd.enable = true;"]
     if data.get("sunshine"):
         svc_lines += ["  services.sunshine.enable = true;"]
-    if svc_lines:
+    if svc_lines or _has_section_brix(brix, "Services"):
         lines += [_section("Services")] + svc_lines
 
     # Desktop
     de = data.get("desktop_environment", "none") or "none"
     de_snippet = _DE_SNIPPETS.get(de, "")
     autologin_user = data.get("autologin_user", "")
-    if de_snippet or autologin_user:
+    if de_snippet or autologin_user or _has_section_brix(brix, "Desktop"):
         lines += [_section("Desktop")]
         if de_snippet:
             lines += [de_snippet]
@@ -726,7 +740,7 @@ def generate_host_nix(data: dict, host_name: str, hw_config: bool = False) -> st
         ]
     if data.get("pipewire_32bit"):
         audio_lines += ["  services.pipewire.alsa.support32Bit = true;"]
-    if audio_lines:
+    if audio_lines or _has_section_brix(brix, "Audio"):
         lines += [_section("Audio")] + audio_lines
 
     # Benutzer
@@ -765,6 +779,8 @@ def generate_host_nix(data: dict, host_name: str, hw_config: bool = False) -> st
                 '    initialPassword = "";',
                 "  };",
             ]
+    elif _has_section_brix(brix, "Benutzer"):
+        lines += [_section("Benutzer")]
 
     # Weitere Benutzer
     for eu in data.get("extra_users", []):
@@ -828,7 +844,7 @@ def generate_host_nix(data: dict, host_name: str, hw_config: bool = False) -> st
             pkg_lines,
             "  ];",
         ]
-    if prog_lines:
+    if prog_lines or _has_section_brix(brix, "Programme"):
         lines += [_section("Programme")] + prog_lines
 
     # Schriftarten (host-specific)
@@ -843,6 +859,8 @@ def generate_host_nix(data: dict, host_name: str, hw_config: bool = False) -> st
             *[f"    {f}" for f in fonts_all],
             "  ];",
         ]
+    elif _has_section_brix(brix, "Schriftarten"):
+        lines += [_section("Schriftarten")]
 
     # Nix & System
     nix_lines = []
@@ -861,7 +879,7 @@ def generate_host_nix(data: dict, host_name: str, hw_config: bool = False) -> st
             f'    options = "--delete-older-than {data.get("nix_gc_age", "30d")}";',
             "  };",
         ]
-    if nix_lines:
+    if nix_lines or _has_section_brix(brix, "Nix & System"):
         lines += [_section("Nix & System")] + nix_lines
 
     # Hardware
@@ -885,7 +903,7 @@ def generate_host_nix(data: dict, host_name: str, hw_config: bool = False) -> st
         hw_lines += ["  hardware.ledger.enable = true;"]
     if data.get("ratbagd"):
         hw_lines += ["  services.ratbagd.enable = true;"]
-    if hw_lines:
+    if hw_lines or _has_section_brix(brix, "Hardware"):
         lines += [_section("Hardware")] + hw_lines
 
     # Virtualisierung
@@ -913,7 +931,7 @@ def generate_host_nix(data: dict, host_name: str, hw_config: bool = False) -> st
         virt_lines += ["  virtualisation.libvirtd.enable = true;"]
         if data.get("virt_manager"):
             virt_lines += ["  programs.virt-manager.enable = true;"]
-    if virt_lines:
+    if virt_lines or _has_section_brix(brix, "Virtualisierung"):
         lines += [_section("Virtualisierung")] + virt_lines
 
     # Dateisystem & Backup
@@ -942,7 +960,7 @@ def generate_host_nix(data: dict, host_name: str, hw_config: bool = False) -> st
         backup_lines += _sn("home", "/home")
     if data.get("snapper_root"):
         backup_lines += _sn("root", "/")
-    if backup_lines:
+    if backup_lines or _has_section_brix(brix, "Dateisystem & Backup"):
         lines += [_section("Dateisystem & Backup")] + backup_lines
 
     # Home Manager NixOS-Modul
@@ -957,7 +975,7 @@ def generate_host_nix(data: dict, host_name: str, hw_config: bool = False) -> st
         hm_lines += ["  home-manager.useGlobalPkgs = true;"]
     if data.get("hm_use_user_packages"):
         hm_lines += ["  home-manager.useUserPackages = true;"]
-    if hm_lines:
+    if hm_lines or _has_section_brix(brix, "Home Manager"):
         lines += [_section("Home Manager")] + hm_lines
 
     lines += ["}", ""]

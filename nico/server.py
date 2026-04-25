@@ -2388,6 +2388,29 @@ def create_app() -> Flask:
         ok, msg = git_manager.git_commit_push(nixos_dir)
         return jsonify({"success": ok, "message": msg})
 
+    @app.route("/api/git/push-force", methods=["POST"])
+    def git_push_force():
+        if err := _check_csrf(): return err
+        nixos_dir, err = _require_setup()
+        if err: return err
+        ok, msg = git_manager.git_push_force(nixos_dir)
+        return jsonify({"success": ok, "message": msg})
+
+    @app.route("/api/git/commit-push-force", methods=["POST"])
+    def git_commit_push_force():
+        if err := _check_csrf(): return err
+        nixos_dir, err = _require_setup()
+        if err: return err
+        ok, msg = git_manager.git_commit_push_force(nixos_dir)
+        return jsonify({"success": ok, "message": msg})
+
+    @app.route("/api/git/close-check")
+    def git_close_check():
+        nixos_dir, err = _require_setup()
+        if err:
+            return jsonify({"has_remote": False, "needs_push": False, "ahead": 0, "dirty": False})
+        return jsonify(git_manager.check_close_state(nixos_dir))
+
     @app.route("/api/git/rollback", methods=["POST"])
     def git_rollback():
         if err := _check_csrf(): return err

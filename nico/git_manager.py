@@ -321,6 +321,59 @@ def check_start_guard(nixos_dir: str) -> dict:
     }
 
 
+def git_push_force(nixos_dir: str) -> tuple[bool, str]:
+    """Run git push --force on the current branch."""
+    if not is_git_repo(nixos_dir):
+        return False, "Kein Git-Repository."
+    rc, out = _run(["push", "--force"], cwd=nixos_dir, timeout=30)
+    if rc != 0:
+        return False, out or "git push --force fehlgeschlagen"
+    return True, out
+
+
+def git_commit_push_force(nixos_dir: str) -> tuple[bool, str]:
+    """Commit all local changes (if any) and force-push to remote."""
+    if not is_git_repo(nixos_dir):
+        return False, "Kein Git-Repository."
+    _ensure_identity(nixos_dir)
+    ok_commit, msg_commit = auto_commit(nixos_dir, label="NiCo: Lokale Änderungen")
+    if not ok_commit and "nothing to commit" not in msg_commit:
+        return False, msg_commit
+    ok_push, msg_push = git_push_force(nixos_dir)
+    if not ok_push:
+        return False, msg_push
+    return True, ""
+
+
+def check_close_state(nixos_dir: str) -> dict:
+    """
+    Fast check at close time (no network fetch).
+    Returns {has_remote, needs_push, ahead, dirty}
+    """
+    if not is_git_repo(nixos_dir):
+        return {"has_remote": False, "needs_push": False, "ahead": 0, "dirty": False}
+
+    rc, remote_url = _run(["remote", "get-url", "origin"], cwd=nixos_dir)
+    if rc != 0 or not remote_url:
+        return {"has_remote": False, "needs_push": False, "ahead": 0, "dirty": False}
+
+    rc, status_out = _run(["status", "--porcelain"], cwd=nixos_dir)
+    dirty = bool(status_out.strip()) if rc == 0 else False
+
+    rc, count_out = _run(["rev-list", "@{u}..HEAD", "--count"], cwd=nixos_dir)
+    try:
+        ahead = int(count_out.strip()) if rc == 0 else 0
+    except ValueError:
+        ahead = 0
+
+    return {
+        "has_remote": True,
+        "needs_push": dirty or ahead > 0,
+        "ahead": ahead,
+        "dirty": dirty,
+    }
+
+
 def get_log(nixos_dir: str, n: int = 30) -> list[dict]:
     """Return the last n commits as a list of {hash, message, date} dicts."""
     if not is_git_repo(nixos_dir):

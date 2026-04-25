@@ -318,6 +318,25 @@
   "git.startGuardPull": "Pull＆再読み込み",
   "git.startGuardPullError": "Pullに失敗しました: {0}",
   "git.startGuardDivergedClose": "OK",
+
+  "git.guard.s2.fetchTitle": "__TODO__",
+  "git.guard.s2.fetchDesc": "__TODO__",
+  "git.guard.s2.fetchBtn": "__TODO__",
+  "git.guard.s2.sendTitle": "__TODO__",
+  "git.guard.s2.sendDesc": "__TODO__",
+  "git.guard.s2.sendBtn": "__TODO__",
+  "git.guard.s2.abort": "__TODO__",
+  "git.guard.s2.fetchError": "__TODO__",
+  "git.guard.s2.sendError": "__TODO__",
+
+  "git.aborted.info": "__TODO__",
+
+  "git.closePrompt.title": "__TODO__",
+  "git.closePrompt.body": "__TODO__",
+  "git.closePrompt.yes": "__TODO__",
+  "git.closePrompt.no": "__TODO__",
+  "git.closePrompt.error": "__TODO__",
+
   "toast.saved": "保存しました。",
   "toast.error": "エラー。",
   "quit.confirm": "NiCoサーバーを停止しますか？",
