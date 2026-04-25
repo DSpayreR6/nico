@@ -3946,6 +3946,7 @@ async function openRebuild(mode = 'switch') {
   const buildPkgEl   = document.getElementById('rph-build-pkg');
   const fetchDoneEl  = document.getElementById('rph-fetch-done');
   const fetchRemainEl= document.getElementById('rph-fetch-remain');
+  const fetchCopyEl  = document.getElementById('rph-fetch-copy');
 
   function _resetMonitor() {
     logEl.innerHTML        = '';
@@ -3955,6 +3956,7 @@ async function openRebuild(mode = 'switch') {
     buildPkgEl.textContent = '';
     fetchDoneEl.textContent   = '';
     fetchRemainEl.textContent = '';
+    fetchCopyEl.textContent   = '';
     document.querySelectorAll('.rebuild-phase-col').forEach(el => el.classList.remove('active'));
     closeBtn.disabled = true;
   }
@@ -3975,6 +3977,7 @@ async function openRebuild(mode = 'switch') {
 
   let isRunning      = true;
   let firstErrorLine = '';
+  let hasGlobalProgress = false;
 
   function _phaseCol(phase) {
     return document.getElementById('rph-' + phase);
@@ -3999,10 +4002,17 @@ async function openRebuild(mode = 'switch') {
     buildPkgEl.textContent = pkg || '';
   }
 
-  function _setDlProgress(done, expected) {
+  function _setDlProgress(done, expected, copiedDone = 0, copiedTotal = 0, copiedExpected = 0, copiedLabel = '') {
     const remain = Math.max(0, expected - done);
     fetchDoneEl.textContent   = done > 0     ? '↓ ' + _fmtBytes(done)   : '';
     fetchRemainEl.textContent = remain > 0   ? '→ ' + _fmtBytes(remain) : '';
+    if (copiedTotal > 0) {
+      let copiedText = `kopiert ${copiedLabel || `${copiedDone}/${copiedTotal}`}`;
+      if (copiedExpected > 0) copiedText += ` (${_fmtBytes(copiedExpected)})`;
+      fetchCopyEl.textContent = copiedText;
+    } else {
+      fetchCopyEl.textContent = '';
+    }
   }
 
   function _finishMonitor(success, message) {
@@ -4011,6 +4021,7 @@ async function openRebuild(mode = 'switch') {
     buildPkgEl.textContent    = '';
     fetchDoneEl.textContent   = '';
     fetchRemainEl.textContent = '';
+    fetchCopyEl.textContent   = '';
     document.querySelectorAll('.rebuild-phase-col').forEach(el => el.classList.remove('active'));
     resultEl.className  = 'rebuild-result ' + (success ? 'result-success' : 'result-failed');
     resultEl.innerHTML  = message;
@@ -4039,10 +4050,24 @@ async function openRebuild(mode = 'switch') {
       _setPhaseActive(msg.phase, msg.active, msg.pkg || '');
 
     } else if (msg.type === 'progress') {
+      if (hasGlobalProgress) return;
       _setBuildProgress(msg.done, msg.total, msg.pkg || '');
 
     } else if (msg.type === 'dl_progress') {
+      if (hasGlobalProgress) return;
       _setDlProgress(msg.done, msg.expected);
+
+    } else if (msg.type === 'global_progress') {
+      hasGlobalProgress = true;
+      _setBuildProgress(msg.built_done || 0, msg.built_total || 0, buildPkgEl.textContent || '');
+      _setDlProgress(
+        msg.dl_done || 0,
+        msg.dl_expected || 0,
+        msg.copied_done || 0,
+        msg.copied_total || 0,
+        msg.copied_expected || 0,
+        msg.copied_label || '',
+      );
 
     } else if (msg.type === 'done') {
       const label = msg.success

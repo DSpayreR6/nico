@@ -1802,6 +1802,18 @@ def create_app() -> Flask:
             dl_state    = {'done': 0, 'expected': 0}
             # Build derivation counter (counted from actBuild start/stop)
             build_state = {'done': 0, 'total': 0}
+            # Global CLI-style progress, preferred when present
+            global_state = {
+                'available': False,
+                'built_done': 0,
+                'built_total': 0,
+                'copied_done': 0,
+                'copied_total': 0,
+                'copied_label': '',
+                'copied_expected': 0,
+                'dl_done': 0,
+                'dl_expected': 0,
+            }
             # Buffer for log output
             log_lines   = []
 
@@ -1824,6 +1836,82 @@ def create_app() -> Flask:
 
             def _emit_dl():
                 return f"data: {_json.dumps({'type': 'dl_progress', 'done': dl_state['done'], 'expected': dl_state['expected']})}\n\n"
+
+            def _emit_global_progress():
+                payload = {
+                    'type': 'global_progress',
+                    'built_done': global_state['built_done'],
+                    'built_total': global_state['built_total'],
+                    'copied_done': global_state['copied_done'],
+                    'copied_total': global_state['copied_total'],
+                    'copied_label': global_state['copied_label'],
+                    'copied_expected': global_state['copied_expected'],
+                    'dl_done': global_state['dl_done'],
+                    'dl_expected': global_state['dl_expected'],
+                }
+                return f"data: {_json.dumps(payload)}\n\n"
+
+            def _parse_size_to_bytes(value, unit):
+                unit_map = {
+                    'B': 1,
+                    'KB': 1000, 'MB': 1000**2, 'GB': 1000**3, 'TB': 1000**4,
+                    'KIB': 1024, 'MIB': 1024**2, 'GIB': 1024**3, 'TIB': 1024**4,
+                }
+                mult = unit_map.get((unit or 'B').upper())
+                if mult is None:
+                    return None
+                try:
+                    return int(float(value) * mult)
+                except (TypeError, ValueError):
+                    return None
+
+            def _parse_bracket_progress(line):
+                """
+                Parse CLI-style aggregate progress, e.g.
+                [53/312 built, 16/599/953 copied (6.7/15.9 GiB), 1.4/4.0 GiB DL]
+                """
+                m = _re.match(r'^\[([^\]]+)\]', line)
+                if not m:
+                    return None
+
+                summary = m.group(1)
+                result = {}
+
+                built_match = _re.search(r'(\d+)\s*/\s*(\d+)\s+built\b', summary, _re.I)
+                if built_match:
+                    result['built_done'] = int(built_match.group(1))
+                    result['built_total'] = int(built_match.group(2))
+
+                copied_match = _re.search(
+                    r'(\d+)\s*/\s*(\d+)(?:\s*/\s*(\d+))?\s+copied\b(?:\s*\(\s*([0-9.]+)\s*/\s*([0-9.]+)\s*([KMGT]?i?B)\s*\))?',
+                    summary,
+                    _re.I,
+                )
+                if copied_match:
+                    result['copied_done'] = int(copied_match.group(1))
+                    result['copied_total'] = int(copied_match.group(2))
+                    copied_counts = [copied_match.group(1), copied_match.group(2)]
+                    if copied_match.group(3):
+                        copied_counts.append(copied_match.group(3))
+                    result['copied_label'] = '/'.join(copied_counts)
+                    if copied_match.group(4) and copied_match.group(5) and copied_match.group(6):
+                        copied_done = _parse_size_to_bytes(copied_match.group(4), copied_match.group(6))
+                        copied_expected = _parse_size_to_bytes(copied_match.group(5), copied_match.group(6))
+                        if copied_done is not None:
+                            result['copied_bytes_done'] = copied_done
+                        if copied_expected is not None:
+                            result['copied_expected'] = copied_expected
+
+                dl_match = _re.search(r'([0-9.]+)\s*/\s*([0-9.]+)\s*([KMGT]?i?B)\s+DL\b', summary, _re.I)
+                if dl_match:
+                    dl_done = _parse_size_to_bytes(dl_match.group(1), dl_match.group(3))
+                    dl_expected = _parse_size_to_bytes(dl_match.group(2), dl_match.group(3))
+                    if dl_done is not None:
+                        result['dl_done'] = dl_done
+                    if dl_expected is not None:
+                        result['dl_expected'] = dl_expected
+
+                return result or None
 
             def _parse_nix_line(json_str):
                 """Parse a @nix JSON line; yield SSE event strings."""
@@ -1962,11 +2050,31 @@ def create_app() -> Flask:
                 proc.stdin.flush()
                 proc.stdin.close()
                 for raw_line in proc.stdout:
-                    line = raw_line.rstrip('\n')
+                    line = raw_line.rstrip('\r\n')
                     log_lines.append(line)
                     if line.startswith('@nix '):
                         yield from _parse_nix_line(line[5:])
                     else:
+                        progress = _parse_bracket_progress(line)
+                        if progress:
+                            global_state['available'] = True
+                            if 'built_done' in progress:
+                                global_state['built_done'] = progress['built_done']
+                            if 'built_total' in progress:
+                                global_state['built_total'] = progress['built_total']
+                            if 'copied_done' in progress:
+                                global_state['copied_done'] = progress['copied_done']
+                            if 'copied_total' in progress:
+                                global_state['copied_total'] = progress['copied_total']
+                            if 'copied_label' in progress:
+                                global_state['copied_label'] = progress['copied_label']
+                            if 'copied_expected' in progress:
+                                global_state['copied_expected'] = progress['copied_expected']
+                            if 'dl_done' in progress:
+                                global_state['dl_done'] = progress['dl_done']
+                            if 'dl_expected' in progress:
+                                global_state['dl_expected'] = progress['dl_expected']
+                            yield _emit_global_progress()
                         yield f"data: {_json.dumps({'type': 'output', 'line': line})}\n\n"
                         # Activating phase detected from raw output (activation scripts
                         # run outside of nix's logger and write directly to stderr)
