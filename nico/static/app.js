@@ -4535,6 +4535,34 @@ async function confirmHostSwitch() {
   });
 }
 
+async function confirmClosePushPrompt() {
+  return new Promise(resolve => {
+    const overlay = document.createElement('div');
+    overlay.className = 'overlay';
+    overlay.innerHTML = `
+      <div class="dialog">
+        <h2 class="dialog-title">${escHtml(t('git.closePrompt.title'))}</h2>
+        <p>${escHtml(t('git.closePrompt.body'))}</p>
+        <div class="dialog-actions">
+          <button id="close-push-confirm" class="btn-primary">${escHtml(t('git.closePrompt.yes'))}</button>
+          <button id="close-push-skip" class="btn-secondary">${escHtml(t('git.closePrompt.no'))}</button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+
+    const cleanup = (result) => {
+      if (overlay.parentNode) document.body.removeChild(overlay);
+      resolve(result);
+    };
+
+    overlay.querySelector('#close-push-confirm')?.addEventListener('click', () => cleanup(true));
+    overlay.querySelector('#close-push-skip')?.addEventListener('click', () => cleanup(false));
+    overlay.addEventListener('click', e => {
+      if (e.target === overlay) cleanup(false);
+    });
+  });
+}
+
 async function loadHostConfig(hostName) {
   await _populateCoFormFromFile(`hosts/${hostName}/default.nix`);
   await updatePreview();
@@ -5071,11 +5099,7 @@ function bindUI() {
         const ccRes  = await csrfFetch('/api/git/close-check');
         const ccData = await ccRes.json();
         if (ccData.has_remote && ccData.needs_push) {
-          const doPush = confirm(
-            t('git.closePrompt.title') + '\n\n' +
-            t('git.closePrompt.body') + '\n\n' +
-            t('git.closePrompt.yes') + ' / ' + t('git.closePrompt.no')
-          );
+          const doPush = await confirmClosePushPrompt();
           if (doPush) {
             const pushRes  = await csrfFetch('/api/git/commit-push', { method: 'POST' });
             const pushData = await pushRes.json();
