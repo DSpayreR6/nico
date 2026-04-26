@@ -4,6 +4,8 @@
 
 ### Bug fixes
 
+- **Klammer-Validierung beim Brick-Speichern**: Beim Speichern eines Nix-Bricks wird jetzt serverseitig geprüft, ob `{}`, `[]` und `()` ausgeglichen sind (Strings und Kommentare werden korrekt ignoriert). Bei Ungleichgewicht bricht der Speichervorgang mit einer konkreten Fehlermeldung ab (z. B. „1× nicht geschlossene `{`"). Damit wird verhindert, dass syntaktisch defekte Brix die Datei korrupieren und den Parser für nachfolgende Blöcke kippen.
+
 - **Auto-Reload nach Pfad-Änderung**: Nach dem Speichern eines neuen NixOS-Config-Pfads in den App-Settings lädt NiCo jetzt automatisch neu, sodass die neue Konfiguration sofort aktiv wird.
 - **Sektion-Header für reine Brix-Blöcke**: Wenn eine Sektion (z. B. „Hardware") nur Nix-Brix enthält, aber keine Formularfelder gesetzt sind, wurde bisher kein Sektions-Header in `configuration.nix` erzeugt – dadurch konnte das rechte Code-Panel nicht mit dem linken Panel synchronisiert werden. Der Generator emittiert jetzt immer einen Sektions-Header, wenn für die Sektion Brix vorhanden sind.
 - **Cross-Token-Suche**: Prism.js zerlegt NixOS-Attribute wie `services.printing` in mehrere DOM-Knoten (Punkt als eigenes Token). Die Suche konnte daher solche Begriffe nicht finden. Die Implementierung von `markTextInElement` wurde auf eine positionsbasierte Methode umgestellt, die den vollständigen Text über alle Knoten hinweg durchsucht und Treffer präzise zurückschreibt.

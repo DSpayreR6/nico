@@ -41,6 +41,10 @@ SECTION_ORDER: list[str] = [
 ZONE_SECTIONS: frozenset[str] = frozenset({"Inputs-Extra", "Outputs-Extra", "Outputs-Hosts"})
 
 
+def _is_zone_section(section: str) -> bool:
+    return section in ZONE_SECTIONS or section.startswith("Host: ")
+
+
 def expand_nested_legacy(blocks: dict[str, dict]) -> dict[str, dict]:
     """
     Post-processing step: if a brick's body contains nested legacy # <brix:>
@@ -240,7 +244,7 @@ def inject_brick_blocks(nix_content: str, blocks: dict[str, dict]) -> str:
     regular_blocks: dict[str, dict] = {}
     for name, block in blocks.items():
         sec = block.get("section", "")
-        if sec in ZONE_SECTIONS:
+        if _is_zone_section(sec):
             zone_bricks.setdefault(sec, []).append(block)
         else:
             regular_blocks[name] = block
@@ -272,7 +276,7 @@ def inject_brick_blocks(nix_content: str, blocks: dict[str, dict]) -> str:
         m = _SECTION_HDR.search(line)
         if m:
             section_name = m.group(1).strip()
-            if section_name in ZONE_SECTIONS:
+            if _is_zone_section(section_name):
                 # Zone section: inject its bricks immediately after this marker
                 result.append(line)
                 zone = zone_bricks.get(section_name, [])
@@ -303,6 +307,66 @@ def inject_brick_blocks(nix_content: str, blocks: dict[str, dict]) -> str:
 def format_brick(section: str, order: int, name: str, body: str) -> str:
     """Format a complete brick block with markers."""
     return f"# <brick: {section} / #{order} {name}>\n{body}\n# </brick: {name}>\n"
+
+
+def check_bracket_balance(body: str) -> list[str]:
+    """Check if {}, [], () are balanced in Nix code, ignoring strings and comments.
+    Returns a list of error strings; empty list means balanced."""
+    counts = {'{': 0, '[': 0, '(': 0}
+    closers = {'}': '{', ']': '[', ')': '('}
+    in_string = False
+    in_indent = False
+    in_comment = False
+    i = 0
+    while i < len(body):
+        ch = body[i]
+        if in_comment:
+            if ch == '\n':
+                in_comment = False
+            i += 1
+            continue
+        if in_indent:
+            if body.startswith("''", i):
+                in_indent = False
+                i += 2
+            else:
+                i += 1
+            continue
+        if in_string:
+            if ch == '\\' and i + 1 < len(body):
+                i += 2
+            elif ch == '"':
+                in_string = False
+                i += 1
+            else:
+                i += 1
+            continue
+        if body.startswith("''", i):
+            in_indent = True
+            i += 2
+            continue
+        if ch == '#':
+            in_comment = True
+            i += 1
+            continue
+        if ch == '"':
+            in_string = True
+            i += 1
+            continue
+        if ch in counts:
+            counts[ch] += 1
+        elif ch in closers:
+            counts[closers[ch]] -= 1
+        i += 1
+
+    errors = []
+    for opener, closer in [('{', '}'), ('[', ']'), ('(', ')')]:
+        n = counts[opener]
+        if n > 0:
+            errors.append(f"{n}× nicht geschlossene `{opener}`")
+        elif n < 0:
+            errors.append(f"{-n}× überschüssige `{closer}`")
+    return errors
 
 
 def next_order_for_section(blocks: dict[str, dict], section: str) -> int:

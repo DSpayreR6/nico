@@ -2440,6 +2440,22 @@ async function updatePreview() {
   if (activeSearch) applySearchHighlights(activeSearch);
 }
 
+async function _refreshPreviewForFile(file = 'configuration.nix') {
+  if (file === 'flake.nix') {
+    if (activeFile?.path === 'flake.nix') {
+      const res = await fetch(`/api/file?path=${encodeURIComponent(file)}`);
+      const data = await res.json();
+      if (!data.error) {
+        await _renderFileIntoView(file, data, { skipTypeDialog: true });
+        return;
+      }
+    }
+    await _updateFlakePreview();
+    return;
+  }
+  await updatePreview();
+}
+
 function schedulePreviewUpdate() {
   clearTimeout(previewDebounce);
   previewDebounce = setTimeout(updatePreview, 450);
@@ -3107,7 +3123,7 @@ function openBrixInsert() {
   if (sel) {
     // Repopulate sections based on target file
     sel.innerHTML = '';
-    const sections = _brixTargetFtype === 'fl' ? FLAKE_BRICK_SECTIONS
+    const sections = _brixTargetFtype === 'fl' ? _getFlakeBrickSections()
                    : _brixTargetFtype === 'hm' ? HM_BRICK_SECTIONS
                    : BRICK_SECTIONS;
     sections.forEach(s => {
@@ -3156,10 +3172,11 @@ async function insertBrix() {
   closeBrixInsert();
   showToast(t('brix.inserted', data.brick_name));
 
-  // Preview aktualisieren: Haupt-Dateien via updatePreview(), Host-Dateien neu laden
+  // Preview aktualisieren: flake.nix is reloaded from disk, other main files
+  // keep using the generator preview, host files are reloaded directly.
   const isMainFile = _brixTargetFile === 'configuration.nix' || _brixTargetFile === 'flake.nix';
   if (isMainFile) {
-    await updatePreview();
+    await _refreshPreviewForFile(_brixTargetFile);
   } else {
     // Host-Datei: Inhalt neu laden und Preview mit korrektem file-Parameter rendern
     try {
@@ -3182,7 +3199,7 @@ async function confirmDeleteBrix(name, file = 'configuration.nix') {
   }
   await csrfFetch(`/api/brick/${encodeURIComponent(name)}?file=${encodeURIComponent(file)}`, { method: 'DELETE' });
   showToast(t('brix.deleted', name));
-  await updatePreview();
+  await _refreshPreviewForFile(file);
 }
 
 // ── Nix-Brick löschen (Dialog) ───────────────────────────────────────────────
@@ -3226,6 +3243,20 @@ const FLAKE_BRICK_SECTIONS = ['Start', 'Inputs', 'Outputs', 'End'];
 const HM_BRICK_SECTIONS    = ['Start', 'Home Manager', 'End'];
 let _brixMoveTarget = null;
 
+function _getFlakeBrickSections(cfg = null) {
+  const sections = [...FLAKE_BRICK_SECTIONS];
+  const hosts = cfg?.flake_hosts
+    || Array.from(document.querySelectorAll('#flake-hosts-list .flake-host-card'))
+      .map(card => ({ name: card.dataset.host || '' }));
+  hosts.forEach(host => {
+    const name = typeof host === 'string' ? host : (host?.name || '');
+    if (!name) return;
+    const section = `Host: ${name}`;
+    if (!sections.includes(section)) sections.push(section);
+  });
+  return sections;
+}
+
 async function openBrixMove(targetName = null) {
   const cfg    = await csrfFetch('/api/config').then(r => r.json());
   // Bricks from the target file: flake.nix or configuration.nix
@@ -3259,7 +3290,7 @@ async function openBrixMove(targetName = null) {
   const sectionSel = document.getElementById('brix-move-section');
   if (sectionSel) {
     sectionSel.innerHTML = '';
-    (isFlake ? FLAKE_BRICK_SECTIONS : _brixContextFtype === 'hm' ? HM_BRICK_SECTIONS : BRICK_SECTIONS).forEach(s => {
+    (isFlake ? _getFlakeBrickSections(cfg) : _brixContextFtype === 'hm' ? HM_BRICK_SECTIONS : BRICK_SECTIONS).forEach(s => {
       const opt = document.createElement('option');
       opt.value = s; opt.textContent = s;
       sectionSel.appendChild(opt);
@@ -3312,7 +3343,7 @@ async function moveBrix() {
 
   // Refresh preview after closing the dialog
   try {
-    await updatePreview();
+    await _refreshPreviewForFile(_brixContextFile);
   } catch (e) {
     console.warn('moveBrix refresh failed:', e);
   }
@@ -3368,7 +3399,7 @@ async function renameBrix() {
   }
   closeBrixRename();
   showToast(t('brix.renamed', data.new_name));
-  await updatePreview();
+  await _refreshPreviewForFile(_brixContextFile);
 }
 
 // ── Brix splitten ───────────────────────────────────────────────────────────
@@ -3412,7 +3443,7 @@ async function splitBrix() {
   }
   closeBrixSplit();
   showToast(t('brix.split', data.new_name));
-  await updatePreview();
+  await _refreshPreviewForFile(_brixContextFile);
 }
 
 // ── Brix inline editing ──────────────────────────────────────────────────────
@@ -3436,8 +3467,14 @@ function openBrixInlineEdit(name, currentContent, wrapEl, bodyWrapper, file = 'c
   saveBtn.textContent = t('brix.editSave');
   saveBtn.addEventListener('click', async () => {
     saveBtn.disabled = true;
-    await saveBrixInline(name, textarea.value, file);
-    // updatePreview() re-renders the whole preview → editor is gone automatically
+    const ok = await saveBrixInline(name, textarea.value, file);
+    if (ok) {
+      bodyWrapper.style.display = '';
+      editor.remove();
+      await _refreshPreviewForFile(file);
+    } else {
+      saveBtn.disabled = false;
+    }
   });
 
   const cancelBtn = document.createElement('button');
@@ -3464,11 +3501,13 @@ async function saveBrixInline(name, content, file = 'configuration.nix') {
   });
   const data = await res.json();
   if (data.error) {
-    showToast(tErr(data.error), 'error');
-    return;
+    let msg = tErr(data.error);
+    if (data.details?.length) msg += ': ' + data.details.join(', ');
+    showToast(msg, 'error');
+    return false;
   }
   showToast(t('brix.editSaved'));
-  await updatePreview();
+  return true;
 }
 
 // ── Suche im Nix-Code ────────────────────────────────────────────────────────
@@ -6264,27 +6303,9 @@ const Sidebar = (() => {
 
     const flake_hosts = [];
     document.querySelectorAll('#flake-hosts-list .flake-host-card').forEach(card => {
-      const name = (card.querySelector('.fh-name')?.value || card.dataset.host || '').trim();
+      const name = (card.dataset.host || '').trim();
       if (!name) return;
-
-      const specialArgs = [];
-      card.querySelectorAll('.fh-special-arg-item').forEach(inp => {
-        const val = inp.value.trim();
-        if (val) specialArgs.push(val);
-      });
-
-      const modules = [];
-      card.querySelectorAll('.fh-module-item').forEach(inp => {
-        const val = inp.value.trim();
-        if (val) modules.push(val);
-      });
-
-      flake_hosts.push({
-        name,
-        arch:        card.querySelector('.fh-system')?.value || 'x86_64-linux',
-        specialArgs: specialArgs.join('\n'),
-        modules:     modules.join('\n'),
-      });
+      flake_hosts.push({ name });
     });
 
     return {
@@ -6305,6 +6326,8 @@ const Sidebar = (() => {
    */
   async function _populateFlakeFormFromFile(content) {
     try {
+      renderCodePreview(content, 'preview-flake', 'flake.nix');
+
       // Datei parsen
       const res    = await csrfFetch('/api/parse/flake', {
         method:  'POST',
@@ -6351,7 +6374,6 @@ const Sidebar = (() => {
       ['__header__', 'Start', 'Inputs', 'Inputs-Extra', 'Outputs', 'Outputs-Hosts', 'Outputs-Extra', 'Hosts', 'End'].forEach(s => collapsedSections.add(s));
       applySectionCollapse();
 
-      await _updateFlakePreview();
       _flakeFormDirty = false;
       _initFlakeFormListeners();
     } catch (e) {
@@ -6407,60 +6429,14 @@ const Sidebar = (() => {
   function _flakeHostCard(host) {
     const name = typeof host === 'string' ? host : (host.name || '');
     const h    = escHtml(name);
-    const arch = typeof host === 'object' ? (host.arch || 'x86_64-linux') : 'x86_64-linux';
-
-    const specialArgsRaw = typeof host === 'object' ? (host.specialArgs || '') : '';
-    const modulesRaw     = typeof host === 'object' ? (host.modules || '') : '';
-    const specialArgsList = specialArgsRaw ? specialArgsRaw.split('\n').filter(s => s.trim()) : [];
-    const modulesList     = modulesRaw ? modulesRaw.split('\n').filter(s => s.trim()) : [];
-
-    const sysOpts = [
-      ['x86_64-linux',  'x86_64-linux  (AMD / Intel)'],
-      ['aarch64-linux', 'aarch64-linux (ARM / Apple Silicon)'],
-      ['i686-linux',    'i686-linux    (32-Bit)'],
-    ].map(([v, l]) => `<option value="${v}"${v === arch ? ' selected' : ''}>${l}</option>`).join('');
-
-    const specialArgsHtml = specialArgsList.length
-      ? specialArgsList.map(v => `<div class="fh-list-item">
-          <input type="text" class="fh-special-arg-item mono-input" value="${escHtml(v)}" spellcheck="false">
-          <button type="button" class="fh-item-remove" title="Entfernen">${niIcon('x')}</button>
-        </div>`).join('')
-      : '';
-
-    const modulesHtml = modulesList.length
-      ? modulesList.map(v => `<div class="fh-list-item">
-          <input type="text" class="fh-module-item mono-input" value="${escHtml(v)}" spellcheck="false">
-          <button type="button" class="fh-item-remove" title="Entfernen">${niIcon('x')}</button>
-        </div>`).join('')
-      : '';
 
     return `<div class="flake-host-card" data-host="${h}">
-      <div class="flake-host-header fh-toggle">
+      <div class="flake-host-header">
         <span class="flake-host-label">${h}</span>
         <span class="fh-header-actions">
-          <span class="fh-chevron ni-icon ni-icon-chevron-down"></span>
           <button type="button" class="fh-remove-btn" data-host="${h}"
                   title="${escHtml(t('fl.hosts.deleteTitle'))}">${niIcon('x')}</button>
         </span>
-      </div>
-      <div class="flake-host-body">
-        <label>${escHtml(t('fl.hosts.name') || 'Name')}</label>
-        <input type="text" class="fh-name mono-input" value="${h}"
-               pattern="[a-zA-Z][a-zA-Z0-9_-]*" spellcheck="false" autocomplete="off">
-        <label style="margin-top:8px">${escHtml(t('fl.hosts.system') || 'System-Architektur')}</label>
-        <select class="fh-system">${sysOpts}</select>
-        <label style="margin-top:8px">
-          ${escHtml(t('fl.hosts.specialArgs') || 'specialArgs')}
-          <span class="hint">${escHtml(t('fl.hosts.specialArgsHint') || '(z.B. inherit home-manager;)')}</span>
-        </label>
-        <div class="fh-list fh-special-args-list">${specialArgsHtml}</div>
-        <button type="button" class="fh-add-item-btn" data-target="special-args">+ ${escHtml(t('fl.hosts.addSpecialArg') || 'Hinzufügen')}</button>
-        <label style="margin-top:8px">
-          ${escHtml(t('fl.hosts.modules') || 'Module')}
-          <span class="hint">${escHtml(t('fl.hosts.modulesHint') || '(z.B. ./configuration.nix)')}</span>
-        </label>
-        <div class="fh-list fh-modules-list">${modulesHtml}</div>
-        <button type="button" class="fh-add-item-btn" data-target="modules">+ ${escHtml(t('fl.hosts.addModule') || 'Hinzufügen')}</button>
       </div>
     </div>`;
   }
@@ -6517,56 +6493,6 @@ const Sidebar = (() => {
     });
   }
 
-  function _bindFlakeHostListItems(container) {
-    container.querySelectorAll('.fh-add-item-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const card = btn.closest('.flake-host-card');
-        const target = btn.dataset.target;
-        const listClass = target === 'special-args' ? '.fh-special-args-list' : '.fh-modules-list';
-        const itemClass = target === 'special-args' ? 'fh-special-arg-item' : 'fh-module-item';
-        const placeholder = target === 'special-args' ? 'inherit home-manager;' : './configuration.nix';
-        const list = card.querySelector(listClass);
-        if (!list) return;
-
-        const item = document.createElement('div');
-        item.className = 'fh-list-item';
-        item.innerHTML = `
-          <input type="text" class="${itemClass} mono-input" value="" placeholder="${placeholder}" spellcheck="false">
-          <button type="button" class="fh-item-remove" title="Entfernen">${niIcon('x')}</button>
-        `;
-        list.appendChild(item);
-        item.querySelector('input')?.focus();
-
-        _bindListItemEvents(item);
-        _flakeFormDirty = true;
-        _scheduleFlakePreviewUpdate();
-      });
-    });
-
-    container.querySelectorAll('.fh-list-item').forEach(_bindListItemEvents);
-  }
-
-  function _bindListItemEvents(item) {
-    const removeBtn = item.querySelector('.fh-item-remove');
-    if (removeBtn && !removeBtn._bound) {
-      removeBtn._bound = true;
-      removeBtn.addEventListener('click', () => {
-        item.remove();
-        _flakeFormDirty = true;
-        _scheduleFlakePreviewUpdate();
-      });
-    }
-
-    const input = item.querySelector('input');
-    if (input && !input._bound) {
-      input._bound = true;
-      input.addEventListener('input', () => {
-        _flakeFormDirty = true;
-        _scheduleFlakePreviewUpdate();
-      });
-    }
-  }
-
   async function _renderFlakeHosts() {
     const container = document.getElementById('flake-hosts-list');
     if (!container) return;
@@ -6584,25 +6510,6 @@ const Sidebar = (() => {
 
       container.innerHTML = data.hosts.map(_flakeHostCard).join('') + _addHostRow();
 
-      // First card expanded by default
-      const first = container.querySelector('.flake-host-card');
-      if (first) {
-        first.querySelector('.flake-host-body')?.classList.add('open');
-        first.querySelector('.fh-toggle')?.classList.add('open');
-      }
-
-      // Collapse/expand toggle
-      container.querySelectorAll('.fh-toggle').forEach(header => {
-        header.addEventListener('click', e => {
-          if (e.target.closest('.fh-remove-btn')) return;
-          const card = header.closest('.flake-host-card');
-          const body = card?.querySelector('.flake-host-body');
-          if (!body) return;
-          const open = body.classList.toggle('open');
-          header.classList.toggle('open', open);
-        });
-      });
-
       // Delete buttons
       container.querySelectorAll('.fh-remove-btn').forEach(btn => {
         btn.addEventListener('click', async () => {
@@ -6615,28 +6522,6 @@ const Sidebar = (() => {
           const j = await r.json();
           if (j.error) { showToast(j.error, 'error'); return; }
           await _renderFlakeHosts();
-          _scheduleFlakePreviewUpdate();
-        });
-      });
-
-      // Host card field changes → preview update
-      container.querySelectorAll('.fh-system').forEach(el => {
-        el.addEventListener('change', () => {
-          _flakeFormDirty = true;
-          _scheduleFlakePreviewUpdate();
-        });
-      });
-
-      // Bind dynamic list item events
-      _bindFlakeHostListItems(container);
-
-      // Name field: update header label live + trigger preview
-      container.querySelectorAll('.fh-name').forEach(el => {
-        el.addEventListener('input', () => {
-          const card = el.closest('.flake-host-card');
-          const label = card?.querySelector('.flake-host-label');
-          if (label) label.textContent = el.value || card.dataset.host;
-          _flakeFormDirty = true;
           _scheduleFlakePreviewUpdate();
         });
       });

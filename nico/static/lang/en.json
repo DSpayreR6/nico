@@ -466,6 +466,7 @@
   "errors.ERR_BRICK_NAME_EXISTS": "A Nix-Brick with this name already exists.",
   "errors.ERR_INVALID_NAME":      "Invalid name – only letters, numbers, and hyphens allowed.",
   "errors.ERR_BRICK_NOT_FOUND":   "Nix-Brick not found.",
+  "errors.ERR_UNBALANCED_BRACKETS": "__TODO__",
   "errors.ERR_INVALID_SPLIT_LINE": "Invalid line number.",
   "errors.ERR_SPLIT_OUT_OF_RANGE": "Line number outside brick content.",
   "errors.ERR_NO_BRICK_NAME":      "No brick name provided.",

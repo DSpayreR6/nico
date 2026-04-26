@@ -462,6 +462,7 @@
   "errors.ERR_BRICK_NAME_EXISTS": "已存在同名 Nix 砖块。",
   "errors.ERR_INVALID_NAME": "无效名称 – 只允许字母、数字和连字符。",
   "errors.ERR_BRICK_NOT_FOUND": "未找到 Nix 砖块。",
+  "errors.ERR_UNBALANCED_BRACKETS": "__TODO__",
   "errors.ERR_INVALID_SPLIT_LINE": "无效行号。",
   "errors.ERR_SPLIT_OUT_OF_RANGE": "行号超出砖块内容范围。",
   "errors.ERR_NO_BRICK_NAME": "未提供砖块名称。",

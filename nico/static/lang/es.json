@@ -462,6 +462,7 @@
   "errors.ERR_BRICK_NAME_EXISTS": "Ya existe un bloque Nix con este nombre.",
   "errors.ERR_INVALID_NAME": "Nombre inválido – solo se permiten letras, números y guiones.",
   "errors.ERR_BRICK_NOT_FOUND": "Bloque Nix no encontrado.",
+  "errors.ERR_UNBALANCED_BRACKETS": "__TODO__",
   "errors.ERR_INVALID_SPLIT_LINE": "Número de línea inválido.",
   "errors.ERR_SPLIT_OUT_OF_RANGE": "Número de línea fuera del contenido del bloque.",
   "errors.ERR_NO_BRICK_NAME": "No se proporcionó nombre de bloque.",
