@@ -276,6 +276,8 @@
   "rebuild.error": "Error",
   "rebuild.connectionError": "❌ Conexión con el servidor perdida",
   "rebuild.close": "Cerrar",
+  "rebuild.commitPush": "__TODO__",
+  "rebuild.pushDone": "__TODO__",
   "admin.gitTitle": "Historial Git & rollback",
   "admin.gitHint": "NiCo crea automáticamente un commit Git después de cada escritura. «Restablecer» restaura los archivos Nix al estado seleccionado – el historial Git se preserva completamente.",
   "admin.loading": "Cargando …",

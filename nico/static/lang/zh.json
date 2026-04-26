@@ -276,6 +276,8 @@
   "rebuild.error": "错误",
   "rebuild.connectionError": "❌ 与服务器的连接已断开",
   "rebuild.close": "关闭",
+  "rebuild.commitPush": "__TODO__",
+  "rebuild.pushDone": "__TODO__",
   "admin.gitTitle": "Git 历史与回滚",
   "admin.gitHint": "NiCo 在每次写入后自动创建 Git 提交。\"重置\"将 Nix 文件恢复到所选状态 – Git 历史完整保留。",
   "admin.loading": "加载中 …",

@@ -1258,7 +1258,7 @@
                 <label class="toggle-row">
                   <span>
                     <span data-i18n="fl.field.hmModule">home-manager NixOS-Modul</span>
-                    <span class="hint">(nixosModules.homeManager)</span>
+                    <span class="hint">(nixosModules.home-manager)</span>
                   </span>
                   <span class="toggle-wrap">
                     <input type="checkbox" id="flake_hm_module" name="flake_hm_module">
@@ -1575,7 +1575,9 @@
         <div id="rebuild-result" class="rebuild-result hidden"></div>
       </div>
       <div class="confirm-buttons" style="margin-top:16px">
-        <button id="rebuild-close-btn" data-i18n="rebuild.close">Schließen</button>
+        <span id="rebuild-push-info" class="hidden" style="color:var(--green);font-size:.85rem;align-self:center"></span>
+        <button id="rebuild-push-btn" class="btn-yellow hidden" data-i18n="rebuild.commitPush">Commit &amp; Push</button>
+        <button id="rebuild-close-btn" class="btn-green" data-i18n="rebuild.close">Schließen</button>
       </div>
     </div>
   </div>

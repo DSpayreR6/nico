@@ -294,6 +294,8 @@
   "rebuild.error":            "Fehler",
   "rebuild.connectionError":  "❌ Verbindung zum Server unterbrochen",
   "rebuild.close":            "Schließen",
+  "rebuild.commitPush":       "Commit & Push",
+  "rebuild.pushDone":         "Gepusht.",
 
   "admin.gitTitle":     "Git-Verlauf & Rollback",
   "admin.gitHint":      "NiCo erstellt nach jedem Schreiben automatisch einen Git-Commit. \"Zur\u00FCcksetzen\" stellt die Nix-Dateien auf den gew\u00E4hlten Stand zur\u00FCck \u2013 die Git-History bleibt dabei vollst\u00E4ndig erhalten.",

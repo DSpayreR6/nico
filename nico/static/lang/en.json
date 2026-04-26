@@ -294,6 +294,8 @@
   "rebuild.error":            "Error",
   "rebuild.connectionError":  "❌ Connection to server lost",
   "rebuild.close":            "Close",
+  "rebuild.commitPush":       "__TODO__",
+  "rebuild.pushDone":         "__TODO__",
 
   "admin.gitTitle":     "Git history & rollback",
   "admin.gitHint":      "NiCo automatically creates a Git commit after every write. \"Reset\" restores the Nix files to the selected state – the Git history is fully preserved.",

@@ -146,12 +146,12 @@ def git_reset_hard(nixos_dir: str) -> tuple[bool, str]:
     return True, out
 
 
-def git_commit_push(nixos_dir: str) -> tuple[bool, str]:
+def git_commit_push(nixos_dir: str, label: str = "") -> tuple[bool, str]:
     """Commit all local changes and push to remote."""
     if not is_git_repo(nixos_dir):
         return False, "Kein Git-Repository."
     _ensure_identity(nixos_dir)
-    ok_commit, msg_commit = auto_commit(nixos_dir, label="NiCo: Lokale Änderungen")
+    ok_commit, msg_commit = auto_commit(nixos_dir, label=label or "NiCo: Lokale Änderungen")
     if not ok_commit and "nothing to commit" not in msg_commit:
         return False, msg_commit
     ok_push, msg_push = git_push(nixos_dir)

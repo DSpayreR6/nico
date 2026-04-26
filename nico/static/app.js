@@ -3981,6 +3981,8 @@ async function openRebuild(mode = 'switch') {
   const monitorEl    = document.getElementById('rebuild-monitor');
   const resultEl     = document.getElementById('rebuild-result');
   const closeBtn     = document.getElementById('rebuild-close-btn');
+  const pushBtn      = document.getElementById('rebuild-push-btn');
+  const pushInfoEl   = document.getElementById('rebuild-push-info');
   const counterEl    = document.getElementById('rph-build-counter');
   const buildPkgEl   = document.getElementById('rph-build-pkg');
   const fetchDoneEl  = document.getElementById('rph-fetch-done');
@@ -3998,6 +4000,10 @@ async function openRebuild(mode = 'switch') {
     fetchCopyEl.textContent   = '';
     document.querySelectorAll('.rebuild-phase-col').forEach(el => el.classList.remove('active'));
     closeBtn.disabled = true;
+    pushBtn.classList.add('hidden');
+    pushBtn.disabled = false;
+    pushInfoEl.classList.add('hidden');
+    pushInfoEl.textContent = '';
   }
 
   // Reset state
@@ -4118,10 +4124,46 @@ async function openRebuild(mode = 'switch') {
       if (msg.success) {
         csrfFetch('/api/config/settings').then(r => r.json()).then(cfg => {
           if (cfg.push_after_rebuild) {
-            csrfFetch('/api/git/push', { method: 'POST' }).then(r => r.json()).then(d => {
-              if (d.success) showToast(t('git.pushSuccess'), 'success');
-              else _showGitPushErrorModal(d.message || t('toast.error'));
+            csrfFetch('/api/git/commit-push', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ label: 'NiCo: Rebuild erfolgreich' }),
+            }).then(r => r.json()).then(d => {
+              if (d.success) {
+                pushInfoEl.textContent = t('rebuild.pushDone');
+                pushInfoEl.classList.remove('hidden');
+              } else {
+                _showGitPushErrorModal(d.message || t('toast.error'));
+              }
             }).catch(() => {});
+          } else {
+            pushBtn.classList.remove('hidden');
+            pushBtn.onclick = async () => {
+              pushBtn.disabled = true;
+              const origText = pushBtn.textContent;
+              pushBtn.textContent = '…';
+              try {
+                const res  = await csrfFetch('/api/git/commit-push', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ label: 'NiCo: Rebuild erfolgreich' }),
+                });
+                const data = await res.json();
+                if (data.success) {
+                  pushBtn.classList.add('hidden');
+                  pushInfoEl.textContent = t('rebuild.pushDone');
+                  pushInfoEl.classList.remove('hidden');
+                } else {
+                  _showGitPushErrorModal(data.message || t('toast.error'));
+                  pushBtn.disabled = false;
+                  pushBtn.textContent = origText;
+                }
+              } catch (e) {
+                _showGitPushErrorModal(String(e));
+                pushBtn.disabled = false;
+                pushBtn.textContent = origText;
+              }
+            };
           }
         }).catch(() => {});
       }
@@ -4218,10 +4260,6 @@ async function runDryRun() {
   const body     = await _buildDryRunBody(hostInfo);
   if (body === null) return;
 
-  const opts = await _showRebuildOptions(hostInfo);
-  if (opts === null) return;
-  body.update_flake = opts.updateFlake;
-
   const overlay = document.getElementById('dryrun-overlay');
   const output  = document.getElementById('dryrun-output');
   output.textContent = '…';
@@ -4251,10 +4289,6 @@ async function runSaveAndDryRun() {
   const hostInfo = await _fetchFlakeHosts();
   const body     = await _buildDryRunBody(hostInfo);
   if (body === null) return;
-
-  const opts = await _showRebuildOptions(hostInfo);
-  if (opts === null) return;
-  body.update_flake = opts.updateFlake;
 
   if (!await Sidebar.flakeSave()) return;
   if (!await _autoSave()) return;

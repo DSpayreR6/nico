@@ -2509,7 +2509,8 @@ def create_app() -> Flask:
         nixos_dir, err = _require_setup()
         if err:
             return err
-        ok, msg = git_manager.git_commit_push(nixos_dir)
+        label = (request.get_json(silent=True) or {}).get("label", "")
+        ok, msg = git_manager.git_commit_push(nixos_dir, label=label)
         return jsonify({"success": ok, "message": msg})
 
     @app.route("/api/git/push-force", methods=["POST"])

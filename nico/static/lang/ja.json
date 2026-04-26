@@ -276,6 +276,8 @@
   "rebuild.error": "エラー",
   "rebuild.connectionError": "❌ サーバーへの接続が切断されました",
   "rebuild.close": "閉じる",
+  "rebuild.commitPush": "__TODO__",
+  "rebuild.pushDone": "__TODO__",
   "admin.gitTitle": "Git履歴 & ロールバック",
   "admin.gitHint": "NiCoは書き込みのたびに自動的にGitコミットを作成します。「リセット」は選択した状態にNixファイルを復元します – Git履歴は完全に保持されます。",
   "admin.loading": "読み込み中 …",

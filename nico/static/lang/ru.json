@@ -276,6 +276,8 @@
   "rebuild.error": "Ошибка",
   "rebuild.connectionError": "❌ Соединение с сервером потеряно",
   "rebuild.close": "Закрыть",
+  "rebuild.commitPush": "__TODO__",
+  "rebuild.pushDone": "__TODO__",
   "admin.gitTitle": "История Git & откат",
   "admin.gitHint": "NiCo автоматически создаёт коммит Git после каждой записи. «Восстановить» возвращает файлы Nix к выбранному состоянию – история Git полностью сохраняется.",
   "admin.loading": "Загрузка …",
