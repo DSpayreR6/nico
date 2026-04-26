@@ -376,6 +376,18 @@
   "git.guard.s2.fetchError": "Holen fehlgeschlagen: {0}",
   "git.guard.s2.sendError": "Senden fehlgeschlagen: {0}",
 
+  "git.guard.status.remote":      "Git Remote:",
+  "git.guard.status.local":       "Git Lokal:",
+  "git.guard.status.bothSame":    "Git Remote & Lokal:",
+  "git.guard.status.noCommit":    "kein Commit",
+  "git.guard.status.uncommitted": "Lokal nicht gesichert",
+  "git.guard.status.remoteNew":   "Remote hat {0} Commit(s) die lokal fehlen",
+  "git.guard.status.localNew":    "Lokal hat {0} Commit(s) die remote fehlen",
+  "git.guard.file.modified":      "Geändert:",
+  "git.guard.file.new":           "Neu:",
+  "git.guard.file.deleted":       "Gelöscht:",
+  "git.guard.file.renamed":       "Umbenannt:",
+
   "git.aborted.info": "NiCo wurde ohne geladene Config geöffnet.\nÜber das NixOS-Menü kann eine Config neu konfiguriert werden.",
 
   "git.closePrompt.title": "Lokale Änderungen noch nicht gepusht",
@@ -405,7 +417,7 @@
 
   "about.title":      "\u00DCber NiCo",
   "about.version":    "Version",
-  "about.versionVal": "0.9.2-beta",
+  "about.versionVal": "0.9.3-beta",
   "about.updated":    "Stand",
   "about.updatedVal": "2026-04-13",
   "about.author":     "Erstellt von",

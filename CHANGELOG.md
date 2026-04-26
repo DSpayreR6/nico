@@ -2,42 +2,28 @@
 
 ## Unreleased
 
+---
+
+## 0.9.3-beta (2026-04-26)
+
 ### Bug fixes
 
-- **Klammer-Validierung beim Brick-Speichern**: Beim Speichern eines Nix-Bricks wird jetzt serverseitig geprüft, ob `{}`, `[]` und `()` ausgeglichen sind (Strings und Kommentare werden korrekt ignoriert). Bei Ungleichgewicht bricht der Speichervorgang mit einer konkreten Fehlermeldung ab (z. B. „1× nicht geschlossene `{`"). Damit wird verhindert, dass syntaktisch defekte Brix die Datei korrupieren und den Parser für nachfolgende Blöcke kippen.
+- Many minor bugfixes
 
-- **Auto-Reload nach Pfad-Änderung**: Nach dem Speichern eines neuen NixOS-Config-Pfads in den App-Settings lädt NiCo jetzt automatisch neu, sodass die neue Konfiguration sofort aktiv wird.
-- **Sektion-Header für reine Brix-Blöcke**: Wenn eine Sektion (z. B. „Hardware") nur Nix-Brix enthält, aber keine Formularfelder gesetzt sind, wurde bisher kein Sektions-Header in `configuration.nix` erzeugt – dadurch konnte das rechte Code-Panel nicht mit dem linken Panel synchronisiert werden. Der Generator emittiert jetzt immer einen Sektions-Header, wenn für die Sektion Brix vorhanden sind.
-- **Cross-Token-Suche**: Prism.js zerlegt NixOS-Attribute wie `services.printing` in mehrere DOM-Knoten (Punkt als eigenes Token). Die Suche konnte daher solche Begriffe nicht finden. Die Implementierung von `markTextInElement` wurde auf eine positionsbasierte Methode umgestellt, die den vollständigen Text über alle Knoten hinweg durchsucht und Treffer präzise zurückschreibt.
-- **Rebuild-Gesamtfortschritt**: Die Rebuild-Boxen verwenden jetzt, wenn verfügbar, die globale Fortschrittszeile von `nixos-rebuild` statt nur lokal bekannter Einzelaktivitäten. Dadurch zeigen `built` und `DL` die echten Gesamtwerte wie in der CLI; zusätzlich wird der `copied`-Fortschritt im Fetching-Block angezeigt. Falls Nix keine globale Fortschrittszeile liefert, bleibt der bisherige Aktivitäts-Fallback erhalten.
+### Git startup guard: status overview
+The startup guard now shows a compact status panel before any action cards:
+- Last commit on remote and local side (hash, message, date, author), or a single "same state" row when both match
+- Commits ahead (local only) and commits behind (remote only) with message preview
+- Uncommitted local files with color-coded labels: **Geändert** (yellow), **Neu** (green), **Gelöscht** (red), **Umbenannt** (blue)
 
-### Git push/pull workflow
-The startup guard dialog now covers all git states with actionable cards before NiCo loads the config:
-- **`behind`**: "Online-Stand holen" card (git pull, green) – reloads on success
-- **`dirty`**: "Lokal verwerfen" card (git reset --hard + clean, red) and "Aktuellen Stand hochladen" card (auto-commit + push, blue)
-- **`ahead`**: "Lokale Commits hochladen" card (git push, blue) and "Lokal verwerfen" card (red)
-- **`diverged`**: hard stop, info only – no action possible, must be resolved manually in the terminal
-- All card actions reload NiCo on success; errors shown inline in the dialog
-
-**Git Push button** added to the NixOS action menu (blue, visible only when a remote is configured). On failure, an error modal with OK button is shown.
-
-**Auto-push settings** added to Admin → Config-Settings (travels with the config, only visible when remote is present):
-- Push automatically after every save
-- Push automatically after a successful rebuild
-
-The save endpoints (`/api/config/write`, host write, raw file write) return `pushed`/`push_error` fields when auto-push is enabled; the frontend shows a combined "Gespeichert und gepusht" toast or a push error modal.
+### Git commit identity
+NiCo now always sets a local `user.email = USER@hostname` and `user.name = USER` per config directory before every commit, so git log shows which machine made each change.
 
 ### Detach config from NiCo
 The active configuration can now be detached from NiCo. NiCo creates a ZIP backup of the current config, removes NiCo-specific comment and marker lines from all `.nix` files, deletes the config metadata JSON, clears the stored config path, and returns to the initial setup state.
 
 ### Sidebar file manager and hardware import
 The sidebar file tree now has hover and context menus for files and directories. Files can be renamed or deleted directly in the tree; directories can additionally create files/directories and import a `hardware-configuration.nix`. Hardware import now supports both known local system paths and a manually entered file or directory path, and an existing target file is backed up as `.bak` before replacement.
-
-### Section docs popup
-The section documentation popup (Wiki / Options) now opens to the right of its anchor instead of expanding left into short section headers.
-
-### Removed early AI UI
-The premature “Ask AI” buttons were removed from the panels. AI stays a long-term goal in the manifest instead of appearing as an unfinished UI feature.
 
 ### Lucide icon set
 All Unicode/emoji icons throughout the UI have been replaced with a consistent set of Lucide SVG icons (v1.9.0, ISC license). Icons are rendered via CSS `mask-image` with `background-color: currentColor`, so they inherit the surrounding text color and are fully theme-swappable. Icon sizes can be overridden per context via the `--ni-icon-size` CSS custom property. The 24 used SVGs are vendored locally under `nico/static/vendor/lucide/`; the theme stylesheet lives at `nico/static/themes/default/icons.css`. The NixOS logo and language flag emojis are intentionally unchanged.
