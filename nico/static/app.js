@@ -2595,7 +2595,7 @@ const BRICK_SECTIONS = [
   'End',
 ];
 
-const HM_PREVIEW_SECTIONS = ['__header__', 'Start', 'Home Manager', 'End'];
+const HM_PREVIEW_SECTIONS = ['__header__', 'Start', 'Home Manager', 'Shell', 'Pakete', 'End'];
 
 /**
  * Split raw code into typed segments:
@@ -6208,6 +6208,32 @@ const Sidebar = (() => {
     return content.replace(/^\s*\{[^}]*\}\s*:/m, `{ ${allArgs.join(', ')} }:`);
   }
 
+  function _hmGetShell(content) {
+    for (const sh of ['bash', 'zsh', 'fish']) {
+      if (new RegExp(`programs\\.${sh}\\s*=\\s*\\{`).test(content)) return sh;
+    }
+    return null;
+  }
+
+  function _hmGetInitExtra(content) {
+    const m = /(?:initExtra|shellInit)\s*=\s*''([\s\S]*?)''/m.exec(content);
+    if (!m) return '';
+    const raw = m[1].replace(/^\n/, '').trimEnd();
+    if (!raw) return '';
+    const lines = raw.split('\n');
+    const indent = Math.min(...lines.filter(l => l.trim()).map(l => l.match(/^(\s*)/)[1].length));
+    return lines.map(l => l.slice(indent)).join('\n').trimEnd();
+  }
+
+  function _hmGetPackages(content) {
+    const m = /home\.packages\s*=(?:\s*with\s+pkgs\s*;)?\s*\[([\s\S]*?)\]/m.exec(content);
+    if (!m) return [];
+    const inner = m[1];
+    const fmt1 = [...inner.matchAll(/pkgs\.([\w_-]+)/g)].map(x => x[1]);
+    if (fmt1.length > 0) return fmt1;
+    return inner.trim().split(/\s+/).filter(s => s && !s.startsWith('#') && /^[\w_-]+$/.test(s));
+  }
+
   /** Baut das HM-Benutzer-Formular und befüllt es mit geparsten Werten */
   function _populateHmPanel(content, filePath) {
     const container = document.getElementById('panel-hm-content');
@@ -6218,6 +6244,9 @@ const Sidebar = (() => {
     const homeDir      = _nixGetStr(content,  'home.homeDirectory');
     const stateVersion = _nixGetStr(content,  'home.stateVersion');
     const hmEnable     = _nixGetBool(content, 'programs.home-manager.enable');
+    const shell        = _hmGetShell(content);
+    const initExtra    = shell ? _hmGetInitExtra(content) : '';
+    const packages     = _hmGetPackages(content);
     _hmCurrentContent  = content;
     _hmCurrentPath     = filePath;
 
@@ -6263,6 +6292,24 @@ const Sidebar = (() => {
             <input id="hm-hmEnable" type="checkbox" ${hmEnable ? 'checked' : ''} />
             <label for="hm-hmEnable" data-i18n="hm.hmEnable">programs.home-manager.enable</label>
           </div>
+        </div>
+      </section>
+      ${shell ? `
+      <section class="collapsible hm-section" data-section="Shell">
+        <h3 class="sec-toggle"><span data-i18n="hm.shell">Shell</span> <span class="hint">(${escHtml(shell)})</span></h3>
+        <div class="sec-body">
+          <label for="hm-initExtra" data-i18n="hm.shellInitExtra">Shell-Init (extra)</label>
+          <p class="hint" data-i18n="hm.shellInitExtraHint" style="margin-bottom:4px">Wird ans Ende der Shell-Init-Datei angehängt.</p>
+          <textarea id="hm-initExtra" rows="4" spellcheck="false" class="mono-input"
+                    placeholder='export PATH="$HOME/.local/bin:$PATH"'>${escHtml(initExtra)}</textarea>
+        </div>
+      </section>` : ''}
+      <section class="collapsible hm-section" data-section="Pakete">
+        <h3 class="sec-toggle"><span data-i18n="hm.packages">Pakete</span></h3>
+        <div class="sec-body">
+          <p class="hint" data-i18n="hm.packagesHint" style="margin-bottom:4px">(ein Nix-Attr pro Zeile)</p>
+          <textarea id="hm-packages-ta" rows="4" spellcheck="false"
+                    placeholder="ripgrep&#10;bat&#10;fastfetch">${escHtml(packages.join('\n'))}</textarea>
         </div>
       </section>
     `;
@@ -6316,27 +6363,38 @@ const Sidebar = (() => {
     let _hmContent = content;
     let _hmSaveTimer = null;
 
-    async function _doHmSave() {
+    function _buildHmPatchPayload(path) {
       const args = [...argsList.querySelectorAll('.hm-arg-row')]
         .map(row => row.querySelector('.hm-arg-name')?.value.trim() ?? '')
         .filter(Boolean);
+      const pkgRaw = document.getElementById('hm-packages-ta')?.value ?? '';
+      const payload = {
+        path,
+        args,
+        username:      document.getElementById('hm-username')?.value      ?? '',
+        home_dir:      document.getElementById('hm-homeDir')?.value       ?? '',
+        state_version: document.getElementById('hm-stateVersion')?.value  ?? '',
+        hm_enable:     document.getElementById('hm-hmEnable')?.checked    ?? false,
+        packages:      pkgRaw.trim().split(/\s+/).filter(Boolean),
+      };
+      const initExtraEl = document.getElementById('hm-initExtra');
+      if (initExtraEl) payload.shell_init_extra = initExtraEl.value;
+      return payload;
+    }
 
-      let updated = _nixSetHmArgs(_hmContent, args);
-      updated = _nixSetValue(updated, 'home.username',               `"${document.getElementById('hm-username')?.value ?? ''}"`);
-      updated = _nixSetValue(updated, 'home.homeDirectory',          `"${document.getElementById('hm-homeDir')?.value ?? ''}"`);
-      updated = _nixSetValue(updated, 'home.stateVersion',           `"${document.getElementById('hm-stateVersion')?.value ?? ''}"`);
-      updated = _nixSetValue(updated, 'programs.home-manager.enable', document.getElementById('hm-hmEnable')?.checked ? 'true' : 'false');
+    async function _doHmSave() {
+      const payload = _buildHmPatchPayload(filePath);
       try {
-        const res  = await csrfFetch('/api/file', {
+        const res  = await csrfFetch('/api/hm/patch', {
           method:  'POST',
           headers: { 'Content-Type': 'application/json' },
-          body:    JSON.stringify({ files: [{ path: filePath, content: updated }] }),
+          body:    JSON.stringify(payload),
         });
         const data = await res.json();
         if (data.success) {
-          _hmContent = updated;
-          _hmCurrentContent = updated;
-          renderCodePreview(updated, 'preview-hm', filePath);
+          _hmContent = data.content;
+          _hmCurrentContent = data.content;
+          renderCodePreview(data.content, 'preview-hm', filePath);
           showToast(t('hm.saved'), 'success');
           return true;
         } else {
@@ -6364,26 +6422,32 @@ const Sidebar = (() => {
     const args = [...container.querySelectorAll('.hm-arg-row')]
       .map(row => row.querySelector('.hm-arg-name')?.value.trim() ?? '')
       .filter(Boolean);
-
-    let updated = _nixSetHmArgs(_hmCurrentContent, args);
-    updated = _nixSetValue(updated, 'home.username',               `"${document.getElementById('hm-username')?.value ?? ''}"`);
-    updated = _nixSetValue(updated, 'home.homeDirectory',          `"${document.getElementById('hm-homeDir')?.value ?? ''}"`);
-    updated = _nixSetValue(updated, 'home.stateVersion',           `"${document.getElementById('hm-stateVersion')?.value ?? ''}"`);
-    updated = _nixSetValue(updated, 'programs.home-manager.enable', document.getElementById('hm-hmEnable')?.checked ? 'true' : 'false');
+    const pkgRaw = container.querySelector('#hm-packages-ta')?.value ?? '';
+    const payload = {
+      path:          _hmCurrentPath,
+      args,
+      username:      document.getElementById('hm-username')?.value     ?? '',
+      home_dir:      document.getElementById('hm-homeDir')?.value      ?? '',
+      state_version: document.getElementById('hm-stateVersion')?.value ?? '',
+      hm_enable:     document.getElementById('hm-hmEnable')?.checked   ?? false,
+      packages:      pkgRaw.trim().split(/\s+/).filter(Boolean),
+    };
+    const initExtraEl = document.getElementById('hm-initExtra');
+    if (initExtraEl) payload.shell_init_extra = initExtraEl.value;
 
     try {
-      const res  = await csrfFetch('/api/file', {
+      const res  = await csrfFetch('/api/hm/patch', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ files: [{ path: _hmCurrentPath, content: updated }] }),
+        body:    JSON.stringify(payload),
       });
       const data = await res.json();
       if (!data.success) {
         showToast(tErr(data.error) || t('toast.error'), 'error');
         return false;
       }
-      _hmCurrentContent = updated;
-      renderCodePreview(updated, 'preview-hm', _hmCurrentPath);
+      _hmCurrentContent = data.content;
+      renderCodePreview(data.content, 'preview-hm', _hmCurrentPath);
       return true;
     } catch (e) {
       showToast(t('toast.error'), 'error');

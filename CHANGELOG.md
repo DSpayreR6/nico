@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+### HM-Panel: Shell, initExtra und Pakete editierbar
+Das HM-Datei-Panel zeigt jetzt alle relevanten Felder aus der home.nix direkt an und erlaubt deren Bearbeitung:
+- **Shell-Sektion**: Zeigt die erkannte Shell (bash/zsh/fish) und ein Textarea für `initExtra` (bzw. `shellInit` bei fish)
+- **Pakete-Sektion**: Textarea für `home.packages` – liest beide Formate (`pkgs.foo` und `with pkgs; [...]`), schreibt immer als `pkgs.foo`
+- Speichern via neuem Endpoint `/api/hm/patch`: patcht Felder direkt im bestehenden Dateiinhalt, regeneriert nicht – unbekannte Felder wie `bashrcExtra` bleiben unberührt
+- Hash wird nach jedem Patch neu berechnet und in der `nico-version`-Zeile aktualisiert
+
+### Fix: Vorgaben-Verletzung – NixOS-Daten nicht mehr in config.json
+`home_manager`-Konfigurationsdaten (Shell, Git, Pakete etc.) wurden bisher beim Startup in `config.json` geschrieben. Das verstößt gegen die Projektregelung „NixOS-Daten nur in `.nix`-Dateien". Behoben: `home_manager` wird weder durch `get_config()` noch durch `save_config()` in `config.json` persistiert.
+
+### Fix: bashrcExtra und andere unbekannte Shell-Felder werden nicht mehr gelöscht
+Wenn eine home.nix extern bearbeitet wurde und NiCo beim Startup eine Regenerierung auslöst, gingen bisher Felder wie `bashrcExtra` innerhalb des `programs.bash`-Blocks verloren. Jetzt gilt: Enthält der Shell-Block unbekannte Felder, wird der gesamte Block als Brix gesichert und nicht neu generiert – kein Datenverlust.
+
 ---
 
 ## 0.9.3-beta (2026-04-26)

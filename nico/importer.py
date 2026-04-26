@@ -1265,7 +1265,25 @@ def build_home_rest_brix(nix_content: str, recognized: dict) -> str:
         rm(r'\s*programs\.git\s*=\s*\{(?:[^{}]|\{[^{}]*\})*\}\s*;')
     shell = recognized.get("shell")
     if shell in ("bash", "zsh", "fish"):
-        rm(rf'\s*programs\.{re.escape(shell)}\s*=\s*\{{(?:[^{{}}]|\{{[^{{}}]*\}})*\}}\s*;')
+        extra_key = {"bash": "initExtra", "zsh": "initExtra", "fish": "shellInit"}[shell]
+        block_m = re.search(
+            rf'programs\.{re.escape(shell)}\s*=\s*\{{((?:[^{{}}]|\{{[^{{}}]*\}})*)\}}',
+            content, re.DOTALL
+        )
+        if block_m:
+            inner = block_m.group(1)
+            inner_check = re.sub(r'\s*enable\s*=\s*(?:true|false)\s*;', '', inner)
+            inner_check = re.sub(
+                rf'\s*{re.escape(extra_key)}\s*=\s*\'\'[\s\S]*?\'\'\s*;', '',
+                inner_check
+            )
+            if inner_check.strip():
+                # Block has unrecognized fields → keep as brix, skip regeneration
+                recognized["shell"] = None
+            else:
+                rm(rf'\s*programs\.{re.escape(shell)}\s*=\s*\{{(?:[^{{}}]|\{{[^{{}}]*\}})*\}}\s*;')
+        else:
+            rm(rf'\s*programs\.{re.escape(shell)}\s*=\s*\{{(?:[^{{}}]|\{{[^{{}}]*\}})*\}}\s*;')
     if recognized.get("firefox"):
         rm(r'\s*programs\.firefox\.enable\s*=\s*true\s*;')
     if recognized.get("xdg_user_dirs"):

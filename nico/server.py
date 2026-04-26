@@ -64,6 +64,89 @@ def _get_nico_type(content: str) -> str | None:
     return m.group(1) or ""   # group(1) is None when type absent → return ""
 
 
+def _hm_patch_str(content: str, key: str, value: str) -> str:
+    ek = re.escape(key)
+    return re.sub(rf'({ek}\s*=\s*)"[^"]*"', rf'\1"{value}"', content)
+
+
+def _hm_patch_bool(content: str, key: str, value: bool) -> str:
+    ek = re.escape(key)
+    nv = "true" if value else "false"
+    return re.sub(rf'({ek}\s*=\s*)(true|false)', rf'\g<1>{nv}', content)
+
+
+def _hm_patch_args(content: str, args: list) -> str:
+    all_args = [a for a in args if a] + ["..."]
+    new_header = "{ " + ", ".join(all_args) + " }:"
+    return re.sub(r'^\s*\{[^}]*\}\s*:', new_header, content, count=1,
+                  flags=re.MULTILINE | re.DOTALL)
+
+
+def _hm_patch_init_extra(content: str, new_extra: str) -> str:
+    for shell, key in [("bash", "initExtra"), ("zsh", "initExtra"), ("fish", "shellInit")]:
+        if not re.search(rf'programs\.{shell}\s*=\s*\{{', content):
+            continue
+        ek = re.escape(key)
+        if new_extra:
+            indented = "\n".join(f"      {ln}" for ln in new_extra.splitlines())
+            def _repl(_m, _k=key, _ind=indented):
+                return f"\n    {_k} = ''\n{_ind}\n    '';"
+            patched = re.sub(
+                rf'\s*{ek}\s*=\s*\'\'[\s\S]*?\'\'[ \t]*;',
+                _repl, content, count=1
+            )
+            if patched != content:
+                return patched
+            # Not found: insert before closing of shell block
+            def _ins(_m, _k=key, _ind=indented):
+                body = _m.group(0)
+                close = body.rfind("};")
+                return body[:close] + f"    {_k} = ''\n{_ind}\n    '';\n  }};"
+            return re.sub(
+                rf'programs\.{shell}\s*=\s*\{{[\s\S]*?\n  \}};',
+                _ins, content, count=1
+            )
+        else:
+            return re.sub(
+                rf'\s*{ek}\s*=\s*\'\'[\s\S]*?\'\'[ \t]*;',
+                '', content, count=1
+            )
+    return content
+
+
+def _hm_patch_packages(content: str, packages: list) -> str:
+    pkg_re = re.compile(
+        r'(\s*)home\.packages\s*=(?:\s*with\s+pkgs\s*;)?\s*\[[\s\S]*?\]\s*;'
+    )
+    m = pkg_re.search(content)
+    if m:
+        indent = m.group(1).replace('\n', '')
+        if packages:
+            pkg_lines = "\n".join(f"{indent}  pkgs.{p}" for p in packages)
+            new_block = f"{indent}home.packages = [\n{pkg_lines}\n{indent}];"
+            return content[:m.start()] + "\n" + new_block + content[m.end():]
+        return content[:m.start()] + content[m.end():]
+    if packages:
+        indent = "  "
+        pkg_lines = "\n".join(f"{indent}  pkgs.{p}" for p in packages)
+        new_block = f"\n{indent}home.packages = [\n{pkg_lines}\n{indent}];"
+        return re.sub(r'(\n\}\n)', rf'{new_block}\1', content, count=1)
+    return content
+
+
+def _hm_update_hash(content: str) -> str:
+    canonical = re.sub(
+        r'^# nico-version: (?:[a-z]+#)?[0-9a-f]{8}\n', '',
+        content, count=1, flags=re.MULTILINE
+    )
+    new_hash = hashlib.sha256(canonical.encode()).hexdigest()[:8]
+    return re.sub(
+        r'^(# nico-version: (?:[a-z]+#)?)[0-9a-f]{8}',
+        rf'\g<1>{new_hash}',
+        content, count=1, flags=re.MULTILINE
+    )
+
+
 def _normalize_hm_content(content: str) -> tuple[str, dict]:
     """Return normalized HM content plus extracted/derived brick blocks."""
     existing_bricks = extract_brick_blocks(content)
@@ -616,7 +699,6 @@ def create_app() -> Flask:
                     existing_bricks = extract_brick_blocks(home_content)
                     home_without_bricks = strip_brick_blocks(home_content)
                     hm = importer.parse_home_config(home_without_bricks)
-                    data["home_manager"] = hm
                     rest = importer.build_home_rest_brix(home_without_bricks, hm)
                     blocks = dict(existing_bricks)
                     if rest.strip():
@@ -668,6 +750,7 @@ def create_app() -> Flask:
 
         incoming.pop("_co_path", None)
         incoming.pop("_co_ready", None)
+        incoming.pop("home_manager", None)
         config_manager.save_config(nixos_dir, incoming)
         return jsonify({"success": True})
 
@@ -3092,6 +3175,53 @@ def create_app() -> Flask:
             git_manager.auto_commit(nixos_dir)
 
         return jsonify({"success": True, "written": written})
+
+    @app.route("/api/hm/patch", methods=["POST"])
+    def hm_patch():
+        """Patch individual fields in a NiCo-managed HM .nix file in-place.
+        Only touches the fields present in the request body; all other content
+        (bashrcExtra, xdg.desktopEntries, …) is preserved unchanged."""
+        if err := _check_csrf(): return err
+        nixos_dir, err = _require_setup()
+        if err:
+            return err
+
+        body = request.get_json(silent=True) or {}
+        rel  = body.get("path", "").strip()
+        if not rel:
+            return jsonify({"error": "ERR_NO_PATH"}), 400
+
+        nixos_path = Path(nixos_dir).resolve()
+        target = (nixos_path / rel).resolve()
+        try:
+            target.relative_to(nixos_path)
+        except ValueError:
+            return jsonify({"error": "ERR_PATH_OUTSIDE"}), 403
+
+        try:
+            content = target.read_text(encoding="utf-8")
+        except OSError:
+            return jsonify({"error": "ERR_FILE_READ"}), 500
+
+        if "username"      in body: content = _hm_patch_str( content, "home.username",               body["username"])
+        if "home_dir"      in body: content = _hm_patch_str( content, "home.homeDirectory",          body["home_dir"])
+        if "state_version" in body: content = _hm_patch_str( content, "home.stateVersion",           body["state_version"])
+        if "hm_enable"     in body: content = _hm_patch_bool(content, "programs.home-manager.enable", body["hm_enable"])
+        if "args"          in body: content = _hm_patch_args(content, body["args"])
+        if "shell_init_extra" in body:
+            content = _hm_patch_init_extra(content, body["shell_init_extra"])
+        if "packages" in body:
+            content = _hm_patch_packages(content, body["packages"])
+
+        content = _hm_update_hash(content)
+
+        try:
+            target.write_text(content, encoding="utf-8")
+        except OSError:
+            return jsonify({"error": "ERR_FILE_WRITE"}), 500
+
+        git_manager.auto_commit(nixos_dir)
+        return jsonify({"success": True, "content": content})
 
     @app.route("/api/file/set-type", methods=["POST"])
     def set_file_type():
