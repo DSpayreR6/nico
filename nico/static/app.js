@@ -809,12 +809,93 @@ function showGitStartGuard(check, configDir) {
       : '';
     const bodyHtml = isScenario2 ? '' : `<p>${escHtml(msg.body)}</p>`;
 
+    function _gsiCommitRow(c) {
+      return `<div class="gsi-commit">
+        <span class="gsi-hash">${escHtml(c.hash)}</span>
+        <span class="gsi-date">${escHtml(c.date)}</span>
+        <span class="gsi-author">${escHtml(c.author)}</span>
+        <span class="gsi-msg">${escHtml(c.message)}</span>
+      </div>`;
+    }
+
+    function _gsiLastRow(label, branch, info) {
+      const infoHtml = info && info.hash
+        ? `<span class="gsi-hash">${escHtml(info.hash)}</span>
+           <span class="gsi-date">${escHtml(info.date)}</span>
+           <span class="gsi-author">${escHtml(info.author)}</span>
+           <span class="gsi-msg">${escHtml(info.message)}</span>`
+        : `<span class="gsi-none">${escHtml(t('git.guard.status.noCommit'))}</span>`;
+      return `<div class="gsi-last-row">
+        <span class="gsi-last-label">${label}</span>
+        <code class="gsi-branch">${escHtml(branch)}</code>
+        ${infoHtml}
+      </div>`;
+    }
+
+    let statusHtml = '';
+    const parts = [];
+
+    // Always: last state comparison
+    if (check.last_local || check.last_remote) {
+      const sameCommit = check.last_local && check.last_remote
+        && check.last_local.hash === check.last_remote.hash;
+      const summaryRows = sameCommit
+        ? `<div class="gsi-last-row">
+            <span class="gsi-last-label">${escHtml(t('git.guard.status.bothSame'))}</span>
+            <code class="gsi-branch">${escHtml(check.local_branch || '?')}</code>
+            <span class="gsi-hash">${escHtml(check.last_local.hash)}</span>
+            <span class="gsi-date">${escHtml(check.last_local.date)}</span>
+            <span class="gsi-author">${escHtml(check.last_local.author)}</span>
+            <span class="gsi-msg">${escHtml(check.last_local.message)}</span>
+           </div>`
+        : `${_gsiLastRow(t('git.guard.status.remote'), check.remote_branch || '?', check.last_remote)}
+           ${_gsiLastRow(t('git.guard.status.local'),  check.local_branch  || '?', check.last_local)}`;
+      parts.push(`<div class="gsi-block gsi-block--summary">${summaryRows}</div>`);
+    }
+
+    // Delta: what remote has that local doesn't
+    if (check.behind_commits && check.behind_commits.length) {
+      parts.push(`<div class="gsi-block gsi-block--warn">
+        <div class="gsi-block-head"><span class="gsi-block-label">${escHtml(t('git.guard.status.remoteNew', check.behind))}</span></div>
+        <div class="gsi-block-body">${check.behind_commits.map(_gsiCommitRow).join('')}</div>
+      </div>`);
+    }
+
+    // Delta: what local has that remote doesn't
+    if (check.ahead_commits && check.ahead_commits.length) {
+      parts.push(`<div class="gsi-block">
+        <div class="gsi-block-head"><span class="gsi-block-label">${escHtml(t('git.guard.status.localNew', check.ahead))}</span></div>
+        <div class="gsi-block-body">${check.ahead_commits.map(_gsiCommitRow).join('')}</div>
+      </div>`);
+    }
+
+    // Dirty files
+    if (check.dirty_files && check.dirty_files.length) {
+      function _fileLabel(st) {
+        if (st === 'D')                return ['gsi-del', t('git.guard.file.deleted')];
+        if (st === 'A' || st === '??') return ['gsi-add', t('git.guard.file.new')];
+        if (st.startsWith('R'))        return ['gsi-ren', t('git.guard.file.renamed')];
+        return ['gsi-mod', t('git.guard.file.modified')];
+      }
+      const rows = check.dirty_files.map(f => {
+        const [cls, label] = _fileLabel(f.status);
+        return `<div class="gsi-file-row ${cls}">${escHtml(label)} ${escHtml(f.path)}</div>`;
+      }).join('');
+      parts.push(`<div class="gsi-block">
+        <div class="gsi-block-head"><span class="gsi-block-label">${escHtml(t('git.guard.status.uncommitted'))}</span></div>
+        <div class="gsi-block-body gsi-file-list">${rows}</div>
+      </div>`);
+    }
+
+    if (parts.length) statusHtml = `<div class="gsi">${parts.join('')}</div>`;
+
     const overlay = document.createElement('div');
     overlay.className = 'overlay';
     overlay.innerHTML = `
       <div class="modal">
         <div class="modal-logo">${escHtml(msg.title)}</div>
         ${pathHtml}
+        ${statusHtml}
         ${bodyHtml}
         ${recHtml}
         <p id="_gs-err" style="color:var(--red);display:none;margin-top:8px"></p>

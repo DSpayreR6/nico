@@ -72,6 +72,8 @@ body {
   padding: 36px 40px;
   width: 500px;
   max-width: 92vw;
+  max-height: 90vh;
+  overflow-y: auto;
 }
 
 .modal-logo {
@@ -924,6 +926,120 @@ button:active { transform: scale(.97); }
   background: var(--surface0);
   border-radius: 4px;
 }
+.gsi {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 4px 0 10px;
+  font-size: 0.78rem;
+}
+.gsi-block {
+  background: var(--surface0);
+  border: 1px solid var(--surface2);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.gsi-block--warn {
+  border-color: color-mix(in srgb, var(--yellow) 40%, var(--surface2));
+}
+.gsi-block--summary {
+  border-color: var(--surface2);
+}
+.gsi-last-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  padding: 5px 10px;
+  font-size: 0.78rem;
+}
+.gsi-last-row + .gsi-last-row {
+  border-top: 1px solid var(--surface1);
+}
+.gsi-last-label {
+  font-weight: 600;
+  color: var(--subtext1);
+  white-space: nowrap;
+  min-width: 3.5rem;
+}
+.gsi-none {
+  color: var(--subtext0);
+  font-style: italic;
+}
+.gsi-block-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 10px;
+  border-bottom: 1px solid var(--surface1);
+  background: var(--surface1);
+}
+.gsi-block-label {
+  font-weight: 600;
+  color: var(--text);
+  font-size: 0.8rem;
+}
+.gsi-branch {
+  font-size: 0.72rem;
+  font-family: monospace;
+  color: var(--subtext0);
+  background: var(--surface2);
+  border-radius: 3px;
+  padding: 0 5px;
+}
+.gsi-block-body {
+  padding: 4px 0;
+}
+.gsi-commit {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  padding: 3px 10px;
+  line-height: 1.4;
+}
+.gsi-commit + .gsi-commit {
+  border-top: 1px solid var(--surface1);
+}
+.gsi-hash {
+  font-family: monospace;
+  color: var(--mauve);
+  font-size: 0.75rem;
+}
+.gsi-date {
+  color: var(--subtext0);
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+.gsi-author {
+  font-family: monospace;
+  color: var(--blue);
+  font-size: 0.75rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.gsi-msg {
+  color: var(--text);
+  word-break: break-word;
+  flex: 1 1 100%;
+}
+.gsi-file-list {
+  padding: 2px 0;
+}
+.gsi-file-row {
+  padding: 3px 12px;
+  font-size: 0.78rem;
+  font-family: monospace;
+  word-break: break-all;
+}
+.gsi-file-row + .gsi-file-row {
+  border-top: 1px solid var(--surface1);
+}
+.gsi-mod { color: var(--yellow); }
+.gsi-add { color: var(--green);  }
+.gsi-del { color: var(--red);    }
+.gsi-ren { color: var(--blue);   }
 
 /* ── Help dropdown menu ───────────────────────────────────────────────────── */
 .help-menu {

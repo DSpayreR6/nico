@@ -40,12 +40,13 @@ def is_git_repo(nixos_dir: str) -> bool:
 
 
 def _ensure_identity(nixos_dir: str) -> None:
-    """Set a local git identity if no global one is configured."""
-    rc, _ = _run(["config", "--global", "user.email"], cwd=nixos_dir)
-    if rc != 0:
-        # No global identity – set a local fallback so commits work
-        _run(["config", "user.email", "nico@localhost"], cwd=nixos_dir)
-        _run(["config", "user.name",  "NiCo"],           cwd=nixos_dir)
+    """Always set a local git identity using system user@hostname so commits show machine origin."""
+    import os
+    import socket
+    user = os.environ.get("USER") or os.environ.get("LOGNAME") or "nico"
+    host = socket.gethostname() or "localhost"
+    _run(["config", "user.email", f"{user}@{host}"], cwd=nixos_dir)
+    _run(["config", "user.name",  user],              cwd=nixos_dir)
 
 
 def init_repo(nixos_dir: str) -> tuple[bool, str]:
@@ -158,6 +159,32 @@ def git_commit_push(nixos_dir: str, label: str = "") -> tuple[bool, str]:
     if not ok_push:
         return False, msg_push
     return True, ""
+
+
+def _get_commit_info(nixos_dir: str, ref: str) -> dict:
+    """Return {hash, message, date, author} for a given ref, or empty dict on failure."""
+    fmt = "%H\x1f%s\x1f%ai\x1f%ae"
+    rc, out = _run(["log", ref, "-1", f"--format={fmt}"], cwd=nixos_dir)
+    if rc != 0 or not out.strip():
+        return {}
+    parts = out.strip().split("\x1f", 3)
+    if len(parts) != 4:
+        return {}
+    return {"hash": parts[0][:7], "message": parts[1], "date": parts[2][:16], "author": parts[3]}
+
+
+def _get_commit_list(nixos_dir: str, range_spec: str, limit: int = 5) -> list:
+    """Return up to `limit` commits for a range as list of {hash, message, date, author}."""
+    fmt = "%H\x1f%s\x1f%ai\x1f%ae"
+    rc, out = _run(["log", range_spec, f"-{limit}", f"--format={fmt}"], cwd=nixos_dir)
+    if rc != 0 or not out.strip():
+        return []
+    result = []
+    for line in out.strip().splitlines():
+        parts = line.split("\x1f", 3)
+        if len(parts) == 4:
+            result.append({"hash": parts[0][:7], "message": parts[1], "date": parts[2][:16], "author": parts[3]})
+    return result
 
 
 def check_remote_status(nixos_dir: str) -> dict:
@@ -308,6 +335,29 @@ def check_start_guard(nixos_dir: str) -> dict:
     else:
         state = "clean_up_to_date"
 
+    _, local_branch  = _run(["rev-parse", "--abbrev-ref", "HEAD"], cwd=nixos_dir)
+    _, remote_branch = _run(["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"], cwd=nixos_dir)
+
+    dirty_files = []
+    if dirty:
+        # Use stdout directly — _run strips the full output which eats the leading
+        # space of the first porcelain line (e.g. " M hosts/...") causing path[0] loss.
+        try:
+            _proc = subprocess.run(
+                ["git", "status", "--porcelain"],
+                cwd=nixos_dir, capture_output=True, text=True, timeout=10,
+            )
+            for line in _proc.stdout.splitlines()[:15]:
+                if len(line) >= 4:
+                    dirty_files.append({"status": line[:2].strip(), "path": line[3:]})
+        except Exception:
+            pass
+
+    ahead_commits  = _get_commit_list(nixos_dir, "@{u}..HEAD")  if ahead  > 0 else []
+    behind_commits = _get_commit_list(nixos_dir, "HEAD..@{u}")  if behind > 0 else []
+    last_local     = _get_commit_info(nixos_dir, "HEAD")
+    last_remote    = _get_commit_info(nixos_dir, "@{u}")
+
     return {
         "state": state,
         "git_installed": True,
@@ -318,6 +368,13 @@ def check_start_guard(nixos_dir: str) -> dict:
         "behind": behind,
         "remote_url": remote_url,
         "detail": "",
+        "local_branch":   local_branch.strip(),
+        "remote_branch":  remote_branch.strip(),
+        "dirty_files":    dirty_files,
+        "ahead_commits":  ahead_commits,
+        "behind_commits": behind_commits,
+        "last_local":     last_local,
+        "last_remote":    last_remote,
     }
 
 
@@ -357,7 +414,8 @@ def check_close_state(nixos_dir: str) -> dict:
     if rc != 0 or not remote_url:
         return {"has_remote": False, "needs_push": False, "ahead": 0, "dirty": False}
 
-    rc, status_out = _run(["status", "--porcelain"], cwd=nixos_dir)
+    # -uno: ignore untracked files (e.g. result symlink, .stfolder) – only tracked changes matter here
+    rc, status_out = _run(["status", "--porcelain", "-uno"], cwd=nixos_dir)
     dirty = bool(status_out.strip()) if rc == 0 else False
 
     rc, count_out = _run(["rev-list", "@{u}..HEAD", "--count"], cwd=nixos_dir)
