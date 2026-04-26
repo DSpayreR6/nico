@@ -8,7 +8,8 @@ can split the preview into collapsible sections that sync with the form.
 import hashlib
 import re
 
-from .brix import inject_brick_blocks
+from .brix import format_brick, inject_brick_blocks
+from .importer import flake_host_brick_name, flake_host_section
 
 # Matches nico-version lines in both formats:
 #   # nico-version: a3f8c2d1          (legacy / no type)
@@ -1003,7 +1004,7 @@ def generate_flake_nix(data: dict, nixos_dir: "str | Path | None" = None) -> str
     pm_input    = bool(data.get("flake_plasma_manager"))
 
     flake_hosts: list[dict] = data.get("flake_hosts") or []
-    brix = data.get("flake_brick_blocks", {})
+    brix = dict(data.get("flake_brick_blocks", {}))
 
     # Legacy: if "outputs-declaration" Brix in "Outputs" section exists, the
     # entire outputs block is managed by that Brix.
@@ -1064,30 +1065,52 @@ def generate_flake_nix(data: dict, nixos_dir: "str | Path | None" = None) -> str
             out_args.append("plasma-manager")
         out_args_str = ", ".join(out_args) + ", ..."
 
+        def _host_header(name: str) -> str:
+            dashes = "─" * max(1, _MARKER_WIDTH - len(f"Host: {name}") - 10)
+            return f"      # ── Host: {name} {dashes}"
+
+        def _default_host_body(name: str) -> str:
+            body = [
+                f'      system = "{arch}";',
+                "      modules = [",
+                "        ./configuration.nix",
+                f"        ./hosts/{name}/hardware-configuration.nix",
+                f"        ./hosts/{name}",
+            ]
+            if hm_input and hm_module:
+                body.append("        home-manager.nixosModules.home-manager")
+            body += ["      ];"]
+            return "\n".join(body)
+
+        def _ensure_host_brix(name: str) -> None:
+            section = flake_host_section(name)
+            if any(block.get("section") == section for block in brix.values()):
+                return
+            brick_name = flake_host_brick_name(name)
+            suffix = 2
+            while brick_name in brix:
+                brick_name = f"{flake_host_brick_name(name)}-{suffix}"
+                suffix += 1
+            brix[brick_name] = {
+                "section": section,
+                "order": 1,
+                "text": format_brick(section, 1, brick_name, _default_host_body(name)),
+            }
+
         def _host_entry(h: dict) -> str:
-            hname     = h["name"]
-            h_arch    = (h.get("arch") or arch).strip()
-            h_special = (h.get("specialArgs") or "").strip()
-            h_mods    = (h.get("modules") or "").strip()
-
-            sys_lines: list[str] = [f'      system = "{h_arch}";']
-            if h_special:
-                sys_lines.append(f'      specialArgs = {{ {h_special} }};')
-
-            if h_mods:
-                mods = [f"        {l}" for l in h_mods.splitlines() if l.strip()]
-            else:
-                mods = ["        ./configuration.nix"]
-            if hm_input and hm_module and "home-manager.nixosModules" not in h_mods:
-                mods.append("        home-manager.nixosModules.homeManager")
-
-            sys_lines += ["      modules = ["] + mods + ["      ];"]
-            return f"    {hname} = nixpkgs.lib.nixosSystem {{\n" + "\n".join(sys_lines) + f"\n    }};"
+            hname = h["name"]
+            _ensure_host_brix(hname)
+            return (
+                f"    {hname} = nixpkgs.lib.nixosSystem {{\n"
+                + _host_header(hname)
+                + "\n"
+                + "    };"
+            )
 
         if flake_hosts:
             cfg_block = "\n".join(_host_entry(h) for h in flake_hosts)
         else:
-            cfg_block = _host_entry({"name": hostname, "arch": arch, "specialArgs": "", "modules": ""})
+            cfg_block = _host_entry({"name": hostname})
 
         content += (
             _section("Outputs") + "\n"

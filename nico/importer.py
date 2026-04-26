@@ -1407,78 +1407,16 @@ def parse_flake_nix(content: str) -> dict:
     # plasma-manager input
     r['flake_plasma_manager'] = bool(re.search(r'plasma-manager\s*[=.]', content))
 
-    # Per-host data: extract flake_hosts list from nixosConfigurations
+    # Per-host data: only the host names remain panel-managed.
     flake_hosts: list[dict] = []
-    outputs_m = re.search(r'\boutputs\s*=\s*\{[^}]*\}\s*:\s*\{', content)
-    if outputs_m:
-        colon_pos = content.index(':', outputs_m.start())
-        body_start = content.index('{', colon_pos)
-        depth, i = 0, body_start
-        while i < len(content):
-            if content[i] == '{':
-                depth += 1
-            elif content[i] == '}':
-                depth -= 1
-                if depth == 0:
-                    body_end = i
-                    break
-            i += 1
-        else:
-            body_end = len(content)
-        outputs_body = content[body_start + 1:body_end]
-        nixos_cfg = _flake_extract_block(outputs_body, "nixosConfigurations")
-        if nixos_cfg:
-            cfg_open  = nixos_cfg.index('{') + 1
-            cfg_close = nixos_cfg.rindex('}')
-            for host_entry in _flake_split_attrs(nixos_cfg[cfg_open:cfg_close]):
-                host_name = _flake_attr_name(host_entry)
-                if not host_name:
-                    continue
-                sys_m2 = re.search(r'nixosSystem\s*\{', host_entry)
-                if not sys_m2:
-                    continue
-                sys_start = host_entry.index('{', sys_m2.start())
-                depth2, j = 0, sys_start
-                while j < len(host_entry):
-                    if host_entry[j] == '{':
-                        depth2 += 1
-                    elif host_entry[j] == '}':
-                        depth2 -= 1
-                        if depth2 == 0:
-                            sys_block = host_entry[sys_start:j + 1]
-                            if not _is_exotic_nixos_system(sys_block):
-                                h: dict = {'name': host_name}
-                                arch_m = re.search(r'\bsystem\s*=\s*"([^"]+)"', sys_block)
-                                h['arch'] = arch_m.group(1) if arch_m else 'x86_64-linux'
-                                sa_m = re.search(r'specialArgs\s*=\s*\{([^}]*)\}', sys_block)
-                                h['specialArgs'] = sa_m.group(1).strip() if sa_m else ''
-                                mod_m = re.search(r'\bmodules\s*=\s*\[', sys_block)
-                                if mod_m:
-                                    b_start = sys_block.index('[', mod_m.start())
-                                    depth3, k = 0, b_start
-                                    while k < len(sys_block):
-                                        if sys_block[k] == '[':
-                                            depth3 += 1
-                                        elif sys_block[k] == ']':
-                                            depth3 -= 1
-                                            if depth3 == 0:
-                                                raw = sys_block[b_start + 1:k]
-                                                clean = re.sub(r'#[^\n]*', '', raw)
-                                                h['modules'] = '\n'.join(
-                                                    l.strip() for l in clean.splitlines() if l.strip()
-                                                )
-                                                break
-                                        k += 1
-                                    else:
-                                        h['modules'] = ''
-                                else:
-                                    h['modules'] = ''
-                                flake_hosts.append(h)
-                            break
-                    j += 1
+    for host_name, host_entry, sys_block in _iter_flake_hosts(content):
+        flake_hosts.append({"name": host_name})
+        if "flake_arch" not in r:
+            arch_m = re.search(r'\bsystem\s*=\s*"([^"]+)"', sys_block)
+            if arch_m:
+                r["flake_arch"] = arch_m.group(1)
     if flake_hosts:
         r['flake_hosts'] = flake_hosts
-        r['flake_arch']  = flake_hosts[0]['arch']
 
     return r
 
@@ -1602,6 +1540,81 @@ def _flake_attr_name(assignment: str) -> str:
     return ''
 
 
+def flake_host_section(host_name: str) -> str:
+    return f"Host: {host_name}"
+
+
+def flake_host_brick_name(host_name: str) -> str:
+    return f"host-{host_name}"
+
+
+def _unique_brick_name(blocks: dict[str, dict], base: str) -> str:
+    if base not in blocks:
+        return base
+    idx = 2
+    while f"{base}-{idx}" in blocks:
+        idx += 1
+    return f"{base}-{idx}"
+
+
+def _extract_nixos_system_block(host_entry: str) -> str | None:
+    sys_m = re.search(r'nixosSystem\s*\{', host_entry)
+    if not sys_m:
+        return None
+    sys_start = host_entry.index('{', sys_m.start())
+    depth, idx = 0, sys_start
+    while idx < len(host_entry):
+        if host_entry[idx] == '{':
+            depth += 1
+        elif host_entry[idx] == '}':
+            depth -= 1
+            if depth == 0:
+                return host_entry[sys_start:idx + 1]
+        idx += 1
+    return None
+
+
+def _nixos_system_body(sys_block: str) -> str:
+    body = sys_block[1:-1].strip("\n")
+    return body.rstrip()
+
+
+def _iter_flake_hosts(content: str) -> list[tuple[str, str, str]]:
+    hosts: list[tuple[str, str, str]] = []
+    outputs_m = re.search(r'\boutputs\s*=\s*\{[^}]*\}\s*:\s*\{', content)
+    if not outputs_m:
+        return hosts
+    colon_pos = content.index(':', outputs_m.start())
+    body_start = content.index('{', colon_pos)
+    depth, i = 0, body_start
+    while i < len(content):
+        if content[i] == '{':
+            depth += 1
+        elif content[i] == '}':
+            depth -= 1
+            if depth == 0:
+                body_end = i
+                break
+        i += 1
+    else:
+        body_end = len(content)
+    outputs_body = content[body_start + 1:body_end]
+    nixos_cfg = _flake_extract_block(outputs_body, "nixosConfigurations")
+    if not nixos_cfg:
+        return hosts
+    cfg_open = nixos_cfg.index('{') + 1
+    cfg_close = nixos_cfg.rindex('}')
+    for host_entry in _flake_split_attrs(nixos_cfg[cfg_open:cfg_close]):
+        host_name = _flake_attr_name(host_entry)
+        if not host_name:
+            continue
+        sys_block = _extract_nixos_system_block(host_entry)
+        if not sys_block:
+            continue
+        hosts.append((host_name, host_entry, sys_block))
+    return hosts
+
+
 def _is_exotic_nixos_system(host_block: str) -> bool:
     """Return True if a nixosSystem { ... } block has parameters NiCo can't
     represent in the panel (anything beyond system, modules, specialArgs).
@@ -1717,6 +1730,29 @@ def build_flake_brix(content: str) -> dict:
                 order_outputs_extra += 1
 
     return brix
+
+
+def ensure_flake_host_bricks(content: str, existing_blocks: dict[str, dict] | None = None) -> dict[str, dict]:
+    """Ensure that every nixosConfigurations host has a dedicated host-body brick.
+
+    Existing host-body bricks are preserved. Managed host bodies from older flake
+    files are migrated into host-specific bricks on the fly.
+    """
+    from .brix import format_brick
+
+    blocks = dict(existing_blocks or {})
+    for host_name, _, sys_block in _iter_flake_hosts(content):
+        section = flake_host_section(host_name)
+        if any(b.get("section") == section for b in blocks.values()):
+            continue
+        brick_name = _unique_brick_name(blocks, flake_host_brick_name(host_name))
+        body = _nixos_system_body(sys_block)
+        blocks[brick_name] = {
+            "section": section,
+            "order": 1,
+            "text": format_brick(section, 1, brick_name, body),
+        }
+    return blocks
 
 
 def copy_nix_tree(source_dir: str | Path, nixos_dir: str | Path) -> list[str]:
