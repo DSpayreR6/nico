@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+### flake.lock anzeigen
+`flake.lock` kann jetzt optional im Dateibaum angezeigt werden. Die Einstellung befindet sich in den NiCo-Einstellungen (Programmeinstellung, bleibt lokal). Ein eigenes Panel informiert darüber, dass die Datei nur zur Ansicht dient und manuell mit einem externen Editor bearbeitet werden kann. Die Anzeige erfolgt mit Zeilennummern und Scroll-Unterstützung.
+
 ### HM-Panel: Shell, initExtra und Pakete editierbar
 Das HM-Datei-Panel zeigt jetzt alle relevanten Felder aus der home.nix direkt an und erlaubt deren Bearbeitung:
 - **Shell-Sektion**: Zeigt die erkannte Shell (bash/zsh/fish) und ein Textarea für `initExtra` (bzw. `shellInit` bei fish)

@@ -1331,6 +1331,19 @@
           </div>
         </div>
 
+        <div id="panel-flk" class="type-panel hidden" data-panel-type="flk">
+          <div class="type-panel-header">
+            <span class="type-panel-badge ft-flk">LK</span>
+            <span class="type-panel-name" data-i18n="panel.flk.name">Flake Lock</span>
+          </div>
+          <div class="type-panel-content">
+            <div class="type-panel-warnbox">
+              <span class="ni-icon ni-icon-alert-triangle" aria-hidden="true"></span>
+              <span data-i18n="panel.flk.info">flake.lock wird von NiCo nur angezeigt. Bearbeitung nur manuell mit einem externen Editor.</span>
+            </div>
+          </div>
+        </div>
+
         <div id="panel-hm" class="type-panel type-panel-form hidden" data-panel-type="hm">
           <div class="type-panel-header">
             <span class="type-panel-badge ft-hm">HM</span>
@@ -1772,13 +1785,26 @@
 
             <!-- Sprache wird über den Header-Switcher eingestellt -->
             <!-- Theme: Platzhalter für später -->
-            <label style="display:flex;align-items:center;gap:8px;margin-top:12px;cursor:pointer">
-              <input type="checkbox" id="setting-code-view-plain">
+            <label class="toggle-row" style="margin-top:12px">
               <span data-i18n="admin.settings.codeViewPlain">Code-Ansicht beim Start: Plain (ohne Brix-Annotationen)</span>
+              <span class="toggle-wrap">
+                <input type="checkbox" id="setting-code-view-plain">
+                <span class="toggle-track"><span class="toggle-thumb"></span></span>
+              </span>
             </label>
-            <label style="display:flex;align-items:center;gap:8px;margin-top:8px;cursor:pointer">
-              <input type="checkbox" id="setting-rebuild-log">
+            <label class="toggle-row" style="margin-top:8px">
               <span data-i18n="admin.settings.rebuildLog">Rebuild-Log immer schreiben (nixos-rebuild.log)</span>
+              <span class="toggle-wrap">
+                <input type="checkbox" id="setting-rebuild-log">
+                <span class="toggle-track"><span class="toggle-thumb"></span></span>
+              </span>
+            </label>
+            <label class="toggle-row" style="margin-top:8px">
+              <span data-i18n="admin.settings.showFlakeLock">flake.lock im Dateibaum anzeigen</span>
+              <span class="toggle-wrap">
+                <input type="checkbox" id="setting-show-flake-lock">
+                <span class="toggle-track"><span class="toggle-thumb"></span></span>
+              </span>
             </label>
           </div>
 

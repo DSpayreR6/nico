@@ -1007,6 +1007,8 @@ function _loadAdminSettings() {
     if (cb) cb.checked = !!data.code_view_plain;
     const cbLog = document.getElementById('setting-rebuild-log');
     if (cbLog) cbLog.checked = !!data.rebuild_log;
+    const cbFlakeLock = document.getElementById('setting-show-flake-lock');
+    if (cbFlakeLock) cbFlakeLock.checked = !!data.show_flake_lock;
     if (Array.isArray(data.hidden_sections)) {
       hiddenSections = data.hidden_sections;
       updateSectionVisibility();
@@ -1038,6 +1040,23 @@ function _loadAdminSettings() {
         body:    JSON.stringify({ rebuild_log: cbRebuildLog.checked }),
       }).then(() => showToast(t('admin.settings.saved'), 'success'))
         .catch(() => showToast(t('toast.error'), 'error'));
+    });
+  }
+
+  // Auto-save Checkbox: show_flake_lock + Tree-Reload
+  const cbShowFlakeLock = document.getElementById('setting-show-flake-lock');
+  if (cbShowFlakeLock && !cbShowFlakeLock.dataset.listenerAttached) {
+    cbShowFlakeLock.dataset.listenerAttached = '1';
+    cbShowFlakeLock.addEventListener('change', () => {
+      csrfFetch('/api/app/settings', {
+        method:  'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ show_flake_lock: cbShowFlakeLock.checked }),
+      }).then(() => {
+        showToast(t('admin.settings.saved'), 'success');
+        if (!cbShowFlakeLock.checked) Sidebar.clearFlkIfActive();
+        Sidebar.loadTree();
+      }).catch(() => showToast(t('toast.error'), 'error'));
     });
   }
 
@@ -6085,6 +6104,9 @@ const Sidebar = (() => {
       _showLeftPanel('fl');
       switchTab('flake');
       await _populateFlakeFormFromFile(data.content);
+    } else if (ftype === 'flk') {
+      _showFlkView(data.content);
+      _showLeftPanel('flk');
     } else if (ftype === 'hm') {
       _clearRawView();
       _showLeftPanel('hm', fileName);
@@ -6811,6 +6833,35 @@ const Sidebar = (() => {
     if (modBtn) { modBtn.innerHTML = niIcon('pencil'); modBtn.dataset.mode = 'edit'; modBtn.title = t('preview.modeRaw'); }
   }
 
+  function _showFlkView(content) {
+    _clearRawView();
+    const previewTabs = elPreviewPanel.querySelector('.preview-tabs');
+    if (previewTabs) { previewTabs.dataset.hiddenByRaw = '1'; previewTabs.style.display = 'none'; }
+    elPreviewPanel.querySelectorAll('.preview-code-wrap, .preview-content').forEach(el => {
+      el.dataset.hiddenByRaw = '1'; el.style.display = 'none';
+    });
+
+    const lines     = content.split('\n');
+    const lineNums  = lines.map((_, i) => i + 1).join('\n');
+    const highlighted = (typeof Prism !== 'undefined' && Prism.languages.nix)
+      ? Prism.highlight(content, Prism.languages.nix, 'nix')
+      : escHtml(content);
+
+    const flkDiv = document.createElement('div');
+    flkDiv.id = 'flk-file-view';
+    flkDiv.className = 'raw-file-view';
+    flkDiv.innerHTML = `
+      <div class="raw-editor-wrap">
+        <div class="raw-line-nums" aria-hidden="true">${lineNums}</div>
+        <pre class="flk-file-pre language-nix"><code>${highlighted}</code></pre>
+      </div>`;
+    elPreviewPanel.appendChild(flkDiv);
+
+    const lns = flkDiv.querySelector('.raw-line-nums');
+    const pre = flkDiv.querySelector('.flk-file-pre');
+    pre.addEventListener('scroll', () => { lns.scrollTop = pre.scrollTop; });
+  }
+
   async function _saveRawFile() {
     const path    = _rawEditPath;
     const content = document.getElementById('raw-file-editor')?.value ?? '';
@@ -6888,6 +6939,7 @@ const Sidebar = (() => {
 
   function _clearRawView() {
     document.getElementById('raw-file-view')?.remove();
+    document.getElementById('flk-file-view')?.remove();
     _rawEditPath = null;
     document.querySelectorAll('[data-hidden-by-raw]').forEach(el => {
       el.style.display = ''; delete el.dataset.hiddenByRaw;
@@ -6946,6 +6998,14 @@ const Sidebar = (() => {
     updateTreeHighlights();
   }
 
+  function clearFlkIfActive() {
+    if (activeFile?.name !== 'flake.lock') return;
+    activeFile = null;
+    _updateActiveFileLabel();
+    _clearRawView();
+    _showLeftPanel('none');
+  }
+
   return {
     init,
     openFileViewer,
@@ -6954,5 +7014,7 @@ const Sidebar = (() => {
     closeTreeContextMenu: _closeTreeContextMenu,
     updateFlakePreview: _updateFlakePreview,
     togglePlainCodeView: _togglePlainCodeViewInSidebar,
+    loadTree,
+    clearFlkIfActive,
   };
 })();

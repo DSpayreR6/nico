@@ -814,7 +814,7 @@ def create_app() -> Flask:
         """Merge settings into app settings (~/.config/nico/settings.json)."""
         if err := _check_csrf(): return err
 
-        _APP_KEYS = frozenset({"language", "theme", "code_view_plain", "rebuild_log", "hidden_sections", "section_filter"})
+        _APP_KEYS = frozenset({"language", "theme", "code_view_plain", "rebuild_log", "hidden_sections", "section_filter", "show_flake_lock"})
         incoming = request.get_json(silent=True) or {}
         patch    = {k: v for k, v in incoming.items() if k in _APP_KEYS}
         if not patch:
@@ -2642,6 +2642,8 @@ def create_app() -> Flask:
         root     = Path(nixos_dir)
         _cfg_s   = config_manager.load_config_settings(nixos_dir)
         _hm_dir  = _cfg_s.get("hm_dir", "home").strip() or "home"
+        _app_s   = config_manager.get_app_settings()
+        _show_flake_lock = bool(_app_s.get("show_flake_lock", False))
 
         def _classify_by_path(item: Path, root: Path) -> str | None:
             rel   = item.relative_to(root)
@@ -2674,6 +2676,13 @@ def create_app() -> Flask:
                         "type":      "file",
                         "path":      str(item.relative_to(root)),
                         "file_type": _FILENAME_TYPE_HINTS.get(item.name) or _classify_by_path(item, root),
+                    })
+                elif item.name == 'flake.lock' and _show_flake_lock:
+                    entries.append({
+                        "name":      item.name,
+                        "type":      "file",
+                        "path":      str(item.relative_to(root)),
+                        "file_type": "flk",
                     })
             return entries
 
@@ -3079,6 +3088,9 @@ def create_app() -> Flask:
             content = target.read_text(encoding='utf-8')
         except OSError:
             return jsonify({"error": "ERR_FILE_READ"}), 500
+
+        if target.name == 'flake.lock':
+            return jsonify({"content": content, "path": rel, "file_type": "flk"})
 
         # Typ aus Dateinamen-Hint (für hw/fl – immer gültig, kein Schreiben nötig)
         hint_type = _FILENAME_TYPE_HINTS.get(target.name)

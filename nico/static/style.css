@@ -3415,6 +3415,22 @@ button:disabled {
   box-sizing: border-box;
 }
 
+.flk-file-pre {
+  flex: 1;
+  min-width: 0;
+  overflow: auto;
+  margin: 0;
+  padding: 16px;
+  background: var(--base, #1e1e2e);
+  color: var(--text);
+  font-family: var(--mono, monospace);
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre;
+  tab-size: 2;
+  box-sizing: border-box;
+}
+
 /* ── Raw-Panel (linkes Panel bei nicht-verwalteten Dateien) ───────────────── */
 .raw-panel {
   padding: 16px;
@@ -3553,6 +3569,7 @@ button:disabled {
 .tree-file.ft-mo  { color: var(--yellow, #f9e2af); }
 .tree-file.ft-hm  { color: var(--peach,  #fab387); }
 .tree-file.ft-nd  { color: var(--overlay2, #9399b2); }
+.tree-file.ft-flk { color: var(--overlay2, #9399b2); }
 .tree-file.ft-unknown { color: var(--overlay1, #7f849c); }
 
 /* ── Typ-Panels ──────────────────────────────────────────────────── */
@@ -3580,10 +3597,11 @@ button:disabled {
   border-radius: 4px;
   background: var(--surface0);
 }
-.type-panel-badge.ft-nd { color: var(--overlay1); }
-.type-panel-badge.ft-fl { color: var(--mauve); }
-.type-panel-badge.ft-mo { color: var(--blue); }
-.type-panel-badge.ft-hm { color: var(--teal); }
+.type-panel-badge.ft-nd  { color: var(--overlay1); }
+.type-panel-badge.ft-fl  { color: var(--mauve); }
+.type-panel-badge.ft-mo  { color: var(--blue); }
+.type-panel-badge.ft-hm  { color: var(--teal); }
+.type-panel-badge.ft-flk { color: var(--overlay1); }
 .type-panel-badge.ft-unknown { color: var(--overlay1); }
 
 .type-panel-name {
