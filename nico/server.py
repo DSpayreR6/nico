@@ -9,6 +9,7 @@ import re
 import secrets
 import shutil
 import threading
+import tomllib
 from pathlib import Path
 
 from flask import Flask, Response, jsonify, render_template, request, stream_with_context
@@ -456,6 +457,24 @@ def _brick_body(text: str) -> str:
     return ""
 
 
+_THEMES_DIR = Path(__file__).parent / "static" / "themes"
+_DEFAULT_THEME = "catppuccin-mocha"
+
+def _load_theme_css(theme_name: str) -> str:
+    toml_path = _THEMES_DIR / theme_name / "theme.toml"
+    if not toml_path.exists():
+        toml_path = _THEMES_DIR / _DEFAULT_THEME / "theme.toml"
+    try:
+        with open(toml_path, "rb") as f:
+            data = tomllib.load(f)
+        css_vars = "\n".join(
+            f"  --{k}: {v};" for k, v in data.get("vars", {}).items()
+        )
+        return f":root {{\n{css_vars}\n}}"
+    except Exception:
+        return ""
+
+
 def create_app() -> Flask:
     app = Flask(__name__)
     # Preserve dict insertion order in JSON responses (needed for brick_blocks ordering)
@@ -496,14 +515,29 @@ def create_app() -> Flask:
     @app.route("/")
     def index():
         from flask import make_response
+        _theme = config_manager.get_app_settings().get("theme", _DEFAULT_THEME)
         r = make_response(render_template(
             "index.html",
             csrf_token=_csrf_token,
             home_dir=str(Path.home()),
             static_v=_static_v,
+            theme_style=_load_theme_css(_theme),
         ))
         r.headers["Cache-Control"] = "no-store"
         return r
+
+    @app.route("/api/themes")
+    def available_themes():
+        """Return list of available themes (scanned from static/themes/)."""
+        themes = []
+        for toml_path in sorted(_THEMES_DIR.glob("*/theme.toml")):
+            try:
+                with open(toml_path, "rb") as f:
+                    data = tomllib.load(f)
+                themes.append({"id": toml_path.parent.name, "name": data.get("name", toml_path.parent.name)})
+            except Exception:
+                pass
+        return jsonify(themes)
 
     @app.route("/api/langs")
     def available_langs():

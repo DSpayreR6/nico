@@ -1,27 +1,8 @@
-/* ── Design tokens (Catppuccin Mocha) ────────────────────────────────────── */
+/* ── Layout tokens (theme-independent) ───────────────────────────────────── */
 :root {
-  --bg:        #1e1e2e;
-  --mantle:    #181825;
-  --crust:     #11111b;
-  --surface0:  #313244;
-  --surface1:  #45475a;
-  --surface2:  #585b70;
-  --overlay0:  #6c7086;
-  --text:      #cdd6f4;
-  --subtext0:  #a6adc8;
-  --subtext1:  #bac2de;
-  --blue:      #89b4fa;
-  --lavender:  #b4befe;
-  --green:     #a6e3a1;
-  --red:       #f38ba8;
-  --yellow:    #f9e2af;
-  --mauve:     #cba6f7;
-  --peach:     #fab387;
-
-  --header-h:  52px;
-  --panel-w:   360px;
-  --radius:    8px;
-  --mono:      'JetBrains Mono', 'Fira Code', 'Cascadia Code', 'Menlo', monospace;
+  --header-h: 52px;
+  --panel-w:  360px;
+  --radius:   8px;
 }
 
 /* ── Reset ───────────────────────────────────────────────────────────────── */
@@ -619,7 +600,7 @@ select {
   display: block;
   width: 44px;
   height: 24px;
-  background: var(--surface1);
+  background: var(--toggle-track, var(--surface1));
   border-radius: 12px;
   transition: background .2s;
   position: relative;
@@ -631,7 +612,7 @@ select {
   left: 3px;
   width: 18px;
   height: 18px;
-  background: var(--subtext0);
+  background: var(--toggle-thumb, var(--subtext0));
   border-radius: 50%;
   transition: transform .2s, background .2s;
 }

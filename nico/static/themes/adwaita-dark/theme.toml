@@ -1,0 +1,42 @@
+name = "Adwaita Dark"
+
+[vars]
+# Base palette (GNOME Adwaita Dark)
+bg         = "#242424"
+base       = "#242424"
+mantle     = "#1c1c1c"
+crust      = "#141414"
+surface0   = "#303030"
+surface1   = "#383838"
+surface2   = "#404040"
+overlay0   = "#606060"
+overlay1   = "#808080"
+overlay2   = "#a0a0a0"
+text       = "#ffffff"
+subtext0   = "#c0c0c0"
+subtext1   = "#e0e0e0"
+
+# Accent colors (GNOME palette)
+blue       = "#3584e4"
+lavender   = "#7986cb"
+green      = "#33d17a"
+red        = "#e01b24"
+yellow     = "#e5a50a"
+mauve      = "#9141ac"
+peach      = "#e66100"
+teal       = "#2190a4"
+sky        = "#62a0ea"
+
+# Semantic tokens
+accent     = "#3584e4"
+accent-dim = "#1a3558"
+bg-card    = "#303030"
+border     = "#484848"
+text2      = "#c0c0c0"
+text-muted    = "#808080"
+toggle-track  = "#484848"
+toggle-thumb  = "#a0a0a0"
+
+# Typography
+mono = "'JetBrains Mono', 'Fira Code', 'Cascadia Code', 'Menlo', monospace"
+sans = "-apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif"

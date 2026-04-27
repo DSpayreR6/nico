@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### Theme-System
+NiCo unterstützt jetzt wechselbare Themes via TOML. Themes liegen in `nico/static/themes/<name>/theme.toml` und werden beim Start geladen – neue Themes erscheinen automatisch im Dropdown. Ein Theme-Picker ist in den NiCo-Einstellungen integriert; die Wahl gilt pro Gerät (Programmeinstellung). Mitgeliefert werden:
+- **Catppuccin Mocha** (bisheriges Standard-Theme, jetzt als TOML)
+- **Breeze Dark** / **Breeze Light** (angelehnt an KDE Plasma)
+- **Adwaita Dark** (angelehnt an GNOME/GTK)
+- **Neon Dark** (dunkles Theme mit Neon-Akzenten)
+
+Alle Farb-Tokens sind CSS-Variablen; das CSS enthält keine hartcodierten Farbwerte mehr. Neue Variable `--toggle-track` / `--toggle-thumb` für theme-spezifische Schalter-Optik.
+
 ### flake.lock anzeigen
 `flake.lock` kann jetzt optional im Dateibaum angezeigt werden. Die Einstellung befindet sich in den NiCo-Einstellungen (Programmeinstellung, bleibt lokal). Ein eigenes Panel informiert darüber, dass die Datei nur zur Ansicht dient und manuell mit einem externen Editor bearbeitet werden kann. Die Anzeige erfolgt mit Zeilennummern und Scroll-Unterstützung.
 

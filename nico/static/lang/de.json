@@ -639,6 +639,7 @@
   "preview.modeRaw":        "Simpler Editor – noch kein Panel verfügbar",
   "preview.plainInactive":  "Annotierte Ansicht aktiv – klicken für Plain (ohne Brix-Marker)",
   "preview.plainActive":    "Plain-Ansicht aktiv (ohne Brix-Marker) – klicken für annotierte Ansicht",
+  "admin.settings.theme":          "Theme",
   "admin.settings.codeViewPlain":  "Code-Ansicht beim Start: Plain (ohne Brix-Annotationen)",
   "admin.settings.rebuildLog":     "Rebuild-Log immer schreiben (nixos-rebuild.log)",
   "admin.settings.showFlakeLock":  "flake.lock im Dateibaum anzeigen",

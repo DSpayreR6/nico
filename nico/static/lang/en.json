@@ -611,6 +611,7 @@
   "preview.modeRaw":        "Simple editor – no panel available yet",
   "preview.plainInactive":  "Annotated view active – click for plain (without Brix markers)",
   "preview.plainActive":    "Plain view active (without Brix markers) – click for annotated view",
+  "admin.settings.theme":          "__TODO__",
   "admin.settings.codeViewPlain": "Code view on start: plain (without Brix annotations)",
   "admin.settings.rebuildLog":     "Always write rebuild log (nixos-rebuild.log)",
   "admin.settings.showFlakeLock":  "__TODO__",

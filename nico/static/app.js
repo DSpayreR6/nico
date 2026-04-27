@@ -1001,8 +1001,11 @@ function openAdmin() {
 }
 
 function _loadAdminSettings() {
-  // Load app settings (machine-local)
-  fetch('/api/app/settings').then(r => r.json()).then(data => {
+  // Load app settings + theme picker
+  Promise.all([
+    fetch('/api/app/settings').then(r => r.json()),
+    fetch('/api/themes').then(r => r.json()),
+  ]).then(([data, themes]) => {
     const cb = document.getElementById('setting-code-view-plain');
     if (cb) cb.checked = !!data.code_view_plain;
     const cbLog = document.getElementById('setting-rebuild-log');
@@ -1012,6 +1015,31 @@ function _loadAdminSettings() {
     if (Array.isArray(data.hidden_sections)) {
       hiddenSections = data.hidden_sections;
       updateSectionVisibility();
+    }
+    // Theme picker
+    const sel = document.getElementById('setting-theme');
+    if (sel && Array.isArray(themes)) {
+      sel.innerHTML = '';
+      themes.forEach(th => {
+        const opt = document.createElement('option');
+        opt.value = th.id;
+        opt.textContent = th.name;
+        if (th.id === (data.theme || 'catppuccin-mocha')) opt.selected = true;
+        sel.appendChild(opt);
+      });
+      if (!sel.dataset.listenerAttached) {
+        sel.dataset.listenerAttached = '1';
+        sel.addEventListener('change', () => {
+          csrfFetch('/api/app/settings', {
+            method:  'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ theme: sel.value }),
+          }).then(() => {
+            showToast(t('admin.settings.saved'), 'success');
+            setTimeout(() => location.reload(), 600);
+          }).catch(() => showToast(t('toast.error'), 'error'));
+        });
+      }
     }
   }).catch(() => {});
 

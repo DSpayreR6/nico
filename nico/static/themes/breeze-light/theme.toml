@@ -1,0 +1,42 @@
+name = "Breeze Light"
+
+[vars]
+# Base palette
+bg         = "#eff0f1"
+base       = "#eff0f1"
+mantle     = "#dde0e3"
+crust      = "#c5c9cd"
+surface0   = "#f7f8f9"
+surface1   = "#e8eaec"
+surface2   = "#d5d8dc"
+overlay0   = "#8695a0"
+overlay1   = "#6a7880"
+overlay2   = "#4e5c65"
+text       = "#1a1d20"
+subtext0   = "#3a4248"
+subtext1   = "#2a3038"
+
+# Accent colors (KDE Breeze – darker for light bg readability)
+blue       = "#1565c0"
+lavender   = "#4051b5"
+green      = "#1e8449"
+red        = "#c0392b"
+yellow     = "#d35400"
+mauve      = "#6a1b9a"
+peach      = "#bf360c"
+teal       = "#00796b"
+sky        = "#0277bd"
+
+# Semantic tokens
+accent     = "#1976d2"
+accent-dim = "#bbdefb"
+bg-card    = "#f7f8f9"
+border     = "#9eacb5"
+text2      = "#3a4248"
+text-muted    = "#5d6b75"
+toggle-track  = "#8fa3b0"
+toggle-thumb  = "#ffffff"
+
+# Typography
+mono = "'JetBrains Mono', 'Fira Code', 'Cascadia Code', 'Menlo', monospace"
+sans = "-apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif"
