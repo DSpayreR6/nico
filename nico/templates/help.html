@@ -5,17 +5,20 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>NiCo – Hilfe</title>
   <script>
-    // Sync language with main app via localStorage
     const LANG_KEY = 'nico_lang';
+    const SUPPORTED_LANGS = ['de', 'en', 'es', 'fr', 'ja', 'ru', 'zh'];
+
     function setLang(code) {
-      localStorage.setItem(LANG_KEY, code);
-      document.documentElement.lang = code;
+      const lang = SUPPORTED_LANGS.includes(code) ? code : 'de';
+      localStorage.setItem(LANG_KEY, lang);
+      document.documentElement.lang = lang;
       document.querySelectorAll('.lang-btn').forEach(b =>
-        b.classList.toggle('active', b.dataset.lang === code));
+        b.classList.toggle('active', b.dataset.lang === lang));
       document.querySelectorAll('[data-de]').forEach(el => {
-        el.innerHTML = el.dataset[code] ?? el.dataset.de;
+        el.innerHTML = el.dataset[lang] ?? el.dataset.de;
       });
     }
+
     document.addEventListener('DOMContentLoaded', () => {
       const lang = localStorage.getItem(LANG_KEY) || 'de';
       setLang(lang);
@@ -29,6 +32,7 @@
       --mantle:   #181825;
       --surface0: #313244;
       --surface1: #45475a;
+      --surface2: #585b70;
       --text:     #cdd6f4;
       --subtext0: #a6adc8;
       --subtext1: #bac2de;
@@ -57,6 +61,7 @@
       display: flex;
       align-items: center;
       gap: 12px;
+      flex-wrap: wrap;
     }
 
     .page-header .logo { font-size: 1.1rem; font-weight: 800; color: var(--blue); letter-spacing: 1px; }
@@ -64,12 +69,25 @@
     .page-header a { margin-left: auto; color: var(--blue); font-size: 13px; text-decoration: none; }
     .page-header a:hover { text-decoration: underline; }
 
-    .help-lang-switcher { margin-left: auto; display: flex; align-items: center; gap: 4px; }
-    .lang-btn {
-      background: none; border: none; cursor: pointer;
-      font-size: 12px; font-weight: 600; padding: 2px 4px;
-      color: var(--overlay0); opacity: .7;
+    .help-lang-switcher {
+      margin-left: auto;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      flex-wrap: wrap;
     }
+
+    .lang-btn {
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 600;
+      padding: 2px 4px;
+      color: var(--overlay0);
+      opacity: .7;
+    }
+
     .lang-btn.active { opacity: 1; color: var(--blue); }
     .lang-btn:hover  { opacity: 1; color: var(--text); }
     .page-header a { margin-left: 12px; }
@@ -81,10 +99,9 @@
       gap: 0;
     }
 
-    /* ── Table of contents ──────────────────────────────────────────────── */
     .toc {
-      width: 240px;
-      min-width: 240px;
+      width: 260px;
+      min-width: 260px;
       padding: 36px 24px;
       position: sticky;
       top: 0;
@@ -103,7 +120,6 @@
     }
 
     .toc ol { list-style: none; padding: 0; }
-
     .toc > ol > li { margin-bottom: 12px; }
 
     .toc a {
@@ -127,7 +143,6 @@
     .toc .toc-sub a { color: var(--overlay0); font-size: 12px; }
     .toc .toc-sub a:hover { color: var(--subtext1); }
 
-    /* ── Content ──────────────────────────────────────────────────────── */
     .content {
       flex: 1;
       padding: 48px 52px;
@@ -204,6 +219,47 @@
 
     .note p { color: var(--subtext1); margin: 0; font-size: 13px; }
     .note strong { color: var(--text); }
+
+    .flow {
+      background: var(--mantle);
+      border: 1px solid var(--surface0);
+      border-radius: 8px;
+      padding: 14px 16px;
+      margin-bottom: 16px;
+      font-family: var(--mono);
+      font-size: 13px;
+      line-height: 1.65;
+      color: var(--subtext1);
+      white-space: pre-wrap;
+    }
+
+    @media (max-width: 900px) {
+      .layout {
+        display: block;
+      }
+
+      .toc {
+        width: auto;
+        min-width: 0;
+        position: static;
+        height: auto;
+        border-right: none;
+        border-bottom: 1px solid var(--surface0);
+      }
+
+      .content {
+        padding: 32px 24px 48px;
+      }
+
+      .page-header {
+        padding: 16px 20px;
+      }
+
+      .help-lang-switcher,
+      .page-header a {
+        margin-left: 0;
+      }
+    }
   </style>
 </head>
 <body>
@@ -212,203 +268,1167 @@
     <span class="logo">NiCo</span>
     <span class="title"
           data-de="Hilfe &amp; Dokumentation"
-          data-en="Help &amp; Documentation">Hilfe &amp; Dokumentation</span>
+          data-en="Help &amp; Documentation"
+          data-es="Ayuda &amp; Documentación"
+          data-fr="Aide &amp; Documentation"
+          data-ja="ヘルプ &amp; ドキュメント"
+          data-ru="Справка &amp; Документация"
+          data-zh="帮助 &amp; 文档">Hilfe &amp; Dokumentation</span>
     <div class="help-lang-switcher">
       <button class="lang-btn active" data-lang="de">DE</button>
-      <span style="opacity:.4;font-size:11px">|</span>
       <button class="lang-btn" data-lang="en">EN</button>
+      <button class="lang-btn" data-lang="es">ES</button>
+      <button class="lang-btn" data-lang="fr">FR</button>
+      <button class="lang-btn" data-lang="ja">JA</button>
+      <button class="lang-btn" data-lang="ru">RU</button>
+      <button class="lang-btn" data-lang="zh">ZH</button>
     </div>
     <a href="/"
        data-de="&#x2190; Zur&#xFC;ck zur App"
-       data-en="&#x2190; Back to app">← Zurück zur App</a>
+       data-en="&#x2190; Back to app"
+       data-es="&#x2190; Volver a la app"
+       data-fr="&#x2190; Retour à l'application"
+       data-ja="&#x2190; アプリに戻る"
+       data-ru="&#x2190; Вернуться в приложение"
+       data-zh="&#x2190; 返回应用">← Zurück zur App</a>
   </div>
 
   <div class="layout">
-
-    <!-- ── Inhaltsverzeichnis ──────────────────────────────────────── -->
     <nav class="toc">
-      <h2 data-de="Inhalt" data-en="Contents">Inhalt</h2>
+      <h2 data-de="Inhalt" data-en="Contents" data-es="Contenido" data-fr="Sommaire" data-ja="目次" data-ru="Содержание" data-zh="目录">Inhalt</h2>
       <ol>
         <li>
           <a href="#kapitel-1"
-             data-de="1. Erste Schritte"
-             data-en="1. Getting started">1. Erste Schritte</a>
+             data-de="1. Was NiCo ist"
+             data-en="1. What NiCo is"
+             data-es="1. Qué es NiCo"
+             data-fr="1. Ce qu'est NiCo"
+             data-ja="1. NiCoとは"
+             data-ru="1. Что такое NiCo"
+             data-zh="1. NiCo 是什么">1. Was NiCo ist</a>
           <div class="toc-sub">
             <a href="#k1-1"
-               data-de="1.1 NiCo starten"
-               data-en="1.1 Starting NiCo">1.1 NiCo starten</a>
-            <a href="#k1-2"
-               data-de="1.2 Einrichtung"
-               data-en="1.2 Setup">1.2 Einrichtung</a>
+               data-de="1.1 Überblick"
+               data-en="1.1 Overview"
+               data-es="1.1 Resumen"
+               data-fr="1.1 Vue d'ensemble"
+               data-ja="1.1 概要"
+               data-ru="1.1 Обзор"
+               data-zh="1.1 概览">1.1 Überblick</a>
           </div>
         </li>
         <li>
           <a href="#kapitel-2"
-             data-de="2. Konfiguration"
-             data-en="2. Configuration">2. Konfiguration</a>
+             data-de="2. Grundprinzip"
+             data-en="2. Core principle"
+             data-es="2. Principio básico"
+             data-fr="2. Principe de base"
+             data-ja="2. 基本原則"
+             data-ru="2. Основной принцип"
+             data-zh="2. 基本原则">2. Grundprinzip</a>
           <div class="toc-sub">
             <a href="#k2-1"
-               data-de="2.1 Sektionen &amp; Felder"
-               data-en="2.1 Sections &amp; fields">2.1 Sektionen &amp; Felder</a>
+               data-de="2.1 Datenebenen"
+               data-en="2.1 Data layers"
+               data-es="2.1 Capas de datos"
+               data-fr="2.1 Niveaux de données"
+               data-ja="2.1 データの層"
+               data-ru="2.1 Уровни данных"
+               data-zh="2.1 数据层级">2.1 Datenebenen</a>
             <a href="#k2-2"
-               data-de="2.2 Pakete verwalten"
-               data-en="2.2 Managing packages">2.2 Pakete verwalten</a>
+               data-de="2.2 Kommentare und Schreiben"
+               data-en="2.2 Comments and writing"
+               data-es="2.2 Comentarios y escritura"
+               data-fr="2.2 Commentaires et écriture"
+               data-ja="2.2 コメントと書き込み"
+               data-ru="2.2 Комментарии и запись"
+               data-zh="2.2 注释与写入">2.2 Kommentare und Schreiben</a>
           </div>
         </li>
         <li>
           <a href="#kapitel-3"
              data-de="3. Nix-Brix"
-             data-en="3. Nix Bricks">3. Nix-Brix</a>
+             data-en="3. Nix Bricks"
+             data-es="3. Nix-Brix"
+             data-fr="3. Nix-Brix"
+             data-ja="3. Nix-Brix"
+             data-ru="3. Nix-Brix"
+             data-zh="3. Nix-Brix">3. Nix-Brix</a>
           <div class="toc-sub">
             <a href="#k3-1"
                data-de="3.1 Was sind Nix-Brix?"
-               data-en="3.1 What are Nix Bricks?">3.1 Was sind Nix-Brix?</a>
+               data-en="3.1 What are Nix Bricks?"
+               data-es="3.1 ¿Qué son los Nix-Brix?"
+               data-fr="3.1 Que sont les Nix-Brix ?"
+               data-ja="3.1 Nix-Brixとは何ですか？"
+               data-ru="3.1 Что такое Nix-Brix?"
+               data-zh="3.1 什么是 Nix-Brix？">3.1 Was sind Nix-Brix?</a>
             <a href="#k3-2"
                data-de="3.2 Nix-Brix anlegen &amp; verwalten"
-               data-en="3.2 Creating &amp; managing Nix Bricks">3.2 Nix-Brix anlegen &amp; verwalten</a>
+               data-en="3.2 Creating and managing Nix Bricks"
+               data-es="3.2 Crear y gestionar Nix-Brix"
+               data-fr="3.2 Créer et gérer les Nix-Brix"
+               data-ja="3.2 Nix-Brix の作成と管理"
+               data-ru="3.2 Создание и управление Nix-Brix"
+               data-zh="3.2 创建和管理 Nix-Brix">3.2 Nix-Brix anlegen &amp; verwalten</a>
+          </div>
+        </li>
+        <li>
+          <a href="#kapitel-4"
+             data-de="4. Start und Einrichtung"
+             data-en="4. Startup and setup"
+             data-es="4. Inicio y configuración"
+             data-fr="4. Démarrage et configuration"
+             data-ja="4. 起動と初期設定"
+             data-ru="4. Запуск и настройка"
+             data-zh="4. 启动与配置">4. Start und Einrichtung</a>
+          <div class="toc-sub">
+            <a href="#k4-1"
+               data-de="4.1 Startroutine"
+               data-en="4.1 Startup routine"
+               data-es="4.1 Rutina de inicio"
+               data-fr="4.1 Routine de démarrage"
+               data-ja="4.1 起動処理"
+               data-ru="4.1 Процедура запуска"
+               data-zh="4.1 启动流程">4.1 Startroutine</a>
+            <a href="#k4-2"
+               data-de="4.2 Git, Symlink und Import"
+               data-en="4.2 Git, symlink and import"
+               data-es="4.2 Git, symlink e importación"
+               data-fr="4.2 Git, lien symbolique et import"
+               data-ja="4.2 Git、シンボリックリンク、インポート"
+               data-ru="4.2 Git, симлинк и импорт"
+               data-zh="4.2 Git、符号链接与导入">4.2 Git, Symlink und Import</a>
+          </div>
+        </li>
+        <li>
+          <a href="#kapitel-5"
+             data-de="5. Oberfläche und Arbeitsweise"
+             data-en="5. Interface and workflow"
+             data-es="5. Interfaz y forma de trabajo"
+             data-fr="5. Interface et manière de travailler"
+             data-ja="5. 画面構成と作業の流れ"
+             data-ru="5. Интерфейс и рабочий процесс"
+             data-zh="5. 界面与工作方式">5. Oberfläche und Arbeitsweise</a>
+          <div class="toc-sub">
+            <a href="#k5-1"
+               data-de="5.1 Oberfläche"
+               data-en="5.1 Interface"
+               data-es="5.1 Interfaz"
+               data-fr="5.1 Interface"
+               data-ja="5.1 画面構成"
+               data-ru="5.1 Интерфейс"
+               data-zh="5.1 界面">5.1 Oberfläche</a>
+            <a href="#k5-2"
+               data-de="5.2 Vorschau und echter Dateistand"
+               data-en="5.2 Preview and real file state"
+               data-es="5.2 Vista previa y estado real del archivo"
+               data-fr="5.2 Aperçu et état réel des fichiers"
+               data-ja="5.2 プレビューと実際のファイル状態"
+               data-ru="5.2 Предпросмотр и реальное состояние файлов"
+               data-zh="5.2 预览与真实文件状态">5.2 Vorschau und echter Dateistand</a>
+          </div>
+        </li>
+        <li>
+          <a href="#kapitel-6"
+             data-de="6. Schreiben, Dry-Run und Rebuild"
+             data-en="6. Write, dry-run and rebuild"
+             data-es="6. Escritura, dry-run y rebuild"
+             data-fr="6. Écriture, dry-run et rebuild"
+             data-ja="6. 書き込み、ドライラン、リビルド"
+             data-ru="6. Запись, dry-run и rebuild"
+             data-zh="6. 写入、Dry-Run 与 Rebuild">6. Schreiben, Dry-Run und Rebuild</a>
+          <div class="toc-sub">
+            <a href="#k6-1"
+               data-de="6.1 NixOS-Menü"
+               data-en="6.1 NixOS menu"
+               data-es="6.1 Menú NixOS"
+               data-fr="6.1 Menu NixOS"
+               data-ja="6.1 NixOS メニュー"
+               data-ru="6.1 Меню NixOS"
+               data-zh="6.1 NixOS 菜单">6.1 NixOS-Menü</a>
+            <a href="#k6-2"
+               data-de="6.2 Flake-Update, Push und manuelle Nutzung"
+               data-en="6.2 Flake update, push and manual use"
+               data-es="6.2 Flake update, push y uso manual"
+               data-fr="6.2 Flake update, push et usage manuel"
+               data-ja="6.2 Flake update、push、手動利用"
+               data-ru="6.2 Flake update, push и ручное использование"
+               data-zh="6.2 Flake 更新、Push 与手动使用">6.2 Flake-Update, Push und manuelle Nutzung</a>
+          </div>
+        </li>
+        <li>
+          <a href="#kapitel-7"
+             data-de="7. Git-Funktionen"
+             data-en="7. Git features"
+             data-es="7. Funciones Git"
+             data-fr="7. Fonctions Git"
+             data-ja="7. Git 機能"
+             data-ru="7. Функции Git"
+             data-zh="7. Git 功能">7. Git-Funktionen</a>
+          <div class="toc-sub">
+            <a href="#k7-1"
+               data-de="7.1 Git-Guard"
+               data-en="7.1 Git guard"
+               data-es="7.1 Guard de Git"
+               data-fr="7.1 Garde Git"
+               data-ja="7.1 Git ガード"
+               data-ru="7.1 Git-guard"
+               data-zh="7.1 Git 守卫">7.1 Git-Guard</a>
+            <a href="#k7-2"
+               data-de="7.2 Commits, Push und Rollback"
+               data-en="7.2 Commits, push and rollback"
+               data-es="7.2 Commits, push y rollback"
+               data-fr="7.2 Commits, push et rollback"
+               data-ja="7.2 コミット、push、ロールバック"
+               data-ru="7.2 Коммиты, push и rollback"
+               data-zh="7.2 提交、Push 与回滚">7.2 Commits, Push und Rollback</a>
+          </div>
+        </li>
+        <li>
+          <a href="#kapitel-8"
+             data-de="8. Flakes, Hosts und Home Manager"
+             data-en="8. Flakes, hosts and Home Manager"
+             data-es="8. Flakes, hosts y Home Manager"
+             data-fr="8. Flakes, hôtes et Home Manager"
+             data-ja="8. Flakes、Hosts、Home Manager"
+             data-ru="8. Flakes, хосты и Home Manager"
+             data-zh="8. Flakes、主机与 Home Manager">8. Flakes, Hosts und Home Manager</a>
+          <div class="toc-sub">
+            <a href="#k8-1"
+               data-de="8.1 Flake-Struktur"
+               data-en="8.1 Flake structure"
+               data-es="8.1 Estructura flake"
+               data-fr="8.1 Structure flake"
+               data-ja="8.1 Flake 構造"
+               data-ru="8.1 Структура flake"
+               data-zh="8.1 Flake 结构">8.1 Flake-Struktur</a>
+            <a href="#k8-2"
+               data-de="8.2 Hosts und Home Manager"
+               data-en="8.2 Hosts and Home Manager"
+               data-es="8.2 Hosts y Home Manager"
+               data-fr="8.2 Hôtes et Home Manager"
+               data-ja="8.2 Hosts と Home Manager"
+               data-ru="8.2 Хосты и Home Manager"
+               data-zh="8.2 主机与 Home Manager">8.2 Hosts und Home Manager</a>
+          </div>
+        </li>
+        <li>
+          <a href="#kapitel-9"
+             data-de="9. Dateien, Typen und Raw-Modus"
+             data-en="9. Files, types and raw mode"
+             data-es="9. Archivos, tipos y modo raw"
+             data-fr="9. Fichiers, types et mode brut"
+             data-ja="9. ファイル、タイプ、Raw モード"
+             data-ru="9. Файлы, типы и raw-режим"
+             data-zh="9. 文件、类型与 Raw 模式">9. Dateien, Typen und Raw-Modus</a>
+          <div class="toc-sub">
+            <a href="#k9-1"
+               data-de="9.1 Datei-Baum"
+               data-en="9.1 File tree"
+               data-es="9.1 Árbol de archivos"
+               data-fr="9.1 Arborescence"
+               data-ja="9.1 ファイルツリー"
+               data-ru="9.1 Дерево файлов"
+               data-zh="9.1 文件树">9.1 Datei-Baum</a>
+            <a href="#k9-2"
+               data-de="9.2 Typen und Rohbearbeitung"
+               data-en="9.2 Types and raw editing"
+               data-es="9.2 Tipos y edición en bruto"
+               data-fr="9.2 Types et édition brute"
+               data-ja="9.2 タイプと生編集"
+               data-ru="9.2 Типы и прямое редактирование"
+               data-zh="9.2 类型与原始编辑">9.2 Typen und Rohbearbeitung</a>
+          </div>
+        </li>
+        <li>
+          <a href="#kapitel-10"
+             data-de="10. Import, Export und Entkoppeln"
+             data-en="10. Import, export and detach"
+             data-es="10. Importar, exportar y desacoplar"
+             data-fr="10. Import, export et détachement"
+             data-ja="10. インポート、エクスポート、切り離し"
+             data-ru="10. Импорт, экспорт и отвязка"
+             data-zh="10. 导入、导出与解绑">10. Import, Export und Entkoppeln</a>
+          <div class="toc-sub">
+            <a href="#k10-1"
+               data-de="10.1 Import und Sicherung"
+               data-en="10.1 Import and backup"
+               data-es="10.1 Importación y copia de seguridad"
+               data-fr="10.1 Import et sauvegarde"
+               data-ja="10.1 インポートとバックアップ"
+               data-ru="10.1 Импорт и резервная копия"
+               data-zh="10.1 导入与备份">10.1 Import und Sicherung</a>
+            <a href="#k10-2"
+               data-de="10.2 Export und Entkoppeln"
+               data-en="10.2 Export and detach"
+               data-es="10.2 Exportación y desacoplamiento"
+               data-fr="10.2 Export et détachement"
+               data-ja="10.2 エクスポートと切り離し"
+               data-ru="10.2 Экспорт и отвязка"
+               data-zh="10.2 导出与解绑">10.2 Export und Entkoppeln</a>
+          </div>
+        </li>
+        <li>
+          <a href="#kapitel-11"
+             data-de="11. Grenzen und typische Fehlerbilder"
+             data-en="11. Limits and typical problems"
+             data-es="11. Límites y problemas típicos"
+             data-fr="11. Limites et problèmes typiques"
+             data-ja="11. 制限と典型的な問題"
+             data-ru="11. Ограничения и типичные проблемы"
+             data-zh="11. 限制与常见问题">11. Grenzen und typische Fehlerbilder</a>
+          <div class="toc-sub">
+            <a href="#k11-1"
+               data-de="11.1 Grenzen"
+               data-en="11.1 Limits"
+               data-es="11.1 Límites"
+               data-fr="11.1 Limites"
+               data-ja="11.1 制限"
+               data-ru="11.1 Ограничения"
+               data-zh="11.1 限制">11.1 Grenzen</a>
+            <a href="#k11-2"
+               data-de="11.2 Typische Fehlerbilder"
+               data-en="11.2 Typical problems"
+               data-es="11.2 Problemas típicos"
+               data-fr="11.2 Problèmes typiques"
+               data-ja="11.2 典型的な問題"
+               data-ru="11.2 Типичные проблемы"
+               data-zh="11.2 常见问题">11.2 Typische Fehlerbilder</a>
           </div>
         </li>
       </ol>
     </nav>
 
-    <!-- ── Hauptinhalt ─────────────────────────────────────────────── -->
     <main class="content">
-      <h1 data-de="NiCo – Hilfe" data-en="NiCo – Help">NiCo – Hilfe</h1>
+      <h1
+        data-de="NiCo – Hilfe"
+        data-en="NiCo – Help"
+        data-es="NiCo – Ayuda"
+        data-fr="NiCo – Aide"
+        data-ja="NiCo – ヘルプ"
+        data-ru="NiCo – Справка"
+        data-zh="NiCo – 帮助">NiCo – Hilfe</h1>
       <p class="intro"
-         data-de="NiCo ist ein lokaler, browserbasierter Konfigurator f&#xFC;r NixOS. Er generiert <code>configuration.nix</code> (und optional <code>flake.nix</code>) aus einer grafischen Oberfl&#xE4;che &#x2013; ohne dass du Nix-Syntax auswendig kennen musst."
-         data-en="NiCo is a local, browser-based configurator for NixOS. It generates <code>configuration.nix</code> (and optionally <code>flake.nix</code>) from a graphical interface &#x2013; no need to know Nix syntax by heart.">
-        NiCo ist ein lokaler, browserbasierter Konfigurator für NixOS.
-        Er generiert <code>configuration.nix</code> (und optional <code>flake.nix</code>)
-        aus einer grafischen Oberfläche – ohne dass du Nix-Syntax auswendig kennen musst.
-      </p>
+         data-de="NiCo ist ein lokaler, browserbasierter Konfigurator für NixOS. Die Anwendung arbeitet direkt mit echten Dateien und soll Nix nicht verstecken, sondern das Schreiben, Prüfen und Pflegen einer Konfiguration erleichtern."
+         data-en="NiCo is a local, browser-based configurator for NixOS. It works directly with real files and is meant to make writing, checking and maintaining a configuration easier without hiding Nix."
+         data-es="NiCo es un configurador local para NixOS basado en navegador. Trabaja directamente con archivos reales y está pensado para facilitar la escritura, comprobación y mantenimiento de una configuración sin ocultar Nix."
+         data-fr="NiCo est un configurateur local pour NixOS basé sur le navigateur. Il travaille directement avec de vrais fichiers et vise à faciliter l'écriture, la vérification et la maintenance d'une configuration sans masquer Nix."
+         data-ja="NiCo は NixOS 用のローカルなブラウザベース設定ツールです。実際のファイルを直接扱い、Nix を隠すのではなく、設定の記述、確認、保守をしやすくすることを目的としています。"
+         data-ru="NiCo — это локальный браузерный конфигуратор для NixOS. Он работает напрямую с реальными файлами и должен облегчать написание, проверку и поддержку конфигурации, не скрывая Nix."
+         data-zh="NiCo 是一个面向 NixOS 的本地浏览器配置工具。它直接处理真实文件，目标不是隐藏 Nix，而是让配置的编写、检查和维护更容易。">NiCo ist ein lokaler, browserbasierter Konfigurator für NixOS. Die Anwendung arbeitet direkt mit echten Dateien und soll Nix nicht verstecken, sondern das Schreiben, Prüfen und Pflegen einer Konfiguration erleichtern.</p>
 
-      <!-- ── Kapitel 1 ─────────────────────────────────────────────── -->
       <section class="chapter" id="kapitel-1">
         <h2><span class="chapter-num">1</span><span
-            data-de="Erste Schritte" data-en="Getting started">Erste Schritte</span></h2>
+          data-de="Was NiCo ist"
+          data-en="What NiCo is"
+          data-es="Qué es NiCo"
+          data-fr="Ce qu'est NiCo"
+          data-ja="NiCoとは"
+          data-ru="Что такое NiCo"
+          data-zh="NiCo 是什么">Was NiCo ist</span></h2>
 
         <div class="subchapter" id="k1-1">
           <h3><span class="sub-num">1.1</span><span
-              data-de="NiCo starten" data-en="Starting NiCo">NiCo starten</span></h3>
-          <p>
-            Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor
-            incididunt ut labore et dolore magna aliqua. NiCo startet einen lokalen Webserver
-            auf Port <code>8421</code> und öffnet den Browser automatisch.
-          </p>
-          <p>
-            Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip
-            ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit
-            esse cillum dolore eu fugiat nulla pariatur.
-          </p>
+            data-de="Überblick"
+            data-en="Overview"
+            data-es="Resumen"
+            data-fr="Vue d'ensemble"
+            data-ja="概要"
+            data-ru="Обзор"
+            data-zh="概览">Überblick</span></h3>
+          <p data-de="NiCo läuft ausschließlich lokal auf <code>127.0.0.1</code>. Die Anwendung arbeitet direkt mit echten <code>.nix</code>-Dateien und soll den Einstieg, die Pflege und die Prüfung einer NixOS-Konfiguration erleichtern."
+             data-en="NiCo runs only locally on <code>127.0.0.1</code>. It works directly with real <code>.nix</code> files and is meant to simplify getting started with, maintaining and checking a NixOS configuration."
+             data-es="NiCo se ejecuta solo localmente en <code>127.0.0.1</code>. Trabaja directamente con archivos <code>.nix</code> reales y busca facilitar el inicio, mantenimiento y comprobación de una configuración NixOS."
+             data-fr="NiCo fonctionne uniquement en local sur <code>127.0.0.1</code>. Il travaille directement avec de vrais fichiers <code>.nix</code> et vise à simplifier la prise en main, la maintenance et la vérification d'une configuration NixOS."
+             data-ja="NiCo は <code>127.0.0.1</code> 上でのみローカル動作します。実際の <code>.nix</code> ファイルを直接扱い、NixOS 設定の導入、保守、確認をしやすくすることを目的としています。"
+             data-ru="NiCo работает только локально на <code>127.0.0.1</code>. Он напрямую работает с реальными файлами <code>.nix</code> и должен упрощать начало работы, сопровождение и проверку конфигурации NixOS."
+             data-zh="NiCo 仅在本地 <code>127.0.0.1</code> 上运行。它直接处理真实的 <code>.nix</code> 文件，目的是让 NixOS 配置的上手、维护和检查更简单。">NiCo läuft ausschließlich lokal auf <code>127.0.0.1</code>. Die Anwendung arbeitet direkt mit echten <code>.nix</code>-Dateien und soll den Einstieg, die Pflege und die Prüfung einer NixOS-Konfiguration erleichtern.</p>
+          <p data-de="NiCo ist kein versteckter Generator mit eigener Sonderwelt. Die erzeugten Dateien bleiben normale Nix-Dateien, die auch außerhalb von NiCo direkt nutzbar sind."
+             data-en="NiCo is not a hidden generator with its own isolated world. The generated files remain normal Nix files that can also be used directly outside NiCo."
+             data-es="NiCo no es un generador oculto con un mundo propio aislado. Los archivos generados siguen siendo archivos Nix normales que también pueden usarse directamente fuera de NiCo."
+             data-fr="NiCo n'est pas un générateur caché avec son propre monde isolé. Les fichiers générés restent des fichiers Nix normaux qui peuvent aussi être utilisés directement en dehors de NiCo."
+             data-ja="NiCo は独自世界を持つ隠れたジェネレーターではありません。生成されたファイルは通常の Nix ファイルのままで、NiCo の外でもそのまま利用できます。"
+             data-ru="NiCo — не скрытый генератор со своим отдельным миром. Создаваемые файлы остаются обычными файлами Nix, которые можно использовать и вне NiCo."
+             data-zh="NiCo 不是一个拥有独立世界的隐藏生成器。生成的文件仍然是普通的 Nix 文件，也可以在 NiCo 之外直接使用。">NiCo ist kein versteckter Generator mit eigener Sonderwelt. Die erzeugten Dateien bleiben normale Nix-Dateien, die auch außerhalb von NiCo direkt nutzbar sind.</p>
           <div class="note">
-            <p>
-              <strong>Hinweis:</strong> Läuft NiCo bereits, öffnet ein erneuter Start nur
-              den Browser – der Webserver wird nicht doppelt gestartet.
-            </p>
+            <p data-de="<strong>Hinweis:</strong> NiCo soll Nix nicht ersetzen. Die Anwendung soll den Umgang mit echter Nix-Konfiguration transparenter und sicherer machen."
+               data-en="<strong>Note:</strong> NiCo is not meant to replace Nix. It is meant to make working with real Nix configuration more transparent and safer."
+               data-es="<strong>Nota:</strong> NiCo no pretende sustituir a Nix. Su objetivo es hacer más transparente y segura la gestión de una configuración Nix real."
+               data-fr="<strong>Remarque :</strong> NiCo n'est pas destiné à remplacer Nix. Il doit rendre le travail avec une vraie configuration Nix plus transparent et plus sûr."
+               data-ja="<strong>注意:</strong> NiCo は Nix を置き換えるためのものではありません。実際の Nix 設定をより透明かつ安全に扱いやすくするためのツールです。"
+               data-ru="<strong>Примечание:</strong> NiCo не предназначен для замены Nix. Он должен делать работу с реальной конфигурацией Nix более прозрачной и безопасной."
+               data-zh="<strong>提示：</strong>NiCo 不是为了取代 Nix。它的目标是让真实的 Nix 配置工作更加透明和安全。"><strong>Hinweis:</strong> NiCo soll Nix nicht ersetzen. Die Anwendung soll den Umgang mit echter Nix-Konfiguration transparenter und sicherer machen.</p>
           </div>
-        </div>
-
-        <div class="subchapter" id="k1-2">
-          <h3><span class="sub-num">1.2</span><span
-              data-de="Einrichtung" data-en="Setup">Einrichtung</span></h3>
-          <p>
-            Beim ersten Start fragt NiCo nach dem NixOS-Konfigurationsverzeichnis.
-            Das ist üblicherweise <code>/etc/nixos</code> oder ein eigenes Verzeichnis
-            wie <code>~/.nixos-config</code>.
-          </p>
-          <p>
-            Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor
-            incididunt ut labore et dolore magna aliqua. NiCo legt dort ein Unterverzeichnis
-            <code>nico/</code> an und speichert seine interne Datenhaltung (<code>nico.json</code>)
-            darin. Diese Datei solltest du nicht manuell bearbeiten.
-          </p>
         </div>
       </section>
 
-      <!-- ── Kapitel 2 ─────────────────────────────────────────────── -->
       <section class="chapter" id="kapitel-2">
         <h2><span class="chapter-num">2</span><span
-            data-de="Konfiguration" data-en="Configuration">Konfiguration</span></h2>
+          data-de="Grundprinzip"
+          data-en="Core principle"
+          data-es="Principio básico"
+          data-fr="Principe de base"
+          data-ja="基本原則"
+          data-ru="Основной принцип"
+          data-zh="基本原则">Grundprinzip</span></h2>
 
         <div class="subchapter" id="k2-1">
           <h3><span class="sub-num">2.1</span><span
-              data-de="Sektionen &amp; Felder" data-en="Sections &amp; fields">Sektionen &amp; Felder</span></h3>
-          <p>
-            Die linke Seite der Oberfläche zeigt alle Konfigurationsoptionen in aufklappbaren
-            Sektionen. Jede Sektion entspricht einem Abschnitt in der generierten
-            <code>configuration.nix</code>. Du kannst Sektionen durch Klick auf den Titel
-            auf- und zuklappen – die rechte Vorschau klappt synchron mit.
-          </p>
-          <p>
-            Lorem ipsum dolor sit amet, consectetur adipiscing elit. Ut enim ad minim veniam,
-            quis nostrud exercitation ullamco laboris. Alle Änderungen werden in der rechten
-            Vorschau sofort angezeigt – aber erst nach Klick auf
-            <strong>„In Config schreiben"</strong> auf die Festplatte geschrieben.
-          </p>
+            data-de="Datenebenen"
+            data-en="Data layers"
+            data-es="Capas de datos"
+            data-fr="Niveaux de données"
+            data-ja="データの層"
+            data-ru="Уровни данных"
+            data-zh="数据层级">Datenebenen</span></h3>
+          <p data-de="NiCo trennt Einstellungen und eigentliche NixOS-Daten bewusst in drei Ebenen."
+             data-en="NiCo deliberately separates settings and actual NixOS data into three layers."
+             data-es="NiCo separa deliberadamente los ajustes y los datos reales de NixOS en tres capas."
+             data-fr="NiCo sépare délibérément les réglages et les véritables données NixOS en trois niveaux."
+             data-ja="NiCo は設定と実際の NixOS データを意図的に 3 つの層に分けています。"
+             data-ru="NiCo сознательно разделяет настройки и собственно данные NixOS на три уровня."
+             data-zh="NiCo 有意识地将设置与真正的 NixOS 数据分成三层。">NiCo trennt Einstellungen und eigentliche NixOS-Daten bewusst in drei Ebenen.</p>
+          <p data-de="<strong>App-Settings</strong> liegen in <code>nico-settings.json</code> und gelten nur auf diesem Rechner. Dazu gehören zum Beispiel Sprache, Theme und das aktuell gewählte Konfigurationsverzeichnis."
+             data-en="<strong>App settings</strong> live in <code>nico-settings.json</code> and apply only on this machine. They include things such as language, theme and the currently selected config directory."
+             data-es="Los <strong>ajustes de la aplicación</strong> se guardan en <code>nico-settings.json</code> y solo se aplican en este equipo. Incluyen, por ejemplo, idioma, tema y el directorio de configuración seleccionado."
+             data-fr="Les <strong>réglages de l'application</strong> se trouvent dans <code>nico-settings.json</code> et ne s'appliquent qu'à cette machine. Ils incluent par exemple la langue, le thème et le répertoire de configuration sélectionné."
+             data-ja="<strong>アプリ設定</strong> は <code>nico-settings.json</code> に保存され、このマシンでのみ有効です。言語、テーマ、現在選択されている設定ディレクトリなどが含まれます。"
+             data-ru="<strong>Настройки приложения</strong> хранятся в <code>nico-settings.json</code> и действуют только на этом компьютере. Сюда входят, например, язык, тема и выбранный каталог конфигурации."
+             data-zh="<strong>应用设置</strong> 存放在 <code>nico-settings.json</code> 中，仅对当前机器有效，例如语言、主题和当前选中的配置目录。"><strong>App-Settings</strong> liegen in <code>nico-settings.json</code> und gelten nur auf diesem Rechner. Dazu gehören zum Beispiel Sprache, Theme und das aktuell gewählte Konfigurationsverzeichnis.</p>
+          <p data-de="<strong>Config-Settings</strong> liegen in <code>{config-dir}/config.json</code> und reisen mit der Konfiguration mit. Dazu gehören zum Beispiel <code>hosts_dir</code>, <code>modules_dir</code>, <code>hm_dir</code>, <code>flake_update_on_rebuild</code>, <code>push_after_save</code> oder <code>push_after_rebuild</code>."
+             data-en="<strong>Config settings</strong> live in <code>{config-dir}/config.json</code> and travel with the configuration. Examples are <code>hosts_dir</code>, <code>modules_dir</code>, <code>hm_dir</code>, <code>flake_update_on_rebuild</code>, <code>push_after_save</code> or <code>push_after_rebuild</code>."
+             data-es="Los <strong>ajustes de la configuración</strong> se guardan en <code>{config-dir}/config.json</code> y viajan con la configuración. Ejemplos: <code>hosts_dir</code>, <code>modules_dir</code>, <code>hm_dir</code>, <code>flake_update_on_rebuild</code>, <code>push_after_save</code> o <code>push_after_rebuild</code>."
+             data-fr="Les <strong>réglages de configuration</strong> se trouvent dans <code>{config-dir}/config.json</code> et accompagnent la configuration. Exemples : <code>hosts_dir</code>, <code>modules_dir</code>, <code>hm_dir</code>, <code>flake_update_on_rebuild</code>, <code>push_after_save</code> ou <code>push_after_rebuild</code>."
+             data-ja="<strong>設定固有の設定</strong> は <code>{config-dir}/config.json</code> に保存され、構成と一緒に移動します。たとえば <code>hosts_dir</code>、<code>modules_dir</code>、<code>hm_dir</code>、<code>flake_update_on_rebuild</code>、<code>push_after_save</code>、<code>push_after_rebuild</code> などです。"
+             data-ru="<strong>Настройки конфигурации</strong> находятся в <code>{config-dir}/config.json</code> и перемещаются вместе с конфигурацией. Например: <code>hosts_dir</code>, <code>modules_dir</code>, <code>hm_dir</code>, <code>flake_update_on_rebuild</code>, <code>push_after_save</code> или <code>push_after_rebuild</code>."
+             data-zh="<strong>配置设置</strong> 存放在 <code>{config-dir}/config.json</code> 中，并随配置一起移动，例如 <code>hosts_dir</code>、<code>modules_dir</code>、<code>hm_dir</code>、<code>flake_update_on_rebuild</code>、<code>push_after_save</code> 或 <code>push_after_rebuild</code>。"><strong>Config-Settings</strong> liegen in <code>{config-dir}/config.json</code> und reisen mit der Konfiguration mit. Dazu gehören zum Beispiel <code>hosts_dir</code>, <code>modules_dir</code>, <code>hm_dir</code>, <code>flake_update_on_rebuild</code>, <code>push_after_save</code> oder <code>push_after_rebuild</code>.</p>
+          <p data-de="Die eigentlichen <strong>NixOS-Daten</strong> liegen ausschließlich in echten <code>.nix</code>-Dateien."
+             data-en="The actual <strong>NixOS data</strong> lives exclusively in real <code>.nix</code> files."
+             data-es="Los <strong>datos reales de NixOS</strong> se guardan exclusivamente en archivos <code>.nix</code> reales."
+             data-fr="Les véritables <strong>données NixOS</strong> se trouvent exclusivement dans de vrais fichiers <code>.nix</code>."
+             data-ja="実際の <strong>NixOS データ</strong> は本物の <code>.nix</code> ファイルにのみ存在します。"
+             data-ru="Собственно <strong>данные NixOS</strong> находятся исключительно в реальных файлах <code>.nix</code>."
+             data-zh="真正的 <strong>NixOS 数据</strong> 只存在于真实的 <code>.nix</code> 文件中。">Die eigentlichen <strong>NixOS-Daten</strong> liegen ausschließlich in echten <code>.nix</code>-Dateien.</p>
         </div>
 
         <div class="subchapter" id="k2-2">
           <h3><span class="sub-num">2.2</span><span
-              data-de="Pakete verwalten" data-en="Managing packages">Pakete verwalten</span></h3>
-          <p>
-            Im Abschnitt <strong>Programme</strong> kannst du Systempakete hinzufügen,
-            entfernen oder vorübergehend deaktivieren. Die Suche nutzt
-            <code>nix search nixpkgs</code> und läuft vollständig lokal – keine Internetverbindung
-            nötig, aber der erste Suchvorgang kann etwas dauern während der Nix-Index aufgebaut wird.
-          </p>
-          <p>
-            Lorem ipsum dolor sit amet, consectetur adipiscing elit. Duis aute irure dolor in
-            reprehenderit. Pakete werden alphabetisch sortiert in die Config geschrieben.
-            Deaktivierte Pakete bleiben in NiCos Liste, werden aber nicht in die Nix-Datei
-            übernommen – praktisch für temporäres Ausschalten ohne Verlust der Information.
-          </p>
+            data-de="Kommentare und Schreiben"
+            data-en="Comments and writing"
+            data-es="Comentarios y escritura"
+            data-fr="Commentaires et écriture"
+            data-ja="コメントと書き込み"
+            data-ru="Комментарии и запись"
+            data-zh="注释与写入">Kommentare und Schreiben</span></h3>
+          <p data-de="NiCo kann freie Dateikommentare nicht allgemein als eigenes Modell mitführen. Beim erneuten Schreiben werden Dateien deshalb von Kommentaren befreit, soweit diese nicht Teil einer von NiCo erhaltenen Struktur sind."
+             data-en="NiCo cannot generally preserve free-form file comments as its own model. When writing again, files are therefore stripped of comments unless those comments are part of a structure that NiCo explicitly preserves."
+             data-es="NiCo no puede conservar comentarios libres de archivo como modelo propio de forma general. Al volver a escribir, los archivos se limpian de comentarios salvo que formen parte de una estructura que NiCo preserve explícitamente."
+             data-fr="NiCo ne peut pas conserver de manière générale les commentaires libres comme modèle propre. Lors d'une nouvelle écriture, les fichiers sont donc débarrassés de ces commentaires, sauf s'ils font partie d'une structure explicitement conservée par NiCo."
+             data-ja="NiCo は自由形式のファイルコメントを一般的な独自モデルとして保持できません。そのため再書き込み時には、NiCo が明示的に保持する構造の一部でない限り、コメントは除去されます。"
+             data-ru="NiCo не может в общем случае сохранять свободные комментарии как собственную модель. Поэтому при повторной записи файлы очищаются от комментариев, если они не являются частью структуры, которую NiCo явно сохраняет."
+             data-zh="NiCo 无法把自由形式的文件注释普遍地作为自己的模型保留。因此再次写入时，除非这些注释属于 NiCo 明确保留的结构，否则文件中的注释会被清除。">NiCo kann freie Dateikommentare nicht allgemein als eigenes Modell mitführen. Beim erneuten Schreiben werden Dateien deshalb von Kommentaren befreit, soweit diese nicht Teil einer von NiCo erhaltenen Struktur sind.</p>
+          <p data-de="Wer freie Inhalte dauerhaft erhalten will, sollte dafür echten Nix-Inhalt oder Nix-Brix verwenden, nicht lose Kommentare. Außerdem gilt: Wenn eine Schreibaktion ausgelöst wird, wird der aktuelle Stand direkt in die echten Dateien übernommen. Git und sinnvolle Zwischensicherungen sind deshalb besonders wichtig."
+             data-en="If free-form content must be preserved, it should be stored as real Nix content or as Nix Bricks, not as loose comments. Also note: when a write action is triggered, the current state is written directly into the real files. That is why Git and sensible intermediate backups are especially important."
+             data-es="Si un contenido libre debe conservarse, conviene guardarlo como contenido Nix real o como Nix-Brix, no como comentarios sueltos. Además, cuando se dispara una acción de escritura, el estado actual se escribe directamente en los archivos reales. Por eso Git y copias intermedias razonables son especialmente importantes."
+             data-fr="Si du contenu libre doit être conservé durablement, il vaut mieux l'enregistrer comme vrai contenu Nix ou sous forme de Nix-Brix, et non comme commentaires isolés. De plus, lorsqu'une action d'écriture est déclenchée, l'état actuel est écrit directement dans les fichiers réels. Git et des sauvegardes intermédiaires raisonnables sont donc particulièrement importants."
+             data-ja="自由な内容を確実に残したい場合は、単なるコメントではなく、実際の Nix コンテンツまたは Nix-Brix として保存するべきです。また、書き込み操作が実行されると、現在の状態が実際のファイルへ直接書き込まれます。そのため Git と適切な中間バックアップが特に重要です。"
+             data-ru="Если свободное содержимое нужно сохранять надёжно, его следует хранить как реальный Nix-код или как Nix-Brix, а не как отдельные комментарии. Также важно: при запуске записи текущее состояние сразу записывается в реальные файлы. Поэтому Git и разумные промежуточные сохранения особенно важны."
+             data-zh="如果希望长期保留自由内容，应将其写成真实的 Nix 内容或 Nix-Brix，而不是零散注释。另外，一旦触发写入操作，当前状态会直接写入真实文件，因此 Git 和合理的中间备份非常重要。">Wer freie Inhalte dauerhaft erhalten will, sollte dafür echten Nix-Inhalt oder Nix-Brix verwenden, nicht lose Kommentare. Außerdem gilt: Wenn eine Schreibaktion ausgelöst wird, wird der aktuelle Stand direkt in die echten Dateien übernommen. Git und sinnvolle Zwischensicherungen sind deshalb besonders wichtig.</p>
         </div>
       </section>
 
-      <!-- ── Kapitel 3 ─────────────────────────────────────────────── -->
       <section class="chapter" id="kapitel-3">
         <h2><span class="chapter-num">3</span><span
-            data-de="Nix-Brix" data-en="Nix Bricks">Nix-Brix</span></h2>
+          data-de="Nix-Brix"
+          data-en="Nix Bricks"
+          data-es="Nix-Brix"
+          data-fr="Nix-Brix"
+          data-ja="Nix-Brix"
+          data-ru="Nix-Brix"
+          data-zh="Nix-Brix">Nix-Brix</span></h2>
 
         <div class="subchapter" id="k3-1">
           <h3><span class="sub-num">3.1</span><span
-              data-de="Was sind Nix-Brix?" data-en="What are Nix Bricks?">Was sind Nix-Brix?</span></h3>
-          <p>
-            Nix-Brix sind manuelle Nix-Abschnitte, die NiCo <strong>niemals verändert</strong>.
-            Du kannst darin beliebigen Nix-Code schreiben – NiCo liest die Blöcke beim Laden,
-            speichert sie intern, und fügt sie beim nächsten Schreiben unverändert wieder ein.
-          </p>
-          <p>
-            Das ermöglicht es, Dinge die NiCo (noch) nicht grafisch abbildet direkt in Nix
-            zu schreiben, ohne dass sie bei der nächsten Regenerierung verloren gehen.
-            Syntax eines Nix-Brick:
-          </p>
-          <div class="note">
-            <p>
-              <code># &lt;brix: 1-syncthing&gt;</code><br>
-              <code>&nbsp;&nbsp;services.syncthing.enable = true;</code><br>
-              <code># &lt;/brix: 1-syncthing&gt;</code>
-            </p>
-          </div>
+            data-de="Was sind Nix-Brix?"
+            data-en="What are Nix Bricks?"
+            data-es="¿Qué son los Nix-Brix?"
+            data-fr="Que sont les Nix-Brix ?"
+            data-ja="Nix-Brixとは何ですか？"
+            data-ru="Что такое Nix-Brix?"
+            data-zh="什么是 Nix-Brix？">Was sind Nix-Brix?</span></h3>
+          <p data-de="Nix-Brix sind das wichtigste Alleinstellungsmerkmal von NiCo. Ein Nix-Brick ist ein freier Nix-Block, den NiCo beim nächsten Schreiben erhalten soll."
+             data-en="Nix Bricks are NiCo's most distinctive feature. A Nix Brick is a free-form Nix block that NiCo is supposed to preserve the next time it writes files."
+             data-es="Los Nix-Brix son la característica más distintiva de NiCo. Un Nix-Brick es un bloque Nix libre que NiCo debe conservar la próxima vez que escriba archivos."
+             data-fr="Les Nix-Brix sont la caractéristique la plus distinctive de NiCo. Un Nix-Brick est un bloc Nix libre que NiCo doit conserver lors de la prochaine écriture."
+             data-ja="Nix-Brix は NiCo の最も特徴的な機能です。Nix-Brick とは、次回書き込み時にも NiCo が保持すべき自由形式の Nix ブロックです。"
+             data-ru="Nix-Brix — это самая характерная особенность NiCo. Nix-Brick — это свободный блок Nix, который NiCo должен сохранить при следующей записи."
+             data-zh="Nix-Brix 是 NiCo 最具特色的功能。Nix-Brick 是一种自由形式的 Nix 代码块，NiCo 在下次写入时应当保留它。">Nix-Brix sind das wichtigste Alleinstellungsmerkmal von NiCo. Ein Nix-Brick ist ein freier Nix-Block, den NiCo beim nächsten Schreiben erhalten soll.</p>
+          <p data-de="Damit kann NiCo Inhalte erhalten, die nicht oder noch nicht vollständig als Formular modelliert sind. Nix-Brix sind deshalb kein Notbehelf, sondern ein Kernprinzip von NiCo."
+             data-en="This allows NiCo to preserve content that is not, or not yet, fully modeled in forms. Nix Bricks are therefore not just a fallback, but a core principle of NiCo."
+             data-es="Esto permite a NiCo conservar contenidos que no están, o todavía no están, modelados completamente en formularios. Por eso los Nix-Brix no son solo un recurso auxiliar, sino un principio central de NiCo."
+             data-fr="Cela permet à NiCo de conserver du contenu qui n'est pas, ou pas encore, entièrement modélisé dans les formulaires. Les Nix-Brix ne sont donc pas un simple secours, mais un principe central de NiCo."
+             data-ja="これにより、フォームで完全には表現されていない、あるいはまだ表現できない内容を NiCo は保持できます。そのため Nix-Brix は単なる回避策ではなく、NiCo の中核原則です。"
+             data-ru="Так NiCo может сохранять содержимое, которое не представлено или ещё не полностью представлено в форме полей. Поэтому Nix-Brix — не временная мера, а один из основных принципов NiCo."
+             data-zh="这样 NiCo 就能保留那些无法或尚未完全通过表单建模的内容。因此，Nix-Brix 不是权宜之计，而是 NiCo 的核心原则之一。">Damit kann NiCo Inhalte erhalten, die nicht oder noch nicht vollständig als Formular modelliert sind. Nix-Brix sind deshalb kein Notbehelf, sondern ein Kernprinzip von NiCo.</p>
         </div>
 
         <div class="subchapter" id="k3-2">
           <h3><span class="sub-num">3.2</span><span
-              data-de="Nix-Brix anlegen &amp; verwalten"
-              data-en="Creating &amp; managing Nix Bricks">Nix-Brix anlegen &amp; verwalten</span></h3>
-          <p>
-            Klicke auf <strong>„Nix-Brick einfügen"</strong> oberhalb der Vorschau um einen neuen
-            Nix-Brick anzulegen. Vergib eine beschreibende Bezeichnung – NiCo weist
-            automatisch eine eindeutige numerische ID zu (Format: <code>ID-bezeichnung</code>).
-          </p>
-          <p>
-            In der Vorschau werden Nix-Brix farblich hervorgehoben. Per Hover-Menü kannst du
-            sie löschen oder verschieben. Beim Löschen erscheint eine Sicherheitsabfrage, da
-            der Inhalt unwiederbringlich verloren geht.
-          </p>
+            data-de="Nix-Brix anlegen &amp; verwalten"
+            data-en="Creating and managing Nix Bricks"
+            data-es="Crear y gestionar Nix-Brix"
+            data-fr="Créer et gérer les Nix-Brix"
+            data-ja="Nix-Brix の作成と管理"
+            data-ru="Создание и управление Nix-Brix"
+            data-zh="创建和管理 Nix-Brix">Nix-Brix anlegen &amp; verwalten</span></h3>
+          <p data-de="Nix-Brix eignen sich besonders für spezielle NixOS-Optionen, freie Modul-Blöcke, ungewöhnliche Flake-Anteile, experimentelle Konfigurationen und manuelle Ergänzungen, die bewusst nicht im Formular liegen sollen."
+             data-en="Nix Bricks are especially useful for special NixOS options, free-form module blocks, unusual flake sections, experimental configurations and manual additions that are intentionally kept outside the form model."
+             data-es="Los Nix-Brix son especialmente útiles para opciones especiales de NixOS, bloques de módulos libres, partes inusuales de flakes, configuraciones experimentales y añadidos manuales que deliberadamente no deben estar en el modelo de formulario."
+             data-fr="Les Nix-Brix sont particulièrement utiles pour les options spéciales de NixOS, les blocs de modules libres, les parties inhabituelles d'un flake, les configurations expérimentales et les ajouts manuels volontairement laissés hors du modèle de formulaire."
+             data-ja="Nix-Brix は、特殊な NixOS オプション、自由なモジュールブロック、特殊な flake 部分、実験的な構成、そしてフォームモデルの外に意図的に置きたい手動追加に特に向いています。"
+             data-ru="Nix-Brix особенно полезны для специальных опций NixOS, свободных блоков модулей, необычных частей flake, экспериментальных конфигураций и ручных дополнений, которые сознательно не должны лежать в форме."
+             data-zh="Nix-Brix 特别适合用于特殊的 NixOS 选项、自由模块块、非常规 flake 部分、实验性配置，以及有意不放入表单模型中的手工补充内容。">Nix-Brix eignen sich besonders für spezielle NixOS-Optionen, freie Modul-Blöcke, ungewöhnliche Flake-Anteile, experimentelle Konfigurationen und manuelle Ergänzungen, die bewusst nicht im Formular liegen sollen.</p>
+          <p data-de="Wenn NiCo etwas nicht vollständig versteht, soll dieser Inhalt nicht verloren gehen, sondern als Brick erhalten bleiben."
+             data-en="If NiCo does not fully understand something, that content should not be lost, but preserved as a Brick."
+             data-es="Si NiCo no entiende algo por completo, ese contenido no debe perderse, sino conservarse como Brick."
+             data-fr="Si NiCo ne comprend pas complètement quelque chose, ce contenu ne doit pas être perdu, mais conservé sous forme de Brick."
+             data-ja="NiCo が何かを完全に理解できない場合でも、その内容は失われず、Brick として保持されるべきです。"
+             data-ru="Если NiCo что-то не понимает полностью, это содержимое не должно теряться, а должно сохраняться как Brick."
+             data-zh="如果 NiCo 不能完全理解某些内容，这些内容不应丢失，而应作为 Brick 被保留下来。">Wenn NiCo etwas nicht vollständig versteht, soll dieser Inhalt nicht verloren gehen, sondern als Brick erhalten bleiben.</p>
         </div>
       </section>
 
+      <section class="chapter" id="kapitel-4">
+        <h2><span class="chapter-num">4</span><span
+          data-de="Start und Einrichtung"
+          data-en="Startup and setup"
+          data-es="Inicio y configuración"
+          data-fr="Démarrage et configuration"
+          data-ja="起動と初期設定"
+          data-ru="Запуск и настройка"
+          data-zh="启动与配置">Start und Einrichtung</span></h2>
+
+        <div class="subchapter" id="k4-1">
+          <h3><span class="sub-num">4.1</span><span
+            data-de="Startroutine"
+            data-en="Startup routine"
+            data-es="Rutina de inicio"
+            data-fr="Routine de démarrage"
+            data-ja="起動処理"
+            data-ru="Процедура запуска"
+            data-zh="启动流程">Startroutine</span></h3>
+          <p data-de="Die Startroutine ist in NiCo besonders wichtig. Beim Start geht es nicht nur darum, die Oberfläche zu öffnen, sondern den Zustand der Konfiguration sauber einzuordnen."
+             data-en="The startup routine is especially important in NiCo. Starting is not just about opening the interface, but also about classifying the state of the configuration correctly."
+             data-es="La rutina de inicio es especialmente importante en NiCo. Al iniciar no solo se abre la interfaz, sino que también se clasifica correctamente el estado de la configuración."
+             data-fr="La routine de démarrage est particulièrement importante dans NiCo. Au démarrage, il ne s'agit pas seulement d'ouvrir l'interface, mais aussi de classer correctement l'état de la configuration."
+             data-ja="NiCo では起動処理が特に重要です。起動とは単に画面を開くことではなく、構成の状態を正しく判定することでもあります。"
+             data-ru="Процедура запуска в NiCo особенно важна. При старте дело не только в открытии интерфейса, но и в корректной оценке состояния конфигурации."
+             data-zh="NiCo 中的启动流程尤其重要。启动不仅仅是打开界面，还包括正确判断配置当前的状态。">Die Startroutine ist in NiCo besonders wichtig. Beim Start geht es nicht nur darum, die Oberfläche zu öffnen, sondern den Zustand der Konfiguration sauber einzuordnen.</p>
+          <div class="note">
+            <p data-de="<strong>Wichtiger Hinweis:</strong> NiCo arbeitet nicht mit einem geschützten Entwurfsformat. Wenn geschrieben wird, wird direkt in die echten Dateien geschrieben. Git, Commits und sinnvolle Zwischensicherungen sind deshalb besonders wichtig."
+               data-en="<strong>Important:</strong> NiCo does not use a protected draft format. When you write, it writes directly into the real files. That is why Git, commits and sensible intermediate backups are especially important."
+               data-es="<strong>Importante:</strong> NiCo no utiliza un formato de borrador protegido. Cuando se escribe, se escribe directamente en los archivos reales. Por eso Git, los commits y las copias intermedias razonables son especialmente importantes."
+               data-fr="<strong>Important :</strong> NiCo n'utilise pas de format de brouillon protégé. Quand il écrit, il écrit directement dans les fichiers réels. C'est pourquoi Git, les commits et des sauvegardes intermédiaires raisonnables sont particulièrement importants."
+               data-ja="<strong>重要:</strong> NiCo は保護された下書き形式を使いません。書き込み時には実際のファイルへ直接書き込みます。そのため Git、コミット、適切な中間バックアップが特に重要です。"
+               data-ru="<strong>Важно:</strong> NiCo не использует защищённый черновой формат. При записи он пишет прямо в реальные файлы. Поэтому Git, коммиты и разумные промежуточные сохранения особенно важны."
+               data-zh="<strong>重要提示：</strong>NiCo 不使用受保护的草稿格式。一旦写入，就会直接写入真实文件，因此 Git、提交以及合理的中间备份尤其重要。"><strong>Wichtiger Hinweis:</strong> NiCo arbeitet nicht mit einem geschützten Entwurfsformat. Wenn geschrieben wird, wird direkt in die echten Dateien geschrieben. Git, Commits und sinnvolle Zwischensicherungen sind deshalb besonders wichtig.</p>
+          </div>
+          <div class="flow"
+               data-de="NiCo startet lokal
+  ↓
+Ist bereits ein Konfigurationsverzeichnis bekannt?
+  ├─ Nein
+  │   → Einrichtungsansicht öffnen
+  │   → Verzeichnis wählen
+  │   → bestehende Config importieren oder mit NiCo neu beginnen
+  │
+  └─ Ja
+      ↓
+Ist das Verzeichnis erreichbar und verwendbar?
+      ├─ Nein → zurück zur Einrichtung
+      └─ Ja
+          ↓
+Ist Git vorhanden oder relevant?
+          ├─ kein Git / Git nicht initialisiert
+          │   → je nach Fall ohne Git weiter oder Git einrichten
+          └─ Git vorhanden
+              ↓
+Ist ein Git-Guard nötig?
+              ├─ Ja → Zustand erst klären
+              └─ Nein → Konfiguration laden"
+               data-en="NiCo starts locally
+  ↓
+Is a configuration directory already known?
+  ├─ No
+  │   → open setup view
+  │   → choose directory
+  │   → import an existing config or start fresh with NiCo
+  │
+  └─ Yes
+      ↓
+Is the directory reachable and usable?
+      ├─ No → return to setup
+      └─ Yes
+          ↓
+Is Git present or relevant?
+          ├─ no Git / Git not initialized
+          │   → continue without Git or set up Git
+          └─ Git present
+              ↓
+Is a Git guard necessary?
+              ├─ Yes → resolve state first
+              └─ No → load configuration"
+               data-es="NiCo se inicia localmente
+  ↓
+¿Ya se conoce un directorio de configuración?
+  ├─ No
+  │   → abrir la vista de configuración inicial
+  │   → elegir directorio
+  │   → importar una configuración existente o empezar de cero con NiCo
+  │
+  └─ Sí
+      ↓
+¿El directorio es accesible y utilizable?
+      ├─ No → volver a la configuración inicial
+      └─ Sí
+          ↓
+¿Git está presente o es relevante?
+          ├─ sin Git / Git no inicializado
+          │   → continuar sin Git o configurar Git
+          └─ Git presente
+              ↓
+¿Hace falta un guard de Git?
+              ├─ Sí → aclarar el estado primero
+              └─ No → cargar la configuración"
+               data-fr="NiCo démarre localement
+  ↓
+Un répertoire de configuration est-il déjà connu ?
+  ├─ Non
+  │   → ouvrir la vue de configuration initiale
+  │   → choisir un répertoire
+  │   → importer une configuration existante ou commencer avec NiCo
+  │
+  └─ Oui
+      ↓
+Le répertoire est-il accessible et utilisable ?
+      ├─ Non → retour à la configuration initiale
+      └─ Oui
+          ↓
+Git est-il présent ou pertinent ?
+          ├─ pas de Git / Git non initialisé
+          │   → continuer sans Git ou configurer Git
+          └─ Git présent
+              ↓
+Un garde Git est-il nécessaire ?
+              ├─ Oui → clarifier d'abord l'état
+              └─ Non → charger la configuration"
+               data-ja="NiCo がローカルで起動
+  ↓
+既知の設定ディレクトリはありますか？
+  ├─ いいえ
+  │   → 初期設定画面を開く
+  │   → ディレクトリを選ぶ
+  │   → 既存設定をインポートするか NiCo で新しく始める
+  │
+  └─ はい
+      ↓
+そのディレクトリは到達可能で利用可能ですか？
+      ├─ いいえ → 初期設定に戻る
+      └─ はい
+          ↓
+Git は存在するか、または関係しますか？
+          ├─ Git なし / Git 未初期化
+          │   → Git なしで続行するか Git を設定する
+          └─ Git あり
+              ↓
+Git ガードは必要ですか？
+              ├─ はい → 先に状態を整理する
+              └─ いいえ → 設定を読み込む"
+               data-ru="NiCo запускается локально
+  ↓
+Уже известен каталог конфигурации?
+  ├─ Нет
+  │   → открыть начальный экран настройки
+  │   → выбрать каталог
+  │   → импортировать существующую конфигурацию или начать с NiCo заново
+  │
+  └─ Да
+      ↓
+Каталог доступен и пригоден для работы?
+      ├─ Нет → вернуться к настройке
+      └─ Да
+          ↓
+Git присутствует или важен?
+          ├─ Git отсутствует / Git не инициализирован
+          │   → продолжить без Git или настроить Git
+          └─ Git присутствует
+              ↓
+Нужен Git-guard?
+              ├─ Да → сначала прояснить состояние
+              └─ Нет → загрузить конфигурацию"
+               data-zh="NiCo 在本地启动
+  ↓
+是否已经知道配置目录？
+  ├─ 否
+  │   → 打开初始设置界面
+  │   → 选择目录
+  │   → 导入现有配置或用 NiCo 从头开始
+  │
+  └─ 是
+      ↓
+该目录是否可访问且可用？
+      ├─ 否 → 返回初始设置
+      └─ 是
+          ↓
+Git 是否存在或是否相关？
+          ├─ 没有 Git / Git 未初始化
+          │   → 无 Git 继续或先配置 Git
+          └─ 已有 Git
+              ↓
+是否需要 Git 守卫？
+              ├─ 是 → 先处理状态
+              └─ 否 → 加载配置">NiCo startet lokal
+  ↓
+Ist bereits ein Konfigurationsverzeichnis bekannt?
+  ├─ Nein
+  │   → Einrichtungsansicht öffnen
+  │   → Verzeichnis wählen
+  │   → bestehende Config importieren oder mit NiCo neu beginnen
+  │
+  └─ Ja
+      ↓
+Ist das Verzeichnis erreichbar und verwendbar?
+      ├─ Nein → zurück zur Einrichtung
+      └─ Ja
+          ↓
+Ist Git vorhanden oder relevant?
+          ├─ kein Git / Git nicht initialisiert
+          │   → je nach Fall ohne Git weiter oder Git einrichten
+          └─ Git vorhanden
+              ↓
+Ist ein Git-Guard nötig?
+              ├─ Ja → Zustand erst klären
+              └─ Nein → Konfiguration laden</div>
+        </div>
+
+        <div class="subchapter" id="k4-2">
+          <h3><span class="sub-num">4.2</span><span
+            data-de="Git, Symlink und Import"
+            data-en="Git, symlink and import"
+            data-es="Git, symlink e importación"
+            data-fr="Git, lien symbolique et import"
+            data-ja="Git、シンボリックリンク、インポート"
+            data-ru="Git, симлинк и импорт"
+            data-zh="Git、符号链接与导入">Git, Symlink und Import</span></h3>
+          <p data-de="Wenn im Konfigurationsverzeichnis ein Git-Repository vorhanden ist, prüft NiCo dessen Zustand vor dem ersten Laden. Ziel ist, dass NiCo nicht stillschweigend mit einem falschen lokalen Stand arbeitet."
+             data-en="If there is a Git repository in the configuration directory, NiCo checks its state before the first load. The goal is to avoid silently working on the wrong local state."
+             data-es="Si existe un repositorio Git en el directorio de configuración, NiCo comprueba su estado antes de la primera carga. El objetivo es evitar trabajar silenciosamente sobre un estado local incorrecto."
+             data-fr="S'il existe un dépôt Git dans le répertoire de configuration, NiCo vérifie son état avant le premier chargement. L'objectif est d'éviter de travailler silencieusement sur un mauvais état local."
+             data-ja="設定ディレクトリに Git リポジトリがある場合、NiCo は最初の読み込み前にその状態を確認します。目的は、誤ったローカル状態で気づかず作業しないようにすることです。"
+             data-ru="Если в каталоге конфигурации есть репозиторий Git, NiCo проверяет его состояние перед первой загрузкой. Цель — не работать незаметно с неправильным локальным состоянием."
+             data-zh="如果配置目录中存在 Git 仓库，NiCo 会在首次加载前检查其状态，目的是避免在错误的本地状态上无声地继续工作。">Wenn im Konfigurationsverzeichnis ein Git-Repository vorhanden ist, prüft NiCo dessen Zustand vor dem ersten Laden. Ziel ist, dass NiCo nicht stillschweigend mit einem falschen lokalen Stand arbeitet.</p>
+          <p data-de="Je nach Setup kann außerdem relevant sein, ob ein erwarteter Symlink existiert oder ob beim Einbinden einer bestehenden Konfiguration zunächst importiert werden muss."
+             data-en="Depending on the setup, it may also matter whether an expected symlink exists or whether an existing configuration has to be imported first."
+             data-es="Según la configuración, también puede ser importante si existe un symlink esperado o si primero hay que importar una configuración existente."
+             data-fr="Selon le setup, il peut aussi être important qu'un lien symbolique attendu existe ou qu'une configuration existante doive d'abord être importée."
+             data-ja="セットアップによっては、期待されるシンボリックリンクが存在するか、既存設定を最初にインポートする必要があるかも重要です。"
+             data-ru="В зависимости от setup может быть важно, существует ли ожидаемый симлинк или нужно ли сначала импортировать существующую конфигурацию."
+             data-zh="根据具体设置，是否存在预期的符号链接，或是否需要先导入现有配置，也可能很重要。">Je nach Setup kann außerdem relevant sein, ob ein erwarteter Symlink existiert oder ob beim Einbinden einer bestehenden Konfiguration zunächst importiert werden muss.</p>
+          <p data-de="Beim Import in ein bereits bestehendes, nicht leeres Verzeichnis legt NiCo vor dem Eingriff eine Sicherung an. Das ist wichtig, damit vorhandene Inhalte nicht unbemerkt überschrieben oder mit importierten Inhalten vermischt werden."
+             data-en="When importing into an existing non-empty directory, NiCo creates a backup before changing anything. This matters so existing content is not silently overwritten or mixed with imported content."
+             data-es="Al importar en un directorio existente y no vacío, NiCo crea una copia de seguridad antes de modificar nada. Esto es importante para que el contenido existente no se sobrescriba ni se mezcle silenciosamente con el contenido importado."
+             data-fr="Lors d'un import dans un répertoire existant et non vide, NiCo crée une sauvegarde avant toute modification. C'est important pour éviter que le contenu existant ne soit écrasé ou mélangé silencieusement au contenu importé."
+             data-ja="既存で空ではないディレクトリにインポートする場合、NiCo は変更前にバックアップを作成します。これは既存内容が気づかれないまま上書きされたり、インポート内容と混ざったりするのを防ぐためです。"
+             data-ru="При импорте в уже существующий непустой каталог NiCo создаёт резервную копию до внесения изменений. Это важно, чтобы существующее содержимое не было незаметно перезаписано или смешано с импортированным."
+             data-zh="在导入到一个已有且非空的目录时，NiCo 会在修改前先创建备份。这一点很重要，以免现有内容被悄悄覆盖或与导入内容混杂。">Beim Import in ein bereits bestehendes, nicht leeres Verzeichnis legt NiCo vor dem Eingriff eine Sicherung an. Das ist wichtig, damit vorhandene Inhalte nicht unbemerkt überschrieben oder mit importierten Inhalten vermischt werden.</p>
+        </div>
+      </section>
+
+      <section class="chapter" id="kapitel-5">
+        <h2><span class="chapter-num">5</span><span
+          data-de="Oberfläche und Arbeitsweise"
+          data-en="Interface and workflow"
+          data-es="Interfaz y forma de trabajo"
+          data-fr="Interface et manière de travailler"
+          data-ja="画面構成と作業の流れ"
+          data-ru="Интерфейс и рабочий процесс"
+          data-zh="界面与工作方式">Oberfläche und Arbeitsweise</span></h2>
+
+        <div class="subchapter" id="k5-1">
+          <h3><span class="sub-num">5.1</span><span
+            data-de="Oberfläche"
+            data-en="Interface"
+            data-es="Interfaz"
+            data-fr="Interface"
+            data-ja="画面構成"
+            data-ru="Интерфейс"
+            data-zh="界面">Oberfläche</span></h3>
+          <p data-de="Die Oberfläche ist in mehrere Bereiche gegliedert: links Formulare, Sektionen, Hosts, Dateiliste und Einstellungen; rechts Vorschau oder Rohansicht der aktuell geöffneten Datei; oben globale Aktionen wie Hilfe, About, Admin und das NixOS-Menü."
+             data-en="The interface is split into several areas: forms, sections, hosts, file list and settings on the left; preview or raw view of the currently opened file on the right; global actions such as help, about, admin and the NixOS menu at the top."
+             data-es="La interfaz se divide en varias áreas: formularios, secciones, hosts, lista de archivos y ajustes a la izquierda; vista previa o vista raw del archivo abierto a la derecha; acciones globales como ayuda, about, admin y el menú NixOS arriba."
+             data-fr="L'interface est divisée en plusieurs zones : formulaires, sections, hôtes, liste de fichiers et réglages à gauche ; aperçu ou vue brute du fichier ouvert à droite ; actions globales comme l'aide, la fenêtre about, l'admin et le menu NixOS en haut."
+             data-ja="画面はいくつかの領域に分かれています。左側にフォーム、セクション、ホスト、ファイル一覧、設定。右側に現在開いているファイルのプレビューまたは raw 表示。上部にヘルプ、About、管理、NixOS メニューなどの全体操作があります。"
+             data-ru="Интерфейс разделён на несколько областей: слева формы, секции, хосты, список файлов и настройки; справа предпросмотр или raw-представление открытого файла; сверху глобальные действия, такие как справка, about, admin и меню NixOS."
+             data-zh="界面分为多个区域：左侧是表单、分区、主机、文件列表和设置；右侧是当前打开文件的预览或 Raw 视图；顶部是帮助、About、管理和 NixOS 菜单等全局操作。">Die Oberfläche ist in mehrere Bereiche gegliedert: links Formulare, Sektionen, Hosts, Dateiliste und Einstellungen; rechts Vorschau oder Rohansicht der aktuell geöffneten Datei; oben globale Aktionen wie Hilfe, About, Admin und das NixOS-Menü.</p>
+          <p data-de="Die Konfiguration wird in thematische Sektionen gegliedert, damit typische Aufgaben schneller gefunden und bearbeitet werden können."
+             data-en="The configuration is divided into thematic sections so common tasks can be found and edited more quickly."
+             data-es="La configuración se divide en secciones temáticas para que las tareas habituales puedan encontrarse y editarse más rápidamente."
+             data-fr="La configuration est divisée en sections thématiques afin que les tâches courantes puissent être trouvées et modifiées plus rapidement."
+             data-ja="設定はテーマ別のセクションに分けられているため、一般的な作業をより素早く見つけて編集できます。"
+             data-ru="Конфигурация разбита на тематические секции, чтобы типичные задачи можно было быстрее находить и редактировать."
+             data-zh="配置被划分为主题分区，以便更快找到并编辑常见任务。">Die Konfiguration wird in thematische Sektionen gegliedert, damit typische Aufgaben schneller gefunden und bearbeitet werden können.</p>
+        </div>
+
+        <div class="subchapter" id="k5-2">
+          <h3><span class="sub-num">5.2</span><span
+            data-de="Vorschau und echter Dateistand"
+            data-en="Preview and real file state"
+            data-es="Vista previa y estado real del archivo"
+            data-fr="Aperçu et état réel des fichiers"
+            data-ja="プレビューと実際のファイル状態"
+            data-ru="Предпросмотр и реальное состояние файлов"
+            data-zh="预览与真实文件状态">Vorschau und echter Dateistand</span></h3>
+          <p data-de="In NiCo muss klar zwischen Formularzustand, Vorschau und dem bereits geschriebenen Stand auf Platte unterschieden werden. Nur der echte Dateistand auf Platte ist für Dry-Run, Rebuild und externe Werkzeuge maßgeblich."
+             data-en="In NiCo you have to distinguish clearly between form state, preview and the state already written to disk. Only the real file state on disk matters for dry-runs, rebuilds and external tools."
+             data-es="En NiCo hay que distinguir claramente entre el estado del formulario, la vista previa y el estado ya escrito en disco. Solo el estado real de los archivos en disco cuenta para dry-run, rebuild y herramientas externas."
+             data-fr="Dans NiCo, il faut distinguer clairement l'état du formulaire, l'aperçu et l'état déjà écrit sur disque. Seul l'état réel des fichiers sur disque compte pour le dry-run, le rebuild et les outils externes."
+             data-ja="NiCo では、フォーム状態、プレビュー、すでにディスクへ書き込まれた状態を明確に区別する必要があります。Dry-run、rebuild、外部ツールで意味を持つのは、ディスク上の実際のファイル状態だけです。"
+             data-ru="В NiCo нужно чётко различать состояние формы, предпросмотр и уже записанное на диск состояние. Для dry-run, rebuild и внешних инструментов важен только реальный файловый статус на диске."
+             data-zh="在 NiCo 中，必须清楚区分表单状态、预览以及已经写入磁盘的状态。对于 Dry-Run、Rebuild 和外部工具来说，只有磁盘上的真实文件状态才有效。">In NiCo muss klar zwischen Formularzustand, Vorschau und dem bereits geschriebenen Stand auf Platte unterschieden werden. Nur der echte Dateistand auf Platte ist für Dry-Run, Rebuild und externe Werkzeuge maßgeblich.</p>
+          <p data-de="Änderungen in Formularen sind daher nicht automatisch bereits geprüft oder aktiv. Sie müssen erst geschrieben werden."
+             data-en="Changes in forms are therefore not automatically checked or active yet. They must be written first."
+             data-es="Por tanto, los cambios en formularios no están comprobados ni activos automáticamente. Primero deben escribirse."
+             data-fr="Les modifications dans les formulaires ne sont donc pas automatiquement vérifiées ni actives. Elles doivent d'abord être écrites."
+             data-ja="そのため、フォーム内の変更は自動的に検証済みでも有効でもありません。まず書き込む必要があります。"
+             data-ru="Поэтому изменения в формах не считаются автоматически проверенными или уже активными. Сначала их нужно записать."
+             data-zh="因此，表单中的更改并不会自动被检查或立即生效，必须先写入。">Änderungen in Formularen sind daher nicht automatisch bereits geprüft oder aktiv. Sie müssen erst geschrieben werden.</p>
+        </div>
+      </section>
+
+      <section class="chapter" id="kapitel-6">
+        <h2><span class="chapter-num">6</span><span
+          data-de="Schreiben, Dry-Run und Rebuild"
+          data-en="Write, dry-run and rebuild"
+          data-es="Escritura, dry-run y rebuild"
+          data-fr="Écriture, dry-run et rebuild"
+          data-ja="書き込み、ドライラン、リビルド"
+          data-ru="Запись, dry-run и rebuild"
+          data-zh="写入、Dry-Run 与 Rebuild">Schreiben, Dry-Run und Rebuild</span></h2>
+
+        <div class="subchapter" id="k6-1">
+          <h3><span class="sub-num">6.1</span><span
+            data-de="NixOS-Menü"
+            data-en="NixOS menu"
+            data-es="Menú NixOS"
+            data-fr="Menu NixOS"
+            data-ja="NixOS メニュー"
+            data-ru="Меню NixOS"
+            data-zh="NixOS 菜单">NixOS-Menü</span></h3>
+          <p data-de="NiCo trennt Bearbeiten, Schreiben und Prüfen bewusst voneinander. Im NixOS-Menü stehen dafür verschiedene Werkzeuge bereit, zum Beispiel Schreiben, Dry-Run, Rebuild und je nach Konfiguration weitere passende Hilfsaktionen."
+             data-en="NiCo deliberately separates editing, writing and checking. The NixOS menu provides several tools for this, such as write, dry-run, rebuild and, depending on the configuration, further helper actions."
+             data-es="NiCo separa deliberadamente editar, escribir y comprobar. El menú NixOS ofrece varias herramientas para ello, como escribir, dry-run, rebuild y, según la configuración, otras acciones auxiliares."
+             data-fr="NiCo sépare délibérément l'édition, l'écriture et la vérification. Le menu NixOS propose plusieurs outils pour cela, comme écrire, dry-run, rebuild et, selon la configuration, d'autres actions utiles."
+             data-ja="NiCo は編集、書き込み、確認を意図的に分けています。NixOS メニューには、それらのために書き込み、dry-run、rebuild、および設定に応じた追加補助アクションが用意されています。"
+             data-ru="NiCo сознательно разделяет редактирование, запись и проверку. Для этого в меню NixOS есть различные инструменты, например запись, dry-run, rebuild и, в зависимости от конфигурации, дополнительные вспомогательные действия."
+             data-zh="NiCo 有意识地将编辑、写入和检查分开处理。NixOS 菜单中提供了相应工具，例如写入、Dry-Run、Rebuild，以及根据配置可用的其他辅助操作。">NiCo trennt Bearbeiten, Schreiben und Prüfen bewusst voneinander. Im NixOS-Menü stehen dafür verschiedene Werkzeuge bereit, zum Beispiel Schreiben, Dry-Run, Rebuild und je nach Konfiguration weitere passende Hilfsaktionen.</p>
+          <p data-de="Der Dry-Run prüft immer nur den geschriebenen Stand auf Platte, niemals ein nur temporäres Formularmodell."
+             data-en="Dry-run always checks only the written state on disk, never a temporary form model."
+             data-es="El dry-run siempre comprueba solo el estado escrito en disco, nunca un modelo temporal del formulario."
+             data-fr="Le dry-run vérifie toujours uniquement l'état écrit sur disque, jamais un modèle de formulaire temporaire."
+             data-ja="Dry-run は常にディスクへ書き込まれた状態のみを確認し、一時的なフォームモデルは確認しません。"
+             data-ru="Dry-run всегда проверяет только уже записанное состояние на диске, а не временную модель формы."
+             data-zh="Dry-Run 始终只检查已经写入磁盘的状态，绝不会检查临时的表单模型。">Der Dry-Run prüft immer nur den geschriebenen Stand auf Platte, niemals ein nur temporäres Formularmodell.</p>
+        </div>
+
+        <div class="subchapter" id="k6-2">
+          <h3><span class="sub-num">6.2</span><span
+            data-de="Flake-Update, Push und manuelle Nutzung"
+            data-en="Flake update, push and manual use"
+            data-es="Flake update, push y uso manual"
+            data-fr="Flake update, push et usage manuel"
+            data-ja="Flake update、push、手動利用"
+            data-ru="Flake update, push и ручное использование"
+            data-zh="Flake 更新、Push 与手动使用">Flake-Update, Push und manuelle Nutzung</span></h3>
+          <p data-de="Ein Flake-Update kann in NiCo grundsätzlich gezielt ausgelöst werden. Zusätzlich kann per Setting festgelegt werden, ob vor einem Rebuild automatisch ein Flake-Update erfolgen soll."
+             data-en="A flake update can generally be triggered explicitly in NiCo. In addition, a setting can define whether a flake update should run automatically before a rebuild."
+             data-es="Un flake update puede lanzarse explícitamente en NiCo. Además, una opción puede definir si debe ejecutarse automáticamente antes de un rebuild."
+             data-fr="Un flake update peut être déclenché explicitement dans NiCo. En plus, un réglage peut définir s'il doit s'exécuter automatiquement avant un rebuild."
+             data-ja="Flake update は NiCo から明示的に実行できます。さらに、rebuild の前に自動で実行するかどうかを設定で決められます。"
+             data-ru="Flake update в NiCo можно запускать вручную. Дополнительно в настройках можно определить, должен ли он запускаться автоматически перед rebuild."
+             data-zh="在 NiCo 中可以显式触发 flake update。此外，还可以通过设置决定是否在 rebuild 前自动执行 flake update。">Ein Flake-Update kann in NiCo grundsätzlich gezielt ausgelöst werden. Zusätzlich kann per Setting festgelegt werden, ob vor einem Rebuild automatisch ein Flake-Update erfolgen soll.</p>
+          <p data-de="Dasselbe gilt für Git-Push: Push kann direkt ausgelöst werden, zusätzlich kann ein automatischer Push nach Speichern oder nach Rebuild aktiviert werden."
+             data-en="The same applies to Git push: pushing can be triggered directly, and automatic pushing can also be enabled after saving or after a rebuild."
+             data-es="Lo mismo se aplica a Git push: puede lanzarse directamente y también activarse de forma automática tras guardar o tras un rebuild."
+             data-fr="Il en va de même pour Git push : il peut être déclenché directement, et un push automatique peut aussi être activé après l'enregistrement ou après un rebuild."
+             data-ja="Git push も同様です。直接実行できるほか、保存後または rebuild 後の自動 push も有効にできます。"
+             data-ru="То же относится и к Git push: его можно запускать вручную, а также можно включить автоматический push после сохранения или после rebuild."
+             data-zh="Git Push 也是如此：既可以直接触发，也可以启用“保存后自动 Push”或“Rebuild 后自动 Push”。">Dasselbe gilt für Git-Push: Push kann direkt ausgelöst werden, zusätzlich kann ein automatischer Push nach Speichern oder nach Rebuild aktiviert werden.</p>
+          <p data-de="Wenn es Probleme gibt oder du lieber außerhalb von NiCo arbeitest, kann der Rebuild-Befehl jederzeit auch manuell ausgeführt werden. Die von NiCo erzeugten oder bearbeiteten Nix-Dateien bleiben normale Nix-Dateien und funktionieren nicht nur innerhalb von NiCo."
+             data-en="If problems occur, or if you prefer to work outside NiCo, the rebuild command can always be run manually. The Nix files created or edited by NiCo remain normal Nix files and do not work only inside NiCo."
+             data-es="Si hay problemas o prefieres trabajar fuera de NiCo, el comando de rebuild siempre puede ejecutarse manualmente. Los archivos Nix creados o editados por NiCo siguen siendo archivos Nix normales y no funcionan solo dentro de NiCo."
+             data-fr="En cas de problème ou si tu préfères travailler en dehors de NiCo, la commande de rebuild peut toujours être exécutée manuellement. Les fichiers Nix créés ou modifiés par NiCo restent des fichiers Nix normaux et ne fonctionnent pas uniquement dans NiCo."
+             data-ja="問題が発生した場合や NiCo の外で作業したい場合でも、rebuild コマンドはいつでも手動実行できます。NiCo が生成・編集した Nix ファイルは通常の Nix ファイルのままであり、NiCo の中でしか使えないものではありません。"
+             data-ru="Если возникают проблемы или ты предпочитаешь работать вне NiCo, команду rebuild всегда можно выполнить вручную. Файлы Nix, созданные или изменённые NiCo, остаются обычными файлами Nix и работают не только внутри NiCo."
+             data-zh="如果出现问题，或者你更愿意在 NiCo 之外工作，rebuild 命令始终可以手动执行。NiCo 生成或编辑的 Nix 文件仍然是普通的 Nix 文件，并不只能在 NiCo 内部使用。">Wenn es Probleme gibt oder du lieber außerhalb von NiCo arbeitest, kann der Rebuild-Befehl jederzeit auch manuell ausgeführt werden. Die von NiCo erzeugten oder bearbeiteten Nix-Dateien bleiben normale Nix-Dateien und funktionieren nicht nur innerhalb von NiCo.</p>
+        </div>
+      </section>
+
+      <section class="chapter" id="kapitel-7">
+        <h2><span class="chapter-num">7</span><span
+          data-de="Git-Funktionen"
+          data-en="Git features"
+          data-es="Funciones Git"
+          data-fr="Fonctions Git"
+          data-ja="Git 機能"
+          data-ru="Функции Git"
+          data-zh="Git 功能">Git-Funktionen</span></h2>
+
+        <div class="subchapter" id="k7-1">
+          <h3><span class="sub-num">7.1</span><span
+            data-de="Git-Guard"
+            data-en="Git guard"
+            data-es="Guard de Git"
+            data-fr="Garde Git"
+            data-ja="Git ガード"
+            data-ru="Git-guard"
+            data-zh="Git 守卫">Git-Guard</span></h3>
+          <p data-de="NiCo kann vor dem ersten Laden einer Konfiguration einen Git-Guard anzeigen. Damit wird verhindert, dass die Anwendung stillschweigend mit einem falschen lokalen Stand arbeitet."
+             data-en="NiCo can display a Git guard before loading a configuration for the first time. This is meant to prevent the application from silently working on the wrong local state."
+             data-es="NiCo puede mostrar un guard de Git antes de cargar una configuración por primera vez. Esto evita que la aplicación trabaje silenciosamente sobre un estado local incorrecto."
+             data-fr="NiCo peut afficher un garde Git avant de charger une configuration pour la première fois. Cela évite que l'application travaille silencieusement sur un mauvais état local."
+             data-ja="NiCo は設定を初めて読み込む前に Git ガードを表示できます。これにより、誤ったローカル状態で気づかず作業してしまうのを防ぎます。"
+             data-ru="NiCo может показывать Git-guard перед первой загрузкой конфигурации. Это предотвращает ситуацию, когда приложение незаметно работает с неправильным локальным состоянием."
+             data-zh="NiCo 可以在首次加载配置前显示 Git 守卫，以避免应用在错误的本地状态上无声地继续工作。">NiCo kann vor dem ersten Laden einer Konfiguration einen Git-Guard anzeigen. Damit wird verhindert, dass die Anwendung stillschweigend mit einem falschen lokalen Stand arbeitet.</p>
+          <p data-de="Typische Zustände sind <code>behind</code>, <code>ahead</code>, <code>dirty</code> oder <code>diverged</code>. In aktuellen Ständen zeigt der Guard zusätzlich Commit-Informationen und geänderte Dateien an."
+             data-en="Typical states are <code>behind</code>, <code>ahead</code>, <code>dirty</code> or <code>diverged</code>. In current versions the guard also shows commit information and changed files."
+             data-es="Los estados típicos son <code>behind</code>, <code>ahead</code>, <code>dirty</code> o <code>diverged</code>. En versiones actuales, el guard también muestra información de commits y archivos modificados."
+             data-fr="Les états typiques sont <code>behind</code>, <code>ahead</code>, <code>dirty</code> ou <code>diverged</code>. Dans les versions actuelles, le garde affiche aussi des informations de commit et les fichiers modifiés."
+             data-ja="代表的な状態は <code>behind</code>、<code>ahead</code>、<code>dirty</code>、<code>diverged</code> です。現在のバージョンでは、コミット情報や変更ファイルも表示されます。"
+             data-ru="Типичные состояния: <code>behind</code>, <code>ahead</code>, <code>dirty</code> или <code>diverged</code>. В текущих версиях guard также показывает информацию о коммитах и изменённых файлах."
+             data-zh="典型状态包括 <code>behind</code>、<code>ahead</code>、<code>dirty</code> 和 <code>diverged</code>。在当前版本中，守卫还会显示提交信息和已修改的文件。">Typische Zustände sind <code>behind</code>, <code>ahead</code>, <code>dirty</code> oder <code>diverged</code>. In aktuellen Ständen zeigt der Guard zusätzlich Commit-Informationen und geänderte Dateien an.</p>
+        </div>
+
+        <div class="subchapter" id="k7-2">
+          <h3><span class="sub-num">7.2</span><span
+            data-de="Commits, Push und Rollback"
+            data-en="Commits, push and rollback"
+            data-es="Commits, push y rollback"
+            data-fr="Commits, push et rollback"
+            data-ja="コミット、push、ロールバック"
+            data-ru="Коммиты, push и rollback"
+            data-zh="提交、Push 与回滚">Commits, Push und Rollback</span></h3>
+          <p data-de="NiCo kann Repositories initialisieren, Status prüfen, Commits erzeugen, pushen, pullen und frühere Stände wiederherstellen. Git ist dabei nicht nur Komfortfunktion, sondern ein wichtiger Sicherheitsmechanismus für die tägliche Arbeit mit echten Konfigurationsdateien."
+             data-en="NiCo can initialize repositories, inspect status, create commits, push, pull and restore earlier states. Git is not just a convenience feature here, but an important safety mechanism for daily work with real configuration files."
+             data-es="NiCo puede inicializar repositorios, comprobar el estado, crear commits, hacer push, pull y restaurar estados anteriores. Git no es solo una comodidad, sino un mecanismo importante de seguridad para el trabajo diario con archivos de configuración reales."
+             data-fr="NiCo peut initialiser des dépôts, vérifier l'état, créer des commits, faire des push, des pull et restaurer des états antérieurs. Git n'est pas seulement une fonction de confort ici, mais un mécanisme de sécurité important pour le travail quotidien avec de vrais fichiers de configuration."
+             data-ja="NiCo はリポジトリの初期化、状態確認、コミット作成、push、pull、過去状態の復元を行えます。Git は単なる便利機能ではなく、実際の設定ファイルを日常的に扱うための重要な安全機構です。"
+             data-ru="NiCo может инициализировать репозитории, проверять статус, создавать коммиты, выполнять push, pull и восстанавливать прежние состояния. Git здесь — не просто удобство, а важный механизм безопасности для ежедневной работы с реальными файлами конфигурации."
+             data-zh="NiCo 可以初始化仓库、检查状态、创建提交、执行 Push、Pull，并恢复到之前的状态。Git 在这里不仅是便利功能，更是日常处理真实配置文件时的重要安全机制。">NiCo kann Repositories initialisieren, Status prüfen, Commits erzeugen, pushen, pullen und frühere Stände wiederherstellen. Git ist dabei nicht nur Komfortfunktion, sondern ein wichtiger Sicherheitsmechanismus für die tägliche Arbeit mit echten Konfigurationsdateien.</p>
+        </div>
+      </section>
+
+      <section class="chapter" id="kapitel-8">
+        <h2><span class="chapter-num">8</span><span
+          data-de="Flakes, Hosts und Home Manager"
+          data-en="Flakes, hosts and Home Manager"
+          data-es="Flakes, hosts y Home Manager"
+          data-fr="Flakes, hôtes et Home Manager"
+          data-ja="Flakes、Hosts、Home Manager"
+          data-ru="Flakes, хосты и Home Manager"
+          data-zh="Flakes、主机与 Home Manager">Flakes, Hosts und Home Manager</span></h2>
+
+        <div class="subchapter" id="k8-1">
+          <h3><span class="sub-num">8.1</span><span
+            data-de="Flake-Struktur"
+            data-en="Flake structure"
+            data-es="Estructura flake"
+            data-fr="Structure flake"
+            data-ja="Flake 構造"
+            data-ru="Структура flake"
+            data-zh="Flake 结构">Flake-Struktur</span></h3>
+          <p data-de="NiCo unterstützt sowohl klassische NixOS-Konfigurationen als auch Flake-basierte Setups. Bei Flakes kann NiCo unter anderem mit <code>flake.nix</code>, Inputs, Hostlisten und bestimmten Flake-Strukturen arbeiten."
+             data-en="NiCo supports both classic NixOS configurations and flake-based setups. For flakes, NiCo can work with <code>flake.nix</code>, inputs, host lists and certain flake structures."
+             data-es="NiCo admite tanto configuraciones clásicas de NixOS como setups basados en flakes. En el caso de flakes, NiCo puede trabajar con <code>flake.nix</code>, inputs, listas de hosts y ciertas estructuras flake."
+             data-fr="NiCo prend en charge à la fois les configurations NixOS classiques et les setups basés sur des flakes. Pour les flakes, NiCo peut travailler avec <code>flake.nix</code>, les inputs, les listes d'hôtes et certaines structures flake."
+             data-ja="NiCo は従来の NixOS 設定と flake ベースのセットアップの両方をサポートします。flake では <code>flake.nix</code>、inputs、ホスト一覧、特定の flake 構造などを扱えます。"
+             data-ru="NiCo поддерживает как классические конфигурации NixOS, так и setup на основе flakes. Для flakes NiCo может работать с <code>flake.nix</code>, inputs, списками хостов и определёнными структурами flake."
+             data-zh="NiCo 同时支持经典的 NixOS 配置和基于 Flake 的设置。在 Flake 场景下，NiCo 可以处理 <code>flake.nix</code>、inputs、主机列表以及某些特定的 Flake 结构。">NiCo unterstützt sowohl klassische NixOS-Konfigurationen als auch Flake-basierte Setups. Bei Flakes kann NiCo unter anderem mit <code>flake.nix</code>, Inputs, Hostlisten und bestimmten Flake-Strukturen arbeiten.</p>
+        </div>
+
+        <div class="subchapter" id="k8-2">
+          <h3><span class="sub-num">8.2</span><span
+            data-de="Hosts und Home Manager"
+            data-en="Hosts and Home Manager"
+            data-es="Hosts y Home Manager"
+            data-fr="Hôtes et Home Manager"
+            data-ja="Hosts と Home Manager"
+            data-ru="Хосты и Home Manager"
+            data-zh="主机与 Home Manager">Hosts und Home Manager</span></h3>
+          <p data-de="Je nach Struktur können Hosts als eigene Einheiten geführt werden. Home Manager kann zusätzlich in die Konfiguration eingebunden werden. Nicht jeder Flake-Teil muss vollständig grafisch bearbeitbar sein; gerade dort spielen Nix-Brix eine wichtige Rolle."
+             data-en="Depending on the structure, hosts can be handled as separate units. Home Manager can also be integrated into the configuration. Not every flake part has to be fully editable in the GUI; that is exactly where Nix Bricks become important."
+             data-es="Según la estructura, los hosts pueden tratarse como unidades separadas. Home Manager también puede integrarse en la configuración. No todas las partes de un flake tienen que ser totalmente editables en la GUI; ahí es donde los Nix-Brix resultan especialmente importantes."
+             data-fr="Selon la structure, les hôtes peuvent être gérés comme des unités séparées. Home Manager peut aussi être intégré à la configuration. Chaque partie d'un flake n'a pas besoin d'être entièrement modifiable dans l'interface graphique ; c'est précisément là que les Nix-Brix deviennent importants."
+             data-ja="構造によっては、ホストを個別の単位として扱えます。Home Manager も設定へ統合できます。flake のすべての部分が GUI で完全編集可能である必要はなく、そのような場面で Nix-Brix が重要になります。"
+             data-ru="В зависимости от структуры хосты могут вестись как отдельные сущности. Home Manager также может быть встроен в конфигурацию. Не каждая часть flake должна быть полностью графически редактируемой — именно здесь важную роль играют Nix-Brix."
+             data-zh="根据结构不同，主机可以作为独立单元进行管理。Home Manager 也可以集成到配置中。并不是每个 Flake 部分都必须能被图形界面完全编辑，而这正是 Nix-Brix 发挥作用的地方。">Je nach Struktur können Hosts als eigene Einheiten geführt werden. Home Manager kann zusätzlich in die Konfiguration eingebunden werden. Nicht jeder Flake-Teil muss vollständig grafisch bearbeitbar sein; gerade dort spielen Nix-Brix eine wichtige Rolle.</p>
+        </div>
+      </section>
+
+      <section class="chapter" id="kapitel-9">
+        <h2><span class="chapter-num">9</span><span
+          data-de="Dateien, Typen und Raw-Modus"
+          data-en="Files, types and raw mode"
+          data-es="Archivos, tipos y modo raw"
+          data-fr="Fichiers, types et mode brut"
+          data-ja="ファイル、タイプ、Raw モード"
+          data-ru="Файлы, типы и raw-режим"
+          data-zh="文件、类型与 Raw 模式">Dateien, Typen und Raw-Modus</span></h2>
+
+        <div class="subchapter" id="k9-1">
+          <h3><span class="sub-num">9.1</span><span
+            data-de="Datei-Baum"
+            data-en="File tree"
+            data-es="Árbol de archivos"
+            data-fr="Arborescence"
+            data-ja="ファイルツリー"
+            data-ru="Дерево файлов"
+            data-zh="文件树">Datei-Baum</span></h3>
+          <p data-de="NiCo verwaltet nicht nur Formulare, sondern auch Dateien direkt. Dazu gehören Datei-Baum, Erstellen, Umbenennen und Löschen im Rahmen der verwalteten Struktur."
+             data-en="NiCo manages not only forms, but also files directly. This includes the file tree as well as creating, renaming and deleting files within the managed structure."
+             data-es="NiCo no solo gestiona formularios, sino también archivos directamente. Esto incluye el árbol de archivos, así como crear, renombrar y eliminar archivos dentro de la estructura gestionada."
+             data-fr="NiCo ne gère pas seulement des formulaires, mais aussi directement des fichiers. Cela inclut l'arborescence, ainsi que la création, le renommage et la suppression de fichiers dans la structure gérée."
+             data-ja="NiCo はフォームだけでなくファイルも直接管理します。これには管理対象構造内でのファイルツリー、作成、名前変更、削除が含まれます。"
+             data-ru="NiCo управляет не только формами, но и файлами напрямую. Это включает дерево файлов, а также создание, переименование и удаление файлов в рамках управляемой структуры."
+             data-zh="NiCo 不仅管理表单，也直接管理文件。这包括文件树，以及在受管理结构中的创建、重命名和删除。">NiCo verwaltet nicht nur Formulare, sondern auch Dateien direkt. Dazu gehören Datei-Baum, Erstellen, Umbenennen und Löschen im Rahmen der verwalteten Struktur.</p>
+        </div>
+
+        <div class="subchapter" id="k9-2">
+          <h3><span class="sub-num">9.2</span><span
+            data-de="Typen und Rohbearbeitung"
+            data-en="Types and raw editing"
+            data-es="Tipos y edición en bruto"
+            data-fr="Types et édition brute"
+            data-ja="タイプと生編集"
+            data-ru="Типы и прямое редактирование"
+            data-zh="类型与原始编辑">Typen und Rohbearbeitung</span></h3>
+          <p data-de="Verwaltete Dateien erhalten einen <code>nico-version</code>-Header. Damit erkennt NiCo, ob eine Datei von NiCo stammt und welchem Typ sie zugeordnet ist. Der Raw-Modus ist wichtig, wenn eine Datei direkt gelesen oder bearbeitet werden soll."
+             data-en="Managed files receive a <code>nico-version</code> header. This lets NiCo detect whether a file is managed by NiCo and which type it belongs to. Raw mode is important when a file should be read or edited directly."
+             data-es="Los archivos gestionados reciben una cabecera <code>nico-version</code>. Esto permite a NiCo detectar si un archivo está gestionado por NiCo y a qué tipo pertenece. El modo raw es importante cuando un archivo debe leerse o editarse directamente."
+             data-fr="Les fichiers gérés reçoivent un en-tête <code>nico-version</code>. Cela permet à NiCo de reconnaître si un fichier est géré par NiCo et à quel type il appartient. Le mode brut est important lorsqu'un fichier doit être lu ou modifié directement."
+             data-ja="管理対象ファイルには <code>nico-version</code> ヘッダーが付きます。これにより NiCo はそのファイルが NiCo 管理かどうか、またどのタイプに属するかを判別できます。Raw モードは、ファイルを直接読んだり編集したりしたいときに重要です。"
+             data-ru="Управляемые файлы получают заголовок <code>nico-version</code>. Это позволяет NiCo определить, управляется ли файл NiCo и к какому типу он относится. Raw-режим важен, когда файл нужно читать или редактировать напрямую."
+             data-zh="受管理的文件会带有 <code>nico-version</code> 头部。这样 NiCo 就能识别该文件是否由 NiCo 管理以及它属于哪种类型。Raw 模式在需要直接读取或编辑文件时非常重要。">Verwaltete Dateien erhalten einen <code>nico-version</code>-Header. Damit erkennt NiCo, ob eine Datei von NiCo stammt und welchem Typ sie zugeordnet ist. Der Raw-Modus ist wichtig, wenn eine Datei direkt gelesen oder bearbeitet werden soll.</p>
+        </div>
+      </section>
+
+      <section class="chapter" id="kapitel-10">
+        <h2><span class="chapter-num">10</span><span
+          data-de="Import, Export und Entkoppeln"
+          data-en="Import, export and detach"
+          data-es="Importar, exportar y desacoplar"
+          data-fr="Import, export et détachement"
+          data-ja="インポート、エクスポート、切り離し"
+          data-ru="Импорт, экспорт и отвязка"
+          data-zh="导入、导出与解绑">Import, Export und Entkoppeln</span></h2>
+
+        <div class="subchapter" id="k10-1">
+          <h3><span class="sub-num">10.1</span><span
+            data-de="Import und Sicherung"
+            data-en="Import and backup"
+            data-es="Importación y copia de seguridad"
+            data-fr="Import et sauvegarde"
+            data-ja="インポートとバックアップ"
+            data-ru="Импорт и резервная копия"
+            data-zh="导入与备份">Import und Sicherung</span></h3>
+          <p data-de="NiCo unterstützt Import vorhandener Nix-Dateien, ZIP-Import und weitere Wege, eine bestehende Konfiguration einzubinden."
+             data-en="NiCo supports importing existing Nix files, ZIP import and other ways to bring an existing configuration into NiCo."
+             data-es="NiCo admite la importación de archivos Nix existentes, importación ZIP y otras formas de incorporar una configuración existente."
+             data-fr="NiCo prend en charge l'import de fichiers Nix existants, l'import ZIP et d'autres moyens d'intégrer une configuration existante."
+             data-ja="NiCo は既存 Nix ファイルのインポート、ZIP インポート、および既存設定を取り込むその他の方法をサポートします。"
+             data-ru="NiCo поддерживает импорт существующих файлов Nix, ZIP-импорт и другие способы подключения уже существующей конфигурации."
+             data-zh="NiCo 支持导入现有 Nix 文件、ZIP 导入，以及将现有配置接入 NiCo 的其他方式。">NiCo unterstützt Import vorhandener Nix-Dateien, ZIP-Import und weitere Wege, eine bestehende Konfiguration einzubinden.</p>
+          <p data-de="Beim Import in ein nicht leeres Zielverzeichnis wird vorher eine Sicherung angelegt. Das schützt davor, vorhandene Inhalte unbemerkt zu überschreiben oder mit importierten Inhalten unklar zu vermischen."
+             data-en="Before importing into a non-empty target directory, a backup is created. This protects against silently overwriting existing content or mixing it ambiguously with imported content."
+             data-es="Antes de importar en un directorio de destino no vacío, se crea una copia de seguridad. Esto protege frente a sobrescribir silenciosamente contenido existente o mezclarlo de forma ambigua con el contenido importado."
+             data-fr="Avant un import dans un répertoire cible non vide, une sauvegarde est créée. Cela protège contre l'écrasement silencieux du contenu existant ou son mélange ambigu avec le contenu importé."
+             data-ja="空ではない対象ディレクトリへインポートする前に、バックアップが作成されます。これにより、既存内容が気づかれないまま上書きされたり、インポート内容と曖昧に混ざったりするのを防げます。"
+             data-ru="Перед импортом в непустой целевой каталог создаётся резервная копия. Это защищает от незаметной перезаписи существующего содержимого или неясного смешивания его с импортированным."
+             data-zh="在导入到非空目标目录之前，会先创建备份。这可以防止现有内容被悄悄覆盖，或与导入内容发生不清晰的混合。">Beim Import in ein nicht leeres Zielverzeichnis wird vorher eine Sicherung angelegt. Das schützt davor, vorhandene Inhalte unbemerkt zu überschreiben oder mit importierten Inhalten unklar zu vermischen.</p>
+        </div>
+
+        <div class="subchapter" id="k10-2">
+          <h3><span class="sub-num">10.2</span><span
+            data-de="Export und Entkoppeln"
+            data-en="Export and detach"
+            data-es="Exportación y desacoplamiento"
+            data-fr="Export et détachement"
+            data-ja="エクスポートと切り離し"
+            data-ru="Экспорт и отвязка"
+            data-zh="导出与解绑">Export und Entkoppeln</span></h3>
+          <p data-de="NiCo kann Konfigurationen exportieren und eine aktive Config wieder von NiCo lösen. Beim Entkoppeln entfernt NiCo seine Marker- und Kommentarzeilen aus verwalteten Dateien, löscht die NiCo-Metadaten der aktiven Config und kehrt in einen neutralen Zustand zurück."
+             data-en="NiCo can export configurations and detach an active config from NiCo again. During detaching, NiCo removes its marker and comment lines from managed files, deletes the NiCo metadata of the active config and returns to a neutral state."
+             data-es="NiCo puede exportar configuraciones y volver a desacoplar una config activa de NiCo. Al desacoplar, NiCo elimina sus líneas de marcador y comentario de los archivos gestionados, borra los metadatos NiCo de la config activa y vuelve a un estado neutral."
+             data-fr="NiCo peut exporter des configurations et détacher à nouveau une config active de NiCo. Lors du détachement, NiCo retire ses lignes de marqueur et de commentaire des fichiers gérés, supprime les métadonnées NiCo de la config active et revient à un état neutre."
+             data-ja="NiCo は設定をエクスポートでき、アクティブな設定を再び NiCo から切り離すこともできます。切り離し時には、管理対象ファイルから NiCo のマーカー行とコメント行を削除し、アクティブ設定の NiCo メタデータを削除して、中立状態に戻ります。"
+             data-ru="NiCo может экспортировать конфигурации и снова отвязывать активную конфигурацию от NiCo. При отвязке NiCo удаляет свои маркерные и комментарные строки из управляемых файлов, удаляет метаданные NiCo активной конфигурации и возвращается в нейтральное состояние."
+             data-zh="NiCo 可以导出配置，也可以把当前活动配置再次从 NiCo 中解绑。解绑时，NiCo 会从受管理文件中移除自己的标记和注释行，删除活动配置的 NiCo 元数据，并返回到中性状态。">NiCo kann Konfigurationen exportieren und eine aktive Config wieder von NiCo lösen. Beim Entkoppeln entfernt NiCo seine Marker- und Kommentarzeilen aus verwalteten Dateien, löscht die NiCo-Metadaten der aktiven Config und kehrt in einen neutralen Zustand zurück.</p>
+        </div>
+      </section>
+
+      <section class="chapter" id="kapitel-11">
+        <h2><span class="chapter-num">11</span><span
+          data-de="Grenzen und typische Fehlerbilder"
+          data-en="Limits and typical problems"
+          data-es="Límites y problemas típicos"
+          data-fr="Limites et problèmes typiques"
+          data-ja="制限と典型的な問題"
+          data-ru="Ограничения и типичные проблемы"
+          data-zh="限制与常见问题">Grenzen und typische Fehlerbilder</span></h2>
+
+        <div class="subchapter" id="k11-1">
+          <h3><span class="sub-num">11.1</span><span
+            data-de="Grenzen"
+            data-en="Limits"
+            data-es="Límites"
+            data-fr="Limites"
+            data-ja="制限"
+            data-ru="Ограничения"
+            data-zh="限制">Grenzen</span></h3>
+          <p data-de="NiCo ist bewusst pragmatisch, aber nicht allwissend. Nicht jede Nix-Struktur lässt sich vollständig grafisch ausdrücken. Besonders exotische Flake-Strukturen, ungewöhnliche Host-Setups oder stark freie Spezialkonfigurationen haben Grenzen."
+             data-en="NiCo is deliberately pragmatic, but not all-knowing. Not every Nix structure can be expressed fully in the GUI. Especially exotic flake structures, unusual host setups or heavily free-form special configurations have limits."
+             data-es="NiCo es deliberadamente pragmático, pero no omnisciente. No toda estructura Nix puede expresarse completamente en la GUI. Especialmente las estructuras flake exóticas, setups de hosts poco habituales o configuraciones especiales muy libres tienen límites."
+             data-fr="NiCo est volontairement pragmatique, mais il n'est pas omniscient. Toutes les structures Nix ne peuvent pas être entièrement exprimées dans l'interface graphique. Les structures flake exotiques, les setups d'hôtes inhabituels ou les configurations spéciales très libres ont notamment leurs limites."
+             data-ja="NiCo は意図的に実用重視ですが、万能ではありません。すべての Nix 構造が GUI で完全に表現できるわけではありません。特に特殊な flake 構造、珍しいホスト構成、自由度の高い特別設定には限界があります。"
+             data-ru="NiCo сознательно прагматичен, но не всеведущ. Не каждую структуру Nix можно полностью выразить в графическом интерфейсе. Особенно это касается экзотических структур flake, необычных setup хостов и сильно свободных специальных конфигураций."
+             data-zh="NiCo 有意保持务实，但并非无所不知。并不是每一种 Nix 结构都能在图形界面中被完全表达。尤其是非常规的 Flake 结构、特殊的主机布局或高度自由的特殊配置，都存在边界。">NiCo ist bewusst pragmatisch, aber nicht allwissend. Nicht jede Nix-Struktur lässt sich vollständig grafisch ausdrücken. Besonders exotische Flake-Strukturen, ungewöhnliche Host-Setups oder stark freie Spezialkonfigurationen haben Grenzen.</p>
+        </div>
+
+        <div class="subchapter" id="k11-2">
+          <h3><span class="sub-num">11.2</span><span
+            data-de="Typische Fehlerbilder"
+            data-en="Typical problems"
+            data-es="Problemas típicos"
+            data-fr="Problèmes typiques"
+            data-ja="典型的な問題"
+            data-ru="Типичные проблемы"
+            data-zh="常见问题">Typische Fehlerbilder</span></h3>
+          <p data-de="Typische Fehlerbilder sind ein nicht sauberer Git-Zustand, ein noch nicht geschriebener Formularzustand, beschädigte Host- oder Flake-Blöcke, fehlende Imports oder entfernte freie Kommentare, die nicht strukturiert erhalten werden konnten."
+             data-en="Typical problems are an unclean Git state, form changes that have not been written yet, damaged host or flake blocks, missing imports or removed free-form comments that could not be preserved structurally."
+             data-es="Los problemas típicos son un estado Git no limpio, cambios de formulario aún no escritos, bloques de host o flake dañados, imports faltantes o comentarios libres eliminados que no pudieron conservarse estructuralmente."
+             data-fr="Les problèmes typiques sont un état Git non propre, des modifications de formulaire pas encore écrites, des blocs hôte ou flake endommagés, des imports manquants ou des commentaires libres supprimés qui n'ont pas pu être conservés structurellement."
+             data-ja="典型的な問題としては、Git 状態がクリーンでないこと、まだ書き込まれていないフォーム変更、破損した host または flake ブロック、不足している import、構造的に保持できず削除された自由コメントなどがあります。"
+             data-ru="Типичные проблемы — это неаккуратное состояние Git, изменения формы, которые ещё не записаны, повреждённые блоки host или flake, отсутствующие imports или удалённые свободные комментарии, которые нельзя было сохранить структурно."
+             data-zh="常见问题包括 Git 状态不干净、表单修改尚未写入、损坏的主机或 Flake 块、缺失的 imports，以及那些无法以结构化方式保留而被移除的自由注释。">Typische Fehlerbilder sind ein nicht sauberer Git-Zustand, ein noch nicht geschriebener Formularzustand, beschädigte Host- oder Flake-Blöcke, fehlende Imports oder entfernte freie Kommentare, die nicht strukturiert erhalten werden konnten.</p>
+          <p data-de="Wenn etwas unklar erscheint, ist die wichtigste Kontrollfrage fast immer: Was wurde tatsächlich geschrieben, und was steht gerade wirklich in der Datei auf Platte?"
+             data-en="If something seems unclear, the most important question is almost always: what was actually written, and what is really in the file on disk right now?"
+             data-es="Si algo parece poco claro, la pregunta de control más importante casi siempre es: ¿qué se escribió realmente y qué hay ahora mismo de verdad en el archivo en disco?"
+             data-fr="Si quelque chose semble peu clair, la question de contrôle la plus importante est presque toujours : qu'est-ce qui a réellement été écrit et qu'y a-t-il vraiment dans le fichier sur disque maintenant ?"
+             data-ja="何かが不明に見える場合、最も重要な確認事項はほとんど常にこうです。実際に何が書き込まれ、今ディスク上のファイルには本当に何が入っているのか？"
+             data-ru="Если что-то кажется непонятным, самый важный контрольный вопрос почти всегда такой: что было реально записано, и что сейчас действительно находится в файле на диске?"
+             data-zh="如果有任何不清楚的地方，最重要的检查问题几乎总是：到底真正写入了什么，现在磁盘上的文件里实际是什么？">Wenn etwas unklar erscheint, ist die wichtigste Kontrollfrage fast immer: Was wurde tatsächlich geschrieben, und was steht gerade wirklich in der Datei auf Platte?</p>
+        </div>
+      </section>
     </main>
   </div>
 

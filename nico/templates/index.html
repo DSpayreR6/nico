@@ -1810,6 +1810,19 @@
                 <span class="toggle-track"><span class="toggle-thumb"></span></span>
               </span>
             </label>
+            <label class="toggle-row" style="margin-top:8px">
+              <span data-i18n="admin.settings.rebuildTerminal">Rebuild in Terminal-Fenster öffnen</span>
+              <span class="toggle-wrap">
+                <input type="checkbox" id="setting-rebuild-terminal">
+                <span class="toggle-track"><span class="toggle-thumb"></span></span>
+              </span>
+            </label>
+            <div style="margin-top:8px" id="default-host-row" class="hidden">
+              <div style="display:flex;align-items:center;gap:8px">
+                <label for="setting-default-host" style="white-space:nowrap;font-size:0.9em" data-i18n="admin.settings.defaultHost">Standard-Host für Rebuild</label>
+                <select id="setting-default-host" class="settings-path-input" style="flex:1"></select>
+              </div>
+            </div>
           </div>
 
           <!-- Sektionen-Einstellungen -->
@@ -1871,6 +1884,18 @@
                   <span class="toggle-track"><span class="toggle-thumb"></span></span>
                 </span>
               </label>
+            </div>
+
+            <!-- Remote einrichten -->
+            <div id="git-set-remote-row" class="hidden" style="margin-top:16px">
+              <p class="raw-panel-hint" style="margin-bottom:6px" data-i18n="git.setRemoteTitle">Remote-Repository einrichten</p>
+              <p class="raw-panel-hint" style="margin-bottom:8px;font-size:0.85em" data-i18n="git.setRemoteHint">Noch kein Remote konfiguriert.</p>
+              <div style="display:flex;gap:6px;align-items:center">
+                <input id="git-remote-url-input" type="text" class="settings-path-input" style="flex:1"
+                       placeholder="git@github.com:user/nixos-config.git" spellcheck="false" autocomplete="off">
+                <button id="git-remote-check-btn" class="btn-surface btn-small" data-i18n="git.setRemoteCheck">Prüfen</button>
+              </div>
+              <div id="git-remote-status" style="margin-top:6px;font-size:0.85em;min-height:1.2em"></div>
             </div>
 
             <!-- Git Push -->

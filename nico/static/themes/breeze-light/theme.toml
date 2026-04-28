@@ -36,6 +36,8 @@ text2      = "#3a4248"
 text-muted    = "#5d6b75"
 toggle-track  = "#8fa3b0"
 toggle-thumb  = "#ffffff"
+brix-bg       = "rgba(106, 27, 154, 0.07)"
+brix-color    = "#1565c0"
 
 # Typography
 mono = "'JetBrains Mono', 'Fira Code', 'Cascadia Code', 'Menlo', monospace"

@@ -1012,6 +1012,38 @@ function _loadAdminSettings() {
     if (cbLog) cbLog.checked = !!data.rebuild_log;
     const cbFlakeLock = document.getElementById('setting-show-flake-lock');
     if (cbFlakeLock) cbFlakeLock.checked = !!data.show_flake_lock;
+    const cbRebuildTerminal = document.getElementById('setting-rebuild-terminal');
+    if (cbRebuildTerminal) cbRebuildTerminal.checked = !!data.rebuild_terminal;
+
+    // Standard-Host Dropdown (nur bei Flake-Modus)
+    const defaultHostRow = document.getElementById('default-host-row');
+    const defaultHostSel = document.getElementById('setting-default-host');
+    if (defaultHostSel) {
+      Promise.all([
+        csrfFetch('/api/flake/hosts').then(r => r.json()),
+        csrfFetch('/api/rebuild/default-host').then(r => r.json()),
+      ]).then(([hostInfo, dhInfo]) => {
+        if (!hostInfo.flake_mode || !hostInfo.hosts.length) return;
+        defaultHostRow?.classList.remove('hidden');
+        const saved = dhInfo.default_host || '';
+        defaultHostSel.innerHTML = `<option value="">${t('admin.settings.defaultHostNone')}</option>` +
+          hostInfo.hosts.map(h => {
+            const n = typeof h === 'object' ? h.name : h;
+            return `<option value="${escHtml(n)}"${n === saved ? ' selected' : ''}>${escHtml(n)}</option>`;
+          }).join('');
+        if (!defaultHostSel.dataset.listenerAttached) {
+          defaultHostSel.dataset.listenerAttached = '1';
+          defaultHostSel.addEventListener('change', () => {
+            csrfFetch('/api/app/settings', {
+              method:  'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body:    JSON.stringify({ default_host: defaultHostSel.value }),
+            }).then(() => showToast(t('admin.settings.saved'), 'success'))
+              .catch(() => showToast(t('toast.error'), 'error'));
+          });
+        }
+      }).catch(() => {});
+    }
     if (Array.isArray(data.hidden_sections)) {
       hiddenSections = data.hidden_sections;
       updateSectionVisibility();
@@ -1071,6 +1103,20 @@ function _loadAdminSettings() {
     });
   }
 
+  // Auto-save Checkbox: rebuild_terminal
+  const cbRebuildTerminal = document.getElementById('setting-rebuild-terminal');
+  if (cbRebuildTerminal && !cbRebuildTerminal.dataset.listenerAttached) {
+    cbRebuildTerminal.dataset.listenerAttached = '1';
+    cbRebuildTerminal.addEventListener('change', () => {
+      csrfFetch('/api/app/settings', {
+        method:  'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ rebuild_terminal: cbRebuildTerminal.checked }),
+      }).then(() => showToast(t('admin.settings.saved'), 'success'))
+        .catch(() => showToast(t('toast.error'), 'error'));
+    });
+  }
+
   // Auto-save Checkbox: show_flake_lock + Tree-Reload
   const cbShowFlakeLock = document.getElementById('setting-show-flake-lock');
   if (cbShowFlakeLock && !cbShowFlakeLock.dataset.listenerAttached) {
@@ -1096,6 +1142,65 @@ function _loadAdminSettings() {
 
     // Push-Toggles + NixOS-Push-Button – nur anzeigen wenn Remote vorhanden
     csrfFetch('/api/git/remote-status').then(r => r.json()).then(rs => {
+      // Remote einrichten wenn noch keiner konfiguriert
+      const setRemoteRow = document.getElementById('git-set-remote-row');
+      if (!rs.has_remote && setRemoteRow) {
+        setRemoteRow.classList.remove('hidden');
+        const urlInput  = document.getElementById('git-remote-url-input');
+        const checkBtn  = document.getElementById('git-remote-check-btn');
+        const statusEl  = document.getElementById('git-remote-status');
+        if (checkBtn && !checkBtn.dataset.listenerAttached) {
+          checkBtn.dataset.listenerAttached = '1';
+          checkBtn.addEventListener('click', async () => {
+            const url = urlInput?.value.trim();
+            if (!url) return;
+            checkBtn.disabled = true;
+            statusEl.textContent = t('git.setRemoteChecking');
+            statusEl.style.color = 'var(--fg-muted)';
+            const res  = await csrfFetch('/api/git/check-remote', {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ url }),
+            }).catch(() => null);
+            checkBtn.disabled = false;
+            if (!res || !res.ok) { statusEl.textContent = t('toast.error'); statusEl.style.color = 'var(--red)'; return; }
+            const d = await res.json();
+            if (!d.ok) {
+              const code = d.error_code || 'UNKNOWN';
+              const friendly = _PUSH_ERR_MSGS[code] ? t(_PUSH_ERR_MSGS[code]) : t('git.pushErr.UNKNOWN');
+              statusEl.innerHTML = `<span style="color:var(--red)">${escHtml(friendly)}</span>`;
+              return;
+            }
+            statusEl.textContent = t('git.setRemoteReachable');
+            statusEl.style.color = 'var(--green)';
+            // Bestätigungsdialog
+            const confirmed = await new Promise(resolve => {
+              const ov = document.createElement('div');
+              ov.className = 'overlay';
+              ov.innerHTML = `<div class="dialog-box" style="min-width:320px">
+                <h2 class="dialog-title">${escHtml(t('git.setRemoteConfirmTitle'))}</h2>
+                <p style="margin-bottom:12px">${escHtml(t('git.setRemoteConfirmBody'))}</p>
+                <div class="dialog-actions">
+                  <button id="_srm-ok" class="btn-primary">${escHtml(t('git.setRemoteOk'))}</button>
+                  <button id="_srm-cancel" class="btn-secondary">${escHtml(t('unsaved.cancel'))}</button>
+                </div></div>`;
+              document.body.appendChild(ov);
+              ov.querySelector('#_srm-ok').addEventListener('click', () => { ov.remove(); resolve(true); });
+              ov.querySelector('#_srm-cancel').addEventListener('click', () => { ov.remove(); resolve(false); });
+            });
+            if (!confirmed) return;
+            const setRes = await csrfFetch('/api/git/set-remote', {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ url }),
+            }).catch(() => null);
+            if (!setRes || !setRes.ok) { showToast(t('git.setRemoteError'), 'error'); return; }
+            showToast(t('git.setRemoteSuccess'), 'success');
+            setRemoteRow.classList.add('hidden');
+            document.getElementById('nixos-git-push-btn')?.classList.remove('hidden');
+            document.getElementById('git-push-settings-row')?.classList.remove('hidden');
+          });
+        }
+        return;
+      }
       if (!rs.has_remote) return;
       // NixOS-Menü Push-Button einblenden
       document.getElementById('nixos-git-push-btn')?.classList.remove('hidden');
@@ -1110,7 +1215,18 @@ function _loadAdminSettings() {
         const el = document.getElementById(id);
         if (el && !el.dataset.listenerAttached) {
           el.dataset.listenerAttached = '1';
-          el.addEventListener('change', () => {
+          el.addEventListener('change', async () => {
+            if (el.checked) {
+              // Schreibzugriff prüfen bevor Auto-Push aktiviert wird
+              const wr = await csrfFetch('/api/git/check-write', { method: 'POST' })
+                .then(r => r.json()).catch(() => null);
+              if (!wr || !wr.ok) {
+                el.checked = false;
+                const code = wr?.error_code || 'UNKNOWN';
+                _showGitPushErrorModal(wr?.raw || '', code);
+                return;
+              }
+            }
             csrfFetch('/api/config/settings', {
               method: 'PATCH', headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ [key]: el.checked }),
@@ -2187,7 +2303,7 @@ async function writeFiles() {
       showToast(t('git.pushAutoSuccess'), 'success');
     } else {
       showToast(t('write.success', data.written.join(', ')));
-      if (data.push_error) _showGitPushErrorModal(data.push_error);
+      if (data.push_error) _showGitPushErrorModal(data.push_error, data.push_error_code);
     }
   } else {
     showToast(tErr(data.error) || t('toast.error'), 'error');
@@ -3977,7 +4093,7 @@ async function _fetchFlakeHosts() {
  * allowAll: add an "Alle Hosts" option (for dry-run only).
  * Returns: hostname string, '__all__', or null (cancelled).
  */
-function _showHostPicker(hosts, { allowAll = false, title = '' } = {}) {
+function _showHostPicker(hosts, { allowAll = false, title = '', defaultHost = null } = {}) {
   return new Promise(resolve => {
     const overlay = document.createElement('div');
     overlay.className = 'overlay';
@@ -3985,7 +4101,11 @@ function _showHostPicker(hosts, { allowAll = false, title = '' } = {}) {
     const allOption = allowAll
       ? `<option value="__all__">${t('flake.allHosts')}</option>` : '';
     const hostOptions = hosts
-      .map(h => { const n = escHtml(typeof h === 'object' ? h.name : h); return `<option value="${n}">${n}</option>`; })
+      .map(h => {
+        const n = escHtml(typeof h === 'object' ? h.name : h);
+        const sel = (defaultHost && n === defaultHost) ? ' selected' : '';
+        return `<option value="${n}"${sel}>${n}</option>`;
+      })
       .join('');
 
     overlay.innerHTML = `
@@ -4024,41 +4144,79 @@ function _showHostPicker(hosts, { allowAll = false, title = '' } = {}) {
  * Die Voreinstellung des Toggles kommt aus dem Admin-Panel.
  * Nur bei Flake-Modus angezeigt.
  */
-async function _showRebuildOptions(hostInfo, { saveChoice = false } = {}) {
-  if (!hostInfo.flake_mode) return { updateFlake: false };
+async function _showRebuildOptions(hostInfo, { saveChoice = false, hostname = '', mode = 'switch' } = {}) {
+  if (!hostInfo.flake_mode) return { updateFlake: false, useTerminal: false };
 
-  // Voreinstellung aus config.json lesen
-  let defaultChecked = false;
+  let defaultFlakeUpdate = false;
+  let defaultTerminal = false;
   try {
-    const cfg = await csrfFetch('/api/config/settings').then(r => r.json());
-    defaultChecked = !!cfg.flake_update_on_rebuild;
-  } catch { /* Fallback: aus Admin-Toggle */ defaultChecked = !!(document.getElementById('flake-update-toggle')?.checked); }
-  const checkedAttr = defaultChecked ? 'checked' : '';
+    const [cfg, app] = await Promise.all([
+      csrfFetch('/api/config/settings').then(r => r.json()),
+      csrfFetch('/api/app/settings').then(r => r.json()),
+    ]);
+    defaultFlakeUpdate = !!cfg.flake_update_on_rebuild;
+    defaultTerminal    = !!app.rebuild_terminal;
+  } catch {
+    defaultFlakeUpdate = !!(document.getElementById('flake-update-toggle')?.checked);
+  }
+
+  const _buildCmd = (upd) => {
+    const base = `sudo nixos-rebuild ${mode} --flake .#${hostname || 'hostname'}`;
+    return upd ? `nix flake update && ${base}` : base;
+  };
 
   return new Promise(resolve => {
     const overlay = document.createElement('div');
     overlay.className = 'overlay';
     overlay.innerHTML = `
-      <div class="dialog-box" style="min-width:320px">
+      <div class="dialog-box" style="min-width:360px">
         <h2 class="dialog-title">${t('rebuild.optionsTitle')}</h2>
         <label class="toggle-row" style="margin:12px 0;cursor:pointer">
           <span>${t('rebuild.optFlakeUpdate')}</span>
           <span class="toggle-wrap">
-            <input type="checkbox" id="_rbo-flake-update" ${checkedAttr}>
+            <input type="checkbox" id="_rbo-flake-update" ${defaultFlakeUpdate ? 'checked' : ''}>
             <span class="toggle-track"><span class="toggle-thumb"></span></span>
           </span>
         </label>
+        <label class="toggle-row" style="margin:4px 0 12px;cursor:pointer">
+          <span>${t('rebuild.optTerminal')}</span>
+          <span class="toggle-wrap">
+            <input type="checkbox" id="_rbo-terminal" ${defaultTerminal ? 'checked' : ''}>
+            <span class="toggle-track"><span class="toggle-thumb"></span></span>
+          </span>
+        </label>
+        <div style="margin-bottom:12px">
+          <div style="font-size:0.78em;color:var(--fg-muted);margin-bottom:4px">${t('rebuild.cmdLabel')}</div>
+          <div style="display:flex;align-items:center;gap:6px">
+            <code id="_rbo-cmd" style="flex:1;font-size:0.8em;background:var(--bg-code,var(--bg2));padding:6px 8px;border-radius:4px;overflow-x:auto;white-space:nowrap"></code>
+            <button id="_rbo-copy" class="btn-surface btn-small" title="${t('rebuild.cmdCopy')}">⎘</button>
+          </div>
+        </div>
         <div class="dialog-actions">
           <button id="_rbo-ok"     class="btn-primary">${t('rebuild.optStart')}</button>
           <button id="_rbo-cancel" class="btn-secondary">${t('unsaved.cancel')}</button>
         </div>
       </div>`;
     document.body.appendChild(overlay);
+
+    const cmdEl      = overlay.querySelector('#_rbo-cmd');
+    const flakeToggle = overlay.querySelector('#_rbo-flake-update');
+    const updateCmd  = () => { cmdEl.textContent = _buildCmd(flakeToggle.checked); };
+    updateCmd();
+    flakeToggle.addEventListener('change', updateCmd);
+
+    overlay.querySelector('#_rbo-copy').addEventListener('click', () => {
+      navigator.clipboard.writeText(cmdEl.textContent).then(
+        () => showToast(t('rebuild.cmdCopied'), 'success'),
+        () => showToast(t('toast.error'), 'error'),
+      );
+    });
+
     overlay.querySelector('#_rbo-ok').addEventListener('click', () => {
-      const updateFlake = !!(overlay.querySelector('#_rbo-flake-update')?.checked);
+      const updateFlake = !!flakeToggle.checked;
+      const useTerminal = !!(overlay.querySelector('#_rbo-terminal')?.checked);
       overlay.remove();
       if (saveChoice) {
-        // Wahl in config.json speichern + Admin-Toggle synchronisieren
         csrfFetch('/api/config/settings', {
           method:  'PATCH',
           headers: { 'Content-Type': 'application/json' },
@@ -4068,7 +4226,7 @@ async function _showRebuildOptions(hostInfo, { saveChoice = false } = {}) {
           if (adminToggle) adminToggle.checked = updateFlake;
         }).catch(() => {});
       }
-      resolve({ updateFlake });
+      resolve({ updateFlake, useTerminal });
     });
     overlay.querySelector('#_rbo-cancel').addEventListener('click', () => {
       overlay.remove();
@@ -4086,19 +4244,51 @@ async function openRebuild(mode = 'switch') {
       showToast(t('flake.noHosts'), 'error');
       return;
     }
-    hostname = await _showHostPicker(hostInfo.hosts, {
-      allowAll: false,
-      title: t('rebuild.title'),
-    });
-    if (hostname === null) return;  // cancelled
+    if (hostInfo.hosts.length === 1) {
+      hostname = typeof hostInfo.hosts[0] === 'object' ? hostInfo.hosts[0].name : hostInfo.hosts[0];
+    } else {
+      let defaultHost = null;
+      try {
+        const dh = await csrfFetch('/api/rebuild/default-host').then(r => r.json());
+        defaultHost = dh.default_host || null;
+      } catch { /* kein Default */ }
+      hostname = await _showHostPicker(hostInfo.hosts, {
+        allowAll: false,
+        title: t('rebuild.title'),
+        defaultHost,
+      });
+      if (hostname === null) return;  // cancelled
+    }
+    // Gewählten Host als neuen Default speichern
+    csrfFetch('/api/app/settings', {
+      method:  'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ default_host: hostname }),
+    }).catch(() => {});
   }
 
   // Rebuild-Optionen abfragen; Wahl wird zurückgespeichert (Voreinstellung für nächsten Rebuild)
-  const opts = await _showRebuildOptions(hostInfo, { saveChoice: true });
+  const opts = await _showRebuildOptions(hostInfo, { saveChoice: true, hostname, mode });
   if (opts === null) return;  // abgebrochen
 
   // Flake-Formular speichern falls dirty
   if (!await Sidebar.flakeSave()) return;
+
+  // Terminal-Modus: Befehl in externem Terminal ausführen
+  if (opts.useTerminal) {
+    const res = await csrfFetch('/api/rebuild/open-terminal', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ hostname, mode, update_flake: opts.updateFlake }),
+    }).catch(() => null);
+    if (!res || !res.ok) {
+      const err = res ? (await res.json().catch(() => ({}))).error : null;
+      showToast(err === 'ERR_NO_TERMINAL' ? t('rebuild.terminalError') : t('toast.error'), 'error');
+    } else {
+      showToast(t('rebuild.terminalLaunched'), 'success');
+    }
+    return;
+  }
 
   // Sudo-Passwort VOR dem Overlay abfragen (damit das Dialog nicht dahinter liegt)
   const sudoNonce = await acquireSudoNonce();
@@ -4261,7 +4451,7 @@ async function openRebuild(mode = 'switch') {
                 pushInfoEl.textContent = t('rebuild.pushDone');
                 pushInfoEl.classList.remove('hidden');
               } else {
-                _showGitPushErrorModal(d.message || t('toast.error'));
+                _showGitPushErrorModal(d.message || t('toast.error'), d.error_code);
               }
             }).catch(() => {});
           } else {
@@ -4282,7 +4472,7 @@ async function openRebuild(mode = 'switch') {
                   pushInfoEl.textContent = t('rebuild.pushDone');
                   pushInfoEl.classList.remove('hidden');
                 } else {
-                  _showGitPushErrorModal(data.message || t('toast.error'));
+                  _showGitPushErrorModal(data.message || t('toast.error'), data.error_code);
                   pushBtn.disabled = false;
                   pushBtn.textContent = origText;
                 }
@@ -5219,20 +5409,36 @@ function bindUI() {
       if (data.success) {
         showToast(t('git.pushSuccess'), 'success');
       } else {
-        _showGitPushErrorModal(data.message || t('toast.error'));
+        _showGitPushErrorModal(data.message || t('toast.error'), data.error_code);
       }
     } catch (e) {
       _showGitPushErrorModal(String(e));
     }
   }
 
-  function _showGitPushErrorModal(msg) {
+  const _PUSH_ERR_MSGS = {
+    NO_KEY:           'git.pushErr.NO_KEY',
+    NO_WRITE:         'git.pushErr.NO_WRITE',
+    NOT_FOUND:        'git.pushErr.NOT_FOUND',
+    NO_NETWORK:       'git.pushErr.NO_NETWORK',
+    NOT_FAST_FORWARD: 'git.pushErr.NOT_FAST_FORWARD',
+    AUTH_FAILED:      'git.pushErr.AUTH_FAILED',
+    UNKNOWN:          'git.pushErr.UNKNOWN',
+  };
+  function _showGitPushErrorModal(msg, errorCode) {
+    const friendly = errorCode && _PUSH_ERR_MSGS[errorCode]
+      ? t(_PUSH_ERR_MSGS[errorCode])
+      : '';
     const overlay = document.createElement('div');
     overlay.className = 'overlay';
     overlay.innerHTML = `
       <div class="modal">
         <div class="modal-logo">${escHtml(t('git.pushFailedTitle'))}</div>
-        <p style="white-space:pre-wrap;font-size:0.85rem;color:var(--red)">${escHtml(msg)}</p>
+        ${friendly ? `<p style="margin-bottom:8px">${escHtml(friendly)}</p>` : ''}
+        <details style="margin-bottom:12px">
+          <summary style="font-size:0.8em;color:var(--fg-muted);cursor:pointer">${escHtml(t('git.pushErrDetail'))}</summary>
+          <pre style="white-space:pre-wrap;font-size:0.78em;color:var(--red);margin-top:6px;overflow-x:auto">${escHtml(msg)}</pre>
+        </details>
         <div class="confirm-buttons">
           <button type="button" id="_push-err-ok" class="action-btn btn-red">OK</button>
         </div>

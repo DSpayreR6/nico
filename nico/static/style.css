@@ -1352,7 +1352,7 @@ mark.search-match-active {
 
 /* ── Brix block rendering in the right preview panel ────────────────────── */
 .code-brix {
-  border-left: 3px solid var(--mauve);
+  border-left: 3px solid var(--brix-color, var(--mauve));
   margin: 4px 0;
   position: relative;
 }
@@ -1364,7 +1364,7 @@ mark.search-match-active {
   align-items: center;
   gap: 8px;
   padding: 2px 8px;
-  background: rgba(203, 166, 247, .08);
+  background: var(--brix-bg, rgba(203, 166, 247, .08));
   cursor: pointer;
   user-select: none;
 }
@@ -1386,7 +1386,7 @@ mark.search-match-active {
 .code-brix-label {
   font-family: var(--mono);
   font-size: 12px;
-  color: var(--mauve);
+  color: var(--brix-color, var(--mauve));
   flex: 1;
 }
 
@@ -3312,7 +3312,7 @@ button:disabled {
   white-space: nowrap;
 }
 .active-file-label.has-file {
-  color: var(--mauve, #cba6f7);
+  color: var(--brix-color, var(--mauve, #cba6f7));
   font-style: normal;
   font-weight: 500;
 }

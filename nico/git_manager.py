@@ -122,14 +122,74 @@ def git_pull(nixos_dir: str) -> tuple[bool, str]:
     return True, out
 
 
-def git_push(nixos_dir: str) -> tuple[bool, str]:
-    """Run git push on the current branch."""
+def classify_push_error(output: str) -> str:
+    """Map raw git error output to a short error code."""
+    o = output.lower()
+    if 'permission denied (publickey)' in o or 'could not read from remote repository' in o:
+        return 'NO_KEY'
+    if ('permission to' in o and 'denied' in o) or 'access denied' in o:
+        return 'NO_WRITE'
+    if 'repository not found' in o or 'does not exist' in o:
+        return 'NOT_FOUND'
+    if 'could not resolve' in o or 'connection refused' in o or 'timed out' in o or 'network is unreachable' in o:
+        return 'NO_NETWORK'
+    if 'rejected' in o and ('non-fast-forward' in o or 'fetch first' in o):
+        return 'NOT_FAST_FORWARD'
+    if 'authentication failed' in o or 'invalid username or password' in o or 'bad credentials' in o:
+        return 'AUTH_FAILED'
+    return 'UNKNOWN'
+
+
+def git_push(nixos_dir: str) -> tuple[bool, str, str]:
+    """Run git push. Returns (success, raw_output, error_code)."""
     if not is_git_repo(nixos_dir):
-        return False, "Kein Git-Repository."
+        return False, "Kein Git-Repository.", "UNKNOWN"
     rc, out = _run(["push"], cwd=nixos_dir, timeout=30)
     if rc != 0:
-        return False, out or "git push fehlgeschlagen"
-    return True, out
+        return False, out or "git push fehlgeschlagen", classify_push_error(out)
+    return True, out, ""
+
+
+def check_write_access(nixos_dir: str) -> tuple[bool, str, str]:
+    """Test push write access via dry run. Returns (ok, error_code, raw_output)."""
+    if not is_git_repo(nixos_dir):
+        return False, 'UNKNOWN', 'Kein Git-Repository.'
+    rc, out = _run(["push", "--dry-run"], cwd=nixos_dir, timeout=30)
+    if rc != 0:
+        return False, classify_push_error(out), out
+    return True, '', out
+
+
+def check_remote_url(url: str) -> tuple[bool, str, str]:
+    """Test if a remote URL is reachable via ls-remote. Returns (ok, error_code, raw_output)."""
+    import subprocess as _sp
+    try:
+        result = _sp.run(
+            ["git", "ls-remote", url, "HEAD"],
+            capture_output=True, text=True, timeout=15,
+        )
+        out = (result.stdout + result.stderr).strip()
+        if result.returncode != 0:
+            return False, classify_push_error(out), out
+        return True, '', out
+    except _sp.TimeoutExpired:
+        return False, 'NO_NETWORK', 'Timeout beim Verbindungsaufbau.'
+    except Exception as exc:
+        return False, 'UNKNOWN', str(exc)
+
+
+def set_remote(nixos_dir: str, url: str) -> tuple[bool, str]:
+    """Add or update origin remote. Returns (ok, raw_output)."""
+    if not is_git_repo(nixos_dir):
+        return False, 'Kein Git-Repository.'
+    rc, _ = _run(["remote", "get-url", "origin"], cwd=nixos_dir)
+    if rc == 0:
+        rc, out = _run(["remote", "set-url", "origin", url], cwd=nixos_dir)
+    else:
+        rc, out = _run(["remote", "add", "origin", url], cwd=nixos_dir)
+    if rc != 0:
+        return False, out or 'Fehler beim Setzen des Remotes.'
+    return True, ''
 
 
 def git_reset_hard(nixos_dir: str) -> tuple[bool, str]:
@@ -155,7 +215,7 @@ def git_commit_push(nixos_dir: str, label: str = "") -> tuple[bool, str]:
     ok_commit, msg_commit = auto_commit(nixos_dir, label=label or "NiCo: Lokale Änderungen")
     if not ok_commit and "nothing to commit" not in msg_commit:
         return False, msg_commit
-    ok_push, msg_push = git_push(nixos_dir)
+    ok_push, msg_push, _ = git_push(nixos_dir)
     if not ok_push:
         return False, msg_push
     return True, ""

@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Rebuild: Terminal-Fenster, Standard-Host, Befehlsanzeige
+
+**Terminal-Modus:** Rebuild kann optional in einem externen Terminal-Fenster ausgeführt werden statt im Nico-Overlay. Nico schreibt dazu ein temporäres Shell-Script, öffnet den erkannten Terminal-Emulator (konsole → xterm → alacritty → kitty → gnome-terminal → xfce4-terminal) und löscht das Script nach Ausführung automatisch. Das sudo-Passwort wird direkt im Terminal abgefragt – es gelangt nicht durch die Web-Schicht. Einstellung in den Programmeinstellungen (bleibt lokal); im Optionen-Dialog vor jedem Rebuild überschreibbar.
+
+**Befehlsanzeige:** Im Optionen-Dialog vor dem Rebuild wird immer der exakte `nixos-rebuild`-Befehl angezeigt (aktualisiert sich live beim Flake-Update-Toggle). Kopier-Button vorhanden. Ermöglicht maximale Transparenz: Wer den Befehl manuell in ein selbst geöffnetes Terminal einfügt, umgeht Nico beim eigentlichen Rebuild vollständig.
+
+**Standard-Host:** Bei Flake-Konfigurationen mit mehreren Hosts wird der zuletzt verwendete Host automatisch vorausgewählt. Der Standard-Host kann auch direkt in den Programmeinstellungen (Config-Tab) per Dropdown gesetzt werden. Erkennung über gespeicherte Einstellung → Hostname-Match → manuell wählen. Bei nur einem Host entfällt der Auswahl-Dialog. Gilt für Rebuild und Dry-Run.
+
 ### Theme-System
 NiCo unterstützt jetzt wechselbare Themes via TOML. Themes liegen in `nico/static/themes/<name>/theme.toml` und werden beim Start geladen – neue Themes erscheinen automatisch im Dropdown. Ein Theme-Picker ist in den NiCo-Einstellungen integriert; die Wahl gilt pro Gerät (Programmeinstellung). Mitgeliefert werden:
 - **Catppuccin Mocha** (bisheriges Standard-Theme, jetzt als TOML)

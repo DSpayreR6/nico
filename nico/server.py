@@ -848,7 +848,7 @@ def create_app() -> Flask:
         """Merge settings into app settings (~/.config/nico/settings.json)."""
         if err := _check_csrf(): return err
 
-        _APP_KEYS = frozenset({"language", "theme", "code_view_plain", "rebuild_log", "hidden_sections", "section_filter", "show_flake_lock"})
+        _APP_KEYS = frozenset({"language", "theme", "code_view_plain", "rebuild_log", "hidden_sections", "section_filter", "show_flake_lock", "default_host", "rebuild_terminal"})
         incoming = request.get_json(silent=True) or {}
         patch    = {k: v for k, v in incoming.items() if k in _APP_KEYS}
         if not patch:
@@ -1759,6 +1759,114 @@ def create_app() -> Flask:
         hosts = data.get("flake_hosts") or []
         return jsonify({"flake_mode": True, "hosts": hosts})
 
+    @app.route("/api/rebuild/default-host")
+    def rebuild_default_host():
+        """Return the default host for rebuild (saved setting, hostname match, or null)."""
+        nixos_dir, err = _require_setup()
+        if err:
+            return err
+        data = config_manager.load_config(nixos_dir) or {}
+        if not data.get("flakes"):
+            return jsonify({"default_host": None})
+
+        hosts = _get_flake_hosts(nixos_dir, data)
+        app_settings = config_manager.get_app_settings()
+        saved = (app_settings.get("default_host") or "").strip()
+
+        if saved and saved in hosts:
+            return jsonify({"default_host": saved})
+        if saved and saved not in hosts:
+            config_manager.save_app_settings({"default_host": ""})
+
+        import socket as _socket
+        machine = _socket.gethostname()
+        if machine in hosts:
+            return jsonify({"default_host": machine})
+
+        return jsonify({"default_host": None})
+
+    @app.route("/api/rebuild/open-terminal", methods=["POST"])
+    def rebuild_open_terminal():
+        """Build nixos-rebuild command and launch it in a terminal emulator."""
+        if err := _check_csrf(): return err
+        nixos_dir, err = _require_setup()
+        if err:
+            return err
+
+        import shlex as _shlex
+        import stat as _stat
+        import subprocess as _sp
+        import tempfile as _tempfile
+        import shutil as _shutil2
+
+        body = request.get_json(silent=True) or {}
+        data = config_manager.load_config(nixos_dir) or {}
+        use_flake = data.get("flakes", False)
+
+        hostname    = (body.get("hostname") or "").strip()
+        mode        = (body.get("mode") or "switch").strip()
+        update_flake = bool(body.get("update_flake", False)) and use_flake
+
+        if mode not in ('switch', 'boot', 'test'):
+            return jsonify({"error": "ERR_INVALID_MODE"}), 400
+
+        nixos_path = Path(nixos_dir).resolve()
+
+        if use_flake:
+            if git_manager.is_git_repo(nixos_dir):
+                flake_arg = f".#{hostname}"
+            else:
+                flake_arg = f"path:{nixos_path.as_posix()}#{hostname}"
+            rebuild_cmd = f"sudo nixos-rebuild {mode} --flake {_shlex.quote(flake_arg)}"
+        else:
+            conf_path = nixos_path / "configuration.nix"
+            rebuild_cmd = f"sudo nixos-rebuild {mode} -I nixos-config={_shlex.quote(str(conf_path))}"
+
+        script_lines = [
+            "#!/usr/bin/env bash",
+            f"cd {_shlex.quote(str(nixos_path))}",
+        ]
+        if update_flake:
+            script_lines.append("nix flake update")
+            script_lines.append(f"[ $? -eq 0 ] && {rebuild_cmd} || echo 'nix flake update fehlgeschlagen'")
+        else:
+            script_lines.append(rebuild_cmd)
+        script_lines += [
+            'echo',
+            'read -rp "Drücke Enter zum Schließen..."',
+            'rm -f "$0"',
+        ]
+
+        fd, script_path = _tempfile.mkstemp(suffix=".sh", prefix="nico-rebuild-")
+        try:
+            with os.fdopen(fd, 'w', encoding='utf-8') as f:
+                f.write('\n'.join(script_lines) + '\n')
+            os.chmod(script_path, _stat.S_IRWXU)
+        except Exception as exc:
+            return jsonify({"error": str(exc)}), 500
+
+        TERMINALS = [
+            ['konsole', '-e', 'bash', script_path],
+            ['xterm', '-e', 'bash', script_path],
+            ['alacritty', '-e', 'bash', script_path],
+            ['kitty', 'bash', script_path],
+            ['gnome-terminal', '--', 'bash', script_path],
+            ['xfce4-terminal', '-e', f'bash {script_path}'],
+        ]
+        for term_cmd in TERMINALS:
+            if _shutil2.which(term_cmd[0]):
+                try:
+                    _sp.Popen(term_cmd)
+                    return jsonify({"success": True})
+                except Exception:
+                    continue
+
+        try:
+            os.unlink(script_path)
+        except OSError:
+            pass
+        return jsonify({"error": "ERR_NO_TERMINAL"}), 500
+
     @app.route("/api/flake/host/add", methods=["POST"])
     def flake_host_add():
         """Add a new host to flake.nix (panel-managed, no filesystem creation)."""
@@ -2588,8 +2696,8 @@ def create_app() -> Flask:
             cfg = config_manager.load_config_settings(nixos_dir)
             if not cfg.get("push_after_save"):
                 return {}
-            ok, msg = git_manager.git_push(nixos_dir)
-            return {"pushed": ok, "push_error": "" if ok else msg}
+            ok, msg, code = git_manager.git_push(nixos_dir)
+            return {"pushed": ok, "push_error": "" if ok else msg, "push_error_code": "" if ok else code}
         except Exception:
             return {}
 
@@ -2608,8 +2716,44 @@ def create_app() -> Flask:
         nixos_dir, err = _require_setup()
         if err:
             return err
-        ok, msg = git_manager.git_push(nixos_dir)
-        return jsonify({"success": ok, "message": msg})
+        ok, msg, code = git_manager.git_push(nixos_dir)
+        return jsonify({"success": ok, "message": msg, "error_code": code})
+
+    @app.route("/api/git/check-remote", methods=["POST"])
+    def git_check_remote():
+        if err := _check_csrf(): return err
+        body = request.get_json(silent=True) or {}
+        url  = (body.get("url") or "").strip()
+        if not url:
+            return jsonify({"ok": False, "error_code": "UNKNOWN", "raw": "Keine URL angegeben."}), 400
+        ok, code, raw = git_manager.check_remote_url(url)
+        return jsonify({"ok": ok, "error_code": code, "raw": raw})
+
+    @app.route("/api/git/set-remote", methods=["POST"])
+    def git_set_remote():
+        if err := _check_csrf(): return err
+        nixos_dir, err = _require_setup()
+        if err:
+            return err
+        body = request.get_json(silent=True) or {}
+        url  = (body.get("url") or "").strip()
+        if not url:
+            return jsonify({"success": False, "message": "Keine URL angegeben."}), 400
+        ok, msg = git_manager.set_remote(nixos_dir, url)
+        if not ok:
+            return jsonify({"success": False, "message": msg}), 500
+        # Fetch nach dem Setzen
+        git_manager._run(["fetch", "--quiet", "origin"], cwd=nixos_dir, timeout=15)
+        return jsonify({"success": True})
+
+    @app.route("/api/git/check-write", methods=["POST"])
+    def git_check_write():
+        if err := _check_csrf(): return err
+        nixos_dir, err = _require_setup()
+        if err:
+            return err
+        ok, code, raw = git_manager.check_write_access(nixos_dir)
+        return jsonify({"ok": ok, "error_code": code, "raw": raw})
 
     @app.route("/api/git/reset-hard", methods=["POST"])
     def git_reset_hard():
