@@ -8,14 +8,24 @@ All git commands use subprocess with explicit argument lists – never shell=Tru
 with variable content to prevent shell injection.
 """
 
+import os
 import subprocess
 from datetime import datetime
 from pathlib import Path
 
+# SSH-Optionen für alle Remote-Operationen: kein interaktiver Prompt,
+# neuer Host-Key wird automatisch akzeptiert, Verbindungs-Timeout 10s.
+_SSH_ENV = {
+    **os.environ,
+    "GIT_TERMINAL_PROMPT": "0",
+    "GIT_SSH_COMMAND": "ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10",
+}
 
-def _run(args: list[str], cwd: str, timeout: int = 10) -> tuple[int, str]:
+
+def _run(args: list[str], cwd: str, timeout: int = 10, remote: bool = False) -> tuple[int, str]:
     """Run a git command. Returns (returncode, combined stdout+stderr).
-    Returns (127, 'git not found') if git is not installed."""
+    Returns (127, 'git not found') if git is not installed.
+    Pass remote=True for commands that involve network access."""
     try:
         result = subprocess.run(
             ["git"] + args,
@@ -23,6 +33,7 @@ def _run(args: list[str], cwd: str, timeout: int = 10) -> tuple[int, str]:
             capture_output=True,
             text=True,
             timeout=timeout,
+            env=_SSH_ENV if remote else None,
         )
         return result.returncode, (result.stdout + result.stderr).strip()
     except FileNotFoundError:
@@ -47,6 +58,22 @@ def _ensure_identity(nixos_dir: str) -> None:
     host = socket.gethostname() or "localhost"
     _run(["config", "user.email", f"{user}@{host}"], cwd=nixos_dir)
     _run(["config", "user.name",  user],              cwd=nixos_dir)
+
+
+def _get_primary_remote_name(nixos_dir: str) -> str:
+    """Return the configured primary remote name, preferring the upstream remote, then origin."""
+    rc, current_branch = _run(["rev-parse", "--abbrev-ref", "HEAD"], cwd=nixos_dir)
+    if rc == 0 and current_branch.strip() and current_branch.strip() != "HEAD":
+        branch = current_branch.strip()
+        rc, branch_remote = _run(["config", "--get", f"branch.{branch}.remote"], cwd=nixos_dir)
+        if rc == 0 and branch_remote.strip():
+            return branch_remote.strip()
+
+    rc, remotes = _run(["remote"], cwd=nixos_dir)
+    remote_names = [line.strip() for line in remotes.splitlines() if line.strip()]
+    if "origin" in remote_names:
+        return "origin"
+    return remote_names[0] if remote_names else ""
 
 
 def init_repo(nixos_dir: str) -> tuple[bool, str]:
@@ -116,10 +143,67 @@ def git_pull(nixos_dir: str) -> tuple[bool, str]:
     """
     if not is_git_repo(nixos_dir):
         return False, "Kein Git-Repository."
-    rc, out = _run(["pull"], cwd=nixos_dir, timeout=30)
+    rc, out = _run(["pull"], cwd=nixos_dir, timeout=30, remote=True)
     if rc != 0:
         return False, out or "git pull fehlgeschlagen"
     return True, out
+
+
+def git_fetch_remote(nixos_dir: str) -> tuple[bool, str]:
+    """Fetch the configured remote without changing local files."""
+    if not is_git_repo(nixos_dir):
+        return False, "Kein Git-Repository."
+    remote_name = _get_primary_remote_name(nixos_dir)
+    if not remote_name:
+        return False, "Kein Remote konfiguriert."
+    rc, out = _run(["fetch", "--quiet", remote_name], cwd=nixos_dir, timeout=30, remote=True)
+    if rc != 0:
+        return False, out or "git fetch fehlgeschlagen"
+    return True, out
+
+
+def list_remote_branches(nixos_dir: str) -> tuple[bool, list[str], str]:
+    """List fetched remote branches below the configured remote."""
+    if not is_git_repo(nixos_dir):
+        return False, [], "Kein Git-Repository."
+    remote_name = _get_primary_remote_name(nixos_dir)
+    if not remote_name:
+        return False, [], "Kein Remote konfiguriert."
+    rc, out = _run(["for-each-ref", "--format=%(refname:short)", f"refs/remotes/{remote_name}/*"], cwd=nixos_dir)
+    if rc != 0:
+        return False, [], out or "Remote-Branches konnten nicht gelesen werden."
+    branches = []
+    for line in out.splitlines():
+        branch = line.strip()
+        if (
+            not branch
+            or branch == f"{remote_name}/HEAD"
+            or branch == remote_name
+            or not branch.startswith(f"{remote_name}/")
+        ):
+            continue
+        branches.append(branch)
+    return True, branches, ""
+
+
+def set_upstream_branch(nixos_dir: str, remote_branch: str) -> tuple[bool, str]:
+    """Connect the current local branch to a <remote>/<branch> upstream."""
+    if not is_git_repo(nixos_dir):
+        return False, "Kein Git-Repository."
+    rc, local_branch = _run(["rev-parse", "--abbrev-ref", "HEAD"], cwd=nixos_dir)
+    if rc != 0 or not local_branch or local_branch.strip() == "HEAD":
+        return False, "Lokaler Branch konnte nicht ermittelt werden."
+    local_branch = local_branch.strip()
+    remote_branch = remote_branch.strip()
+    remote_name = _get_primary_remote_name(nixos_dir)
+    if not remote_name:
+        return False, "Kein Remote konfiguriert."
+    if not remote_branch.startswith(f"{remote_name}/"):
+        return False, "Ungültiger Remote-Branch."
+    rc, out = _run(["branch", "--set-upstream-to", remote_branch, local_branch], cwd=nixos_dir)
+    if rc != 0:
+        return False, out or "Remote-Branch konnte nicht zugeordnet werden."
+    return True, ""
 
 
 def classify_push_error(output: str) -> str:
@@ -144,7 +228,7 @@ def git_push(nixos_dir: str) -> tuple[bool, str, str]:
     """Run git push. Returns (success, raw_output, error_code)."""
     if not is_git_repo(nixos_dir):
         return False, "Kein Git-Repository.", "UNKNOWN"
-    rc, out = _run(["push"], cwd=nixos_dir, timeout=30)
+    rc, out = _run(["push"], cwd=nixos_dir, timeout=30, remote=True)
     if rc != 0:
         return False, out or "git push fehlgeschlagen", classify_push_error(out)
     return True, out, ""
@@ -154,53 +238,35 @@ def check_write_access(nixos_dir: str) -> tuple[bool, str, str]:
     """Test push write access via dry run. Returns (ok, error_code, raw_output)."""
     if not is_git_repo(nixos_dir):
         return False, 'UNKNOWN', 'Kein Git-Repository.'
-    rc, out = _run(["push", "--dry-run"], cwd=nixos_dir, timeout=30)
+    rc, out = _run(["push", "--dry-run"], cwd=nixos_dir, timeout=30, remote=True)
     if rc != 0:
         return False, classify_push_error(out), out
     return True, '', out
-
-
-def check_remote_url(url: str) -> tuple[bool, str, str]:
-    """Test if a remote URL is reachable via ls-remote. Returns (ok, error_code, raw_output)."""
-    import subprocess as _sp
-    try:
-        result = _sp.run(
-            ["git", "ls-remote", url, "HEAD"],
-            capture_output=True, text=True, timeout=15,
-        )
-        out = (result.stdout + result.stderr).strip()
-        if result.returncode != 0:
-            return False, classify_push_error(out), out
-        return True, '', out
-    except _sp.TimeoutExpired:
-        return False, 'NO_NETWORK', 'Timeout beim Verbindungsaufbau.'
-    except Exception as exc:
-        return False, 'UNKNOWN', str(exc)
 
 
 def set_remote(nixos_dir: str, url: str) -> tuple[bool, str]:
     """Add or update origin remote. Returns (ok, raw_output)."""
     if not is_git_repo(nixos_dir):
         return False, 'Kein Git-Repository.'
-    rc, _ = _run(["remote", "get-url", "origin"], cwd=nixos_dir)
+    remote_name = _get_primary_remote_name(nixos_dir) or "origin"
+    rc, _ = _run(["remote", "get-url", remote_name], cwd=nixos_dir)
     if rc == 0:
-        rc, out = _run(["remote", "set-url", "origin", url], cwd=nixos_dir)
+        rc, out = _run(["remote", "set-url", remote_name, url], cwd=nixos_dir)
     else:
-        rc, out = _run(["remote", "add", "origin", url], cwd=nixos_dir)
+        rc, out = _run(["remote", "add", remote_name, url], cwd=nixos_dir)
     if rc != 0:
         return False, out or 'Fehler beim Setzen des Remotes.'
     return True, ''
 
 
 def git_reset_hard(nixos_dir: str) -> tuple[bool, str]:
-    """Reset to origin/<current-branch> and remove untracked files."""
+    """Reset to the configured upstream branch and remove untracked files."""
     if not is_git_repo(nixos_dir):
         return False, "Kein Git-Repository."
-    rc, branch = _run(["rev-parse", "--abbrev-ref", "HEAD"], cwd=nixos_dir)
-    if rc != 0 or not branch or branch.strip() == "HEAD":
-        return False, "Branch nicht ermittelbar oder HEAD detached."
-    branch = branch.strip()
-    rc, out = _run(["reset", "--hard", f"origin/{branch}"], cwd=nixos_dir)
+    rc, upstream = _run(["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"], cwd=nixos_dir)
+    if rc != 0 or not upstream:
+        return False, "Kein Upstream-Branch konfiguriert."
+    rc, out = _run(["reset", "--hard", upstream.strip()], cwd=nixos_dir)
     if rc != 0:
         return False, out or "git reset fehlgeschlagen"
     _run(["clean", "-fd"], cwd=nixos_dir)
@@ -251,6 +317,7 @@ def check_remote_status(nixos_dir: str) -> dict:
     """
     Check whether the local repo is behind its remote.
     Returns {
+        "has_git": bool,
         "has_remote": bool,
         "remote_url": str,
         "behind": int,   # commits local is behind remote (0 = up to date)
@@ -258,28 +325,31 @@ def check_remote_status(nixos_dir: str) -> dict:
     }
     """
     if not is_git_repo(nixos_dir):
-        return {"has_remote": False, "remote_url": "", "behind": 0, "error": ""}
+        return {"has_git": False, "has_remote": False, "remote_url": "", "behind": 0, "error": ""}
 
-    rc, remote_url = _run(["remote", "get-url", "origin"], cwd=nixos_dir)
+    remote_name = _get_primary_remote_name(nixos_dir)
+    if not remote_name:
+        return {"has_git": True, "has_remote": False, "remote_url": "", "behind": 0, "error": ""}
+    rc, remote_url = _run(["remote", "get-url", remote_name], cwd=nixos_dir)
     if rc != 0 or not remote_url:
-        return {"has_remote": False, "remote_url": "", "behind": 0, "error": ""}
+        return {"has_git": True, "has_remote": False, "remote_url": "", "behind": 0, "error": ""}
 
-    rc, fetch_out = _run(["fetch", "--quiet", "origin"], cwd=nixos_dir, timeout=15)
+    rc, fetch_out = _run(["fetch", "--quiet", remote_name], cwd=nixos_dir, timeout=15, remote=True)
     if rc != 0:
-        return {"has_remote": True, "remote_url": remote_url, "behind": 0,
+        return {"has_git": True, "has_remote": True, "remote_url": remote_url, "behind": 0,
                 "error": f"fetch fehlgeschlagen: {fetch_out}"}
 
     rc, count_out = _run(["rev-list", "HEAD..@{u}", "--count"], cwd=nixos_dir)
     if rc != 0:
         # No upstream tracking branch configured
-        return {"has_remote": True, "remote_url": remote_url, "behind": 0, "error": ""}
+        return {"has_git": True, "has_remote": True, "remote_url": remote_url, "behind": 0, "error": ""}
 
     try:
         behind = int(count_out.strip())
     except ValueError:
         behind = 0
 
-    return {"has_remote": True, "remote_url": remote_url, "behind": behind, "error": ""}
+    return {"has_git": True, "has_remote": True, "remote_url": remote_url, "behind": behind, "error": ""}
 
 
 def check_start_guard(nixos_dir: str) -> dict:
@@ -287,7 +357,7 @@ def check_start_guard(nixos_dir: str) -> dict:
     Inspect the local repository before NiCo loads and normalizes files.
     Returns a state machine for the startup guard dialog.
     States:
-      not_git | no_remote | clean_up_to_date | dirty | behind | ahead | diverged | error
+      not_git | no_remote | remote_no_upstream | clean_up_to_date | dirty | behind | ahead | diverged | error
     """
     import shutil
 
@@ -317,7 +387,20 @@ def check_start_guard(nixos_dir: str) -> dict:
             "detail": "",
         }
 
-    rc, remote_url = _run(["remote", "get-url", "origin"], cwd=nixos_dir)
+    remote_name = _get_primary_remote_name(nixos_dir)
+    if not remote_name:
+        return {
+            "state": "no_remote",
+            "git_installed": True,
+            "has_git": True,
+            "has_remote": False,
+            "dirty": False,
+            "ahead": 0,
+            "behind": 0,
+            "remote_url": "",
+            "detail": "",
+        }
+    rc, remote_url = _run(["remote", "get-url", remote_name], cwd=nixos_dir)
     if rc != 0 or not remote_url:
         return {
             "state": "no_remote",
@@ -336,8 +419,9 @@ def check_start_guard(nixos_dir: str) -> dict:
 
     rc, upstream = _run(["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"], cwd=nixos_dir)
     if rc != 0 or not upstream:
+        _, local_branch = _run(["rev-parse", "--abbrev-ref", "HEAD"], cwd=nixos_dir)
         return {
-            "state": "no_remote",
+            "state": "remote_no_upstream",
             "git_installed": True,
             "has_git": True,
             "has_remote": True,
@@ -346,9 +430,10 @@ def check_start_guard(nixos_dir: str) -> dict:
             "behind": 0,
             "remote_url": remote_url,
             "detail": "",
+            "local_branch": local_branch.strip() if local_branch else "",
         }
 
-    rc, fetch_out = _run(["fetch", "--quiet", "origin"], cwd=nixos_dir, timeout=15)
+    rc, fetch_out = _run(["fetch", "--quiet", remote_name], cwd=nixos_dir, timeout=15, remote=True)
     if rc != 0:
         return {
             "state": "error",
@@ -442,7 +527,7 @@ def git_push_force(nixos_dir: str) -> tuple[bool, str]:
     """Run git push --force on the current branch."""
     if not is_git_repo(nixos_dir):
         return False, "Kein Git-Repository."
-    rc, out = _run(["push", "--force"], cwd=nixos_dir, timeout=30)
+    rc, out = _run(["push", "--force"], cwd=nixos_dir, timeout=30, remote=True)
     if rc != 0:
         return False, out or "git push --force fehlgeschlagen"
     return True, out
@@ -470,7 +555,10 @@ def check_close_state(nixos_dir: str) -> dict:
     if not is_git_repo(nixos_dir):
         return {"has_remote": False, "needs_push": False, "ahead": 0, "dirty": False}
 
-    rc, remote_url = _run(["remote", "get-url", "origin"], cwd=nixos_dir)
+    remote_name = _get_primary_remote_name(nixos_dir)
+    if not remote_name:
+        return {"has_remote": False, "needs_push": False, "ahead": 0, "dirty": False}
+    rc, remote_url = _run(["remote", "get-url", remote_name], cwd=nixos_dir)
     if rc != 0 or not remote_url:
         return {"has_remote": False, "needs_push": False, "ahead": 0, "dirty": False}
 

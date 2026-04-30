@@ -2654,7 +2654,7 @@ def create_app() -> Flask:
     def git_remote_status():
         nixos_dir, err = _require_setup()
         if err:
-            return jsonify({"has_remote": False, "remote_url": "", "behind": 0, "error": ""})
+            return jsonify({"has_git": False, "has_remote": False, "remote_url": "", "behind": 0, "error": ""})
         return jsonify(git_manager.check_remote_status(nixos_dir))
 
     @app.route("/api/git/start-check")
@@ -2710,6 +2710,36 @@ def create_app() -> Flask:
         ok, msg = git_manager.git_pull(nixos_dir)
         return jsonify({"success": ok, "message": msg})
 
+    @app.route("/api/git/fetch-remote", methods=["POST"])
+    def git_fetch_remote():
+        if err := _check_csrf(): return err
+        nixos_dir, err = _require_setup()
+        if err:
+            return err
+        ok, msg = git_manager.git_fetch_remote(nixos_dir)
+        return jsonify({"success": ok, "message": msg})
+
+    @app.route("/api/git/remote-branches")
+    def git_remote_branches():
+        nixos_dir, err = _require_setup()
+        if err:
+            return jsonify({"success": False, "branches": [], "message": "Setup fehlt."}), 400
+        ok, branches, msg = git_manager.list_remote_branches(nixos_dir)
+        return jsonify({"success": ok, "branches": branches, "message": msg})
+
+    @app.route("/api/git/set-upstream", methods=["POST"])
+    def git_set_upstream():
+        if err := _check_csrf(): return err
+        nixos_dir, err = _require_setup()
+        if err:
+            return err
+        body = request.get_json(silent=True) or {}
+        branch = (body.get("branch") or "").strip()
+        if not branch:
+            return jsonify({"success": False, "message": "Kein Remote-Branch angegeben."}), 400
+        ok, msg = git_manager.set_upstream_branch(nixos_dir, branch)
+        return jsonify({"success": ok, "message": msg})
+
     @app.route("/api/git/push", methods=["POST"])
     def git_push():
         if err := _check_csrf(): return err
@@ -2718,16 +2748,6 @@ def create_app() -> Flask:
             return err
         ok, msg, code = git_manager.git_push(nixos_dir)
         return jsonify({"success": ok, "message": msg, "error_code": code})
-
-    @app.route("/api/git/check-remote", methods=["POST"])
-    def git_check_remote():
-        if err := _check_csrf(): return err
-        body = request.get_json(silent=True) or {}
-        url  = (body.get("url") or "").strip()
-        if not url:
-            return jsonify({"ok": False, "error_code": "UNKNOWN", "raw": "Keine URL angegeben."}), 400
-        ok, code, raw = git_manager.check_remote_url(url)
-        return jsonify({"ok": ok, "error_code": code, "raw": raw})
 
     @app.route("/api/git/set-remote", methods=["POST"])
     def git_set_remote():
@@ -2742,8 +2762,6 @@ def create_app() -> Flask:
         ok, msg = git_manager.set_remote(nixos_dir, url)
         if not ok:
             return jsonify({"success": False, "message": msg}), 500
-        # Fetch nach dem Setzen
-        git_manager._run(["fetch", "--quiet", "origin"], cwd=nixos_dir, timeout=15)
         return jsonify({"success": True})
 
     @app.route("/api/git/check-write", methods=["POST"])

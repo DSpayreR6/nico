@@ -1888,14 +1888,32 @@
 
             <!-- Remote einrichten -->
             <div id="git-set-remote-row" class="hidden" style="margin-top:16px">
-              <p class="raw-panel-hint" style="margin-bottom:6px" data-i18n="git.setRemoteTitle">Remote-Repository einrichten</p>
-              <p class="raw-panel-hint" style="margin-bottom:8px;font-size:0.85em" data-i18n="git.setRemoteHint">Noch kein Remote konfiguriert.</p>
-              <div style="display:flex;gap:6px;align-items:center">
-                <input id="git-remote-url-input" type="text" class="settings-path-input" style="flex:1"
-                       placeholder="git@github.com:user/nixos-config.git" spellcheck="false" autocomplete="off">
-                <button id="git-remote-check-btn" class="btn-surface btn-small" data-i18n="git.setRemoteCheck">Prüfen</button>
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+                <p class="raw-panel-hint" data-i18n="git.setRemoteTitle">Remote-Repository einrichten</p>
+                <a href="/help#k7-3" target="_blank" style="font-size:0.8em;color:var(--blue);text-decoration:none;opacity:0.8" data-i18n="git.setRemoteHelpLink">? Hilfe</a>
               </div>
+              <p class="raw-panel-hint" style="margin-bottom:8px;font-size:0.85em" data-i18n="git.setRemoteHint">Noch kein Remote konfiguriert. Plattform und Repository wählen:</p>
+              <select id="git-remote-platform" class="settings-path-input" style="width:100%;margin-bottom:8px">
+                <option value="github">GitHub</option>
+                <option value="gitlab">GitLab</option>
+                <option value="codeberg">Codeberg</option>
+                <option value="custom" data-i18n-opt="git.setRemoteCustomOption">Eigene URL</option>
+              </select>
+              <div id="git-remote-fields" style="display:flex;gap:6px;align-items:center;margin-bottom:8px">
+                <input id="git-remote-user" type="text" class="settings-path-input" style="flex:1"
+                       placeholder="benutzername" spellcheck="false" autocomplete="off">
+                <span style="color:var(--fg-muted);font-weight:600">/</span>
+                <input id="git-remote-repo" type="text" class="settings-path-input" style="flex:1.5"
+                       placeholder="nixos-config" spellcheck="false" autocomplete="off">
+              </div>
+              <div id="git-remote-custom-field" style="display:none;margin-bottom:8px">
+                <input id="git-remote-url-input" type="text" class="settings-path-input" style="width:100%"
+                       placeholder="git@github.com:user/nixos-config.git" spellcheck="false" autocomplete="off">
+              </div>
+              <div id="git-remote-preview" style="font-size:0.82em;color:var(--fg-muted);font-family:monospace;margin-bottom:8px;min-height:1.2em"></div>
+              <button id="git-remote-check-btn" class="btn-surface btn-small" data-i18n="git.setRemoteSave">Remote speichern</button>
               <div id="git-remote-status" style="margin-top:6px;font-size:0.85em;min-height:1.2em"></div>
+              <p class="raw-panel-hint" style="margin-top:8px;font-size:0.85em" data-i18n="git.setRemoteRestartHint">Änderungen an Remote-Daten werden erst nach einem Programmneustart für den Start-Abgleich verwendet.</p>
             </div>
 
             <!-- Git Push -->

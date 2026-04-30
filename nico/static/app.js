@@ -708,7 +708,7 @@ async function fetchGitStartCheck() {
 }
 
 function _gitGuardNeedsDialog(check) {
-  return ['dirty', 'behind', 'diverged', 'error'].includes(check?.state);
+  return ['dirty', 'behind', 'diverged', 'error', 'remote_no_upstream'].includes(check?.state);
 }
 
 function _gitGuardSeverity(check) {
@@ -747,11 +747,52 @@ function _gitGuardMessage(check) {
       recommendation: t('git.startGuardDirtyRecommendation'),
     };
   }
+  if (check.state === 'remote_no_upstream') {
+    return {
+      title: t('git.startGuardNoUpstreamTitle'),
+      body: t('git.startGuardNoUpstreamBody', check.local_branch || '?'),
+      recommendation: '',
+    };
+  }
   return {
     title: t('git.startGuardErrorTitle'),
     body: t('git.startGuardErrorBody', check.detail || 'git fetch'),
     recommendation: t('git.startGuardErrorRecommendation'),
   };
+}
+
+function showRemoteBranchPicker(branches, localBranch) {
+  return new Promise(resolve => {
+    function _remoteBranchLabel(branch) {
+      const slash = branch.indexOf('/');
+      return slash >= 0 ? branch.slice(slash + 1) : branch;
+    }
+
+    const overlay = document.createElement('div');
+    overlay.className = 'overlay';
+    overlay.innerHTML = `
+      <div class="dialog">
+        <h2 class="dialog-title">${escHtml(t('git.branchPickTitle'))}</h2>
+        <p class="dialog-info">${escHtml(t('git.branchPickBody', localBranch || '?'))}</p>
+        <select id="_gs-branch-select" class="settings-path-input" style="width:100%;margin-top:12px">
+          ${branches.map(branch => `<option value="${escHtml(branch)}">${escHtml(_remoteBranchLabel(branch))}</option>`).join('')}
+        </select>
+        <div class="dialog-actions">
+          <button id="_gs-branch-cancel" class="btn-secondary">${escHtml(t('unsaved.cancel'))}</button>
+          <button id="_gs-branch-ok" class="btn-primary">${escHtml(t('git.branchPickConfirm'))}</button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+    overlay.querySelector('#_gs-branch-cancel')?.addEventListener('click', () => {
+      overlay.remove();
+      resolve(null);
+    });
+    overlay.querySelector('#_gs-branch-ok')?.addEventListener('click', () => {
+      const value = overlay.querySelector('#_gs-branch-select')?.value || '';
+      overlay.remove();
+      resolve(value || null);
+    });
+  });
 }
 
 function showAbortedState(configDir) {
@@ -772,6 +813,7 @@ function showGitStartGuard(check, configDir) {
     const isError = check.state === 'error';
     // Scenario 2: behind / dirty / diverged → two action cards + abort
     const isScenario2 = ['behind', 'dirty', 'diverged'].includes(check.state);
+    const isNoUpstream = check.state === 'remote_no_upstream';
 
     const pathHtml = configDir
       ? `<p class="git-guard-path">${escHtml(configDir)}</p>`
@@ -797,6 +839,18 @@ function showGitStartGuard(check, configDir) {
           <button type="button" data-card="send" class="action-btn btn-red">${escHtml(t('git.guard.s2.sendBtn'))}</button>
         </div>`;
       secondaryHtml = `<button type="button" id="_gs-abort" class="btn-surface">${escHtml(t('git.guard.s2.abort'))}</button>`;
+    } else if (isNoUpstream) {
+      cardsHtml = `
+        <div class="git-guard-card">
+          <div class="git-guard-card-info">
+            <div class="git-guard-card-title">${escHtml(t('git.guard.noUpstream.fetchTitle'))}</div>
+            <div class="git-guard-card-desc">${escHtml(t('git.guard.noUpstream.fetchDesc'))}</div>
+          </div>
+          <button type="button" data-card="fetch-connect" class="action-btn btn-green">${escHtml(t('git.guard.noUpstream.fetchBtn'))}</button>
+        </div>`;
+      secondaryHtml = `
+        <button type="button" id="_gs-abort" class="btn-surface">${escHtml(t('git.startGuardCancel'))}</button>
+        <button type="button" id="_gs-open"  class="btn-surface">${escHtml(t('git.guard.noUpstream.keepLocal'))}</button>`;
     } else {
       // error state: offer local open or abort
       secondaryHtml = `
@@ -919,20 +973,53 @@ function showGitStartGuard(check, configDir) {
         errEl.style.display = 'none';
         try {
           const endpointMap = {
-            fetch: '/api/git/reset-hard',   // reset to origin then pull
+            fetch: '/api/git/reset-hard',   // reset to tracked remote branch then pull
             send:  '/api/git/commit-push-force',
           };
           const errKeyMap = {
             fetch: 'git.guard.s2.fetchError',
             send:  'git.guard.s2.sendError',
           };
-          // For fetch: reset-hard brings us to origin, then pull gets latest
+          // For fetch: reset-hard brings us to the tracked remote branch, then pull gets latest
           if (cardId === 'fetch') {
             const r1 = await csrfFetch('/api/git/reset-hard', { method: 'POST' });
             const d1 = await r1.json();
             if (!d1.success) throw new Error(d1.message || '');
             await csrfFetch('/api/git/pull', { method: 'POST' }).catch(() => {});
             location.reload();
+            return;
+          }
+          if (cardId === 'fetch-connect') {
+            const fetchRes = await csrfFetch('/api/git/fetch-remote', { method: 'POST' });
+            const fetchData = await fetchRes.json();
+            if (!fetchData.success) throw new Error(fetchData.message || '');
+
+            const branchRes = await csrfFetch('/api/git/remote-branches');
+            const branchData = await branchRes.json();
+            if (!branchData.success) throw new Error(branchData.message || '');
+            const branches = Array.isArray(branchData.branches) ? branchData.branches : [];
+            if (!branches.length) throw new Error(t('git.guard.noUpstream.noBranches'));
+
+            let targetBranch = null;
+            if (branches.length === 1) {
+              targetBranch = branches[0];
+            } else {
+              targetBranch = await showRemoteBranchPicker(branches, check.local_branch || '');
+            }
+            if (!targetBranch) {
+              btn.disabled = false;
+              btn.textContent = origText;
+              return;
+            }
+
+            const linkRes = await csrfFetch('/api/git/set-upstream', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ branch: targetBranch }),
+            });
+            const linkData = await linkRes.json();
+            if (!linkData.success) throw new Error(linkData.message || '');
+            finish('retry-check');
             return;
           }
           const res  = await csrfFetch(endpointMap[cardId], { method: 'POST' });
@@ -959,37 +1046,40 @@ function showGitStartGuard(check, configDir) {
 async function ensureGitStartGuard(configDir) {
   if (_startGuardApproved === configDir) return true;
 
-  let check;
-  try {
-    check = await fetchGitStartCheck();
-  } catch {
-    check = {
-      state: 'error',
-      detail: 'start-check failed',
-      ahead: 0,
-      behind: 0,
-      dirty: false,
-    };
-  }
+  while (true) {
+    let check;
+    try {
+      check = await fetchGitStartCheck();
+    } catch {
+      check = {
+        state: 'error',
+        detail: 'start-check failed',
+        ahead: 0,
+        behind: 0,
+        dirty: false,
+      };
+    }
 
-  if (!_gitGuardNeedsDialog(check)) {
-    _startGuardApproved = configDir;
-    return true;
-  }
+    if (!_gitGuardNeedsDialog(check)) {
+      _startGuardApproved = configDir;
+      return true;
+    }
 
-  const result = await showGitStartGuard(check, configDir);
-  if (result === true) {
-    _startGuardApproved = configDir;
-    return true;
-  }
-  if (result === 'aborted') {
-    showAbortedState(configDir);
+    const result = await showGitStartGuard(check, configDir);
+    if (result === 'retry-check') continue;
+    if (result === true) {
+      _startGuardApproved = configDir;
+      return true;
+    }
+    if (result === 'aborted') {
+      showAbortedState(configDir);
+      return false;
+    }
+    // error state: user cancelled → back to setup
+    showSetupOverlay();
+    document.getElementById('nixos-dir-input').value = configDir || '';
     return false;
   }
-  // error state: user cancelled → back to setup
-  showSetupOverlay();
-  document.getElementById('nixos-dir-input').value = configDir || '';
-  return false;
 }
 
 function openAdmin() {
@@ -1142,66 +1232,102 @@ function _loadAdminSettings() {
 
     // Push-Toggles + NixOS-Push-Button – nur anzeigen wenn Remote vorhanden
     csrfFetch('/api/git/remote-status').then(r => r.json()).then(rs => {
-      // Remote einrichten wenn noch keiner konfiguriert
       const setRemoteRow = document.getElementById('git-set-remote-row');
-      if (!rs.has_remote && setRemoteRow) {
+      if (setRemoteRow && rs.has_git) {
         setRemoteRow.classList.remove('hidden');
-        const urlInput  = document.getElementById('git-remote-url-input');
+
+        function _buildRemoteUrl() {
+          const platform = document.getElementById('git-remote-platform')?.value || 'github';
+          if (platform === 'custom') {
+            return document.getElementById('git-remote-url-input')?.value.trim() || '';
+          }
+          const user = document.getElementById('git-remote-user')?.value.trim() || '';
+          const repo = document.getElementById('git-remote-repo')?.value.trim() || '';
+          if (!user || !repo) return '';
+          const hosts = { github: 'github.com', gitlab: 'gitlab.com', codeberg: 'codeberg.org' };
+          return `git@${hosts[platform]}:${user}/${repo}.git`;
+        }
+
+        function _applyRemoteUrl(url) {
+          const platformEl = document.getElementById('git-remote-platform');
+          const userEl = document.getElementById('git-remote-user');
+          const repoEl = document.getElementById('git-remote-repo');
+          const customEl = document.getElementById('git-remote-url-input');
+          if (!platformEl || !userEl || !repoEl || !customEl) return;
+
+          const sshMatch = url.match(/^git@(github\.com|gitlab\.com|codeberg\.org):([^/]+)\/(.+?)(?:\.git)?$/);
+          const httpsMatch = url.match(/^https?:\/\/(github\.com|gitlab\.com|codeberg\.org)\/([^/]+)\/(.+?)(?:\.git)?$/);
+          const match = sshMatch || httpsMatch;
+          const platformByHost = {
+            'github.com': 'github',
+            'gitlab.com': 'gitlab',
+            'codeberg.org': 'codeberg',
+          };
+          if (!match) {
+            platformEl.value = 'custom';
+            customEl.value = url;
+            userEl.value = '';
+            repoEl.value = '';
+            return;
+          }
+          platformEl.value = platformByHost[match[1]] || 'custom';
+          userEl.value = match[2];
+          repoEl.value = match[3];
+          customEl.value = platformEl.value === 'custom' ? url : '';
+        }
+
+        function _updateRemotePreview() {
+          const url = _buildRemoteUrl();
+          const el = document.getElementById('git-remote-preview');
+          if (el) el.textContent = url;
+        }
+
+        function _onPlatformChange() {
+          const platform = document.getElementById('git-remote-platform')?.value;
+          const fields = document.getElementById('git-remote-fields');
+          const customField = document.getElementById('git-remote-custom-field');
+          if (fields) fields.style.display = platform === 'custom' ? 'none' : 'flex';
+          if (customField) customField.style.display = platform === 'custom' ? 'block' : 'none';
+          _updateRemotePreview();
+        }
+
+        document.getElementById('git-remote-platform')?.addEventListener('change', _onPlatformChange);
+        document.getElementById('git-remote-user')?.addEventListener('input', _updateRemotePreview);
+        document.getElementById('git-remote-repo')?.addEventListener('input', _updateRemotePreview);
+        document.getElementById('git-remote-url-input')?.addEventListener('input', _updateRemotePreview);
+
         const checkBtn  = document.getElementById('git-remote-check-btn');
         const statusEl  = document.getElementById('git-remote-status');
+        if (rs.remote_url) _applyRemoteUrl(rs.remote_url);
+        _onPlatformChange();
         if (checkBtn && !checkBtn.dataset.listenerAttached) {
           checkBtn.dataset.listenerAttached = '1';
           checkBtn.addEventListener('click', async () => {
-            const url = urlInput?.value.trim();
+            const url = _buildRemoteUrl();
             if (!url) return;
             checkBtn.disabled = true;
-            statusEl.textContent = t('git.setRemoteChecking');
+            statusEl.textContent = t('git.setRemoteSaving');
             statusEl.style.color = 'var(--fg-muted)';
-            const res  = await csrfFetch('/api/git/check-remote', {
-              method: 'POST', headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ url }),
-            }).catch(() => null);
-            checkBtn.disabled = false;
-            if (!res || !res.ok) { statusEl.textContent = t('toast.error'); statusEl.style.color = 'var(--red)'; return; }
-            const d = await res.json();
-            if (!d.ok) {
-              const code = d.error_code || 'UNKNOWN';
-              const friendly = _PUSH_ERR_MSGS[code] ? t(_PUSH_ERR_MSGS[code]) : t('git.pushErr.UNKNOWN');
-              statusEl.innerHTML = `<span style="color:var(--red)">${escHtml(friendly)}</span>`;
-              return;
-            }
-            statusEl.textContent = t('git.setRemoteReachable');
-            statusEl.style.color = 'var(--green)';
-            // Bestätigungsdialog
-            const confirmed = await new Promise(resolve => {
-              const ov = document.createElement('div');
-              ov.className = 'overlay';
-              ov.innerHTML = `<div class="dialog-box" style="min-width:320px">
-                <h2 class="dialog-title">${escHtml(t('git.setRemoteConfirmTitle'))}</h2>
-                <p style="margin-bottom:12px">${escHtml(t('git.setRemoteConfirmBody'))}</p>
-                <div class="dialog-actions">
-                  <button id="_srm-ok" class="btn-primary">${escHtml(t('git.setRemoteOk'))}</button>
-                  <button id="_srm-cancel" class="btn-secondary">${escHtml(t('unsaved.cancel'))}</button>
-                </div></div>`;
-              document.body.appendChild(ov);
-              ov.querySelector('#_srm-ok').addEventListener('click', () => { ov.remove(); resolve(true); });
-              ov.querySelector('#_srm-cancel').addEventListener('click', () => { ov.remove(); resolve(false); });
-            });
-            if (!confirmed) return;
             const setRes = await csrfFetch('/api/git/set-remote', {
               method: 'POST', headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ url }),
             }).catch(() => null);
-            if (!setRes || !setRes.ok) { showToast(t('git.setRemoteError'), 'error'); return; }
-            showToast(t('git.setRemoteSuccess'), 'success');
-            setRemoteRow.classList.add('hidden');
+            checkBtn.disabled = false;
+            if (!setRes || !setRes.ok) {
+              statusEl.textContent = t('git.setRemoteError');
+              statusEl.style.color = 'var(--red)';
+              showToast(t('git.setRemoteError'), 'error');
+              return;
+            }
+            statusEl.textContent = t('git.setRemoteSavedRestart');
+            statusEl.style.color = 'var(--green)';
+            showToast(t('git.setRemoteSavedRestart'), 'success');
             document.getElementById('nixos-git-push-btn')?.classList.remove('hidden');
             document.getElementById('git-push-settings-row')?.classList.remove('hidden');
           });
         }
-        return;
       }
-      if (!rs.has_remote) return;
+      if (!rs.has_git || !rs.has_remote) return;
       // NixOS-Menü Push-Button einblenden
       document.getElementById('nixos-git-push-btn')?.classList.remove('hidden');
       // Push-Settings-Sektion einblenden
@@ -4341,6 +4467,10 @@ async function openRebuild(mode = 'switch') {
   let isRunning      = true;
   let firstErrorLine = '';
   let hasGlobalProgress = false;
+  let maxBuildTotal = 0;
+  let maxDlExpected = 0;
+  let maxCopiedTotal = 0;
+  let maxCopiedExpected = 0;
 
   function _phaseCol(phase) {
     return document.getElementById('rph-' + phase);
@@ -4361,17 +4491,29 @@ async function openRebuild(mode = 'switch') {
   }
 
   function _setBuildProgress(done, total, pkg) {
-    counterEl.textContent  = total > 0 ? `${done} von ${total}` : '';
+    const stableTotal = Math.max(maxBuildTotal, total || 0);
+    maxBuildTotal = stableTotal;
+    const remain = Math.max(0, stableTotal - (done || 0));
+    counterEl.textContent  = stableTotal > 0 ? `noch ${remain} von ${stableTotal}` : '';
     buildPkgEl.textContent = pkg || '';
   }
 
   function _setDlProgress(done, expected, copiedDone = 0, copiedTotal = 0, copiedExpected = 0, copiedLabel = '') {
-    const remain = Math.max(0, expected - done);
-    fetchDoneEl.textContent   = done > 0     ? '↓ ' + _fmtBytes(done)   : '';
-    fetchRemainEl.textContent = remain > 0   ? '→ ' + _fmtBytes(remain) : '';
-    if (copiedTotal > 0) {
-      let copiedText = `kopiert ${copiedLabel || `${copiedDone}/${copiedTotal}`}`;
-      if (copiedExpected > 0) copiedText += ` (${_fmtBytes(copiedExpected)})`;
+    maxDlExpected = Math.max(maxDlExpected, expected || 0);
+    maxCopiedTotal = Math.max(maxCopiedTotal, copiedTotal || 0);
+    maxCopiedExpected = Math.max(maxCopiedExpected, copiedExpected || 0);
+
+    const stableExpected = maxDlExpected;
+    const stableCopiedTotal = maxCopiedTotal;
+    const stableCopiedExpected = maxCopiedExpected;
+    const remain = Math.max(0, stableExpected - (done || 0));
+    const copiedRemain = Math.max(0, stableCopiedTotal - (copiedDone || 0));
+
+    fetchDoneEl.textContent   = stableExpected > 0 ? 'geladen ' + _fmtBytes(done || 0) : '';
+    fetchRemainEl.textContent = stableExpected > 0 ? 'noch ' + _fmtBytes(remain) : '';
+    if (stableCopiedTotal > 0) {
+      let copiedText = `noch ${copiedRemain} von ${stableCopiedTotal}`;
+      if (stableCopiedExpected > 0) copiedText += ` (${_fmtBytes(Math.max(0, stableCopiedExpected - (done || 0)))})`;
       fetchCopyEl.textContent = copiedText;
     } else {
       fetchCopyEl.textContent = '';

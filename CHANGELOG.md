@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+### Git-Remote-Einstellungen und Startup-Abgleich
+
+Im Config-Settings-Tab gibt es jetzt einen dauerhaften Bereich für das Remote-Git-Repository. Das Remote kann direkt gespeichert und später wieder geändert werden; die aktuellen Werte werden aus dem konfigurierten Remote vorbelegt. Ein Hinweis unter dem Bereich erklärt, dass Änderungen an Remote-Daten erst nach einem Programmneustart für den Startup-Abgleich verwendet werden.
+
+Der Startup-Abgleich wurde außerdem für Anfängerfälle robuster gemacht:
+- Remote speichern erzwingt keinen SSH-Verbindungstest mehr vorab
+- Wenn ein Remote existiert, aber noch kein Upstream-Branch zugeordnet ist, bietet NiCo beim Start jetzt `Remote-Stand laden` oder `Lokal so lassen` an
+- Bei genau einem Remote-Branch wird die Zuordnung automatisch hergestellt; bei mehreren Branches erscheint eine Auswahl
+- Remote-Name, Remote-Branch und lokaler Branch werden sauber getrennt, auch wenn die Namen unterschiedlich sind (z. B. lokal `master`, remote `main`)
+
+### Rebuild-Fortschritt: Gesamtwerte statt springender Einzelaktivitäten
+
+Die Status-Boxen im Rebuild-Overlay zeigen für Laden und Bauen jetzt stabile Gesamt-/Restwerte des gesamten laufenden Rebuilds. Damit sinken `noch zu laden` und `noch zu builden` monoton, statt zwischen parallelen Einzelaktivitäten hin- und herzuspringen.
+
 ### Rebuild: Terminal-Fenster, Standard-Host, Befehlsanzeige
 
 **Terminal-Modus:** Rebuild kann optional in einem externen Terminal-Fenster ausgeführt werden statt im Nico-Overlay. Nico schreibt dazu ein temporäres Shell-Script, öffnet den erkannten Terminal-Emulator (konsole → xterm → alacritty → kitty → gnome-terminal → xfce4-terminal) und löscht das Script nach Ausführung automatisch. Das sudo-Passwort wird direkt im Terminal abgefragt – es gelangt nicht durch die Web-Schicht. Einstellung in den Programmeinstellungen (bleibt lokal); im Optionen-Dialog vor jedem Rebuild überschreibbar.
