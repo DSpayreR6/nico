@@ -1,6 +1,8 @@
 # NiCo – NixOS Configurator
 
-> ⚠️ **Beta / Experimental** – Do not use in production. Testing in a VM is strongly recommended.
+> ⚠️ NiCo should now work. I use it myself for managing my machines.
+> Despite this, I recommand to make a backup of your config or let nico work with a copy in a separate directory.
+> So you can tryout if your config is processed correct an if a dry-run works.
 
 NiCo is a browser-based GUI editor for NixOS configurations. It reads and writes directly to your `.nix` files — no database, no intermediate format, no hidden state.
 
