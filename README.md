@@ -8,6 +8,8 @@ NiCo is a browser-based GUI editor for NixOS configurations. It reads and writes
 
 Built by a non-developer using Claude Code and OpenAI Codex as an experiment in AI-assisted development.
 
+You can also write here: https://discourse.nixos.org/t/nico-nixos-configurator/77117
+
 ---
 
 ## Features
