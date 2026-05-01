@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Doppelstart-Schutz mit Theme-Seite
+
+Wird NiCo gestartet während bereits eine Instanz läuft, öffnet sich jetzt eine Hinweisseite im Browser statt die laufende Instanz stumm neu zu starten. Die Seite zeigt einen „Neu starten"-Button; ohne Klick bleibt das bestehende Fenster unberührt und voll funktionsfähig. Nach einem Neustart wechselt die Seite automatisch zur neuen Instanz. Die Hinweisseite verwendet das aktuell eingestellte NiCo-Theme.
+
 ### Git-Remote-Einstellungen und Startup-Abgleich
 
 Im Config-Settings-Tab gibt es jetzt einen dauerhaften Bereich für das Remote-Git-Repository. Das Remote kann direkt gespeichert und später wieder geändert werden; die aktuellen Werte werden aus dem konfigurierten Remote vorbelegt. Ein Hinweis unter dem Bereich erklärt, dass Änderungen an Remote-Daten erst nach einem Programmneustart für den Startup-Abgleich verwendet werden.
