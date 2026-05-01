@@ -4315,13 +4315,29 @@ async function _showRebuildOptions(hostInfo, { saveChoice = false, hostname = ''
             <span class="toggle-track"><span class="toggle-thumb"></span></span>
           </span>
         </label>
-        <label class="toggle-row" style="margin:4px 0 12px;cursor:pointer">
+        <label class="toggle-row" style="margin:4px 0 4px;cursor:pointer">
           <span>${t('rebuild.optTerminal')}</span>
           <span class="toggle-wrap">
             <input type="checkbox" id="_rbo-terminal" ${defaultTerminal ? 'checked' : ''}>
             <span class="toggle-track"><span class="toggle-thumb"></span></span>
           </span>
         </label>
+        <div id="_rbo-terminal-opts" style="display:${defaultTerminal ? 'flex' : 'none'};flex-direction:column;gap:4px;margin:4px 0 12px;padding-left:14px;border-left:2px solid var(--border,#444)">
+          <label class="toggle-row" style="cursor:pointer">
+            <span>${t('rebuild.optShutdown')}</span>
+            <span class="toggle-wrap">
+              <input type="checkbox" id="_rbo-shutdown">
+              <span class="toggle-track"><span class="toggle-thumb"></span></span>
+            </span>
+          </label>
+          <label class="toggle-row" style="cursor:pointer">
+            <span>${t('rebuild.optPushShutdown')}</span>
+            <span class="toggle-wrap">
+              <input type="checkbox" id="_rbo-push-shutdown">
+              <span class="toggle-track"><span class="toggle-thumb"></span></span>
+            </span>
+          </label>
+        </div>
         <div style="margin-bottom:12px">
           <div style="font-size:0.78em;color:var(--fg-muted);margin-bottom:4px">${t('rebuild.cmdLabel')}</div>
           <div style="display:flex;align-items:center;gap:6px">
@@ -4336,11 +4352,21 @@ async function _showRebuildOptions(hostInfo, { saveChoice = false, hostname = ''
       </div>`;
     document.body.appendChild(overlay);
 
-    const cmdEl      = overlay.querySelector('#_rbo-cmd');
-    const flakeToggle = overlay.querySelector('#_rbo-flake-update');
-    const updateCmd  = () => { cmdEl.textContent = _buildCmd(flakeToggle.checked); };
+    const cmdEl         = overlay.querySelector('#_rbo-cmd');
+    const flakeToggle   = overlay.querySelector('#_rbo-flake-update');
+    const termToggle    = overlay.querySelector('#_rbo-terminal');
+    const termOptsEl    = overlay.querySelector('#_rbo-terminal-opts');
+    const shutdownCb    = overlay.querySelector('#_rbo-shutdown');
+    const pushShutCb    = overlay.querySelector('#_rbo-push-shutdown');
+    const updateCmd     = () => { cmdEl.textContent = _buildCmd(flakeToggle.checked); };
     updateCmd();
     flakeToggle.addEventListener('change', updateCmd);
+    termToggle.addEventListener('change', () => {
+      termOptsEl.style.display = termToggle.checked ? 'flex' : 'none';
+      if (!termToggle.checked) { shutdownCb.checked = false; pushShutCb.checked = false; }
+    });
+    shutdownCb.addEventListener('change',  () => { if (shutdownCb.checked)  pushShutCb.checked = false; });
+    pushShutCb.addEventListener('change',  () => { if (pushShutCb.checked)  shutdownCb.checked  = false; });
 
     overlay.querySelector('#_rbo-copy').addEventListener('click', () => {
       navigator.clipboard.writeText(cmdEl.textContent).then(
@@ -4350,8 +4376,10 @@ async function _showRebuildOptions(hostInfo, { saveChoice = false, hostname = ''
     });
 
     overlay.querySelector('#_rbo-ok').addEventListener('click', () => {
-      const updateFlake = !!flakeToggle.checked;
-      const useTerminal = !!(overlay.querySelector('#_rbo-terminal')?.checked);
+      const updateFlake     = !!flakeToggle.checked;
+      const useTerminal     = !!termToggle.checked;
+      const shutdownAfter   = !!shutdownCb.checked;
+      const pushShutdownAfter = !!pushShutCb.checked;
       overlay.remove();
       if (saveChoice) {
         csrfFetch('/api/config/settings', {
@@ -4363,7 +4391,7 @@ async function _showRebuildOptions(hostInfo, { saveChoice = false, hostname = ''
           if (adminToggle) adminToggle.checked = updateFlake;
         }).catch(() => {});
       }
-      resolve({ updateFlake, useTerminal });
+      resolve({ updateFlake, useTerminal, shutdownAfter, pushShutdownAfter });
     });
     overlay.querySelector('#_rbo-cancel').addEventListener('click', () => {
       overlay.remove();
@@ -4416,7 +4444,7 @@ async function openRebuild(mode = 'switch') {
     const res = await csrfFetch('/api/rebuild/open-terminal', {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ hostname, mode, update_flake: opts.updateFlake }),
+      body:    JSON.stringify({ hostname, mode, update_flake: opts.updateFlake, shutdown_after: opts.shutdownAfter, push_shutdown_after: opts.pushShutdownAfter }),
     }).catch(() => null);
     if (!res || !res.ok) {
       const err = res ? (await res.json().catch(() => ({}))).error : null;

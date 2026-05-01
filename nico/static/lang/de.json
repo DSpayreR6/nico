@@ -287,6 +287,8 @@
   "rebuild.optionsTitle":     "Rebuild-Optionen",
   "rebuild.optFlakeUpdate":   "Flake aktualisieren (nix flake update)",
   "rebuild.optTerminal":      "In Terminal-Fenster ausführen",
+  "rebuild.optShutdown":      "Nach Rebuild herunterfahren",
+  "rebuild.optPushShutdown":  "Nach Rebuild Konfiguration hochladen und PC herunterfahren",
   "rebuild.cmdLabel":         "Befehlszeile",
   "rebuild.cmdCopy":          "Kopieren",
   "rebuild.cmdCopied":        "Befehl kopiert",

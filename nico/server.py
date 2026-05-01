@@ -1804,9 +1804,11 @@ def create_app() -> Flask:
         data = config_manager.load_config(nixos_dir) or {}
         use_flake = data.get("flakes", False)
 
-        hostname    = (body.get("hostname") or "").strip()
-        mode        = (body.get("mode") or "switch").strip()
-        update_flake = bool(body.get("update_flake", False)) and use_flake
+        hostname          = (body.get("hostname") or "").strip()
+        mode              = (body.get("mode") or "switch").strip()
+        update_flake      = bool(body.get("update_flake", False)) and use_flake
+        push_shutdown     = bool(body.get("push_shutdown_after", False))
+        shutdown_after    = bool(body.get("shutdown_after", False)) and not push_shutdown
 
         if mode not in ('switch', 'boot', 'test'):
             return jsonify({"error": "ERR_INVALID_MODE"}), 400
@@ -1827,16 +1829,48 @@ def create_app() -> Flask:
             "#!/usr/bin/env bash",
             f"cd {_shlex.quote(str(nixos_path))}",
         ]
-        if update_flake:
-            script_lines.append("nix flake update")
-            script_lines.append(f"[ $? -eq 0 ] && {rebuild_cmd} || echo 'nix flake update fehlgeschlagen'")
+        if shutdown_after or push_shutdown:
+            script_lines.append("_rebuild_ok=0")
+            if update_flake:
+                script_lines += [
+                    "if nix flake update; then",
+                    f"    {rebuild_cmd} && _rebuild_ok=1",
+                    "else",
+                    "    echo 'nix flake update fehlgeschlagen'",
+                    "fi",
+                ]
+            else:
+                script_lines.append(f"{rebuild_cmd} && _rebuild_ok=1")
+            if push_shutdown:
+                script_lines += [
+                    'if [ "$_rebuild_ok" -eq 1 ]; then',
+                    '    git push',
+                    '    sudo shutdown -h now',
+                    'else',
+                    '    echo',
+                    '    read -rp "Rebuild fehlgeschlagen. Drücke Enter zum Schließen..."',
+                    'fi',
+                ]
+            else:
+                script_lines += [
+                    'if [ "$_rebuild_ok" -eq 1 ]; then',
+                    '    sudo shutdown -h now',
+                    'else',
+                    '    echo',
+                    '    read -rp "Drücke Enter zum Schließen..."',
+                    'fi',
+                ]
         else:
-            script_lines.append(rebuild_cmd)
-        script_lines += [
-            'echo',
-            'read -rp "Drücke Enter zum Schließen..."',
-            'rm -f "$0"',
-        ]
+            if update_flake:
+                script_lines.append("nix flake update")
+                script_lines.append(f"[ $? -eq 0 ] && {rebuild_cmd} || echo 'nix flake update fehlgeschlagen'")
+            else:
+                script_lines.append(rebuild_cmd)
+            script_lines += [
+                'echo',
+                'read -rp "Drücke Enter zum Schließen..."',
+            ]
+        script_lines.append('rm -f "$0"')
 
         fd, script_path = _tempfile.mkstemp(suffix=".sh", prefix="nico-rebuild-")
         try:
