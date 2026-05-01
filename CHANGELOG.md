@@ -51,7 +51,16 @@ Wenn eine home.nix extern bearbeitet wurde und NiCo beim Startup eine Regenerier
 
 ---
 
-## 0.9.3-beta (2026-04-26)
+## 0.9.4 (2026-05-01)
+
+### Bug fixes
+
+- Flake-Update-Einstellung wird jetzt sofort beim Ändern gespeichert (kein Speichern-Button mehr nötig)
+- `push_after_save` und `push_after_rebuild` wurden nicht persistiert (fehlten in `_CONFIG_KEYS`)
+
+---
+
+## 0.9.3 (2026-04-26)
 
 ### Bug fixes
 
