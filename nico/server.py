@@ -807,6 +807,7 @@ def create_app() -> Flask:
         _CONFIG_KEYS = frozenset({
             "hosts_dir", "modules_dir", "hm_dir",
             "flake_update_on_rebuild", "validation_rules",
+            "push_after_save", "push_after_rebuild",
         })
         incoming = request.get_json(silent=True) or {}
         patch    = {k: v for k, v in incoming.items() if k in _CONFIG_KEYS}

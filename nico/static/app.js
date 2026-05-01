@@ -1226,9 +1226,22 @@ function _loadAdminSettings() {
 
   // Load config settings from config.json (travels with the config)
   csrfFetch('/api/config/settings').then(r => r.json()).then(data => {
-    // Flake-Update-Toggle
+    // Flake-Update-Toggle (auto-save on change)
     const toggle = document.getElementById('flake-update-toggle');
-    if (toggle) toggle.checked = !!data.flake_update_on_rebuild;
+    if (toggle) {
+      toggle.checked = !!data.flake_update_on_rebuild;
+      if (!toggle.dataset.listenerAttached) {
+        toggle.dataset.listenerAttached = '1';
+        toggle.addEventListener('change', () => {
+          csrfFetch('/api/config/settings', {
+            method:  'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ flake_update_on_rebuild: toggle.checked }),
+          }).then(() => showToast(t('admin.settings.saved'), 'success'))
+            .catch(() => showToast(t('toast.error'), 'error'));
+        });
+      }
+    }
 
     // Push-Toggles + NixOS-Push-Button – nur anzeigen wenn Remote vorhanden
     csrfFetch('/api/git/remote-status').then(r => r.json()).then(rs => {
@@ -1384,7 +1397,6 @@ function _loadAdminSettings() {
       const hostsDir   = document.getElementById('settings-hosts-dir')?.value.trim() || 'hosts';
       const modulesDir = document.getElementById('settings-modules-dir')?.value.trim() || 'modules';
       const hmDir      = document.getElementById('settings-hm-dir')?.value.trim() || 'home';
-      const flakeUpdate = !!document.getElementById('flake-update-toggle')?.checked;
       csrfFetch('/api/config/settings', {
         method:  'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -1392,7 +1404,6 @@ function _loadAdminSettings() {
           hosts_dir: hostsDir,
           modules_dir: modulesDir,
           hm_dir: hmDir,
-          flake_update_on_rebuild: flakeUpdate,
         }),
       }).then(() => showToast(t('admin.settings.saved'), 'success'))
         .catch(() => showToast(t('toast.error'), 'error'));
