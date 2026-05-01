@@ -87,18 +87,9 @@ def main():
     if _is_port_free(PREFERRED_PORT):
         port = PREFERRED_PORT
     elif _nico_already_running(PREFERRED_PORT):
-        # NiCo is already running – shut it down and restart fresh
-        print(f"Laufende NiCo-Instanz auf Port {PREFERRED_PORT} wird beendet …")
-        _shutdown_running_instance(PREFERRED_PORT)
-        # Wait until the port is actually free (up to 5 seconds)
-        for _ in range(50):
-            time.sleep(0.1)
-            if _is_port_free(PREFERRED_PORT):
-                break
-        else:
-            print("Port wurde nicht rechtzeitig freigegeben – breche ab.")
-            return
-        port = PREFERRED_PORT
+        print(f"NiCo läuft bereits auf Port {PREFERRED_PORT}.")
+        webbrowser.open(f"http://{HOST}:{PREFERRED_PORT}")
+        return
     else:
         port = _find_free_port(PREFERRED_PORT + 1)
         print(f"Port {PREFERRED_PORT} belegt, verwende Port {port}.")
