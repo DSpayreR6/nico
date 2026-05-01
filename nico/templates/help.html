@@ -483,6 +483,14 @@
                data-ja="7.2 コミット、push、ロールバック"
                data-ru="7.2 Коммиты, push и rollback"
                data-zh="7.2 提交、Push 与回滚">7.2 Commits, Push und Rollback</a>
+            <a href="#k7-3"
+               data-de="7.3 Remote-Repository einrichten"
+               data-en="__TODO__"
+               data-es="__TODO__"
+               data-fr="__TODO__"
+               data-ja="__TODO__"
+               data-ru="__TODO__"
+               data-zh="__TODO__">7.3 Remote-Repository einrichten</a>
           </div>
         </li>
         <li>
@@ -1225,6 +1233,48 @@ Ist ein Git-Guard nötig?
              data-ja="NiCo はリポジトリの初期化、状態確認、コミット作成、push、pull、過去状態の復元を行えます。Git は単なる便利機能ではなく、実際の設定ファイルを日常的に扱うための重要な安全機構です。"
              data-ru="NiCo может инициализировать репозитории, проверять статус, создавать коммиты, выполнять push, pull и восстанавливать прежние состояния. Git здесь — не просто удобство, а важный механизм безопасности для ежедневной работы с реальными файлами конфигурации."
              data-zh="NiCo 可以初始化仓库、检查状态、创建提交、执行 Push、Pull，并恢复到之前的状态。Git 在这里不仅是便利功能，更是日常处理真实配置文件时的重要安全机制。">NiCo kann Repositories initialisieren, Status prüfen, Commits erzeugen, pushen, pullen und frühere Stände wiederherstellen. Git ist dabei nicht nur Komfortfunktion, sondern ein wichtiger Sicherheitsmechanismus für die tägliche Arbeit mit echten Konfigurationsdateien.</p>
+        </div>
+
+        <div class="subchapter" id="k7-3">
+          <h3><span class="sub-num">7.3</span><span
+            data-de="Remote-Repository einrichten"
+            data-en="__TODO__"
+            data-es="__TODO__"
+            data-fr="__TODO__"
+            data-ja="__TODO__"
+            data-ru="__TODO__"
+            data-zh="__TODO__">Remote-Repository einrichten</span></h3>
+          <p data-de="Ein Remote-Repository ist eine Online-Sicherungskopie der NixOS-Konfiguration – zum Beispiel auf GitHub, GitLab oder Codeberg. Geht der lokale Rechner verloren, kann die gesamte Konfiguration von dort wiederhergestellt werden."
+             data-en="__TODO__"
+             data-es="__TODO__"
+             data-fr="__TODO__"
+             data-ja="__TODO__"
+             data-ru="__TODO__"
+             data-zh="__TODO__">Ein Remote-Repository ist eine Online-Sicherungskopie der NixOS-Konfiguration – zum Beispiel auf GitHub, GitLab oder Codeberg. Geht der lokale Rechner verloren, kann die gesamte Konfiguration von dort wiederhergestellt werden.</p>
+          <p style="margin-top:10px"
+             data-de="<strong>Voraussetzung: SSH-Schlüssel</strong><br>NiCo verbindet sich per SSH. Ein SSH-Schlüssel muss einmalig im Konto der gewählten Plattform hinterlegt sein. Wer noch keinen hat, kann ihn im Terminal mit <code>ssh-keygen -t ed25519</code> erzeugen und den öffentlichen Schlüssel (<code>~/.ssh/id_ed25519.pub</code>) im Konto unter <em>SSH-Schlüssel</em> eintragen."
+             data-en="__TODO__"
+             data-es="__TODO__"
+             data-fr="__TODO__"
+             data-ja="__TODO__"
+             data-ru="__TODO__"
+             data-zh="__TODO__"><strong>Voraussetzung: SSH-Schlüssel</strong><br>NiCo verbindet sich per SSH. Ein SSH-Schlüssel muss einmalig im Konto der gewählten Plattform hinterlegt sein. Wer noch keinen hat, kann ihn im Terminal mit <code>ssh-keygen -t ed25519</code> erzeugen und den öffentlichen Schlüssel (<code>~/.ssh/id_ed25519.pub</code>) im Konto unter <em>SSH-Schlüssel</em> eintragen.</p>
+          <p style="margin-top:10px"
+             data-de="<strong>Schritte (Beispiel GitHub):</strong><br>1. Unter <em>github.com</em> ein Konto anlegen (kostenlos).<br>2. Oben rechts → <em>New repository</em> klicken.<br>3. Name vergeben, <em>Private</em> wählen, <strong>kein</strong> README anlegen → <em>Create repository</em>.<br>4. In NiCo: Plattform <em>GitHub</em> wählen, Benutzernamen und Repository-Namen eingeben → <em>Prüfen</em>.<br>5. Bestätigen – NiCo richtet den Remote ein und NixOS-Push steht ab sofort zur Verfügung."
+             data-en="__TODO__"
+             data-es="__TODO__"
+             data-fr="__TODO__"
+             data-ja="__TODO__"
+             data-ru="__TODO__"
+             data-zh="__TODO__"><strong>Schritte (Beispiel GitHub):</strong><br>1. Unter <em>github.com</em> ein Konto anlegen (kostenlos).<br>2. Oben rechts → <em>New repository</em> klicken.<br>3. Name vergeben, <em>Private</em> wählen, <strong>kein</strong> README anlegen → <em>Create repository</em>.<br>4. In NiCo: Plattform <em>GitHub</em> wählen, Benutzernamen und Repository-Namen eingeben → <em>Prüfen</em>.<br>5. Bestätigen – NiCo richtet den Remote ein und NixOS-Push steht ab sofort zur Verfügung.</p>
+          <p style="margin-top:10px"
+             data-de="<strong>Andere Plattformen:</strong> GitLab (<em>gitlab.com</em>) und Codeberg (<em>codeberg.org</em>) funktionieren genauso. Beide sind kostenlos und bieten private Repositories. Codeberg ist gemeinnützig und ohne kommerzielle Interessen. Für eine komplett eigene Serverinstallation kann unter <em>Eigene URL</em> eine beliebige SSH-Adresse eingegeben werden."
+             data-en="__TODO__"
+             data-es="__TODO__"
+             data-fr="__TODO__"
+             data-ja="__TODO__"
+             data-ru="__TODO__"
+             data-zh="__TODO__"><strong>Andere Plattformen:</strong> GitLab (<em>gitlab.com</em>) und Codeberg (<em>codeberg.org</em>) funktionieren genauso. Beide sind kostenlos und bieten private Repositories. Codeberg ist gemeinnützig und ohne kommerzielle Interessen. Für eine komplett eigene Serverinstallation kann unter <em>Eigene URL</em> eine beliebige SSH-Adresse eingegeben werden.</p>
         </div>
       </section>
 
