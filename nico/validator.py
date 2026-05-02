@@ -65,6 +65,22 @@ ALL_RULES: list[Rule] = [
          "Überflüssige Brix-Blöcke",
          "Erkennt Brix-Blöcke deren Inhalt 1:1 über das NiCo-Panel konfigurierbar wäre.",
          "info"),
+    Rule("hm_user_defined",
+         "HM-User definiert",
+         "Prüft ob home-manager.users.<user> in der Flake-Config definiert ist.",
+         "warning", flake_only=True),
+    Rule("hm_allowunfree",
+         "HM allowUnfree konsistent",
+         "Prüft ob nixpkgs.config.allowUnfree in NixOS- und HM-Config übereinstimmt.",
+         "warning"),
+    Rule("snapper_btrfs",
+         "Snapper-Mountpoints prüfen",
+         "Prüft ob die konfigurierten Snapper-Mountpoints existieren und btrfs sind.",
+         "error"),
+    Rule("snapper_in_host",
+         "Snapper in Host-Config",
+         "Warnt wenn Snapper in einer Flake-Config mit mehreren Hosts in der Basis-Config steht.",
+         "info", flake_only=True),
 ]
 
 RULE_MAP: dict[str, Rule] = {r.id: r for r in ALL_RULES}
@@ -437,6 +453,144 @@ def _rule_brix_redundant(nixos_dir: str, config: dict, is_flake: bool,
     return findings
 
 
+def _rule_hm_user_defined(nixos_dir: str, config: dict, is_flake: bool,
+                          host: str | None = None) -> list[Finding]:
+    hm = config.get("home_manager") or {}
+    if not hm.get("enabled"):
+        return []
+    username = (hm.get("username") or "").strip()
+    if not username:
+        return []
+
+    # Match both quoted and unquoted: home-manager.users.alice or home-manager.users."alice"
+    pattern = re.compile(
+        r'home-manager\s*\.\s*users\s*\.\s*"?' + re.escape(username) + r'"?',
+    )
+    for nix_file in sorted(Path(nixos_dir).rglob("*.nix")):
+        if ".git" in nix_file.parts:
+            continue
+        try:
+            content = nix_file.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        if pattern.search(content):
+            return []
+
+    return [Finding(
+        rule_id="hm_user_defined",
+        severity="warning",
+        message=f'home-manager.users.{username} ist in keiner .nix-Datei definiert.',
+        detail="Nach einer HM-Integration muss der User explizit über "
+               f"home-manager.users.{username} eingebunden werden, "
+               "z. B. in flake.nix oder einem eingebundenen Modul.",
+    )]
+
+
+def _rule_hm_allowunfree(nixos_dir: str, config: dict, is_flake: bool,
+                         host: str | None = None) -> list[Finding]:
+    hm = config.get("home_manager") or {}
+    if not hm.get("enabled"):
+        return []
+    if not config.get("allowUnfree"):
+        return []
+
+    pattern = re.compile(r'nixpkgs\s*\.\s*config\s*\.\s*allowUnfree\s*=\s*true')
+
+    base = Path(nixos_dir)
+    cfg_settings = config.get("_cfg_settings") or {}
+    hm_dir_name = cfg_settings.get("hm_dir") or config.get("hm_dir") or "home"
+
+    # Collect HM-side .nix files: home.nix at root + everything under hm_dir
+    hm_files: list[Path] = []
+    root_home = base / "home.nix"
+    if root_home.exists():
+        hm_files.append(root_home)
+    hm_subdir = base / hm_dir_name
+    if hm_subdir.is_dir():
+        hm_files.extend(
+            f for f in hm_subdir.rglob("*.nix") if ".git" not in f.parts
+        )
+
+    hm_has_unfree = False
+    for nix_file in hm_files:
+        try:
+            if pattern.search(nix_file.read_text(encoding="utf-8")):
+                hm_has_unfree = True
+                break
+        except OSError:
+            continue
+
+    if hm_has_unfree:
+        return []
+
+    hm_hint = "home.nix"
+    if hm_files:
+        hm_hint = " oder ".join(str(f.relative_to(base)) for f in hm_files[:2])
+    else:
+        hm_hint = f"home.nix oder {hm_dir_name}/"
+
+    return [Finding(
+        rule_id="hm_allowunfree",
+        severity="warning",
+        message="nixpkgs.config.allowUnfree fehlt in der HM-Konfiguration.",
+        detail=f"allowUnfree ist in NiCo aktiviert, aber in {hm_hint} "
+               "ist nixpkgs.config.allowUnfree = true nicht gesetzt. "
+               "Unfree-Pakete in Home Manager werden sonst abgelehnt.",
+    )]
+
+
+def _rule_snapper_btrfs(nixos_dir: str, config: dict, is_flake: bool,
+                        host: str | None = None) -> list[Finding]:
+    if not config.get("snapper_enable"):
+        return []
+    findings = []
+    for entry in (config.get("snapper_configs") or []):
+        mount = (entry.get("mountpoint") or "").strip()
+        name  = (entry.get("name") or "").strip()
+        if not mount:
+            continue
+        if not os.path.ismount(mount):
+            findings.append(Finding(
+                rule_id="snapper_btrfs",
+                severity="error",
+                message=f'Snapper "{name}": Mountpoint "{mount}" ist nicht gemountet.',
+                detail="Snapper kann nur auf gemountete Dateisysteme angewendet werden.",
+            ))
+            continue
+        try:
+            result = subprocess.run(
+                ["findmnt", "-n", "-o", "FSTYPE", mount],
+                capture_output=True, text=True, timeout=5,
+            )
+            fstype = result.stdout.strip()
+        except Exception:
+            continue
+        if fstype != "btrfs":
+            findings.append(Finding(
+                rule_id="snapper_btrfs",
+                severity="error",
+                message=f'Snapper "{name}": "{mount}" ist kein btrfs-Dateisystem (erkannt: "{fstype}").',
+                detail="Snapper unterstützt nur btrfs. Der Mountpoint muss ein btrfs-Subvolume sein.",
+            ))
+    return findings
+
+
+def _rule_snapper_in_host(nixos_dir: str, config: dict, is_flake: bool,
+                          host: str | None = None) -> list[Finding]:
+    if not config.get("snapper_enable"):
+        return []
+    hosts = config.get("flake_hosts") or []
+    if len(hosts) <= 1:
+        return []
+    return [Finding(
+        rule_id="snapper_in_host",
+        severity="info",
+        message="Snapper ist in der Basis-Config konfiguriert, nicht pro Host.",
+        detail="Bei mehreren Flake-Hosts haben Hosts unterschiedliche Subvolumes. "
+               "Die Snapper-Config sollte in der jeweiligen Host-Config stehen.",
+    )]
+
+
 # ── Rule function registry ─────────────────────────────────────────────────────
 
 _RULE_FNS: dict[str, object] = {
@@ -447,4 +601,8 @@ _RULE_FNS: dict[str, object] = {
     "duplicate_attrs":   _rule_duplicate_attrs,
     "imports_exist":     _rule_imports_exist,
     "brix_redundant":    _rule_brix_redundant,
+    "hm_user_defined":   _rule_hm_user_defined,
+    "hm_allowunfree":    _rule_hm_allowunfree,
+    "snapper_btrfs":     _rule_snapper_btrfs,
+    "snapper_in_host":   _rule_snapper_in_host,
 }

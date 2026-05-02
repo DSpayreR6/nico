@@ -415,21 +415,32 @@ def _ts_parse_config(nix_content: str) -> 'tuple[dict, set[str]] | None':
     # ── Dateisystem & Backup ──────────────────────────────────────────────────
     b('btrfs_scrub', 'services.btrfs.autoScrub.enable')
 
-    for cfg_name, nico_key in [('home', 'snapper_home'), ('root', 'snapper_root')]:
-        sn_key = f'services.snapper.configs.{cfg_name}'
-        if sn_key in kv:
-            r[nico_key] = True
-            consumed.add(sn_key)
-            inner = _np.extract_inner_block(kv[sn_key]) or kv[sn_key]
-            for fld, limit_key in [
-                ('snapper_timeline_hourly',  'TIMELINE_LIMIT_HOURLY'),
-                ('snapper_timeline_daily',   'TIMELINE_LIMIT_DAILY'),
-                ('snapper_timeline_weekly',  'TIMELINE_LIMIT_WEEKLY'),
-                ('snapper_timeline_monthly', 'TIMELINE_LIMIT_MONTHLY'),
-                ('snapper_timeline_yearly',  'TIMELINE_LIMIT_YEARLY'),
-            ]:
-                m2 = re.search(rf'{limit_key}\s*=\s*(\d+)', inner)
-                if m2: r[fld] = int(m2.group(1))
+    _sn_prefix = 'services.snapper.configs.'
+    _sn_cfgs = []
+    for key in list(kv.keys()):
+        if not key.startswith(_sn_prefix):
+            continue
+        cfg_name = key[len(_sn_prefix):]
+        inner = _np.extract_inner_block(kv[key]) or kv[key]
+        m_sub = re.search(r'SUBVOLUME\s*=\s*"([^"]*)"', inner)
+        mountpoint = m_sub.group(1) if m_sub else ''
+        sn_entry = {"name": cfg_name, "mountpoint": mountpoint,
+                    "hourly": 5, "daily": 7, "weekly": 0, "monthly": 1, "yearly": 0}
+        for fld, limit_key in [
+            ('hourly',  'TIMELINE_LIMIT_HOURLY'),
+            ('daily',   'TIMELINE_LIMIT_DAILY'),
+            ('weekly',  'TIMELINE_LIMIT_WEEKLY'),
+            ('monthly', 'TIMELINE_LIMIT_MONTHLY'),
+            ('yearly',  'TIMELINE_LIMIT_YEARLY'),
+        ]:
+            m2 = re.search(rf'{limit_key}\s*=\s*(\d+)', inner)
+            if m2:
+                sn_entry[fld] = int(m2.group(1))
+        _sn_cfgs.append(sn_entry)
+        consumed.add(key)
+    if _sn_cfgs:
+        r['snapper_enable'] = True
+        r['snapper_configs'] = _sn_cfgs
 
     # ── Benutzer ──────────────────────────────────────────────────────────────
     _EXCL   = {'root', 'nobody', 'guest', 'gast'}
@@ -833,23 +844,25 @@ def parse_config(nix_content: str) -> dict:
     # ── Dateisystem & Backup ──────────────────────────────────────────────────
     b('btrfs_scrub', r'services\.btrfs\.autoScrub\.enable\s*=\s*(true|false)')
 
-    # snapper: flache Form (Generator-Output) ODER verschachtelter Block (User-Config)
-    if re.search(r'services\.snapper\.configs\.home', c) or \
-       re.search(r'SUBVOLUME\s*=\s*"/home"', c):
-        r['snapper_home'] = True
-    if re.search(r'services\.snapper\.configs\.root', c) or \
-       re.search(r'SUBVOLUME\s*=\s*"/"', c):
-        r['snapper_root'] = True
-    for field, key in [
-        ('snapper_timeline_hourly',  'TIMELINE_LIMIT_HOURLY'),
-        ('snapper_timeline_daily',   'TIMELINE_LIMIT_DAILY'),
-        ('snapper_timeline_weekly',  'TIMELINE_LIMIT_WEEKLY'),
-        ('snapper_timeline_monthly', 'TIMELINE_LIMIT_MONTHLY'),
-        ('snapper_timeline_yearly',  'TIMELINE_LIMIT_YEARLY'),
-    ]:
-        m2 = re.search(rf'{key}\s*=\s*(\d+)', c)
-        if m2:
-            r[field] = int(m2.group(1))
+    # snapper: alle services.snapper.configs.<name>-Blöcke auslesen
+    _sn_flat: list[dict] = []
+    for _m_sn in re.finditer(
+        r'services\.snapper\.configs\.([\w-]+)\s*=\s*\{([^}]*)\}', c
+    ):
+        _cfg_name = _m_sn.group(1)
+        _inner    = _m_sn.group(2)
+        _m_sub    = re.search(r'SUBVOLUME\s*=\s*"([^"]*)"', _inner)
+        _entry = {"name": _cfg_name, "mountpoint": _m_sub.group(1) if _m_sub else '',
+                  "hourly": 5, "daily": 7, "weekly": 0, "monthly": 1, "yearly": 0}
+        for _fld, _lk in [('hourly','TIMELINE_LIMIT_HOURLY'),('daily','TIMELINE_LIMIT_DAILY'),
+                           ('weekly','TIMELINE_LIMIT_WEEKLY'),('monthly','TIMELINE_LIMIT_MONTHLY'),
+                           ('yearly','TIMELINE_LIMIT_YEARLY')]:
+            _m2 = re.search(rf'{_lk}\s*=\s*(\d+)', _inner)
+            if _m2: _entry[_fld] = int(_m2.group(1))
+        _sn_flat.append(_entry)
+    if _sn_flat:
+        r['snapper_enable'] = True
+        r['snapper_configs'] = _sn_flat
 
     # ── Benutzer ──────────────────────────────────────────────────────────────
     _EXCLUDED_USERS = {'root', 'nobody', 'guest', 'gast'}
@@ -1119,11 +1132,12 @@ def build_rest_brix(nix_content: str, recognized: dict) -> str:
 
     # ── Dateisystem & Backup ──────────────────────────────────────────────────
     rm('btrfs_scrub', r'\s*services\.btrfs\.autoScrub\.enable\s*=\s*(?:true|false)\s*;')
-    # snapper: flache Form (Generator) oder tief verschachtelter Block (User-Config)
-    if 'snapper_home' in recognized or 'snapper_root' in recognized:
+    # snapper: alle configs entfernen (Name egal)
+    if 'snapper_configs' in recognized:
         content = _remove_deep_block(content, 'services.snapper')
-        rm('snapper_home', r'\s*services\.snapper\.configs\.home\s*=\s*\{[^}]*\}\s*;')
-        rm('snapper_root', r'\s*services\.snapper\.configs\.root\s*=\s*\{[^}]*\}\s*;')
+        content = re.sub(
+            r'\s*services\.snapper\.configs\.[\w-]+\s*=\s*\{[^}]*\}\s*;', '', content
+        )
 
     # ── Benutzer ──────────────────────────────────────────────────────────────
     all_recognized_users = []

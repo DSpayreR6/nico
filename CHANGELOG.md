@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+### Snapper: dynamische Subvolume-Konfiguration
+
+Die Snapper-Konfiguration ist vollständig neu gestaltet. Die bisherigen Festeinträge für `/` und `/home` sind entfernt; stattdessen gibt es einen Master-Schalter und ein Karten-System analog zum Benutzer-Panel. Pro Karte werden Config-Name, Mountpoint und ein eigener Snapshot-Zeitplan konfiguriert. Beliebig viele Subvolumes sind möglich.
+
+Das Mountpoint-Feld nimmt den gemounteten Pfad entgegen (z. B. `/`, `/home`, `/data`), nicht den internen btrfs-Subvolume-Namen. Die Hilfe erklärt diesen Unterschied in einem neuen Abschnitt (5.3).
+
+Zwei neue Validierungsregeln:
+- **`snapper_btrfs`**: prüft ob der eingetragene Mountpoint im laufenden System existiert und ein btrfs-Dateisystem ist
+- **`snapper_in_host`**: weist in Flake-Configs mit mehreren Hosts darauf hin, dass Snapper in die jeweilige Host-Config gehört
+
+Bestehende Configs mit den alten Feldern (`snapper_root`, `snapper_home`) werden beim Laden automatisch ins neue Format migriert.
+
+Ebenfalls in dieser Änderung: zwei neue Validierungsregeln für Home Manager (`hm_user_defined`, `hm_allowunfree`), die prüfen ob `home-manager.users.<user>` explizit definiert ist und ob `nixpkgs.config.allowUnfree` konsistent in beiden Configs gesetzt ist.
+
 ### Doppelstart-Schutz mit Theme-Seite
 
 Wird NiCo gestartet während bereits eine Instanz läuft, öffnet sich jetzt eine Hinweisseite im Browser statt die laufende Instanz stumm neu zu starten. Die Seite zeigt einen „Neu starten"-Button; ohne Klick bleibt das bestehende Fenster unberührt und voll funktionsfähig. Nach einem Neustart wechselt die Seite automatisch zur neuen Instanz. Die Hinweisseite verwendet das aktuell eingestellte NiCo-Theme.

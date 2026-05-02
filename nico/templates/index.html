@@ -1108,52 +1108,17 @@
                 </span>
               </label>
               <label class="toggle-row">
-                <span data-i18n="field.snapperHome">Snapper: /home</span>
+                <span data-i18n="field.snapperEnable">Snapper aktivieren</span>
                 <span class="toggle-wrap">
-                  <input type="checkbox" id="snapper_home" name="snapper_home">
+                  <input type="checkbox" id="snapper_enable" name="snapper_enable">
                   <span class="toggle-track"><span class="toggle-thumb"></span></span>
                 </span>
               </label>
-              <label class="toggle-row">
-                <span data-i18n="field.snapperRoot">Snapper: /</span>
-                <span class="toggle-wrap">
-                  <input type="checkbox" id="snapper_root" name="snapper_root">
-                  <span class="toggle-track"><span class="toggle-thumb"></span></span>
-                </span>
-              </label>
-              <div id="snapper-timeline" class="hidden">
-                <div class="lvl2-section" data-lvl2="snapper-timeline-detail">
-                  <div class="lvl2-toggle" data-i18n="field.snapperTimeline">Snapshot-Zeitplan</div>
-                  <div class="lvl2-body">
-                    <div class="hm-xdg-grid" style="grid-template-columns: repeat(3, 1fr)">
-                      <div>
-                        <label for="snapper_timeline_hourly" data-i18n="field.snapperHourly">Stündlich (max.)</label>
-                        <input type="number" id="snapper_timeline_hourly" name="snapper_timeline_hourly"
-                               min="0" max="48" value="5" style="width:70px">
-                      </div>
-                      <div>
-                        <label for="snapper_timeline_daily" data-i18n="field.snapperDaily">Täglich (max.)</label>
-                        <input type="number" id="snapper_timeline_daily" name="snapper_timeline_daily"
-                               min="0" max="30" value="7" style="width:70px">
-                      </div>
-                      <div>
-                        <label for="snapper_timeline_weekly" data-i18n="field.snapperWeekly">Wöchentlich (max.)</label>
-                        <input type="number" id="snapper_timeline_weekly" name="snapper_timeline_weekly"
-                               min="0" max="52" value="0" style="width:70px">
-                      </div>
-                      <div>
-                        <label for="snapper_timeline_monthly" data-i18n="field.snapperMonthly">Monatlich (max.)</label>
-                        <input type="number" id="snapper_timeline_monthly" name="snapper_timeline_monthly"
-                               min="0" max="12" value="1" style="width:70px">
-                      </div>
-                      <div>
-                        <label for="snapper_timeline_yearly" data-i18n="field.snapperYearly">Jährlich (max.)</label>
-                        <input type="number" id="snapper_timeline_yearly" name="snapper_timeline_yearly"
-                               min="0" max="10" value="0" style="width:70px">
-                      </div>
-                    </div>
-                  </div>
-                </div>
+              <div id="snapper-area" class="hidden">
+                <div id="snapper-list"></div>
+                <button type="button" id="snapper-add-btn" class="add-user-btn" data-i18n="field.snapperAddConfig">
+                  + Subvolume hinzufügen
+                </button>
               </div>
             </div>
           </section>

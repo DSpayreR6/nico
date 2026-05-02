@@ -427,6 +427,14 @@
                data-ja="5.2 プレビューと実際のファイル状態"
                data-ru="5.2 Предпросмотр и реальное состояние файлов"
                data-zh="5.2 预览与真实文件状态">5.2 Vorschau und echter Dateistand</a>
+            <a href="#k5-3"
+               data-de="5.3 Snapper: Mountpoint vs. Subvol-Name"
+               data-en="5.3 Snapper: mountpoint vs. subvol name"
+               data-es="5.3 Snapper: mountpoint frente al nombre del subvol"
+               data-fr="5.3 Snapper : point de montage vs nom du sous-volume"
+               data-ja="5.3 Snapper：マウントポイントとサブボリューム名の違い"
+               data-ru="5.3 Snapper: точка монтирования и имя подтома"
+               data-zh="5.3 Snapper：挂载点与子卷名称的区别">5.3 Snapper: Mountpoint vs. Subvol-Name</a>
           </div>
         </li>
         <li>
@@ -1111,6 +1119,31 @@ Ist ein Git-Guard nötig?
              data-ja="そのため、フォーム内の変更は自動的に検証済みでも有効でもありません。まず書き込む必要があります。"
              data-ru="Поэтому изменения в формах не считаются автоматически проверенными или уже активными. Сначала их нужно записать."
              data-zh="因此，表单中的更改并不会自动被检查或立即生效，必须先写入。">Änderungen in Formularen sind daher nicht automatisch bereits geprüft oder aktiv. Sie müssen erst geschrieben werden.</p>
+        </div>
+
+        <div class="subchapter" id="k5-3">
+          <h3><span class="sub-num">5.3</span><span
+            data-de="Snapper: Mountpoint vs. Subvol-Name"
+            data-en="Snapper: mountpoint vs. subvol name"
+            data-es="Snapper: mountpoint frente al nombre del subvol"
+            data-fr="Snapper : point de montage vs nom du sous-volume"
+            data-ja="Snapper：マウントポイントとサブボリューム名の違い"
+            data-ru="Snapper: точка монтирования и имя подтома"
+            data-zh="Snapper：挂载点与子卷名称的区别">Snapper: Mountpoint vs. Subvol-Name</span></h3>
+          <p data-de="Im Feld &bdquo;Mountpoint&ldquo; wird der Pfad eingetragen, unter dem das btrfs-Subvolume im laufenden System gemountet ist – nicht der interne btrfs-Subvolume-Name. Snapper benötigt den Mountpoint, weil er über ihn das Dateisystem anspricht."
+             data-en="In the &ldquo;Mountpoint&rdquo; field, enter the path under which the btrfs subvolume is mounted in the running system – not the internal btrfs subvolume name. Snapper needs the mountpoint because it uses it to address the filesystem."
+             data-es="En el campo &laquo;Mountpoint&raquo; se introduce la ruta bajo la cual el subvolumen btrfs está montado en el sistema en ejecución, no el nombre interno del subvolumen btrfs. Snapper necesita el mountpoint porque es el que usa para acceder al sistema de archivos."
+             data-fr="Dans le champ &laquo;&nbsp;Mountpoint&nbsp;&raquo;, saisir le chemin sous lequel le sous-volume btrfs est monté dans le système en cours d'exécution – pas le nom interne du sous-volume btrfs. Snapper a besoin du point de montage car c'est par lui qu'il accède au système de fichiers."
+             data-ja="&ldquo;Mountpoint&rdquo; フィールドには、稼働中のシステムで btrfs サブボリュームがマウントされているパスを入力します。btrfs 内部のサブボリューム名ではありません。Snapper はマウントポイントを使ってファイルシステムにアクセスするため、マウントポイントが必要です。"
+             data-ru="В поле &laquo;Mountpoint&raquo; вводится путь, по которому btrfs-подтом смонтирован в работающей системе, – а не внутреннее имя подтома btrfs. Snapper нужна точка монтирования, поскольку именно через неё он обращается к файловой системе."
+             data-zh="在 &ldquo;Mountpoint&rdquo; 字段中，填写 btrfs 子卷在运行系统中的挂载路径，而不是 btrfs 内部的子卷名称。Snapper 需要挂载点，因为它通过挂载点访问文件系统。">Im Feld „Mountpoint" wird der Pfad eingetragen, unter dem das btrfs-Subvolume im laufenden System gemountet ist – nicht der interne btrfs-Subvolume-Name. Snapper benötigt den Mountpoint, weil er über ihn das Dateisystem anspricht.</p>
+          <p data-de="Beispiel: Ein Subvolume heißt intern &bdquo;nixos&ldquo; und ist unter &bdquo;/&ldquo; gemountet. Im Feld steht &bdquo;/&ldquo;. Weitere Informationen zu Snapper und verfügbaren Optionen unter options.nixos.org."
+             data-en="Example: a subvolume is internally named &ldquo;nixos&rdquo; and mounted at &ldquo;/&rdquo;. The field contains &ldquo;/&rdquo;. Further information on Snapper and available options at options.nixos.org."
+             data-es="Ejemplo: un subvolumen se llama internamente &laquo;nixos&raquo; y está montado en &laquo;/&raquo;. El campo contiene &laquo;/&raquo;. Más información sobre Snapper y las opciones disponibles en options.nixos.org."
+             data-fr="Exemple : un sous-volume s'appelle en interne &laquo;&nbsp;nixos&nbsp;&raquo; et est monté sous &laquo;&nbsp;/&nbsp;&raquo;. Le champ contient &laquo;&nbsp;/&nbsp;&raquo;. Plus d'informations sur Snapper et les options disponibles sur options.nixos.org."
+             data-ja="例：サブボリュームの内部名が &ldquo;nixos&rdquo; で &ldquo;/&rdquo; にマウントされている場合、フィールドには &ldquo;/&rdquo; と入力します。Snapper と利用可能なオプションの詳細は options.nixos.org を参照してください。"
+             data-ru="Пример: подтом называется внутри &laquo;nixos&raquo; и смонтирован в &laquo;/&raquo;. В поле вводится &laquo;/&raquo;. Подробнее о Snapper и доступных параметрах – на options.nixos.org."
+             data-zh="示例：一个子卷内部名称为 &ldquo;nixos&rdquo;，挂载于 &ldquo;/&rdquo;，则字段中填写 &ldquo;/&rdquo;。关于 Snapper 及可用选项的更多信息，请访问 options.nixos.org。">Beispiel: Ein Subvolume heißt intern „nixos" und ist unter „/" gemountet. Im Feld steht „/". Weitere Informationen zu Snapper und verfügbaren Optionen unter options.nixos.org.</p>
         </div>
       </section>
 

@@ -138,14 +138,9 @@ DEFAULT_NIXOS_CONFIG = {
     "virt_manager":         False,
 
     # ── Dateisystem & Backup
-    "btrfs_scrub":               False,
-    "snapper_home":              False,
-    "snapper_root":              False,
-    "snapper_timeline_hourly":   5,
-    "snapper_timeline_daily":    7,
-    "snapper_timeline_weekly":   0,
-    "snapper_timeline_monthly":  1,
-    "snapper_timeline_yearly":   0,
+    "btrfs_scrub":      False,
+    "snapper_enable":   False,
+    "snapper_configs":  [],
 
     # Weitere Benutzer
     "extra_users": [],
@@ -335,6 +330,30 @@ def load_config(nixos_config_dir: str) -> dict:
             data["brick_blocks"] = extract_brick_blocks(content)
         except OSError:
             pass
+
+    # Migrate old flat snapper fields to new list format
+    _sn_old_hourly  = data.pop("snapper_timeline_hourly",  5)
+    _sn_old_daily   = data.pop("snapper_timeline_daily",   7)
+    _sn_old_weekly  = data.pop("snapper_timeline_weekly",  0)
+    _sn_old_monthly = data.pop("snapper_timeline_monthly", 1)
+    _sn_old_yearly  = data.pop("snapper_timeline_yearly",  0)
+    _sn_root = data.pop("snapper_root", False)
+    _sn_home = data.pop("snapper_home", False)
+    if _sn_root or _sn_home:
+        data["snapper_enable"] = True
+        migrated: list = []
+        if _sn_root:
+            migrated.append({"name": "root", "mountpoint": "/",
+                              "hourly": _sn_old_hourly, "daily": _sn_old_daily,
+                              "weekly": _sn_old_weekly, "monthly": _sn_old_monthly,
+                              "yearly": _sn_old_yearly})
+        if _sn_home:
+            migrated.append({"name": "home", "mountpoint": "/home",
+                              "hourly": _sn_old_hourly, "daily": _sn_old_daily,
+                              "weekly": _sn_old_weekly, "monthly": _sn_old_monthly,
+                              "yearly": _sn_old_yearly})
+        if not data.get("snapper_configs"):
+            data["snapper_configs"] = migrated
 
     home_file = Path(nixos_config_dir) / "home.nix"
     if home_file.exists():

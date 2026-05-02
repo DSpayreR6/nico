@@ -518,36 +518,33 @@ def generate_configuration_nix(data: dict) -> str:
         lines += [_section("Virtualisierung")] + virt_lines
 
     # ── Dateisystem & Backup ──────────────────────────────────────────────────
-    btrfs_scrub  = data.get("btrfs_scrub",  False)
-    snapper_home = data.get("snapper_home", False)
-    snapper_root = data.get("snapper_root", False)
-    sn_hourly    = data.get("snapper_timeline_hourly",  5)
-    sn_daily     = data.get("snapper_timeline_daily",   7)
-    sn_weekly    = data.get("snapper_timeline_weekly",  0)
-    sn_monthly   = data.get("snapper_timeline_monthly", 1)
-    sn_yearly    = data.get("snapper_timeline_yearly",  0)
+    btrfs_scrub     = data.get("btrfs_scrub",     False)
+    snapper_enable  = data.get("snapper_enable",  False)
+    snapper_configs = data.get("snapper_configs") or []
 
-    def _snapper_cfg(cfg_name: str, subvol: str) -> list[str]:
+    def _snapper_cfg(cfg: dict) -> list[str]:
+        name  = cfg.get("name", "")
+        mount = cfg.get("mountpoint", "")
         return [
-            f"  services.snapper.configs.{cfg_name} = {{",
-            f'    SUBVOLUME = "{subvol}";',
+            f"  services.snapper.configs.{name} = {{",
+            f'    SUBVOLUME = "{mount}";',
             "    TIMELINE_CREATE = true;",
             "    TIMELINE_CLEANUP = true;",
-            f"    TIMELINE_LIMIT_HOURLY = {sn_hourly};",
-            f"    TIMELINE_LIMIT_DAILY = {sn_daily};",
-            f"    TIMELINE_LIMIT_WEEKLY = {sn_weekly};",
-            f"    TIMELINE_LIMIT_MONTHLY = {sn_monthly};",
-            f"    TIMELINE_LIMIT_YEARLY = {sn_yearly};",
+            f"    TIMELINE_LIMIT_HOURLY = {cfg.get('hourly', 5)};",
+            f"    TIMELINE_LIMIT_DAILY = {cfg.get('daily', 7)};",
+            f"    TIMELINE_LIMIT_WEEKLY = {cfg.get('weekly', 0)};",
+            f"    TIMELINE_LIMIT_MONTHLY = {cfg.get('monthly', 1)};",
+            f"    TIMELINE_LIMIT_YEARLY = {cfg.get('yearly', 0)};",
             "  };",
         ]
 
     backup_lines = []
     if btrfs_scrub:
         backup_lines += ["  services.btrfs.autoScrub.enable = true;"]
-    if snapper_home:
-        backup_lines += _snapper_cfg("home", "/home")
-    if snapper_root:
-        backup_lines += _snapper_cfg("root", "/")
+    if snapper_enable:
+        for sn_cfg in snapper_configs:
+            if sn_cfg.get("name") and sn_cfg.get("mountpoint"):
+                backup_lines += _snapper_cfg(sn_cfg)
     if backup_lines or _has_section_brix(brix, "Dateisystem & Backup"):
         lines += [_section("Dateisystem & Backup")] + backup_lines
 
@@ -939,28 +936,21 @@ def generate_host_nix(data: dict, host_name: str, hw_config: bool = False) -> st
     backup_lines = []
     if data.get("btrfs_scrub"):
         backup_lines += ["  services.btrfs.autoScrub.enable = true;"]
-    sn_hourly  = data.get("snapper_timeline_hourly",  5)
-    sn_daily   = data.get("snapper_timeline_daily",   7)
-    sn_weekly  = data.get("snapper_timeline_weekly",  0)
-    sn_monthly = data.get("snapper_timeline_monthly", 1)
-    sn_yearly  = data.get("snapper_timeline_yearly",  0)
-    def _sn(cfg, subvol):
-        return [
-            f"  services.snapper.configs.{cfg} = {{",
-            f'    SUBVOLUME = "{subvol}";',
-            "    TIMELINE_CREATE = true;",
-            "    TIMELINE_CLEANUP = true;",
-            f"    TIMELINE_LIMIT_HOURLY = {sn_hourly};",
-            f"    TIMELINE_LIMIT_DAILY = {sn_daily};",
-            f"    TIMELINE_LIMIT_WEEKLY = {sn_weekly};",
-            f"    TIMELINE_LIMIT_MONTHLY = {sn_monthly};",
-            f"    TIMELINE_LIMIT_YEARLY = {sn_yearly};",
-            "  };",
-        ]
-    if data.get("snapper_home"):
-        backup_lines += _sn("home", "/home")
-    if data.get("snapper_root"):
-        backup_lines += _sn("root", "/")
+    if data.get("snapper_enable"):
+        for sn_cfg in (data.get("snapper_configs") or []):
+            if sn_cfg.get("name") and sn_cfg.get("mountpoint"):
+                backup_lines += [
+                    f"  services.snapper.configs.{sn_cfg['name']} = {{",
+                    f'    SUBVOLUME = "{sn_cfg["mountpoint"]}";',
+                    "    TIMELINE_CREATE = true;",
+                    "    TIMELINE_CLEANUP = true;",
+                    f"    TIMELINE_LIMIT_HOURLY = {sn_cfg.get('hourly', 5)};",
+                    f"    TIMELINE_LIMIT_DAILY = {sn_cfg.get('daily', 7)};",
+                    f"    TIMELINE_LIMIT_WEEKLY = {sn_cfg.get('weekly', 0)};",
+                    f"    TIMELINE_LIMIT_MONTHLY = {sn_cfg.get('monthly', 1)};",
+                    f"    TIMELINE_LIMIT_YEARLY = {sn_cfg.get('yearly', 0)};",
+                    "  };",
+                ]
     if backup_lines or _has_section_brix(brix, "Dateisystem & Backup"):
         lines += [_section("Dateisystem & Backup")] + backup_lines
 

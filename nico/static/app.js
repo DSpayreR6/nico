@@ -4857,8 +4857,109 @@ function togglePodmanOptions(show) {
 function toggleLibvirtdOptions(show) {
   document.getElementById('libvirtd-options')?.classList.toggle('hidden', !show);
 }
-function toggleSnapperTimeline(show) {
-  document.getElementById('snapper-timeline')?.classList.toggle('hidden', !show);
+// ── Snapper-Karten ─────────────────────────────────────────────────────────
+
+const SN_DEFAULTS = { name: '', mountpoint: '', hourly: 5, daily: 7, weekly: 0, monthly: 1, yearly: 0 };
+
+function _snapperCard(idx, cfg) {
+  const name   = escHtml(cfg.name       || '');
+  const mount  = escHtml(cfg.mountpoint || '');
+  const title  = name || t('field.snapperNewConfig');
+  return `<div class="extra-user-card" data-sn-idx="${idx}">
+    <div class="extra-user-header eu-toggle" data-sn-idx="${idx}">
+      <span class="extra-user-label">${title}</span>
+      <span class="eu-header-actions">
+        ${niIcon('chevron-down').replace('class="', 'class="eu-chevron ')}
+        <button type="button" class="sn-remove-btn" data-sn-idx="${idx}"
+                title="${escHtml(t('field.snapperRemove'))}">${niIcon('x')}</button>
+      </span>
+    </div>
+    <div class="extra-user-body">
+      <label data-i18n="field.snapperConfigName">${escHtml(t('field.snapperConfigName'))}</label>
+      <input type="text" class="sn-name" data-sn-idx="${idx}" value="${name}"
+             placeholder="root" spellcheck="false" autocomplete="off">
+
+      <label data-i18n="field.snapperMountpoint">${escHtml(t('field.snapperMountpoint'))}</label>
+      <input type="text" class="sn-mountpoint" data-sn-idx="${idx}" value="${mount}"
+             placeholder="/" spellcheck="false" autocomplete="off">
+
+      <div class="lvl2-section" data-lvl2="sn-timeline-${idx}">
+        <div class="lvl2-toggle" data-i18n="field.snapperTimeline">${escHtml(t('field.snapperTimeline'))}</div>
+        <div class="lvl2-body">
+          <div class="hm-xdg-grid" style="grid-template-columns: repeat(3, 1fr)">
+            ${['hourly','daily','weekly','monthly','yearly'].map(f => `
+            <div>
+              <label data-i18n="field.snapper${f[0].toUpperCase()+f.slice(1)}">${escHtml(t('field.snapper'+f[0].toUpperCase()+f.slice(1)))}</label>
+              <input type="number" class="sn-${f}" data-sn-idx="${idx}"
+                     min="0" max="99" value="${cfg[f] ?? SN_DEFAULTS[f]}" style="width:70px">
+            </div>`).join('')}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
+function renderAllSnapperConfigs(configs) {
+  const list = document.getElementById('snapper-list');
+  if (!list) return;
+  list.innerHTML = configs.map((c, i) => _snapperCard(i, c)).join('');
+
+  list.querySelectorAll('.eu-toggle').forEach(header => {
+    header.addEventListener('click', e => {
+      if (e.target.closest('.sn-remove-btn')) return;
+      const card = header.closest('.extra-user-card');
+      const body = card?.querySelector('.extra-user-body');
+      if (!body) return;
+      const open = body.classList.toggle('open');
+      header.classList.toggle('open', open);
+    });
+  });
+
+  list.querySelectorAll('.sn-name').forEach(inp => {
+    inp.addEventListener('input', () => {
+      const card  = inp.closest('.extra-user-card');
+      const label = card?.querySelector('.extra-user-label');
+      if (label) label.textContent = inp.value || t('field.snapperNewConfig');
+      schedulePreviewUpdate();
+    });
+  });
+
+  list.querySelectorAll('.sn-remove-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const idx     = parseInt(btn.dataset.snIdx, 10);
+      const current = getAllSnapperConfigs();
+      current.splice(idx, 1);
+      renderAllSnapperConfigs(current);
+      schedulePreviewUpdate();
+    });
+  });
+
+  list.querySelectorAll('input').forEach(el => {
+    if (!el.classList.contains('sn-name')) {
+      el.addEventListener('input',  schedulePreviewUpdate);
+      el.addEventListener('change', schedulePreviewUpdate);
+    }
+  });
+
+  initLvl2Sections(list);
+}
+
+function getAllSnapperConfigs() {
+  const list = document.getElementById('snapper-list');
+  if (!list) return [];
+  return [...list.querySelectorAll('.extra-user-card[data-sn-idx]')].map(card => {
+    const idx = card.dataset.snIdx;
+    return {
+      name:       card.querySelector(`.sn-name[data-sn-idx="${idx}"]`)?.value?.trim()       || '',
+      mountpoint: card.querySelector(`.sn-mountpoint[data-sn-idx="${idx}"]`)?.value?.trim() || '',
+      hourly:     parseInt(card.querySelector(`.sn-hourly[data-sn-idx="${idx}"]`)?.value    || '5', 10),
+      daily:      parseInt(card.querySelector(`.sn-daily[data-sn-idx="${idx}"]`)?.value     || '7', 10),
+      weekly:     parseInt(card.querySelector(`.sn-weekly[data-sn-idx="${idx}"]`)?.value    || '0', 10),
+      monthly:    parseInt(card.querySelector(`.sn-monthly[data-sn-idx="${idx}"]`)?.value   || '1', 10),
+      yearly:     parseInt(card.querySelector(`.sn-yearly[data-sn-idx="${idx}"]`)?.value    || '0', 10),
+    };
+  });
 }
 
 // ── Passwort-Toggle ────────────────────────────────────────────────────────
@@ -5061,14 +5162,9 @@ function getFormData() {
     virt_manager:         ch('virt_manager'),
 
     // Dateisystem & Backup
-    btrfs_scrub:               ch('btrfs_scrub'),
-    snapper_home:              ch('snapper_home'),
-    snapper_root:              ch('snapper_root'),
-    snapper_timeline_hourly:   parseInt(v('snapper_timeline_hourly')  || '5',  10),
-    snapper_timeline_daily:    parseInt(v('snapper_timeline_daily')   || '7',  10),
-    snapper_timeline_weekly:   parseInt(v('snapper_timeline_weekly')  || '0',  10),
-    snapper_timeline_monthly:  parseInt(v('snapper_timeline_monthly') || '0',  10),
-    snapper_timeline_yearly:   parseInt(v('snapper_timeline_yearly')  || '0',  10),
+    btrfs_scrub:     ch('btrfs_scrub'),
+    snapper_enable:  ch('snapper_enable'),
+    snapper_configs: getAllSnapperConfigs(),
 
     // Multi-host context: tells the preview endpoint which host is active
     _host: _activeHost,
@@ -5240,9 +5336,12 @@ function populateFormFromData(data) {
   if ('virtualbox_guest_drag_drop' in data) ch('virtualbox_guest_drag_drop', data.virtualbox_guest_drag_drop);
   if ('libvirtd'           in data) ch('libvirtd',            data.libvirtd);
   if ('virt_manager'       in data) ch('virt_manager',        data.virt_manager);
-  if ('btrfs_scrub'        in data) ch('btrfs_scrub',         data.btrfs_scrub);
-  if ('snapper_home'       in data) ch('snapper_home',        data.snapper_home);
-  if ('snapper_root'       in data) ch('snapper_root',        data.snapper_root);
+  if ('btrfs_scrub'     in data) ch('btrfs_scrub',    data.btrfs_scrub);
+  if ('snapper_enable'  in data) {
+    ch('snapper_enable', data.snapper_enable);
+    document.getElementById('snapper-area')?.classList.toggle('hidden', !data.snapper_enable);
+    renderAllSnapperConfigs(data.snapper_configs || []);
+  }
 
   if ('user_groups' in data) {
     const selectedGroups = new Set(data.user_groups || []);
@@ -5282,10 +5381,6 @@ function populateFormFromData(data) {
   togglePodmanOptions(!!document.getElementById('podman')?.checked);
   toggleLibvirtdOptions(!!document.getElementById('libvirtd')?.checked);
   toggleVboxGuestOptions(!!document.getElementById('virtualbox_guest')?.checked);
-  toggleSnapperTimeline(
-    !!document.getElementById('snapper_home')?.checked
-    || !!document.getElementById('snapper_root')?.checked
-  );
   updateSectionVisibility();
 }
 
@@ -5312,11 +5407,7 @@ function clearCoForm() {
   setField('boot_config_limit', 5);
   setField('nix_gc_frequency', 'weekly');
   setField('nix_gc_age', '30d');
-  setField('snapper_timeline_hourly', 5);
-  setField('snapper_timeline_daily', 7);
-  setField('snapper_timeline_weekly', 0);
-  setField('snapper_timeline_monthly', 0);
-  setField('snapper_timeline_yearly', 0);
+  renderAllSnapperConfigs([]);
   setField('hm_git_default_branch', 'main');
   setField('hm_shell', 'bash');
   setField('hm_xdg_download', 'Downloads');
@@ -5343,7 +5434,7 @@ function clearCoForm() {
   togglePodmanOptions(false);
   toggleLibvirtdOptions(false);
   toggleVboxGuestOptions(false);
-  toggleSnapperTimeline(false);
+  document.getElementById('snapper-area')?.classList.add('hidden');
   updateSectionVisibility();
 }
 
@@ -5466,10 +5557,23 @@ function bindUI() {
   on('docker',       'change', e => toggleDockerOptions(e.target.checked));
   on('podman',       'change', e => togglePodmanOptions(e.target.checked));
   on('libvirtd',     'change', e => toggleLibvirtdOptions(e.target.checked));
-  on('snapper_home', 'change', e => toggleSnapperTimeline(
-    e.target.checked || document.getElementById('snapper_root')?.checked));
-  on('snapper_root', 'change', e => toggleSnapperTimeline(
-    e.target.checked || document.getElementById('snapper_home')?.checked));
+  on('snapper_enable', 'change', e => {
+    document.getElementById('snapper-area')?.classList.toggle('hidden', !e.target.checked);
+    schedulePreviewUpdate();
+  });
+  document.getElementById('snapper-add-btn')?.addEventListener('click', () => {
+    const current = getAllSnapperConfigs();
+    current.push({ ...SN_DEFAULTS });
+    renderAllSnapperConfigs(current);
+    const list  = document.getElementById('snapper-list');
+    const cards = list?.querySelectorAll('.extra-user-card');
+    if (cards?.length) {
+      const last = cards[cards.length - 1];
+      last.querySelector('.extra-user-body')?.classList.add('open');
+      last.querySelector('.eu-toggle')?.classList.add('open');
+    }
+    schedulePreviewUpdate();
+  });
 
   document.getElementById('extra_locale_enable')?.addEventListener('change', function() {
     document.getElementById('extra-locale-detail')?.classList.toggle('hidden', !this.checked);
