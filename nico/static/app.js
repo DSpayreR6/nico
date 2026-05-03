@@ -2834,6 +2834,12 @@ async function _refreshPreviewForFile(file = 'configuration.nix') {
     await _updateFlakePreview();
     return;
   }
+  if (_brixTargetFtype === 'hm' && file !== 'configuration.nix') {
+    const res = await csrfFetch(`/api/file?path=${encodeURIComponent(file)}`);
+    const data = await res.json();
+    if (!data.error) renderCodePreview(data.content, 'preview-hm', file);
+    return;
+  }
   await updatePreview();
 }
 
@@ -3553,21 +3559,7 @@ async function insertBrix() {
   closeBrixInsert();
   showToast(t('brix.inserted', data.brick_name));
 
-  // Preview aktualisieren: flake.nix is reloaded from disk, other main files
-  // keep using the generator preview, host files are reloaded directly.
-  const isMainFile = _brixTargetFile === 'configuration.nix' || _brixTargetFile === 'flake.nix';
-  if (isMainFile) {
-    await _refreshPreviewForFile(_brixTargetFile);
-  } else {
-    // Host-Datei: Inhalt neu laden und Preview mit korrektem file-Parameter rendern
-    try {
-      const res = await fetch(`/api/file?path=${encodeURIComponent(_brixTargetFile)}`);
-      const fileData = await res.json();
-      if (!fileData.error) {
-        renderCodePreview(fileData.content, 'preview-configuration', _brixTargetFile);
-      }
-    } catch { /* non-fatal */ }
-  }
+  await _refreshPreviewForFile(_brixTargetFile);
 
   const brickEl = document.querySelector(`[data-brick-name="${CSS.escape(data.brick_name)}"]`);
   brickEl?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
@@ -4860,11 +4852,46 @@ function toggleLibvirtdOptions(show) {
 // ── Snapper-Karten ─────────────────────────────────────────────────────────
 
 const SN_DEFAULTS = { name: '', mountpoint: '', hourly: 5, daily: 7, weekly: 0, monthly: 1, yearly: 0 };
+const SNAPPPER_NAME_RE = /^[A-Za-z0-9._-]+$/;
+
+function _snapperCardTitle(name, mountpoint) {
+  if (name) return name;
+  if (mountpoint) return mountpoint;
+  return t('field.snapperNewConfigUnnamed');
+}
+
+function _snapperValidateCard(card) {
+  const nameInput = card?.querySelector('.sn-name');
+  const mountInput = card?.querySelector('.sn-mountpoint');
+  const nameErr = card?.querySelector('.sn-name-error');
+  const mountErr = card?.querySelector('.sn-mountpoint-error');
+  if (!nameInput || !mountInput || !nameErr || !mountErr) return;
+
+  const name = nameInput.value.trim();
+  const mount = mountInput.value.trim();
+
+  let nameMsg = '';
+  if (name && !SNAPPPER_NAME_RE.test(name)) {
+    nameMsg = t('field.snapperConfigNameError');
+  }
+
+  let mountMsg = '';
+  if (mount && (!mount.startsWith('/') || /\s/.test(mount))) {
+    mountMsg = t('field.snapperMountpointError');
+  }
+
+  nameInput.setCustomValidity(nameMsg);
+  mountInput.setCustomValidity(mountMsg);
+  nameErr.textContent = nameMsg;
+  mountErr.textContent = mountMsg;
+  nameErr.classList.toggle('hidden', !nameMsg);
+  mountErr.classList.toggle('hidden', !mountMsg);
+}
 
 function _snapperCard(idx, cfg) {
   const name   = escHtml(cfg.name       || '');
   const mount  = escHtml(cfg.mountpoint || '');
-  const title  = name || t('field.snapperNewConfig');
+  const title  = escHtml(_snapperCardTitle(cfg.name || '', cfg.mountpoint || ''));
   return `<div class="extra-user-card" data-sn-idx="${idx}">
     <div class="extra-user-header eu-toggle" data-sn-idx="${idx}">
       <span class="extra-user-label">${title}</span>
@@ -4876,12 +4903,16 @@ function _snapperCard(idx, cfg) {
     </div>
     <div class="extra-user-body">
       <label data-i18n="field.snapperConfigName">${escHtml(t('field.snapperConfigName'))}</label>
+      <p class="hint" data-i18n="field.snapperConfigNameHint" style="margin:0 0 4px">${escHtml(t('field.snapperConfigNameHint'))}</p>
       <input type="text" class="sn-name" data-sn-idx="${idx}" value="${name}"
-             placeholder="root" spellcheck="false" autocomplete="off">
+             placeholder="${escHtml(t('field.snapperConfigNamePlaceholder'))}" spellcheck="false" autocomplete="off">
+      <p class="raw-panel-hint sn-name-error hidden" style="margin-top:4px;color:var(--red)"></p>
 
       <label data-i18n="field.snapperMountpoint">${escHtml(t('field.snapperMountpoint'))}</label>
+      <p class="hint" data-i18n="field.snapperMountpointHint" style="margin:0 0 4px">${escHtml(t('field.snapperMountpointHint'))}</p>
       <input type="text" class="sn-mountpoint" data-sn-idx="${idx}" value="${mount}"
-             placeholder="/" spellcheck="false" autocomplete="off">
+             placeholder="${escHtml(t('field.snapperMountpointPlaceholder'))}" spellcheck="false" autocomplete="off">
+      <p class="raw-panel-hint sn-mountpoint-error hidden" style="margin-top:4px;color:var(--red)"></p>
 
       <div class="lvl2-section" data-lvl2="sn-timeline-${idx}">
         <div class="lvl2-toggle" data-i18n="field.snapperTimeline">${escHtml(t('field.snapperTimeline'))}</div>
@@ -4920,7 +4951,27 @@ function renderAllSnapperConfigs(configs) {
     inp.addEventListener('input', () => {
       const card  = inp.closest('.extra-user-card');
       const label = card?.querySelector('.extra-user-label');
-      if (label) label.textContent = inp.value || t('field.snapperNewConfig');
+      const mount = card?.querySelector('.sn-mountpoint')?.value?.trim() || '';
+      if (label) label.textContent = _snapperCardTitle(inp.value.trim(), mount);
+      if (card) _snapperValidateCard(card);
+      schedulePreviewUpdate();
+    });
+  });
+
+  list.querySelectorAll('.sn-mountpoint').forEach(inp => {
+    const card = inp.closest('.extra-user-card');
+    if (card) _snapperValidateCard(card);
+    inp.addEventListener('input', () => {
+      const currentCard = inp.closest('.extra-user-card');
+      const label = currentCard?.querySelector('.extra-user-label');
+      const name = currentCard?.querySelector('.sn-name')?.value?.trim() || '';
+      if (label) label.textContent = _snapperCardTitle(name, inp.value.trim());
+      if (currentCard) _snapperValidateCard(currentCard);
+      schedulePreviewUpdate();
+    });
+    inp.addEventListener('change', () => {
+      const currentCard = inp.closest('.extra-user-card');
+      if (currentCard) _snapperValidateCard(currentCard);
       schedulePreviewUpdate();
     });
   });
@@ -4936,7 +4987,7 @@ function renderAllSnapperConfigs(configs) {
   });
 
   list.querySelectorAll('input').forEach(el => {
-    if (!el.classList.contains('sn-name')) {
+    if (!el.classList.contains('sn-name') && !el.classList.contains('sn-mountpoint')) {
       el.addEventListener('input',  schedulePreviewUpdate);
       el.addEventListener('change', schedulePreviewUpdate);
     }
@@ -6039,6 +6090,20 @@ const Sidebar = (() => {
     document.getElementById('tool-reload')?.addEventListener('click', () => {
       toolsDropdown?.classList.add('hidden');
       _reloadFile();
+    });
+
+    document.getElementById('tool-copy-file')?.addEventListener('click', async () => {
+      toolsDropdown?.classList.add('hidden');
+      if (!activeFile) return;
+      try {
+        const res  = await fetch(`/api/file?path=${encodeURIComponent(activeFile.path)}`);
+        const data = await res.json();
+        if (data.error) { showToast(tErr(data.error), 'error'); return; }
+        await navigator.clipboard.writeText(data.content);
+        showToast(t('tools.fileCopied'), 'success');
+      } catch {
+        showToast(t('toast.error'), 'error');
+      }
     });
 
     document.getElementById('tool-code-search')?.addEventListener('click', () => {
