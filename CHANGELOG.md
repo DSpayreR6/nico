@@ -2,28 +2,28 @@
 
 ## Unreleased
 
-### Neue Funktionen
+### New Features
 
-- Snapper individuell einstellbar mit freien Subvolumes und eigenem Zeitplan pro Eintrag
-- Doppelstart-Schutz: zweite NiCo-Instanz zeigt Hinweisseite statt stillem Neustart
-- Git-Remote-Einrichtung direkt im Config-Settings-Tab
-- Git-Remote-Abgleich beim Start (Branch-Zuordnung, Ahead/Behind-Anzeige)
-- Rebuild wahlweise im externen Terminal-Fenster ausführen
-- Standard-Host bei Flake-Configs mit mehreren Hosts speicherbar
-- Rebuild-Fortschritt zeigt stabile Gesamtwerte statt springender Einzelaktivitäten
-- Theme-System via TOML; mitgeliefert: Catppuccin Mocha, Breeze Dark/Light, Adwaita Dark, Neon Dark
-- flake.lock optional im Dateibaum anzeigbar
-- HM-Panel: Shell, initExtra und Pakete direkt bearbeitbar
-- Validator: Brix-Redundanz-Hinweis zeigt betroffene Panel-Sektion
+- Snapper individually configurable with free subvolumes and per-entry snapshot schedule
+- Double-start protection: second NiCo instance shows info page instead of silent restart
+- Git remote setup directly in the Config Settings tab
+- Git remote sync on startup (branch assignment, ahead/behind display)
+- Rebuild optionally runs in an external terminal window
+- Default host for flake configs with multiple hosts is now persistent
+- Rebuild progress shows stable totals instead of jumping per-activity values
+- Theme system via TOML; included: Catppuccin Mocha, Breeze Dark/Light, Adwaita Dark, Neon Dark
+- flake.lock optionally visible in the file tree
+- HM panel: shell, initExtra and packages directly editable
+- Validator: brix redundancy hint now shows the affected panel section
 
-### Bugfixes
+### Bug Fixes
 
-- Brix-Verschieben nach vorangehendem HM-Datei-Wechsel korrigiert
-- Firefox-Freeze bei Rebuild im Webfenster behoben (DOM-Batching, max. 500 Zeilen im Log)
-- Flake-Host-Brix: `specialArgs` und Host-spezifische Inhalte gingen beim Roundtrip verloren
-- Doppelte-Attribute-Validierung prüft jetzt alle `.nix`-Dateien der Config
-- NixOS-Daten nicht mehr fälschlicherweise in config.json persistiert
-- bashrcExtra und andere unbekannte Shell-Felder werden bei Regenerierung nicht mehr gelöscht
+- Brick move broken after switching to an HM file
+- Firefox freeze during rebuild in the web UI fixed (DOM batching, max 500 log lines)
+- Flake host brix: `specialArgs` and host-specific content was lost on roundtrip
+- Duplicate attribute validation now checks all `.nix` files in the config
+- NixOS data no longer incorrectly persisted in config.json
+- bashrcExtra and other unknown shell fields no longer deleted on regeneration
 
 ---
 
