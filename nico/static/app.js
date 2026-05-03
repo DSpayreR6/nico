@@ -4465,6 +4465,8 @@ async function openRebuild(mode = 'switch') {
   const fetchCopyEl  = document.getElementById('rph-fetch-copy');
 
   function _resetMonitor() {
+    if (_logRafId) { cancelAnimationFrame(_logRafId); _logRafId = null; }
+    _logBuffer = [];
     logEl.innerHTML        = '';
     resultEl.className     = 'rebuild-result hidden';
     resultEl.textContent   = '';
@@ -4502,6 +4504,38 @@ async function openRebuild(mode = 'switch') {
   let maxDlExpected = 0;
   let maxCopiedTotal = 0;
   let maxCopiedExpected = 0;
+
+  // Batched log rendering – prevents per-line reflow in Firefox
+  const MAX_LOG_LINES = 500;
+  let _logBuffer = [];
+  let _logRafId  = null;
+
+  function _flushLog() {
+    _logRafId = null;
+    if (!_logBuffer.length) return;
+    const frag = document.createDocumentFragment();
+    for (const { text, cls } of _logBuffer) {
+      const span = document.createElement('span');
+      if (cls) span.className = cls;
+      span.textContent = text;
+      frag.appendChild(span);
+    }
+    _logBuffer = [];
+    logEl.appendChild(frag);
+    // Trim oldest lines to keep DOM lean
+    while (logEl.childElementCount > MAX_LOG_LINES) {
+      logEl.removeChild(logEl.firstChild);
+    }
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  function _appendLog(line) {
+    let cls = '';
+    if (/error:/i.test(line))        cls = 'log-error';
+    else if (/warning:/i.test(line)) cls = 'log-warning';
+    _logBuffer.push({ text: line + '\n', cls });
+    if (!_logRafId) _logRafId = requestAnimationFrame(_flushLog);
+  }
 
   function _phaseCol(phase) {
     return document.getElementById('rph-' + phase);
@@ -4570,17 +4604,8 @@ async function openRebuild(mode = 'switch') {
 
     if (msg.type === 'output') {
       const line = msg.line;
-
-      // Append colorized line to log
-      const span = document.createElement('span');
-      if (/error:/i.test(line))        span.className = 'log-error';
-      else if (/warning:/i.test(line)) span.className = 'log-warning';
-      span.textContent = line + '\n';
-      logEl.appendChild(span);
-      logEl.scrollTop = logEl.scrollHeight;
-
-      // Track first error line
       if (!firstErrorLine && /error:/i.test(line)) firstErrorLine = line.trim();
+      _appendLog(line);
 
     } else if (msg.type === 'phase') {
       _setPhaseActive(msg.phase, msg.active, msg.pkg || '');
@@ -4606,6 +4631,7 @@ async function openRebuild(mode = 'switch') {
       );
 
     } else if (msg.type === 'done') {
+      _flushLog();
       const label = msg.success
         ? niIcon('check-circle') + ' ' + t('rebuild.success')
         : niIcon('x-circle') + ' ' + t('rebuild.failed') + (firstErrorLine ? ': ' + firstErrorLine.substring(0, 80) : '');
@@ -6669,6 +6695,8 @@ const Sidebar = (() => {
       _clearRawView();
       _showLeftPanel('form');
       switchTab('configuration');
+      _brixTargetFtype  = 'co';
+      _brixContextFtype = 'co';
       const hostMatch = path.match(/(?:^|\/)hosts\/([^/]+)\/default\.nix$/);
       if (fileName === 'configuration.nix' && !path.includes('/')) {
         _activeHost = '';
@@ -6687,6 +6715,8 @@ const Sidebar = (() => {
       _clearRawView();
       _showLeftPanel('fl');
       switchTab('flake');
+      _brixTargetFtype  = 'fl';
+      _brixContextFtype = 'fl';
       await _populateFlakeFormFromFile(data.content);
     } else if (ftype === 'flk') {
       _showFlkView(data.content);

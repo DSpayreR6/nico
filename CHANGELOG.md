@@ -2,75 +2,28 @@
 
 ## Unreleased
 
-### Viele Bugfixes
+### Neue Funktionen
 
-- Flake-Hostblöcke werden wieder vollständig als Host-Brix konserviert; `specialArgs` und andere Host-spezifische Inhalte gehen beim Roundtrip nicht mehr verloren
-- Die Validierungsregel für doppelte Attribute prüft jetzt alle relevanten `.nix`-Dateien der Config, also auch Hostdateien
+- Snapper individuell einstellbar mit freien Subvolumes und eigenem Zeitplan pro Eintrag
+- Doppelstart-Schutz: zweite NiCo-Instanz zeigt Hinweisseite statt stillem Neustart
+- Git-Remote-Einrichtung direkt im Config-Settings-Tab
+- Git-Remote-Abgleich beim Start (Branch-Zuordnung, Ahead/Behind-Anzeige)
+- Rebuild wahlweise im externen Terminal-Fenster ausführen
+- Standard-Host bei Flake-Configs mit mehreren Hosts speicherbar
+- Rebuild-Fortschritt zeigt stabile Gesamtwerte statt springender Einzelaktivitäten
+- Theme-System via TOML; mitgeliefert: Catppuccin Mocha, Breeze Dark/Light, Adwaita Dark, Neon Dark
+- flake.lock optional im Dateibaum anzeigbar
+- HM-Panel: Shell, initExtra und Pakete direkt bearbeitbar
+- Validator: Brix-Redundanz-Hinweis zeigt betroffene Panel-Sektion
 
-### Snapper: dynamische Subvolume-Konfiguration
+### Bugfixes
 
-Die Snapper-Konfiguration ist vollständig neu gestaltet. Die bisherigen Festeinträge für `/` und `/home` sind entfernt; stattdessen gibt es einen Master-Schalter und ein Karten-System analog zum Benutzer-Panel. Pro Karte werden Config-Name, Mountpoint und ein eigener Snapshot-Zeitplan konfiguriert. Beliebig viele Subvolumes sind möglich.
-
-Das Mountpoint-Feld nimmt den gemounteten Pfad entgegen (z. B. `/`, `/home`, `/data`), nicht den internen btrfs-Subvolume-Namen. Die Hilfe erklärt diesen Unterschied in einem neuen Abschnitt (5.3).
-
-Zwei neue Validierungsregeln:
-- **`snapper_btrfs`**: prüft ob der eingetragene Mountpoint im laufenden System existiert und ein btrfs-Dateisystem ist
-- **`snapper_in_host`**: weist in Flake-Configs mit mehreren Hosts darauf hin, dass Snapper in die jeweilige Host-Config gehört
-
-Bestehende Configs mit den alten Feldern (`snapper_root`, `snapper_home`) werden beim Laden automatisch ins neue Format migriert.
-
-Ebenfalls in dieser Änderung: zwei neue Validierungsregeln für Home Manager (`hm_user_defined`, `hm_allowunfree`), die prüfen ob `home-manager.users.<user>` explizit definiert ist und ob `nixpkgs.config.allowUnfree` konsistent in beiden Configs gesetzt ist.
-
-### Doppelstart-Schutz mit Theme-Seite
-
-Wird NiCo gestartet während bereits eine Instanz läuft, öffnet sich jetzt eine Hinweisseite im Browser statt die laufende Instanz stumm neu zu starten. Die Seite zeigt einen „Neu starten"-Button; ohne Klick bleibt das bestehende Fenster unberührt und voll funktionsfähig. Nach einem Neustart wechselt die Seite automatisch zur neuen Instanz. Die Hinweisseite verwendet das aktuell eingestellte NiCo-Theme.
-
-### Git-Remote-Einstellungen und Startup-Abgleich
-
-Im Config-Settings-Tab gibt es jetzt einen dauerhaften Bereich für das Remote-Git-Repository. Das Remote kann direkt gespeichert und später wieder geändert werden; die aktuellen Werte werden aus dem konfigurierten Remote vorbelegt. Ein Hinweis unter dem Bereich erklärt, dass Änderungen an Remote-Daten erst nach einem Programmneustart für den Startup-Abgleich verwendet werden.
-
-Der Startup-Abgleich wurde außerdem für Anfängerfälle robuster gemacht:
-- Remote speichern erzwingt keinen SSH-Verbindungstest mehr vorab
-- Wenn ein Remote existiert, aber noch kein Upstream-Branch zugeordnet ist, bietet NiCo beim Start jetzt `Remote-Stand laden` oder `Lokal so lassen` an
-- Bei genau einem Remote-Branch wird die Zuordnung automatisch hergestellt; bei mehreren Branches erscheint eine Auswahl
-- Remote-Name, Remote-Branch und lokaler Branch werden sauber getrennt, auch wenn die Namen unterschiedlich sind (z. B. lokal `master`, remote `main`)
-
-### Rebuild-Fortschritt: Gesamtwerte statt springender Einzelaktivitäten
-
-Die Status-Boxen im Rebuild-Overlay zeigen für Laden und Bauen jetzt stabile Gesamt-/Restwerte des gesamten laufenden Rebuilds. Damit sinken `noch zu laden` und `noch zu builden` monoton, statt zwischen parallelen Einzelaktivitäten hin- und herzuspringen.
-
-### Rebuild: Terminal-Fenster, Standard-Host, Befehlsanzeige
-
-**Terminal-Modus:** Rebuild kann optional in einem externen Terminal-Fenster ausgeführt werden statt im Nico-Overlay. Nico schreibt dazu ein temporäres Shell-Script, öffnet den erkannten Terminal-Emulator (konsole → xterm → alacritty → kitty → gnome-terminal → xfce4-terminal) und löscht das Script nach Ausführung automatisch. Das sudo-Passwort wird direkt im Terminal abgefragt – es gelangt nicht durch die Web-Schicht. Einstellung in den Programmeinstellungen (bleibt lokal); im Optionen-Dialog vor jedem Rebuild überschreibbar.
-
-**Befehlsanzeige:** Im Optionen-Dialog vor dem Rebuild wird immer der exakte `nixos-rebuild`-Befehl angezeigt (aktualisiert sich live beim Flake-Update-Toggle). Kopier-Button vorhanden. Ermöglicht maximale Transparenz: Wer den Befehl manuell in ein selbst geöffnetes Terminal einfügt, umgeht Nico beim eigentlichen Rebuild vollständig.
-
-**Standard-Host:** Bei Flake-Konfigurationen mit mehreren Hosts wird der zuletzt verwendete Host automatisch vorausgewählt. Der Standard-Host kann auch direkt in den Programmeinstellungen (Config-Tab) per Dropdown gesetzt werden. Erkennung über gespeicherte Einstellung → Hostname-Match → manuell wählen. Bei nur einem Host entfällt der Auswahl-Dialog. Gilt für Rebuild und Dry-Run.
-
-### Theme-System
-NiCo unterstützt jetzt wechselbare Themes via TOML. Themes liegen in `nico/static/themes/<name>/theme.toml` und werden beim Start geladen – neue Themes erscheinen automatisch im Dropdown. Ein Theme-Picker ist in den NiCo-Einstellungen integriert; die Wahl gilt pro Gerät (Programmeinstellung). Mitgeliefert werden:
-- **Catppuccin Mocha** (bisheriges Standard-Theme, jetzt als TOML)
-- **Breeze Dark** / **Breeze Light** (angelehnt an KDE Plasma)
-- **Adwaita Dark** (angelehnt an GNOME/GTK)
-- **Neon Dark** (dunkles Theme mit Neon-Akzenten)
-
-Alle Farb-Tokens sind CSS-Variablen; das CSS enthält keine hartcodierten Farbwerte mehr. Neue Variable `--toggle-track` / `--toggle-thumb` für theme-spezifische Schalter-Optik.
-
-### flake.lock anzeigen
-`flake.lock` kann jetzt optional im Dateibaum angezeigt werden. Die Einstellung befindet sich in den NiCo-Einstellungen (Programmeinstellung, bleibt lokal). Ein eigenes Panel informiert darüber, dass die Datei nur zur Ansicht dient und manuell mit einem externen Editor bearbeitet werden kann. Die Anzeige erfolgt mit Zeilennummern und Scroll-Unterstützung.
-
-### HM-Panel: Shell, initExtra und Pakete editierbar
-Das HM-Datei-Panel zeigt jetzt alle relevanten Felder aus der home.nix direkt an und erlaubt deren Bearbeitung:
-- **Shell-Sektion**: Zeigt die erkannte Shell (bash/zsh/fish) und ein Textarea für `initExtra` (bzw. `shellInit` bei fish)
-- **Pakete-Sektion**: Textarea für `home.packages` – liest beide Formate (`pkgs.foo` und `with pkgs; [...]`), schreibt immer als `pkgs.foo`
-- Speichern via neuem Endpoint `/api/hm/patch`: patcht Felder direkt im bestehenden Dateiinhalt, regeneriert nicht – unbekannte Felder wie `bashrcExtra` bleiben unberührt
-- Hash wird nach jedem Patch neu berechnet und in der `nico-version`-Zeile aktualisiert
-
-### Fix: Vorgaben-Verletzung – NixOS-Daten nicht mehr in config.json
-`home_manager`-Konfigurationsdaten (Shell, Git, Pakete etc.) wurden bisher beim Startup in `config.json` geschrieben. Das verstößt gegen die Projektregelung „NixOS-Daten nur in `.nix`-Dateien". Behoben: `home_manager` wird weder durch `get_config()` noch durch `save_config()` in `config.json` persistiert.
-
-### Fix: bashrcExtra und andere unbekannte Shell-Felder werden nicht mehr gelöscht
-Wenn eine home.nix extern bearbeitet wurde und NiCo beim Startup eine Regenerierung auslöst, gingen bisher Felder wie `bashrcExtra` innerhalb des `programs.bash`-Blocks verloren. Jetzt gilt: Enthält der Shell-Block unbekannte Felder, wird der gesamte Block als Brix gesichert und nicht neu generiert – kein Datenverlust.
+- Brix-Verschieben nach vorangehendem HM-Datei-Wechsel korrigiert
+- Firefox-Freeze bei Rebuild im Webfenster behoben (DOM-Batching, max. 500 Zeilen im Log)
+- Flake-Host-Brix: `specialArgs` und Host-spezifische Inhalte gingen beim Roundtrip verloren
+- Doppelte-Attribute-Validierung prüft jetzt alle `.nix`-Dateien der Config
+- NixOS-Daten nicht mehr fälschlicherweise in config.json persistiert
+- bashrcExtra und andere unbekannte Shell-Felder werden bei Regenerierung nicht mehr gelöscht
 
 ---
 

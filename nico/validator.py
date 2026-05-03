@@ -62,8 +62,8 @@ ALL_RULES: list[Rule] = [
          "Prüft ob alle in imports referenzierten Dateipfade auf Platte existieren.",
          "error"),
     Rule("brix_redundant",
-         "Überflüssige Brix-Blöcke",
-         "Erkennt Brix-Blöcke deren Inhalt 1:1 über das NiCo-Panel konfigurierbar wäre.",
+         "Brix-Blöcke mit Panel-Optionen",
+         "Erkennt Brix-Blöcke deren Inhalt vermutlich vollständig über das NiCo-Panel konfigurierbar wäre.",
          "info"),
     Rule("hm_user_defined",
          "HM-User definiert",
@@ -413,6 +413,67 @@ def _rule_imports_exist(nixos_dir: str, config: dict, is_flake: bool,
     return findings
 
 
+_FIELD_SECTION: dict[str, str] = {
+    # Boot
+    "boot_loader": "Boot", "secure_boot": "Boot", "lanzaboote": "Boot",
+    "kernel": "Boot", "boot_efi_can_touch": "Boot", "boot_config_limit": "Boot",
+    # System
+    "hostname": "System", "state_version": "System", "allowUnfree": "System",
+    "nix_args": "System",
+    # Lokalisierung
+    "timezone": "Lokalisierung", "locale": "Lokalisierung",
+    "keyboard_layout": "Lokalisierung", "keyboard_variant": "Lokalisierung",
+    "keyboard_console": "Lokalisierung", "extra_locale": "Lokalisierung",
+    # Netzwerk
+    "networkmanager": "Netzwerk", "ssh": "Netzwerk",
+    "firewall_disable": "Netzwerk", "firewall_tcp_enable": "Netzwerk",
+    "firewall_tcp_ports": "Netzwerk", "firewall_udp_enable": "Netzwerk",
+    "firewall_udp_ports": "Netzwerk",
+    # Services
+    "printing": "Services", "avahi": "Services", "bluetooth": "Services",
+    "blueman": "Services", "libinput": "Services", "fprintd": "Services",
+    "pcscd": "Services", "sunshine": "Services",
+    # Desktop
+    "desktop_environment": "Desktop", "autologin_user": "Desktop",
+    # Audio
+    "pipewire": "Audio", "pipewire_32bit": "Audio",
+    # Benutzer
+    "username": "Benutzer", "user_description": "Benutzer",
+    "user_initial_password": "Benutzer", "user_uid": "Benutzer",
+    "user_groups": "Benutzer", "user_groups_extra": "Benutzer",
+    "user_shell": "Benutzer", "user_extra_nix": "Benutzer",
+    # Programme
+    "packages": "Programme", "steam": "Programme",
+    # Schriftarten
+    "fonts": "Schriftarten", "fonts_extra": "Schriftarten",
+    # Nix & System
+    "flakes": "Nix & System", "nix_optimize_store": "Nix & System",
+    "nix_gc": "Nix & System", "nix_gc_frequency": "Nix & System",
+    "nix_gc_age": "Nix & System",
+    # Hardware
+    "opengl": "Hardware", "cpu_microcode": "Hardware",
+    "enable_all_firmware": "Hardware", "hardware_config": "Hardware",
+    "zram_swap": "Hardware",
+    # Virtualisierung
+    "docker": "Virtualisierung", "docker_rootless": "Virtualisierung",
+    "podman": "Virtualisierung", "podman_docker_compat": "Virtualisierung",
+    "virtualbox_host": "Virtualisierung", "libvirtd": "Virtualisierung",
+    "virt_manager": "Virtualisierung",
+    # Dateisystem & Backup
+    "btrfs_scrub": "Dateisystem & Backup", "snapper_enable": "Dateisystem & Backup",
+    "snapper_configs": "Dateisystem & Backup",
+    # Home Manager
+    "home_manager": "Home Manager",
+}
+
+
+def _section_hint(recognized: dict) -> str:
+    sections = sorted({_FIELD_SECTION[k] for k in recognized if k in _FIELD_SECTION})
+    if not sections:
+        return "NiCo-Panel"
+    return ", ".join(f'"{s}"' for s in sections)
+
+
 def _rule_brix_redundant(nixos_dir: str, config: dict, is_flake: bool,
                          host: str | None = None) -> list[Finding]:
     from . import importer as _imp
@@ -446,12 +507,13 @@ def _rule_brix_redundant(nixos_dir: str, config: dict, is_flake: bool,
                 continue
             rest = _imp.build_rest_brix(wrapped, recognized)
             if not rest.strip():
+                hint = _section_hint(recognized)
                 findings.append(Finding(
                     rule_id="brix_redundant",
                     severity="info",
-                    message=f'Brix "{name}" koennte ueber das NiCo-Panel konfiguriert werden.',
-                    detail="Inhalt ist vollständig als bekannte NixOS-Option erkannt. "
-                           "Nach einem Import wäre dieser Brix überflüssig.",
+                    message=f'Brix "{name}": Inhalt kann vermutlich im NiCo-Panel eingegeben werden – bitte prüfen.',
+                    detail=f"Erkannte Optionen in Sektion {hint}. "
+                           "Nach einem Import prüfen ob alle Einstellungen korrekt übernommen wurden.",
                 ))
         except Exception:
             continue

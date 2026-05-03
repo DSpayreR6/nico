@@ -36,7 +36,7 @@ text2      = "#c0c0c0"
 text-muted    = "#808080"
 toggle-track  = "#484848"
 toggle-thumb  = "#a0a0a0"
-brix-bg       = "rgba(145, 65, 172, 0.08)"
+brix-bg       = "#4e4e4e"
 brix-color    = "#3584e4"
 
 # Typography
