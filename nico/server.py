@@ -3,7 +3,6 @@ Flask application: routes and API.
 All state lives in config_manager; this file only handles HTTP concerns.
 """
 
-import hashlib
 import os
 import re
 import secrets
@@ -19,448 +18,36 @@ from .brix import (extract_brick_blocks, inject_brick_blocks, strip_brick_blocks
                    format_brick, next_order_for_section, SECTION_ORDER,
                    expand_nested_legacy, brix_content_to_bricks,
                    check_bracket_balance)
-
-# Maps filenames to their heuristic file-type code (used in sidebar)
-_FILENAME_TYPE_HINTS: dict[str, str] = {
-    "hardware-configuration.nix": "hw",
-    "flake.nix":                  "fl",
-}
-
-
-def _classify_filename(name: str) -> str | None:
-    """Map a .nix filename to its NiCo type code for header insertion.
-    Returns None for non-.nix files.
-    """
-    if name in ('configuration.nix', 'default.nix'):
-        return 'co'
-    if name == 'flake.nix':
-        return 'fl'
-    if name == 'hardware-configuration.nix':
-        return 'hw'
-    if name == 'home.nix':
-        return 'hm'
-    if name.endswith('.nix'):
-        return 'nd'
-    return None
-
-# Regex matching nico-version line without a type prefix (legacy format)
-_VERSION_NOTYPE_RE = re.compile(
-    r'^(# nico-version: )([0-9a-f]{8})', re.MULTILINE
+from .core import (
+    NICO_HEADER as _NICO_HEADER,
+    NICO_HEADER,
+    _FILENAME_TYPE_HINTS,
+    _FORBIDDEN_PATH_PREFIXES,
+    _SAFE_NAME_RE,
+    _VALID_FILE_TYPES,
+    _VERSION_ANY_RE,
+    _VERSION_NOTYPE_RE,
+    _VERSION_WITHTYPE_RE,
+    brick_body         as _brick_body,
+    classify_filename  as _classify_filename,
+    clean_nix_error    as _clean_nix_error,
+    flake_outputs_modify_host as _flake_outputs_modify_host,
+    get_flake_hosts    as _get_flake_hosts,
+    get_nico_type      as _get_nico_type,
+    hm_patch_args      as _hm_patch_args,
+    hm_patch_bool      as _hm_patch_bool,
+    hm_patch_init_extra as _hm_patch_init_extra,
+    hm_patch_packages  as _hm_patch_packages,
+    hm_patch_str       as _hm_patch_str,
+    hm_update_hash     as _hm_update_hash,
+    insert_type        as _insert_type,
+    modify_brick_in_file as _modify_brick_in_file,
+    normalize_hm_content as _normalize_hm_content,
+    run_enabled_validation as _run_enabled_validation,
+    scan_flake_hosts   as _scan_flake_hosts,
+    set_type_in_content as _set_type_in_content,
+    validate_user_path as _validate_user_path,
 )
-
-
-def _get_nico_type(content: str) -> str | None:
-    """Return the file-type code from the nico-version line, or None if absent.
-
-    Returns:
-      'co', 'nd', 'fl', etc.  – explicit type present
-      ''                       – nico-version line exists but has no type (needs nd)
-      None                     – no nico-version line at all (external file)
-    """
-    m = re.search(
-        r'^# nico-version: (?:([a-z]+)#)?[0-9a-f]{8}', content, re.MULTILINE
-    )
-    if not m:
-        return None
-    return m.group(1) or ""   # group(1) is None when type absent → return ""
-
-
-def _hm_patch_str(content: str, key: str, value: str) -> str:
-    ek = re.escape(key)
-    return re.sub(rf'({ek}\s*=\s*)"[^"]*"', rf'\1"{value}"', content)
-
-
-def _hm_patch_bool(content: str, key: str, value: bool) -> str:
-    ek = re.escape(key)
-    nv = "true" if value else "false"
-    return re.sub(rf'({ek}\s*=\s*)(true|false)', rf'\g<1>{nv}', content)
-
-
-def _hm_patch_args(content: str, args: list) -> str:
-    all_args = [a for a in args if a] + ["..."]
-    new_header = "{ " + ", ".join(all_args) + " }:"
-    return re.sub(r'^\s*\{[^}]*\}\s*:', new_header, content, count=1,
-                  flags=re.MULTILINE | re.DOTALL)
-
-
-def _hm_patch_init_extra(content: str, new_extra: str) -> str:
-    for shell, key in [("bash", "initExtra"), ("zsh", "initExtra"), ("fish", "shellInit")]:
-        if not re.search(rf'programs\.{shell}\s*=\s*\{{', content):
-            continue
-        ek = re.escape(key)
-        if new_extra:
-            indented = "\n".join(f"      {ln}" for ln in new_extra.splitlines())
-            def _repl(_m, _k=key, _ind=indented):
-                return f"\n    {_k} = ''\n{_ind}\n    '';"
-            patched = re.sub(
-                rf'\s*{ek}\s*=\s*\'\'[\s\S]*?\'\'[ \t]*;',
-                _repl, content, count=1
-            )
-            if patched != content:
-                return patched
-            # Not found: insert before closing of shell block
-            def _ins(_m, _k=key, _ind=indented):
-                body = _m.group(0)
-                close = body.rfind("};")
-                return body[:close] + f"    {_k} = ''\n{_ind}\n    '';\n  }};"
-            return re.sub(
-                rf'programs\.{shell}\s*=\s*\{{[\s\S]*?\n  \}};',
-                _ins, content, count=1
-            )
-        else:
-            return re.sub(
-                rf'\s*{ek}\s*=\s*\'\'[\s\S]*?\'\'[ \t]*;',
-                '', content, count=1
-            )
-    return content
-
-
-def _hm_patch_packages(content: str, packages: list) -> str:
-    pkg_re = re.compile(
-        r'(\s*)home\.packages\s*=(?:\s*with\s+pkgs\s*;)?\s*\[[\s\S]*?\]\s*;'
-    )
-    m = pkg_re.search(content)
-    if m:
-        indent = m.group(1).replace('\n', '')
-        if packages:
-            pkg_lines = "\n".join(f"{indent}  pkgs.{p}" for p in packages)
-            new_block = f"{indent}home.packages = [\n{pkg_lines}\n{indent}];"
-            return content[:m.start()] + "\n" + new_block + content[m.end():]
-        return content[:m.start()] + content[m.end():]
-    if packages:
-        indent = "  "
-        pkg_lines = "\n".join(f"{indent}  pkgs.{p}" for p in packages)
-        new_block = f"\n{indent}home.packages = [\n{pkg_lines}\n{indent}];"
-        return re.sub(r'(\n\}\n)', rf'{new_block}\1', content, count=1)
-    return content
-
-
-def _hm_update_hash(content: str) -> str:
-    canonical = re.sub(
-        r'^# nico-version: (?:[a-z]+#)?[0-9a-f]{8}\n', '',
-        content, count=1, flags=re.MULTILINE
-    )
-    new_hash = hashlib.sha256(canonical.encode()).hexdigest()[:8]
-    return re.sub(
-        r'^(# nico-version: (?:[a-z]+#)?)[0-9a-f]{8}',
-        rf'\g<1>{new_hash}',
-        content, count=1, flags=re.MULTILINE
-    )
-
-
-def _normalize_hm_content(content: str) -> tuple[str, dict]:
-    """Return normalized HM content plus extracted/derived brick blocks."""
-    existing_bricks = extract_brick_blocks(content)
-    clean_content = strip_brick_blocks(content)
-    hm = importer.parse_home_config(clean_content)
-    blocks = dict(existing_bricks)
-    rest = importer.build_home_rest_brix(clean_content, hm)
-    if rest.strip():
-        rest_blocks = brix_content_to_bricks(rest, section="End", existing_blocks=blocks)
-        blocks.update(rest_blocks)
-    hm_data = dict(hm)
-    hm_data["hm_brick_blocks"] = blocks
-    return hm_generator.generate_home_nix(hm_data), blocks
-
-
-def _insert_type(content: str, ftype: str) -> str:
-    """Rewrite the nico-version line to prepend <ftype># before the hash."""
-    return _VERSION_NOTYPE_RE.sub(rf'\g<1>{ftype}#\g<2>', content, count=1)
-
-
-_VERSION_WITHTYPE_RE = re.compile(
-    r'^(# nico-version: )[a-z]+#([0-9a-f]{8})', re.MULTILINE
-)
-_VALID_FILE_TYPES = frozenset({"co", "nd", "fl", "mo", "hm", "hw"})
-
-# Kommentarzeilen die NiCo vor die nico-version-Zeile setzt
-_NICO_HEADER = (
-    "# Generated by NiCo – NixOS Configurator\n"
-    "# Do not edit manually. Use NiCo or add custom Nix via Nix-Brix.\n"
-)
-
-
-_VERSION_ANY_RE = re.compile(
-    r'^# nico-version: (?:[a-z]+#)?[0-9a-f]{8}\n?', re.MULTILINE
-)
-
-
-def _set_type_in_content(content: str, ftype: str) -> str:
-    """Replace or insert the type code in the nico-version line, recomputing the hash.
-
-    Handles all three cases:
-      - type already present  → remove old line, recompute hash, write new line
-      - no type, has hash     → remove old line, recompute hash, write new line
-      - no nico-version line  → prepend nico-version line (+ NiCo header for CO only)
-    """
-    if _VERSION_ANY_RE.search(content):
-        # Remove the existing nico-version line to get canonical content for hashing
-        canonical = _VERSION_ANY_RE.sub('', content, count=1)
-        h = hashlib.sha256(canonical.encode()).hexdigest()[:8]
-        new_line = f"# nico-version: {ftype}#{h}\n"
-        return _VERSION_ANY_RE.sub(new_line, content, count=1)
-    # Keine nico-version-Zeile → nico-version-Zeile an den Anfang
-    # CO-Dateien erhalten zusätzlich den _NICO_HEADER.
-    # Wichtig: Der Hash muss auf dem Canonical berechnet werden, also dem was
-    # check_version_hash als Canonical sieht: alles außer der nico-version-Zeile.
-    # Da _NICO_HEADER in der Datei VOR der nico-version-Zeile steht, ist
-    # Canonical für co-Dateien = _NICO_HEADER + content.
-    if ftype == 'co':
-        canonical = _NICO_HEADER + content
-        h = hashlib.sha256(canonical.encode()).hexdigest()[:8]
-        nico_line = f"# nico-version: {ftype}#{h}\n"
-        return f"{_NICO_HEADER}{nico_line}{content}"
-    h = hashlib.sha256(content.encode()).hexdigest()[:8]
-    nico_line = f"# nico-version: {ftype}#{h}\n"
-    return f"{nico_line}{content}"
-
-
-_SAFE_NAME_RE = re.compile(r"^[^/\\]+$")
-
-
-# Filesystem prefixes that NiCo must never write to
-_FORBIDDEN_PATH_PREFIXES = [
-    Path('/etc'), Path('/usr'), Path('/bin'), Path('/sbin'),
-    Path('/lib'), Path('/lib64'), Path('/proc'), Path('/sys'),
-    Path('/dev'), Path('/run'), Path('/boot'), Path('/nix/store'),
-    Path('/root'), Path('/var'),
-]
-
-
-def _clean_nix_error(raw: str, tmpfile: str) -> str:
-    """
-    Make nix-instantiate error output more readable:
-      - Replace the temp file path with '<config>'
-      - Strip leading 'error:' boilerplate lines that repeat the file path
-    """
-    import re as _re
-    cleaned = raw.replace(tmpfile, "<config>")
-    # Remove the first line if it is just "error:" or a bare path reference
-    lines = cleaned.splitlines()
-    # Remove leading blank lines
-    while lines and not lines[0].strip():
-        lines.pop(0)
-    return "\n".join(lines)
-
-
-def _validate_user_path(raw: str):
-    """
-    Validate a user-provided filesystem path.
-    Returns (resolved_path, None) on success or (None, error_str) on failure.
-    Blocks path traversal (via Path.resolve) and known system directories.
-    """
-    if not raw or not raw.strip():
-        return None, "ERR_NO_DIR"
-    try:
-        p = Path(raw).expanduser().resolve()
-    except Exception:
-        return None, "ERR_INVALID_PATH"
-    for prefix in _FORBIDDEN_PATH_PREFIXES:
-        try:
-            p.relative_to(prefix)
-            return None, "ERR_SYSTEM_PATH"
-        except ValueError:
-            pass
-    return p, None
-
-
-def _scan_flake_hosts(flake_path: Path) -> list[str]:
-    """
-    Scan an external flake.nix for nixosConfigurations host names.
-    Used only when NiCo has no internal knowledge of the hosts (external file).
-    Simple line-by-line scan – no full Nix parser needed for this pattern.
-    """
-    try:
-        content = flake_path.read_text(encoding="utf-8")
-    except OSError:
-        return []
-    # Match: nixosConfigurations.hostname  or  nixosConfigurations."hostname"
-    found: list[str] = []
-    for m in re.finditer(r'nixosConfigurations\s*\.\s*"?([\w-]+)"?', content):
-        h = m.group(1)
-        if h not in found:
-            found.append(h)
-    return found
-
-
-def _get_flake_hosts(nixos_dir: str, data: dict) -> list[str]:
-    """
-    Return all flake host names for rebuild.
-    Primary source is the current flake.nix on disk so dry-run matches the
-    host picker. Exotic Brix hosts are added as a fallback.
-    """
-    hosts: list[str] = []
-
-    flake_path = Path(nixos_dir) / "flake.nix"
-    if flake_path.exists():
-        try:
-            flake_data = dict(data)
-            flake_data.update(importer.parse_flake_nix(flake_path.read_text(encoding="utf-8")))
-            for h in flake_data.get("flake_hosts") or []:
-                name = h.get("name", "")
-                if name and name not in hosts:
-                    hosts.append(name)
-        except OSError:
-            pass
-
-    # Fallback: panel-managed hosts from already loaded data
-    for h in data.get("flake_hosts") or []:
-        name = h.get("name", "")
-        if name and name not in hosts:
-            hosts.append(name)
-
-    # Exotic host names from Brix blocks in flake.nix
-    if flake_path.exists():
-        try:
-            brix = extract_brick_blocks(flake_path.read_text(encoding="utf-8"))
-            for bname, block in brix.items():
-                if block.get("section") == "Outputs-Hosts" and bname not in hosts:
-                    hosts.append(bname)
-                elif bname == "outputs-declaration" and block.get("section") == "Outputs":
-                    # Legacy outputs-declaration: scan inside for host names
-                    body = _brick_body(block["text"])
-                    for m in re.finditer(r'\b([\w-]+)\s*=\s*nixpkgs\.lib\.nixosSystem', body):
-                        h = m.group(1)
-                        if h not in hosts:
-                            hosts.append(h)
-        except OSError:
-            pass
-
-    if not hosts:
-        single = (data.get("hostname") or "nixos").strip()
-        if single:
-            hosts.append(single)
-
-    return hosts or ["nixos"]
-
-
-def _flake_outputs_modify_host(brix_text: str, action: str, host_name: str) -> str | None:
-    """Add or remove a nixosSystem host entry inside the nixosConfigurations block
-    of an outputs-declaration Brix body.  Returns the modified body or None."""
-    body = _brick_body(brix_text)
-
-    # Locate nixosConfigurations = { ... }
-    m = re.search(r'\bnixosConfigurations\s*=\s*\{', body)
-    if not m:
-        return None
-    brace_start = body.index('{', m.start())
-    depth, i, cfg_end = 0, brace_start, len(body)
-    while i < len(body):
-        if body[i] == '{':
-            depth += 1
-        elif body[i] == '}':
-            depth -= 1
-            if depth == 0:
-                cfg_end = i
-                break
-        i += 1
-
-    cfg_body = body[brace_start + 1:cfg_end]
-
-    def _extract_system_block(text: str, sys_match) -> tuple[int, int]:
-        """Return (start, end) of the full '<name> = nixpkgs.lib.nixosSystem { ... };'."""
-        bp = text.index('{', sys_match.end() - 1)
-        d, j, end = 0, bp, len(text)
-        while j < len(text):
-            if text[j] == '{':
-                d += 1
-            elif text[j] == '}':
-                d -= 1
-                if d == 0:
-                    end = j + 1
-                    while end < len(text) and text[end] in ' \t':
-                        end += 1
-                    if end < len(text) and text[end] == ';':
-                        end += 1
-                    break
-            j += 1
-        return sys_match.start(), end
-
-    if action == 'add':
-        sys_m = re.search(
-            r'\s+[\w-]+\s*=\s*nixpkgs\.lib\.nixosSystem\s*\{', cfg_body
-        )
-        if not sys_m:
-            return None
-        src_name = re.search(r'([\w-]+)\s*=\s*nixpkgs', sys_m.group()).group(1)
-        start_pos, end_pos = _extract_system_block(cfg_body, sys_m)
-        template_block = cfg_body[start_pos:end_pos]
-        new_block = (
-            template_block
-            .replace(f'{src_name} =', f'{host_name} =', 1)
-            .replace(f'./hosts/{src_name}/', f'./hosts/{host_name}/')
-            .replace(f'./hosts/{src_name}', f'./hosts/{host_name}')
-        )
-        new_cfg_body = cfg_body.rstrip('\n') + '\n' + new_block + '\n'
-
-    elif action == 'remove':
-        sys_m = re.search(
-            r'\s+' + re.escape(host_name) + r'\s*=\s*nixpkgs\.lib\.nixosSystem\s*\{',
-            cfg_body,
-        )
-        if not sys_m:
-            return None
-        start_pos, end_pos = _extract_system_block(cfg_body, sys_m)
-        new_cfg_body = cfg_body[:start_pos] + cfg_body[end_pos:]
-    else:
-        return None
-
-    return body[:brace_start + 1] + new_cfg_body + body[cfg_end:]
-
-
-def _modify_brick_in_file(
-    nixos_dir: str,
-    fname: str,
-    modifier,   # callable: dict[str, dict] -> dict[str, dict]
-) -> tuple[bool, str]:
-    """
-    Read fname, apply modifier(blocks) → new_blocks, strip old brick markers,
-    inject new_blocks, recompute hash, write back.
-    Returns (success, error_key_or_empty).
-    """
-    root  = Path(nixos_dir).resolve()
-    fpath = (root / fname).resolve()
-    try:
-        fpath.relative_to(root)
-    except ValueError:
-        return False, "ERR_SYSTEM_PATH"
-    if not fpath.exists():
-        return False, "ERR_FILE_NOT_FOUND"
-    try:
-        content = fpath.read_text(encoding="utf-8")
-    except OSError:
-        return False, "ERR_READ"
-
-    ftype = _get_nico_type(content)
-    if ftype is None or ftype == "":
-        ftype = "nd"
-
-    if ftype == "hm":
-        try:
-            content, blocks = _normalize_hm_content(content)
-        except Exception:
-            blocks = extract_brick_blocks(content)
-    else:
-        blocks = extract_brick_blocks(content)
-    new_blocks = modifier(blocks)
-    clean      = strip_brick_blocks(content)
-    with_brick = inject_brick_blocks(clean, new_blocks)
-    final      = _set_type_in_content(with_brick, ftype)
-
-    try:
-        fpath.write_text(final, encoding="utf-8")
-    except OSError:
-        return False, "ERR_WRITE"
-
-    return True, ""
-
-
-def _brick_body(text: str) -> str:
-    """Extract body lines from a formatted brick text (strips start/end marker lines)."""
-    lines = text.splitlines(keepends=True)
-    if len(lines) >= 2:
-        return "".join(lines[1:-1])
-    return ""
 
 
 _THEMES_DIR = Path(__file__).parent / "static" / "themes"
@@ -512,12 +99,6 @@ def create_app() -> Flask:
         if not secrets.compare_digest(token, _csrf_token):
             return jsonify({"error": "ERR_CSRF"}), 403
         return None
-
-    def _run_enabled_validation(nixos_dir: str, config: dict | None, host: str | None = None) -> list[dict]:
-        from . import validator as _val
-        cfg_settings = config_manager.load_config_settings(nixos_dir)
-        enabled_rules = cfg_settings.get("validation_rules") or _val.default_validation_rules()
-        return _val.run_validation(nixos_dir, enabled_rules, config or {}, host=host)
 
     # ------------------------------------------------------------------ routes
 
