@@ -543,17 +543,33 @@ def _rule_snapper_btrfs(nixos_dir: str, config: dict, is_flake: bool,
                         host: str | None = None) -> list[Finding]:
     if not config.get("snapper_enable"):
         return []
+
+    def _snapper_target(name: str, mount: str) -> str:
+        label = f'Snapper "{name}"' if name else f'Snapper-Mountpoint "{mount}"'
+        if host:
+            return f'{label} in Host "{host}"'
+        return label
+
     findings = []
     for entry in (config.get("snapper_configs") or []):
         mount = (entry.get("mountpoint") or "").strip()
         name  = (entry.get("name") or "").strip()
         if not mount:
             continue
+        target = _snapper_target(name, mount)
+        if not os.path.exists(mount):
+            findings.append(Finding(
+                rule_id="snapper_btrfs",
+                severity="error",
+                message=f'{target}: Mountpoint "{mount}" existiert nicht.',
+                detail="Der eingetragene Pfad muss auf diesem System vorhanden sein.",
+            ))
+            continue
         if not os.path.ismount(mount):
             findings.append(Finding(
                 rule_id="snapper_btrfs",
                 severity="error",
-                message=f'Snapper "{name}": Mountpoint "{mount}" ist nicht gemountet.',
+                message=f'{target}: Mountpoint "{mount}" ist nicht gemountet.',
                 detail="Snapper kann nur auf gemountete Dateisysteme angewendet werden.",
             ))
             continue
@@ -569,7 +585,7 @@ def _rule_snapper_btrfs(nixos_dir: str, config: dict, is_flake: bool,
             findings.append(Finding(
                 rule_id="snapper_btrfs",
                 severity="error",
-                message=f'Snapper "{name}": "{mount}" ist kein btrfs-Dateisystem (erkannt: "{fstype}").',
+                message=f'{target}: "{mount}" ist kein btrfs-Dateisystem (erkannt: "{fstype}").',
                 detail="Snapper unterstützt nur btrfs. Der Mountpoint muss ein btrfs-Subvolume sein.",
             ))
     return findings

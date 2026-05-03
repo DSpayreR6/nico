@@ -513,6 +513,12 @@ def create_app() -> Flask:
             return jsonify({"error": "ERR_CSRF"}), 403
         return None
 
+    def _run_enabled_validation(nixos_dir: str, config: dict | None, host: str | None = None) -> list[dict]:
+        from . import validator as _val
+        cfg_settings = config_manager.load_config_settings(nixos_dir)
+        enabled_rules = cfg_settings.get("validation_rules") or _val.default_validation_rules()
+        return _val.run_validation(nixos_dir, enabled_rules, config or {}, host=host)
+
     # ------------------------------------------------------------------ routes
 
     # Cache-buster: changes every server restart so browsers always reload static files
@@ -836,13 +842,10 @@ def create_app() -> Flask:
         nixos_dir, err = _require_setup()
         if err:
             return err
-        from . import validator as _val
-        cfg_settings  = config_manager.load_config_settings(nixos_dir)
-        enabled_rules = cfg_settings.get("validation_rules") or _val.default_validation_rules()
         config        = config_manager.load_config(nixos_dir)
         body          = request.get_json(silent=True) or {}
         host          = body.get("host") or None
-        findings      = _val.run_validation(nixos_dir, enabled_rules, config, host=host)
+        findings      = _run_enabled_validation(nixos_dir, config, host=host)
         return jsonify({"findings": findings})
 
     @app.route("/api/app/settings", methods=["GET"])
@@ -2485,7 +2488,6 @@ def create_app() -> Flask:
 
         body   = request.get_json(silent=True) or {}
         stored = config_manager.load_config(nixos_dir) or {}
-
         use_flake    = stored.get("flakes", False)
         update_flake = bool(body.get("update_flake", False)) and use_flake
 
