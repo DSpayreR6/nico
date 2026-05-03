@@ -4464,6 +4464,11 @@ async function openRebuild(mode = 'switch') {
   const fetchRemainEl= document.getElementById('rph-fetch-remain');
   const fetchCopyEl  = document.getElementById('rph-fetch-copy');
 
+  // Batched log rendering – prevents per-line reflow in Firefox
+  const MAX_LOG_LINES = 500;
+  let _logBuffer = [];
+  let _logRafId  = null;
+
   function _resetMonitor() {
     if (_logRafId) { cancelAnimationFrame(_logRafId); _logRafId = null; }
     _logBuffer = [];
@@ -4504,11 +4509,6 @@ async function openRebuild(mode = 'switch') {
   let maxDlExpected = 0;
   let maxCopiedTotal = 0;
   let maxCopiedExpected = 0;
-
-  // Batched log rendering – prevents per-line reflow in Firefox
-  const MAX_LOG_LINES = 500;
-  let _logBuffer = [];
-  let _logRafId  = null;
 
   function _flushLog() {
     _logRafId = null;
