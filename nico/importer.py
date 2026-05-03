@@ -1186,13 +1186,16 @@ def parse_home_config(nix_content: str) -> dict:
 
     r: dict = dict(HM_DEFAULTS)
     r["enabled"] = True
+    core_args = {"config", "pkgs", "lib"}
 
     m_args = re.search(r'^\s*\{([^}]*)\}\s*:', nix_content, re.MULTILINE)
     if m_args:
         r["args"] = [
             arg.strip()
             for arg in m_args.group(1).split(',')
-            if arg.strip() and arg.strip() != '...'
+            if arg.strip()
+            and arg.strip() != '...'
+            and arg.strip() not in core_args
         ]
 
     def _s(pat: str) -> str | None:
