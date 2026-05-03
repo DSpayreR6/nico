@@ -1187,6 +1187,14 @@ def parse_home_config(nix_content: str) -> dict:
     r: dict = dict(HM_DEFAULTS)
     r["enabled"] = True
 
+    m_args = re.search(r'^\s*\{([^}]*)\}\s*:', nix_content, re.MULTILINE)
+    if m_args:
+        r["args"] = [
+            arg.strip()
+            for arg in m_args.group(1).split(',')
+            if arg.strip() and arg.strip() != '...'
+        ]
+
     def _s(pat: str) -> str | None:
         m = re.search(pat, nix_content, re.DOTALL | re.MULTILINE)
         return m.group(1).strip() if m else None

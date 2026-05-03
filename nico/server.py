@@ -435,7 +435,13 @@ def _modify_brick_in_file(
     if ftype is None or ftype == "":
         ftype = "nd"
 
-    blocks     = extract_brick_blocks(content)
+    if ftype == "hm":
+        try:
+            content, blocks = _normalize_hm_content(content)
+        except Exception:
+            blocks = extract_brick_blocks(content)
+    else:
+        blocks = extract_brick_blocks(content)
     new_blocks = modifier(blocks)
     clean      = strip_brick_blocks(content)
     with_brick = inject_brick_blocks(clean, new_blocks)
