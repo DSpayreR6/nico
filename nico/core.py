@@ -27,6 +27,8 @@ _FILENAME_TYPE_HINTS: dict[str, str] = {
 }
 
 _VALID_FILE_TYPES = frozenset({"co", "nd", "fl", "mo", "hm", "hw"})
+_READABLE_SUFFIXES = {".nix", ".lock", ".json", ".md"}
+_WRITABLE_SUFFIXES = {".nix"}
 
 
 def classify_filename(name: str) -> str | None:
@@ -435,6 +437,170 @@ def clean_nix_error(raw: str, tmpfile: str) -> str:
     while lines and not lines[0].strip():
         lines.pop(0)
     return "\n".join(lines)
+
+
+# ── Shared filesystem helpers ────────────────────────────────────────────────
+
+def _resolve_config_rel(root: Path, rel_path: str) -> Path:
+    target = (root / rel_path).resolve()
+    target.relative_to(root)
+    return target
+
+
+def list_config_tree(nixos_dir: str) -> dict:
+    """Return the visible config tree, matching the web UI rules."""
+    root = Path(nixos_dir).resolve()
+    cfg_settings = config_manager.load_config_settings(nixos_dir)
+    hm_dir = cfg_settings.get("hm_dir", "home").strip() or "home"
+    app_settings = config_manager.get_app_settings()
+    show_flake_lock = bool(app_settings.get("show_flake_lock", False))
+
+    def _classify_by_path(item: Path) -> str | None:
+        rel = item.relative_to(root)
+        parts = rel.parts
+        if len(parts) >= 2 and parts[0] == hm_dir:
+            return "hm"
+        return classify_filename(item.name)
+
+    def _build_tree(directory: Path) -> list[dict]:
+        entries: list[dict] = []
+        try:
+            items = sorted(directory.iterdir(), key=lambda p: (p.is_file(), p.name.lower()))
+        except PermissionError:
+            return entries
+        for item in items:
+            if item.name.startswith(".") or (item.name == "nico" and item.is_dir()):
+                continue
+            rel_path = str(item.relative_to(root))
+            if item.is_dir():
+                entries.append({
+                    "name": item.name,
+                    "type": "dir",
+                    "path": rel_path,
+                    "children": _build_tree(item),
+                })
+            elif item.suffix == ".nix":
+                entries.append({
+                    "name": item.name,
+                    "type": "file",
+                    "path": rel_path,
+                    "file_type": _FILENAME_TYPE_HINTS.get(item.name) or _classify_by_path(item),
+                })
+            elif item.name == "flake.lock" and show_flake_lock:
+                entries.append({
+                    "name": item.name,
+                    "type": "file",
+                    "path": rel_path,
+                    "file_type": "flk",
+                })
+        return entries
+
+    return {"tree": _build_tree(root), "root": str(root)}
+
+
+def read_config_file(nixos_dir: str, rel_path: str) -> dict:
+    """Read a config-relative file with the same normalization rules as the web UI."""
+    rel = (rel_path or "").strip()
+    if not rel:
+        raise ValueError("ERR_NO_PATH")
+
+    root = Path(nixos_dir).resolve()
+    target = _resolve_config_rel(root, rel)
+
+    if target.suffix not in _READABLE_SUFFIXES:
+        raise ValueError("ERR_FILE_TYPE")
+    if not target.exists():
+        raise FileNotFoundError("ERR_FILE_NOT_FOUND")
+
+    content = target.read_text(encoding="utf-8")
+
+    if target.name == "flake.lock":
+        return {"content": content, "path": rel, "file_type": "flk", "writable": False}
+
+    hint_type = _FILENAME_TYPE_HINTS.get(target.name)
+    cfg_settings = config_manager.load_config_settings(nixos_dir)
+    hm_dir = cfg_settings.get("hm_dir", "home").strip() or "home"
+    rel_parts = Path(rel).parts
+    path_type = "hm" if len(rel_parts) >= 2 and rel_parts[0] == hm_dir else None
+
+    ftype = get_nico_type(content)
+    if ftype == "":
+        stamp = hint_type or path_type or classify_filename(target.name) or "nd"
+        content = insert_type(content, stamp)
+        try:
+            target.write_text(content, encoding="utf-8")
+        except OSError:
+            pass
+        ftype = stamp
+    elif ftype is not None:
+        override = hint_type or path_type
+        if override and override != ftype:
+            content = insert_type(content, override)
+            try:
+                target.write_text(content, encoding="utf-8")
+            except OSError:
+                pass
+            ftype = override
+
+    if ftype == "hm":
+        try:
+            content, _ = normalize_hm_content(content)
+        except Exception:
+            pass
+
+    return {
+        "content": content,
+        "path": rel,
+        "file_type": ftype,
+        "writable": target.suffix in _WRITABLE_SUFFIXES,
+    }
+
+
+def write_raw_config_file(
+    nixos_dir: str,
+    rel_path: str,
+    content: str,
+    *,
+    label: str = "",
+    commit: bool = True,
+) -> dict:
+    """Write a raw .nix file inside the config directory."""
+    rel = (rel_path or "").strip()
+    if not rel:
+        raise ValueError("ERR_NO_PATH")
+
+    root = Path(nixos_dir).resolve()
+    target = _resolve_config_rel(root, rel)
+
+    if target.suffix not in _WRITABLE_SUFFIXES:
+        raise ValueError("ERR_FILE_TYPE")
+
+    cfg_settings = config_manager.load_config_settings(nixos_dir)
+    hm_dir = cfg_settings.get("hm_dir", "home").strip() or "home"
+    rel_parts = Path(rel).parts
+    is_hm_path = len(rel_parts) >= 2 and rel_parts[0] == hm_dir
+    if is_hm_path or classify_filename(target.name) == "hm":
+        content, _ = normalize_hm_content(content)
+
+    target.write_text(content, encoding="utf-8")
+
+    if commit:
+        try:
+            git_manager.auto_commit(nixos_dir, label=label)
+        except Exception:
+            pass
+
+    result = {"success": True, "written": [rel]}
+    try:
+        cfg = config_manager.load_config_settings(nixos_dir)
+        if cfg.get("push_after_save"):
+            ok, msg, code = git_manager.git_push(nixos_dir)
+            result["pushed"] = ok
+            result["push_error"] = "" if ok else msg
+            result["push_error_code"] = "" if ok else code
+    except Exception:
+        pass
+    return result
 
 
 # ── Config load / write orchestration ─────────────────────────────────────────
