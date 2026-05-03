@@ -331,9 +331,11 @@ def _rule_hardware_matches(nixos_dir: str, config: dict, is_flake: bool,
 def _rule_duplicate_attrs(nixos_dir: str, config: dict, is_flake: bool,
                           host: str | None = None) -> list[Finding]:
     findings = []
-    targets = [Path(nixos_dir) / "configuration.nix"]
-    if is_flake:
-        targets.append(Path(nixos_dir) / "flake.nix")
+    base = Path(nixos_dir)
+    targets = [
+        nix_file for nix_file in sorted(base.rglob("*.nix"))
+        if ".git" not in nix_file.parts
+    ]
 
     for nix_file in targets:
         if not nix_file.exists():
@@ -372,10 +374,14 @@ def _rule_duplicate_attrs(nixos_dir: str, config: dict, is_flake: bool,
                 f"'{k}' mehrfach: " + ", ".join(f"Zeile {l}" for l in lines)
                 for k, lines in sorted(dupes.items())
             ]
+            try:
+                label = str(nix_file.relative_to(base))
+            except ValueError:
+                label = nix_file.name
             findings.append(Finding(
                 rule_id="duplicate_attrs",
                 severity="error",
-                message=f"{nix_file.name}: Doppelte Attribute gefunden.",
+                message=f"{label}: Doppelte Attribute gefunden.",
                 detail="\n".join(parts),
             ))
     return findings

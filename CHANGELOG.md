@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Viele Bugfixes
+
+- Flake-Hostblöcke werden wieder vollständig als Host-Brix konserviert; `specialArgs` und andere Host-spezifische Inhalte gehen beim Roundtrip nicht mehr verloren
+- Die Validierungsregel für doppelte Attribute prüft jetzt alle relevanten `.nix`-Dateien der Config, also auch Hostdateien
+
 ### Snapper: dynamische Subvolume-Konfiguration
 
 Die Snapper-Konfiguration ist vollständig neu gestaltet. Die bisherigen Festeinträge für `/` und `/home` sind entfernt; stattdessen gibt es einen Master-Schalter und ein Karten-System analog zum Benutzer-Panel. Pro Karte werden Config-Name, Mountpoint und ein eigener Snapshot-Zeitplan konfiguriert. Beliebig viele Subvolumes sind möglich.

@@ -1658,13 +1658,6 @@ def _iter_flake_hosts(content: str) -> list[tuple[str, str, str]]:
     return hosts
 
 
-def _is_exotic_nixos_system(host_block: str) -> bool:
-    """Return True if a nixosSystem { ... } block has parameters NiCo can't
-    represent in the panel (anything beyond system, modules, specialArgs).
-    specialArgs is always panel-safe (stored as textarea regardless of content)."""
-    return bool(re.search(r'\b(pkgs|lib|config|options)\s*=', host_block))
-
-
 # Known input names that NiCo manages via panel fields
 _KNOWN_INPUTS = frozenset({"nixpkgs", "home-manager", "nixos-hardware", "plasma-manager"})
 
@@ -1679,14 +1672,12 @@ def build_flake_brix(content: str) -> dict:
 
     Logic:
     - Unknown inputs      → Brix in "Inputs-Extra"
-    - Exotic hosts        → Brix in "Outputs-Hosts" (per-host decision)
-    - Non-exotic hosts    → panel handles (no Brix created)
+    - Every detected host  → one complete host-body Brix in "Host: <name>"
     - Other output keys   → Brix in "Outputs-Extra"
     """
     from .brix import format_brick
     brix: dict = {}
     order_inputs       = 1
-    order_outputs_host = 1
     order_outputs_extra = 1
 
     # ── inputs ────────────────────────────────────────────────────────────────
@@ -1723,43 +1714,18 @@ def build_flake_brix(content: str) -> dict:
             body_end = len(content)
         outputs_body = content[body_start + 1:body_end]
 
-        # Per-host decision: exotic → Brix, non-exotic → panel
+        # Every detected host is conserved as one complete host-body brick.
         nixos_cfg = _flake_extract_block(outputs_body, "nixosConfigurations")
         if nixos_cfg:
-            cfg_open  = nixos_cfg.index('{') + 1
-            cfg_close = nixos_cfg.rindex('}')
-            for host_entry in _flake_split_attrs(nixos_cfg[cfg_open:cfg_close]):
-                host_name = _flake_attr_name(host_entry)
-                if not host_name:
-                    continue
-                sys_m = re.search(r'nixosSystem\s*\{', host_entry)
-                if not sys_m:
-                    # Unknown host structure → Brix
-                    brix[host_name] = {
-                        "section": "Outputs-Hosts",
-                        "order":   order_outputs_host,
-                        "text":    format_brick("Outputs-Hosts", order_outputs_host, host_name, host_entry),
-                    }
-                    order_outputs_host += 1
-                    continue
-                sys_start = host_entry.index('{', sys_m.start())
-                depth2, j = 0, sys_start
-                while j < len(host_entry):
-                    if host_entry[j] == '{':
-                        depth2 += 1
-                    elif host_entry[j] == '}':
-                        depth2 -= 1
-                        if depth2 == 0:
-                            sys_block = host_entry[sys_start:j + 1]
-                            if _is_exotic_nixos_system(sys_block):
-                                brix[host_name] = {
-                                    "section": "Outputs-Hosts",
-                                    "order":   order_outputs_host,
-                                    "text":    format_brick("Outputs-Hosts", order_outputs_host, host_name, host_entry),
-                                }
-                                order_outputs_host += 1
-                            break
-                    j += 1
+            for host_name, _, sys_block in _iter_flake_hosts(content):
+                section = flake_host_section(host_name)
+                brick_name = flake_host_brick_name(host_name)
+                body = _nixos_system_body(sys_block)
+                brix[brick_name] = {
+                    "section": section,
+                    "order": 1,
+                    "text": format_brick(section, 1, brick_name, body),
+                }
 
         # Other output keys (formatter etc.) → "Outputs-Extra"
         for entry in _flake_split_attrs(outputs_body):
