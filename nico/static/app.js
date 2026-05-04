@@ -1732,6 +1732,10 @@ async function saveSectionsSettings() {
 
 /** POST /api/validate and show the results overlay. */
 async function runValidation() {
+  await Sidebar.flakeSave();
+  await _autoSave();
+  await _writeNix();
+
   // For flake configs with multiple hosts, ask which host to validate
   let host = null;
   if (_isFlakeConfig) {
@@ -4417,8 +4421,10 @@ async function openRebuild(mode = 'switch') {
   const opts = await _showRebuildOptions(hostInfo, { hostname, mode });
   if (opts === null) return;  // abgebrochen
 
-  // Flake-Formular speichern falls dirty
+  // Flake-Formular speichern falls dirty, dann alle Änderungen schreiben
   if (!await Sidebar.flakeSave()) return;
+  if (!await _autoSave()) return;
+  if (!await _writeNix()) return;
 
   // Terminal-Modus: Befehl in externem Terminal ausführen
   if (opts.useTerminal) {
@@ -5730,6 +5736,12 @@ function bindUI() {
     });
   });
 
+  async function _saveAllSilent() {
+    await Sidebar.flakeSave();
+    await _autoSave();
+    await _writeNix();
+  }
+
   // NixOS action dropdown
   (function initNixosMenu() {
     const menu  = document.getElementById('nixos-menu');
@@ -5739,7 +5751,9 @@ function bindUI() {
 
     function toggle(e) {
       e.stopPropagation();
+      const opening = drop.classList.contains('hidden');
       drop.classList.toggle('hidden');
+      if (opening) _saveAllSilent();
     }
     function close() { drop.classList.add('hidden'); }
 
