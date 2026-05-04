@@ -4273,7 +4273,7 @@ function _showHostPicker(hosts, { allowAll = false, title = '', defaultHost = nu
  * Die Voreinstellung des Toggles kommt aus dem Admin-Panel.
  * Nur bei Flake-Modus angezeigt.
  */
-async function _showRebuildOptions(hostInfo, { saveChoice = false, hostname = '', mode = 'switch' } = {}) {
+async function _showRebuildOptions(hostInfo, { hostname = '', mode = 'switch' } = {}) {
   if (!hostInfo.flake_mode) return { updateFlake: false, useTerminal: false };
 
   let defaultFlakeUpdate = false;
@@ -4373,16 +4373,6 @@ async function _showRebuildOptions(hostInfo, { saveChoice = false, hostname = ''
       const shutdownAfter   = !!shutdownCb.checked;
       const pushShutdownAfter = !!pushShutCb.checked;
       overlay.remove();
-      if (saveChoice) {
-        csrfFetch('/api/config/settings', {
-          method:  'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body:    JSON.stringify({ flake_update_on_rebuild: updateFlake }),
-        }).then(() => {
-          const adminToggle = document.getElementById('flake-update-toggle');
-          if (adminToggle) adminToggle.checked = updateFlake;
-        }).catch(() => {});
-      }
       resolve({ updateFlake, useTerminal, shutdownAfter, pushShutdownAfter });
     });
     overlay.querySelector('#_rbo-cancel').addEventListener('click', () => {
@@ -4424,8 +4414,7 @@ async function openRebuild(mode = 'switch') {
     }).catch(() => {});
   }
 
-  // Rebuild-Optionen abfragen; Wahl wird zurückgespeichert (Voreinstellung für nächsten Rebuild)
-  const opts = await _showRebuildOptions(hostInfo, { saveChoice: true, hostname, mode });
+  const opts = await _showRebuildOptions(hostInfo, { hostname, mode });
   if (opts === null) return;  // abgebrochen
 
   // Flake-Formular speichern falls dirty
