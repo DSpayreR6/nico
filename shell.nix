@@ -3,7 +3,6 @@ pkgs.mkShell {
   buildInputs = [
     pkgs.python312
     pkgs.python312Packages.flask
-    pkgs.python312Packages.textual
     pkgs.python312Packages.tree-sitter
     pkgs.tree-sitter-grammars.tree-sitter-nix
   ];
