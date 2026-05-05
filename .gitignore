@@ -21,6 +21,7 @@ manifest.md
 !nico/static/*.png
 featureplan.txt
 vorgaben.txt
+hinweisliste.txt
 vm-test.txt
 asdf
 config-vm

@@ -1732,6 +1732,10 @@ async function saveSectionsSettings() {
 
 /** POST /api/validate and show the results overlay. */
 async function runValidation() {
+  await Sidebar.flakeSave();
+  await _autoSave();
+  await _writeNix();
+
   // For flake configs with multiple hosts, ask which host to validate
   let host = null;
   if (_isFlakeConfig) {
@@ -4273,7 +4277,7 @@ function _showHostPicker(hosts, { allowAll = false, title = '', defaultHost = nu
  * Die Voreinstellung des Toggles kommt aus dem Admin-Panel.
  * Nur bei Flake-Modus angezeigt.
  */
-async function _showRebuildOptions(hostInfo, { saveChoice = false, hostname = '', mode = 'switch' } = {}) {
+async function _showRebuildOptions(hostInfo, { hostname = '', mode = 'switch' } = {}) {
   if (!hostInfo.flake_mode) return { updateFlake: false, useTerminal: false };
 
   let defaultFlakeUpdate = false;
@@ -4373,16 +4377,6 @@ async function _showRebuildOptions(hostInfo, { saveChoice = false, hostname = ''
       const shutdownAfter   = !!shutdownCb.checked;
       const pushShutdownAfter = !!pushShutCb.checked;
       overlay.remove();
-      if (saveChoice) {
-        csrfFetch('/api/config/settings', {
-          method:  'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body:    JSON.stringify({ flake_update_on_rebuild: updateFlake }),
-        }).then(() => {
-          const adminToggle = document.getElementById('flake-update-toggle');
-          if (adminToggle) adminToggle.checked = updateFlake;
-        }).catch(() => {});
-      }
       resolve({ updateFlake, useTerminal, shutdownAfter, pushShutdownAfter });
     });
     overlay.querySelector('#_rbo-cancel').addEventListener('click', () => {
@@ -4424,12 +4418,13 @@ async function openRebuild(mode = 'switch') {
     }).catch(() => {});
   }
 
-  // Rebuild-Optionen abfragen; Wahl wird zurückgespeichert (Voreinstellung für nächsten Rebuild)
-  const opts = await _showRebuildOptions(hostInfo, { saveChoice: true, hostname, mode });
+  const opts = await _showRebuildOptions(hostInfo, { hostname, mode });
   if (opts === null) return;  // abgebrochen
 
-  // Flake-Formular speichern falls dirty
+  // Flake-Formular speichern falls dirty, dann alle Änderungen schreiben
   if (!await Sidebar.flakeSave()) return;
+  if (!await _autoSave()) return;
+  if (!await _writeNix()) return;
 
   // Terminal-Modus: Befehl in externem Terminal ausführen
   if (opts.useTerminal) {
@@ -5741,6 +5736,12 @@ function bindUI() {
     });
   });
 
+  async function _saveAllSilent() {
+    await Sidebar.flakeSave();
+    await _autoSave();
+    await _writeNix();
+  }
+
   // NixOS action dropdown
   (function initNixosMenu() {
     const menu  = document.getElementById('nixos-menu');
@@ -5750,7 +5751,9 @@ function bindUI() {
 
     function toggle(e) {
       e.stopPropagation();
+      const opening = drop.classList.contains('hidden');
       drop.classList.toggle('hidden');
+      if (opening) _saveAllSilent();
     }
     function close() { drop.classList.add('hidden'); }
 
