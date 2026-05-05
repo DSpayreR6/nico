@@ -2,8 +2,7 @@
 NiCo business logic library.
 
 Contains all non-HTTP helpers previously scattered in server.py.
-Both the Flask web frontend (server.py) and the TUI can import from here
-without any Flask dependency.
+Can be imported independently of Flask (e.g. for testing or future frontends).
 """
 from __future__ import annotations
 
