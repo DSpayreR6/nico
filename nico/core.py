@@ -54,7 +54,7 @@ _VERSION_WITHTYPE_RE = re.compile(
     r'^(# nico-version: )[a-z]+#([0-9a-f]{8})', re.MULTILINE
 )
 _VERSION_ANY_RE = re.compile(
-    r'^# nico-version: (?:[a-z]+#)?[0-9a-f]{8}\n?', re.MULTILINE
+    r'^# nico-version: (?:[a-z]+#)?[0-9a-f]{8}(?:#[pr])?\n?', re.MULTILINE
 )
 
 NICO_HEADER = (
@@ -84,6 +84,36 @@ def insert_type(content: str, ftype: str) -> str:
     return _VERSION_NOTYPE_RE.sub(rf'\g<1>{ftype}#\g<2>', content, count=1)
 
 
+def get_panel_mode(content: str) -> str | None:
+    """Return the panel mode flag from the nico-version line, or None if absent.
+
+    Returns:
+      'p'  – panel active
+      'r'  – raw mode
+      None – no flag set (use config default)
+    """
+    m = re.search(
+        r'^# nico-version: (?:[a-z]+#)?[0-9a-f]{8}#([pr])', content, re.MULTILINE
+    )
+    return m.group(1) if m else None
+
+
+def set_panel_mode(content: str, mode: str) -> str:
+    """Set or replace the panel mode flag (#p or #r) in the nico-version line."""
+    return re.sub(
+        r'^(# nico-version: (?:[a-z]+#)?[0-9a-f]{8})(?:#[pr])?',
+        rf'\g<1>#{mode}',
+        content, count=1, flags=re.MULTILINE
+    )
+
+
+def check_brix_integrity(content: str) -> bool:
+    """Return True if all brix open/close markers are properly paired."""
+    opens  = len(re.findall(r'^# <brix:', content, re.MULTILINE))
+    closes = len(re.findall(r'^# </brix:', content, re.MULTILINE))
+    return opens == closes
+
+
 def set_type_in_content(content: str, ftype: str) -> str:
     """Replace or insert the type code in the nico-version line, recomputing the hash.
 
@@ -91,11 +121,14 @@ def set_type_in_content(content: str, ftype: str) -> str:
       - type already present  → remove old line, recompute hash, write new line
       - no type, has hash     → remove old line, recompute hash, write new line
       - no nico-version line  → prepend nico-version line (+ NiCo header for CO only)
+    Panel mode flag (#p/#r) is preserved when rewriting an existing line.
     """
     if _VERSION_ANY_RE.search(content):
-        canonical = _VERSION_ANY_RE.sub('', content, count=1)
-        h = hashlib.sha256(canonical.encode()).hexdigest()[:8]
-        new_line = f"# nico-version: {ftype}#{h}\n"
+        panel_flag   = get_panel_mode(content)
+        canonical    = _VERSION_ANY_RE.sub('', content, count=1)
+        h            = hashlib.sha256(canonical.encode()).hexdigest()[:8]
+        panel_suffix = f'#{panel_flag}' if panel_flag else ''
+        new_line     = f"# nico-version: {ftype}#{h}{panel_suffix}\n"
         return _VERSION_ANY_RE.sub(new_line, content, count=1)
     if ftype == 'co':
         canonical = NICO_HEADER + content
@@ -236,7 +269,7 @@ def hm_patch_packages(content: str, packages: list) -> str:
 
 def hm_update_hash(content: str) -> str:
     canonical = re.sub(
-        r'^# nico-version: (?:[a-z]+#)?[0-9a-f]{8}\n', '',
+        r'^# nico-version: (?:[a-z]+#)?[0-9a-f]{8}(?:#[pr])?\n', '',
         content, count=1, flags=re.MULTILINE
     )
     new_hash = hashlib.sha256(canonical.encode()).hexdigest()[:8]

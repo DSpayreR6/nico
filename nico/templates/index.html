@@ -1252,7 +1252,9 @@
             <span class="ni-icon ni-icon-alert-triangle" aria-hidden="true"></span>
             <span data-i18n="sidebar.hwWarnText">hardware-configuration.nix wird von NixOS automatisch generiert. Manuelle Änderungen können das System destabilisieren.</span>
           </div>
-          <p class="raw-panel-hint" data-i18n="sidebar.rawPanelHint">Diese Datei wird nicht von NiCo verwaltet. Du kannst sie rechts direkt bearbeiten und speichern.</p>
+          <p id="raw-panel-regular-hint" class="raw-panel-hint" data-i18n="sidebar.rawPanelHint">Diese Datei wird nicht von NiCo verwaltet. Du kannst sie rechts direkt bearbeiten und speichern.</p>
+          <p id="panel-off-hint" class="raw-panel-hint hidden" data-i18n="sidebar.panelOffHint">Panel deaktiviert. Die Datei kann rechts direkt bearbeitet werden.</p>
+          <p id="panel-off-source" class="raw-panel-hint hidden" style="font-size:0.82em;margin-top:4px;opacity:0.7"></p>
         </div>
 
         <!-- ── Typ-Panels (je ein Panel pro Datei-Typ) ──────────────────── -->
@@ -1333,6 +1335,11 @@
         <!-- Permanente Tab-Bar (immer sichtbar) -->
         <div class="tab-bar" role="tablist">
           <div id="active-file-label" class="active-file-label"></div>
+          <div id="panel-toggle" class="panel-toggle hidden">
+            <button id="panel-toggle-btn" class="panel-toggle-btn" data-mode="p">
+              <span id="panel-toggle-label" data-i18n="panelToggle.panel">Panel</span>
+            </button>
+          </div>
           <button id="preview-mode-btn" class="preview-mode-btn"
                   data-i18n-title="preview.modePanel"
                   title="Bearbeitung nur über Panel möglich"><span class="ni-icon ni-icon-eye" aria-hidden="true"></span></button>
@@ -1347,7 +1354,7 @@
                 <button id="tool-copy-file"   class="tools-item" data-i18n="tools.copyFile">Datei kopieren</button>
                 <button id="tool-code-search" class="tools-item" data-i18n="tools.codeSearch">Im Code suchen</button>
                 <button id="tool-set-type"    class="tools-item" data-i18n="tools.setType">Dateityp festlegen</button>
-                <div class="tools-separator"></div>
+                <div id="tool-brix-sep" class="tools-separator"></div>
                 <button id="tool-brix-insert" class="tools-item tools-item-brix" data-i18n="tools.brixInsert">+ Nix-Brick einfügen</button>
               </div>
             </div>
@@ -1896,6 +1903,17 @@
                 <span data-i18n="admin.settings.pushAfterRebuild">Nach erfolgreichem Rebuild automatisch pushen</span>
                 <span class="toggle-wrap">
                   <input type="checkbox" id="push-after-rebuild-toggle">
+                  <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                </span>
+              </label>
+            </div>
+
+            <!-- Panel-Default -->
+            <div style="margin-top:16px">
+              <label class="toggle-row" style="cursor:pointer">
+                <span data-i18n="admin.settings.panelDefault">Dateien standardmäßig im Raw-Modus öffnen</span>
+                <span class="toggle-wrap">
+                  <input type="checkbox" id="panel-default-toggle">
                   <span class="toggle-track"><span class="toggle-thumb"></span></span>
                 </span>
               </label>

@@ -688,6 +688,7 @@ async function loadConfig() {
   _brixContextFtype = 'co';
   hideIntegrityWarning();
   await _populateCoFormFromFile('configuration.nix');
+  Sidebar.refreshPanelToggle('configuration.nix', 'co');
 
   // Collapse everything on (re)load
   document.querySelectorAll('section.collapsible[data-section]').forEach(s =>
@@ -1387,6 +1388,25 @@ function _loadAdminSettings() {
     // HM-Verzeichnis
     const hmDirInput = document.getElementById('settings-hm-dir');
     if (hmDirInput) hmDirInput.value = data.hm_dir || 'home';
+
+    // Panel-Default
+    _panelDefault = data.panel_default || 'p';
+    const panelDefaultToggle = document.getElementById('panel-default-toggle');
+    if (panelDefaultToggle) {
+      panelDefaultToggle.checked = (_panelDefault === 'r');
+      if (!panelDefaultToggle.dataset.listenerAttached) {
+        panelDefaultToggle.dataset.listenerAttached = '1';
+        panelDefaultToggle.addEventListener('change', () => {
+          const newVal = panelDefaultToggle.checked ? 'r' : 'p';
+          _panelDefault = newVal;
+          csrfFetch('/api/config/settings', {
+            method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ panel_default: newVal }),
+          }).then(() => showToast(t('admin.settings.saved'), 'success'))
+            .catch(() => showToast(t('toast.error'), 'error'));
+        });
+      }
+    }
   }).catch(() => {});
 
   // Config-Einstellungen speichern
@@ -5262,6 +5282,7 @@ async function switchHost(hostName) {
     _brixTargetFile  = 'configuration.nix';
     _brixContextFile = 'configuration.nix';
     await _populateCoFormFromFile('configuration.nix');
+    Sidebar.refreshPanelToggle('configuration.nix', 'co');
     await updatePreview();
   } else {
     await loadHostConfig(hostName);
@@ -5330,6 +5351,7 @@ async function confirmClosePushPrompt() {
 
 async function loadHostConfig(hostName) {
   await _populateCoFormFromFile(`hosts/${hostName}/default.nix`);
+  Sidebar.refreshPanelToggle(`hosts/${hostName}/default.nix`, 'co');
   await updatePreview();
 }
 
@@ -6151,6 +6173,43 @@ const Sidebar = (() => {
     });
   }
 
+  // ── Panel-Toggle ──────────────────────────────────────────────────
+
+  document.getElementById('panel-toggle-btn')?.addEventListener('click', async () => {
+    if (!activeFile) return;
+    const btn      = document.getElementById('panel-toggle-btn');
+    const curMode  = btn?.dataset.mode || 'p';
+    const newMode  = curMode === 'r' ? 'p' : 'r';
+
+    // If currently in raw mode, include any unsaved edits in the request
+    let bodyContent = null;
+    if (_rawEditPath === activeFile.path) {
+      const editorBody = document.getElementById('raw-file-editor')?.value ?? '';
+      bodyContent = _rawEditHeader ? _rawEditHeader + '\n' + editorBody : editorBody;
+    }
+
+    try {
+      const payload = { path: activeFile.path, mode: newMode };
+      if (bodyContent !== null) payload.content = bodyContent;
+      const res  = await csrfFetch('/api/file/panel-mode', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (data.error) {
+        if (data.error === 'ERR_BRIX_INCOMPLETE') {
+          showToast(t('panelToggle.brixError'), 'error');
+        } else {
+          showToast(tErr(data.error), 'error');
+        }
+        return;
+      }
+      await _loadFileIntoView(activeFile.path, { skipTypeDialog: true });
+    } catch {
+      showToast(t('toast.error'), 'error');
+    }
+  });
+
   // ── Dateityp-Dialog ──────────────────────────────────────────────
 
   const _FILE_TYPES = [
@@ -6689,11 +6748,71 @@ const Sidebar = (() => {
   }
 
   // Aktiver Pfad der gerade im Raw-Editor angezeigten Datei
-  let _rawEditPath = null;
+  let _rawEditPath   = null;
+  // Header-Zeilen (nico-version + NiCo-Kommentare) der aktuellen Raw-Datei
+  let _rawEditHeader = '';
+  // Panel-Default aus Config-Settings ('p' oder 'r')
+  let _panelDefault  = 'p';
+
+  function _splitNicoHeader(content) {
+    const lines = content.split('\n');
+    let headerEnd = -1;
+    for (let i = 0; i < Math.min(lines.length, 6); i++) {
+      if (lines[i].startsWith('# nico-version:')) { headerEnd = i; break; }
+    }
+    if (headerEnd === -1) return { header: '', body: content };
+    const header = lines.slice(0, headerEnd + 1).join('\n');
+    const body   = lines.slice(headerEnd + 1).join('\n');
+    return { header, body: body.startsWith('\n') ? body.slice(1) : body };
+  }
+
+  function _getPanelModeFromContent(content) {
+    const m = content.match(/^# nico-version: (?:[a-z]+#)?[0-9a-f]{8}#([pr])/m);
+    return m ? m[1] : null;
+  }
+
+  function _effectivePanelMode(content) {
+    return _getPanelModeFromContent(content) ?? _panelDefault;
+  }
+
+  function _updatePanelToggle(ftype, content) {
+    const toggle = document.getElementById('panel-toggle');
+    const btn    = document.getElementById('panel-toggle-btn');
+    const label  = document.getElementById('panel-toggle-label');
+    if (!toggle || !btn) return;
+    const supportsPanels = ['co', 'fl', 'hm'].includes(ftype);
+    toggle.classList.toggle('hidden', !supportsPanels);
+    if (!supportsPanels) return;
+    const mode    = _effectivePanelMode(content);
+    const isPanel = mode !== 'r';
+    btn.dataset.mode = mode;
+    if (label) label.textContent = isPanel ? t('panelToggle.panel') : t('panelToggle.off');
+    btn.dataset.active = isPanel ? '1' : '0';
+  }
+
+  function _setRawModeUI(isRaw) {
+    document.getElementById('preview-mode-btn')?.classList.toggle('hidden', isRaw);
+    document.getElementById('tool-set-type')?.classList.toggle('hidden', isRaw);
+    document.getElementById('tool-brix-sep')?.classList.toggle('hidden', isRaw);
+    document.getElementById('tool-brix-insert')?.classList.toggle('hidden', isRaw);
+  }
 
   async function _renderFileIntoView(path, data, { skipTypeDialog = false } = {}) {
     const fileName = path.split('/').pop();
-    const ftype = data.file_type || 'unknown';
+    const ftype    = data.file_type || 'unknown';
+
+    _updatePanelToggle(ftype, data.content || '');
+
+    // Panel-capable files respect the #p/#r flag
+    const panelCapable = ['co', 'fl', 'hm'].includes(ftype);
+    if (panelCapable && _effectivePanelMode(data.content || '') === 'r') {
+      _showRawView(data.content || '', fileName, path);
+      _showLeftPanel('panel-off', fileName, { panelOff: true, flagSource: _getPanelModeFromContent(data.content || '') !== null ? 'file' : 'settings' });
+      _setRawModeUI(true);
+      return;
+    }
+    _setRawModeUI(false);
+
     if (ftype === 'co') {
       _clearRawView();
       _showLeftPanel('form');
@@ -6761,7 +6880,7 @@ const Sidebar = (() => {
     }
   }
 
-  function _showLeftPanel(mode, fileName) {
+  function _showLeftPanel(mode, fileName, { panelOff = false, flagSource = null } = {}) {
     // Hide all panels
     document.getElementById('config-form')?.classList.add('hidden');
     document.getElementById('flake-form')?.classList.add('hidden');
@@ -6772,11 +6891,22 @@ const Sidebar = (() => {
       document.getElementById('config-form')?.classList.remove('hidden');
     } else if (mode === 'fl') {
       document.getElementById('flake-form')?.classList.remove('hidden');
-    } else if (mode === 'raw') {
+    } else if (mode === 'raw' || mode === 'panel-off') {
       const rawPanel = document.getElementById('raw-panel');
       rawPanel?.classList.remove('hidden');
-      const hwWarn = document.getElementById('raw-panel-hw-warn');
-      hwWarn?.classList.toggle('hidden', fileName !== 'hardware-configuration.nix');
+      const hwWarn       = document.getElementById('raw-panel-hw-warn');
+      const regularHint  = document.getElementById('raw-panel-regular-hint');
+      const offHint      = document.getElementById('panel-off-hint');
+      const offSource    = document.getElementById('panel-off-source');
+      hwWarn?.classList.toggle('hidden', panelOff || fileName !== 'hardware-configuration.nix');
+      regularHint?.classList.toggle('hidden', panelOff);
+      offHint?.classList.toggle('hidden', !panelOff);
+      if (offSource) {
+        offSource.classList.toggle('hidden', !panelOff);
+        if (panelOff && flagSource) {
+          offSource.textContent = flagSource === 'file' ? t('panelToggle.sourceFile') : t('panelToggle.sourceSettings');
+        }
+      }
     } else {
       document.getElementById(`panel-${mode}`)?.classList.remove('hidden');
     }
@@ -7427,12 +7557,24 @@ const Sidebar = (() => {
     rawDiv.id = 'raw-file-view';
     rawDiv.className = 'raw-file-view';
 
-    const lineCount = content.split('\n').length;
+    const { header, body } = _splitNicoHeader(content);
+    _rawEditHeader = header;
+
+    const lineCount = body.split('\n').length;
     const lineNums  = Array.from({length: lineCount}, (_, i) => i + 1).join('\n');
+
+    const headerHtml = header
+      ? `<div class="raw-header-block">
+           <pre class="raw-header-pre language-nix">${escHtml(header)}</pre>
+         </div>
+         <div class="raw-header-sep"></div>`
+      : '';
+
     rawDiv.innerHTML = `
+      ${headerHtml}
       <div class="raw-editor-wrap">
         <div class="raw-line-nums" aria-hidden="true">${lineNums}</div>
-        <textarea id="raw-file-editor" class="raw-file-editor" spellcheck="false">${escHtml(content)}</textarea>
+        <textarea id="raw-file-editor" class="raw-file-editor" spellcheck="false">${escHtml(body)}</textarea>
       </div>
     `;
     elPreviewPanel.appendChild(rawDiv);
@@ -7480,9 +7622,10 @@ const Sidebar = (() => {
   }
 
   async function _saveRawFile() {
-    const path    = _rawEditPath;
-    const content = document.getElementById('raw-file-editor')?.value ?? '';
+    const path = _rawEditPath;
+    const body = document.getElementById('raw-file-editor')?.value ?? '';
     if (!path) return;
+    const content = _rawEditHeader ? _rawEditHeader + '\n' + body : body;
 
     const fileName = path.split('/').pop();
     // hardware-configuration.nix: Bestätigungsdialog
@@ -7623,6 +7766,14 @@ const Sidebar = (() => {
     _showLeftPanel('none');
   }
 
+  async function _refreshPanelToggle(path, ftype) {
+    try {
+      const r = await fetch(`/api/file?path=${encodeURIComponent(path)}`);
+      const d = await r.json();
+      if (!d.error) _updatePanelToggle(ftype, d.content || '');
+    } catch {}
+  }
+
   return {
     init,
     openFileViewer,
@@ -7633,5 +7784,6 @@ const Sidebar = (() => {
     togglePlainCodeView: _togglePlainCodeViewInSidebar,
     loadTree,
     clearFlkIfActive,
+    refreshPanelToggle: _refreshPanelToggle,
   };
 })();

@@ -44,6 +44,7 @@ DEFAULT_CONFIG_SETTINGS = {
     "flake_update_on_rebuild": False,
     "push_after_save":    False,
     "push_after_rebuild": False,
+    "panel_default":      "p",
     # Validation rules: all enabled by default; keys match validator.ALL_RULES ids
     "validation_rules": {
         "user_in_config":    True,

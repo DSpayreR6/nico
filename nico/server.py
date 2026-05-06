@@ -49,6 +49,9 @@ from .core import (
     set_type_in_content as _set_type_in_content,
     validate_user_path as _validate_user_path,
     write_config_files as _write_config_files,
+    check_brix_integrity as _check_brix_integrity,
+    get_panel_mode     as _get_panel_mode,
+    set_panel_mode     as _set_panel_mode,
 )
 
 
@@ -296,6 +299,7 @@ def create_app() -> Flask:
             "hosts_dir", "modules_dir", "hm_dir",
             "flake_update_on_rebuild", "validation_rules",
             "push_after_save", "push_after_rebuild",
+            "panel_default",
         })
         incoming = request.get_json(silent=True) or {}
         patch    = {k: v for k, v in incoming.items() if k in _CONFIG_KEYS}
@@ -2821,12 +2825,25 @@ def create_app() -> Flask:
             if target.name in ('configuration.nix', 'flake.nix'):
                 return jsonify({"error": "ERR_MANAGED_FILE"}), 400
             try:
+                # Refuse to overwrite NiCo-managed files unless explicitly in raw mode
+                if target.name in ('configuration.nix', 'flake.nix'):
+                    try:
+                        existing = target.read_text(encoding='utf-8')
+                    except OSError:
+                        existing = ''
+                    if _get_panel_mode(existing) != 'r':
+                        return jsonify({"error": "ERR_MANAGED_FILE"}), 400
+
                 _cfg_s   = config_manager.load_config_settings(nixos_dir)
                 _hm_dir  = _cfg_s.get("hm_dir", "home").strip() or "home"
                 _rel_parts = Path(rel).parts
                 is_hm_path = len(_rel_parts) >= 2 and _rel_parts[0] == _hm_dir
                 if is_hm_path or _classify_filename(target.name) == 'hm':
                     content, _ = _normalize_hm_content(content)
+                # Recompute nico-version hash for NiCo-managed files saved in raw mode
+                ftype = _get_nico_type(content)
+                if ftype:
+                    content = _set_type_in_content(content, ftype)
                 target.write_text(content, encoding='utf-8')
                 written.append(rel)
             except OSError:
@@ -2934,6 +2951,67 @@ def create_app() -> Flask:
 
             git_manager.auto_commit(nixos_dir)
             return jsonify({"ok": True, "file_type": ftype})
+        except Exception as exc:
+            return jsonify({"error": f"ERR_INTERNAL: {exc}"}), 500
+
+    @app.route("/api/file/panel-mode", methods=["POST"])
+    def set_panel_mode_route():
+        """Set the panel mode flag (#p or #r) in a file's nico-version header.
+        Optionally saves new file content at the same time (when switching modes
+        with unsaved changes). Checks brix integrity when switching to panel mode.
+        """
+        try:
+            if err := _check_csrf(): return err
+            nixos_dir, err = _require_setup()
+            if err:
+                return err
+
+            body    = request.get_json(silent=True) or {}
+            rel     = (body.get("path")    or "").strip()
+            mode    = (body.get("mode")    or "").strip()
+            content = body.get("content")  # optional – send when switching with unsaved edits
+
+            if not rel:
+                return jsonify({"error": "ERR_NO_PATH"}), 400
+            if mode not in ("p", "r"):
+                return jsonify({"error": "ERR_INVALID_MODE"}), 400
+
+            root   = Path(nixos_dir).resolve()
+            target = (root / rel).resolve()
+            try:
+                target.relative_to(root)
+            except ValueError:
+                return jsonify({"error": "ERR_SYSTEM_PATH"}), 403
+
+            if target.suffix != '.nix':
+                return jsonify({"error": "ERR_NOT_NIX"}), 400
+
+            try:
+                current = target.read_text(encoding="utf-8")
+            except OSError:
+                return jsonify({"error": "ERR_FILE_READ"}), 500
+
+            # Use provided content if supplied (unsaved raw edits), else existing file
+            base = content if content is not None else current
+
+            # When switching to panel mode, verify brix markers are intact
+            if mode == 'p' and not _check_brix_integrity(base):
+                return jsonify({"error": "ERR_BRIX_INCOMPLETE"}), 400
+
+            updated = _set_panel_mode(base, mode)
+
+            # Recompute hash so change-detection stays consistent
+            ftype = _get_nico_type(updated)
+            if ftype:
+                updated = _set_type_in_content(updated, ftype)
+
+            try:
+                target.write_text(updated, encoding="utf-8")
+            except OSError:
+                return jsonify({"error": "ERR_FILE_WRITE"}), 500
+
+            git_manager.auto_commit(nixos_dir)
+            return jsonify({"ok": True, "mode": mode})
         except Exception as exc:
             return jsonify({"error": f"ERR_INTERNAL: {exc}"}), 500
 

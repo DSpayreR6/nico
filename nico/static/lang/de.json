@@ -737,6 +737,12 @@
   "field.snapperYearly":       "Jährlich (max.)",
 
   "sidebar.rawPanelHint":   "Diese Datei wird nicht von NiCo verwaltet. Du kannst sie rechts direkt bearbeiten.",
+  "sidebar.panelOffHint":   "Panel deaktiviert. Die Datei kann rechts direkt bearbeitet werden.",
+  "panelToggle.panel":       "Panel",
+  "panelToggle.off":         "Panel aus",
+  "panelToggle.brixError":   "Nix-Brix unvollständig – bitte alle Blöcke schließen bevor das Panel aktiviert wird.",
+  "panelToggle.sourceFile":  "Raw-Modus: in Datei gesetzt",
+  "panelToggle.sourceSettings": "Raw-Modus: Standard aus Einstellungen",
   "sidebar.hwWarnIcon":     "⚠",
   "sidebar.hwWarnText":     "hardware-configuration.nix wird von NixOS automatisch generiert. Manuelle Änderungen können das System destabilisieren.",
   "sidebar.rawSave":        "Speichern",
@@ -812,6 +818,7 @@
   "admin.settings.modulesDirHint": "Unterverzeichnis für NixOS-Module (Standard: modules)",
   "admin.settings.hmDir":        "Home-Manager-Verzeichnis",
   "admin.settings.hmDirHint":    "Unterverzeichnis für Home-Manager-Dateien (Standard: home)",
+  "admin.settings.panelDefault":  "Dateien standardmäßig im Raw-Modus öffnen",
   "admin.settings.save":         "Speichern",
   "admin.settings.saved":        "Einstellungen gespeichert",
 
