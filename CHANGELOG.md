@@ -4,6 +4,7 @@
 
 ### New Features
 
+- Panel toggle redesigned as a card with a real toggle switch in the tab bar; save button replaces the eye icon in raw mode for a stable layout
 - Snapper individually configurable with free subvolumes and per-entry snapshot schedule
 - Double-start protection: second NiCo instance shows info page instead of silent restart
 - Git remote setup directly in the Config Settings tab

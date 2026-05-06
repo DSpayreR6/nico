@@ -457,9 +457,9 @@
 
   "about.title":      "\u00DCber NiCo",
   "about.version":    "Version",
-  "about.versionVal": "0.9.5",
+  "about.versionVal": "0.9.6",
   "about.updated":    "Stand",
-  "about.updatedVal": "2026-04-13",
+  "about.updatedVal": "2026-05-06",
   "about.author":     "Erstellt von",
   "about.authorVal":  "DSpayreR6",
   "about.license":    "Lizenz",
@@ -738,8 +738,8 @@
 
   "sidebar.rawPanelHint":   "Diese Datei wird nicht von NiCo verwaltet. Du kannst sie rechts direkt bearbeiten.",
   "sidebar.panelOffHint":   "Panel deaktiviert. Die Datei kann rechts direkt bearbeitet werden.",
-  "panelToggle.panel":       "Panel",
-  "panelToggle.off":         "Panel aus",
+  "panelToggle.panel":       "Panel ein",
+  "panelToggle.off":         "Panels aus",
   "panelToggle.brixError":   "Nix-Brix unvollständig – bitte alle Blöcke schließen bevor das Panel aktiviert wird.",
   "panelToggle.sourceFile":  "Raw-Modus: in Datei gesetzt",
   "panelToggle.sourceSettings": "Raw-Modus: Standard aus Einstellungen",

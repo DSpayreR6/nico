@@ -6175,8 +6175,12 @@ const Sidebar = (() => {
 
   // ── Panel-Toggle ──────────────────────────────────────────────────
 
-  document.getElementById('panel-toggle-btn')?.addEventListener('click', async () => {
+  let _panelToggleBusy = false;
+
+  document.getElementById('panel-toggle-check')?.addEventListener('change', async (e) => {
     if (!activeFile) return;
+    if (_panelToggleBusy) { e.target.checked = !e.target.checked; return; }
+    _panelToggleBusy = true;
     const btn      = document.getElementById('panel-toggle-btn');
     const curMode  = btn?.dataset.mode || 'p';
     const newMode  = curMode === 'r' ? 'p' : 'r';
@@ -6197,6 +6201,7 @@ const Sidebar = (() => {
       });
       const data = await res.json();
       if (data.error) {
+        e.target.checked = !e.target.checked;
         if (data.error === 'ERR_BRIX_INCOMPLETE') {
           showToast(t('panelToggle.brixError'), 'error');
         } else {
@@ -6206,7 +6211,10 @@ const Sidebar = (() => {
       }
       await _loadFileIntoView(activeFile.path, { skipTypeDialog: true });
     } catch {
+      e.target.checked = !e.target.checked;
       showToast(t('toast.error'), 'error');
+    } finally {
+      _panelToggleBusy = false;
     }
   });
 
@@ -6787,7 +6795,8 @@ const Sidebar = (() => {
     const isPanel = mode !== 'r';
     btn.dataset.mode = mode;
     if (label) label.textContent = isPanel ? t('panelToggle.panel') : t('panelToggle.off');
-    btn.dataset.active = isPanel ? '1' : '0';
+    const check = document.getElementById('panel-toggle-check');
+    if (check) check.checked = isPanel;
   }
 
   function _setRawModeUI(isRaw) {

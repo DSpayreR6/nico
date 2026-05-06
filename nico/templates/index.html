@@ -1336,13 +1336,21 @@
         <div class="tab-bar" role="tablist">
           <div id="active-file-label" class="active-file-label"></div>
           <div id="panel-toggle" class="panel-toggle hidden">
-            <button id="panel-toggle-btn" class="panel-toggle-btn" data-mode="p">
-              <span id="panel-toggle-label" data-i18n="panelToggle.panel">Panel</span>
-            </button>
+            <label class="panel-toggle-card" id="panel-toggle-btn">
+              <span class="toggle-wrap">
+                <input type="checkbox" id="panel-toggle-check">
+                <span class="toggle-track"><span class="toggle-thumb"></span></span>
+              </span>
+              <span id="panel-toggle-label" data-i18n="panelToggle.panel">Panel ein</span>
+            </label>
           </div>
           <button id="preview-mode-btn" class="preview-mode-btn"
                   data-i18n-title="preview.modePanel"
                   title="Bearbeitung nur über Panel möglich"><span class="ni-icon ni-icon-eye" aria-hidden="true"></span></button>
+          <!-- Raw-Datei speichern (nur sichtbar im Raw-Edit-Modus, ersetzt Auge) -->
+          <button id="raw-save-tab-btn" class="preview-mode-btn hidden"
+                  data-i18n-title="sidebar.rawSave"
+                  title="Datei speichern"><span class="ni-icon ni-icon-save" aria-hidden="true"></span></button>
           <div class="tab-actions">
             <!-- Wrench-Tools-Dropdown -->
             <div class="tools-menu" id="tools-menu">
@@ -1362,10 +1370,6 @@
             <button id="save-all-btn" class="tab-action-btn hidden"
                     data-i18n-title="sidebar.saveAllTitle"
                     title="Alle Änderungen speichern"><span class="ni-icon ni-icon-save" aria-hidden="true"></span></button>
-            <!-- Raw-Datei speichern (nur sichtbar im Raw-Edit-Modus) -->
-            <button id="raw-save-tab-btn" class="tab-action-btn hidden"
-                    data-i18n-title="sidebar.rawSave"
-                    title="Datei speichern"><span class="ni-icon ni-icon-save" aria-hidden="true"></span></button>
             <!-- Sidebar-Toggle -->
             <button id="sidebar-toggle-btn" class="tab-action-btn"
                     data-i18n-title="sidebar.toggleTitle"
