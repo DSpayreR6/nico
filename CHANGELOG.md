@@ -19,6 +19,7 @@
 
 ### Bug Fixes
 
+- Panel toggle: race condition on rapid clicking no longer causes inconsistent state
 - Brick move broken after switching to an HM file
 - Firefox freeze during rebuild in the web UI fixed (DOM batching, max 500 log lines)
 - Flake host brix: `specialArgs` and host-specific content was lost on roundtrip
