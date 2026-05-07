@@ -2523,6 +2523,17 @@ button:disabled {
 .admin-import-body { /* shown by default, hidden when collapsed */ }
 
 /* Settings panel */
+.settings-rubrik {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1.2px;
+  color: var(--blue);
+  border-bottom: 1px solid var(--surface2);
+  padding-bottom: 5px;
+  margin-bottom: 10px;
+}
+
 .settings-path-row {
   display: flex;
   align-items: center;

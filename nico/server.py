@@ -150,10 +150,13 @@ def create_app() -> Flask:
         if nixos_dir and Path(nixos_dir).is_dir():
             p = Path(nixos_dir)
             has_config = (p / "configuration.nix").exists() or (p / "flake.nix").exists()
+            app_s = config_manager.get_app_settings()
             return jsonify({
                 "setup_complete":    True,
                 "needs_import":      not has_config,
                 "nixos_config_dir":  nixos_dir,
+                "git_sync":          app_s.get("git_sync", True),
+                "git_status_only":   app_s.get("git_status_only", False),
             })
         return jsonify({"setup_complete": False})
 
@@ -2150,6 +2153,8 @@ def create_app() -> Flask:
     def _maybe_auto_push(nixos_dir: str) -> dict:
         """Push after save if push_after_save is enabled. Returns extra response fields."""
         try:
+            if not config_manager.get_app_settings().get("git_sync", True):
+                return {}
             cfg = config_manager.load_config_settings(nixos_dir)
             if not cfg.get("push_after_save"):
                 return {}

@@ -1735,12 +1735,15 @@
         <div class="settings-subtab-panel" data-subtab-panel="nico">
           <div class="admin-section">
             <div class="admin-section-title" data-i18n="admin.settings.nicoTitle">NiCo-Einstellungen</div>
-            <p class="raw-panel-hint" style="margin-top:4px;margin-bottom:8px" data-i18n="admin.settings.nicoHint">
+            <p class="raw-panel-hint" style="margin-top:4px;margin-bottom:12px" data-i18n="admin.settings.nicoHint">
               Programmeinstellungen – bleiben auf diesem Rechner.
             </p>
 
+            <!-- Rubrik: Allgemein -->
+            <div class="settings-rubrik" data-i18n="admin.settings.rubrikGeneral">Allgemein</div>
+
             <!-- Config-Pfad -->
-            <div class="settings-path-row" style="margin-top:8px">
+            <div class="settings-path-row">
               <label data-i18n="admin.settingsPathLabel">Aktueller NixOS-Config-Pfad:</label>
               <input type="text" id="settings-current-path" readonly
                      class="settings-path-input"
@@ -1761,22 +1764,42 @@
             </div>
             <div id="settings-error" class="settings-error hidden"></div>
 
-            <!-- Sprache wird über den Header-Switcher eingestellt -->
-            <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:12px">
-              <label for="setting-theme" data-i18n="admin.settings.theme">Theme</label>
-              <select id="setting-theme" class="settings-path-input" style="width:auto;flex-shrink:0"></select>
+            <div style="margin-top:8px" id="default-host-row" class="hidden">
+              <div style="display:flex;align-items:center;gap:8px">
+                <label for="setting-default-host" style="white-space:nowrap;font-size:0.9em" data-i18n="admin.settings.defaultHost">Standard-Host für Rebuild</label>
+                <select id="setting-default-host" class="settings-path-input" style="flex:1"></select>
+              </div>
             </div>
-            <label class="toggle-row" style="margin-top:12px">
-              <span data-i18n="admin.settings.codeViewPlain">Code-Ansicht beim Start: Plain (ohne Brix-Annotationen)</span>
+
+            <!-- Git-Sync -->
+            <label class="toggle-row" style="margin-top:10px">
+              <span data-i18n="admin.settings.gitSync">Git-Sync aktiviert</span>
               <span class="toggle-wrap">
-                <input type="checkbox" id="setting-code-view-plain">
+                <input type="checkbox" id="setting-git-sync" checked>
                 <span class="toggle-track"><span class="toggle-thumb"></span></span>
               </span>
             </label>
-            <label class="toggle-row" style="margin-top:8px">
-              <span data-i18n="admin.settings.rebuildLog">Rebuild-Log immer schreiben (nixos-rebuild.log)</span>
+            <div id="setting-git-status-only-row" class="hidden" style="margin-left:20px;margin-top:4px">
+              <label class="toggle-row">
+                <span data-i18n="admin.settings.gitStatusOnly">Git-Status trotzdem prüfen</span>
+                <span class="toggle-wrap">
+                  <input type="checkbox" id="setting-git-status-only">
+                  <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                </span>
+              </label>
+            </div>
+
+            <!-- Rubrik: Darstellung -->
+            <div class="settings-rubrik" style="margin-top:24px" data-i18n="admin.settings.rubrikAppearance">Darstellung</div>
+
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+              <label for="setting-theme" data-i18n="admin.settings.theme">Theme</label>
+              <select id="setting-theme" class="settings-path-input" style="width:auto;flex-shrink:0"></select>
+            </div>
+            <label class="toggle-row" style="margin-top:10px">
+              <span data-i18n="admin.settings.codeViewPlain">Code-Ansicht beim Start: Plain (ohne Brix-Annotationen)</span>
               <span class="toggle-wrap">
-                <input type="checkbox" id="setting-rebuild-log">
+                <input type="checkbox" id="setting-code-view-plain">
                 <span class="toggle-track"><span class="toggle-thumb"></span></span>
               </span>
             </label>
@@ -1787,6 +1810,25 @@
                 <span class="toggle-track"><span class="toggle-thumb"></span></span>
               </span>
             </label>
+            <div style="margin-top:10px">
+              <button id="sections-settings-btn" class="btn-surface btn-small"
+                      data-i18n="admin.sections.settingsBtn">Sektionen anpassen</button>
+              <p class="raw-panel-hint" style="margin-top:4px"
+                 data-i18n="admin.sections.settingsHint">
+                Sektionen die standardmäßig sichtbar sein sollen. Sektionen mit Inhalt werden immer angezeigt.
+              </p>
+            </div>
+
+            <!-- Rubrik: Rebuild -->
+            <div class="settings-rubrik" style="margin-top:24px" data-i18n="admin.settings.rubrikRebuild">Rebuild</div>
+
+            <label class="toggle-row">
+              <span data-i18n="admin.settings.rebuildLog">Rebuild-Log immer schreiben (nixos-rebuild.log)</span>
+              <span class="toggle-wrap">
+                <input type="checkbox" id="setting-rebuild-log">
+                <span class="toggle-track"><span class="toggle-thumb"></span></span>
+              </span>
+            </label>
             <label class="toggle-row" style="margin-top:8px">
               <span data-i18n="admin.settings.rebuildTerminal">Rebuild in Terminal-Fenster öffnen</span>
               <span class="toggle-wrap">
@@ -1794,23 +1836,6 @@
                 <span class="toggle-track"><span class="toggle-thumb"></span></span>
               </span>
             </label>
-            <div style="margin-top:8px" id="default-host-row" class="hidden">
-              <div style="display:flex;align-items:center;gap:8px">
-                <label for="setting-default-host" style="white-space:nowrap;font-size:0.9em" data-i18n="admin.settings.defaultHost">Standard-Host für Rebuild</label>
-                <select id="setting-default-host" class="settings-path-input" style="flex:1"></select>
-              </div>
-            </div>
-          </div>
-
-          <!-- Sektionen-Einstellungen -->
-          <div class="admin-section">
-            <div class="admin-section-title" data-i18n="admin.sections.settingsTitle">Sektionen anpassen</div>
-            <p class="raw-panel-hint" style="margin-top:4px;margin-bottom:10px"
-               data-i18n="admin.sections.settingsHint">
-              Sektionen die standardmäßig sichtbar sein sollen. Sektionen mit Inhalt werden immer angezeigt.
-            </p>
-            <button id="sections-settings-btn" class="btn-surface btn-small"
-                    data-i18n="admin.sections.settingsBtn">Sektionen anpassen</button>
           </div>
         </div>
 
@@ -1818,11 +1843,13 @@
         <div class="settings-subtab-panel hidden" data-subtab-panel="config">
           <div class="admin-section">
             <div class="admin-section-title" data-i18n="admin.settings.configTitle">Config-Einstellungen</div>
-            <p class="raw-panel-hint" style="margin-top:4px;margin-bottom:8px" data-i18n="admin.settings.configHint">
+            <p class="raw-panel-hint" style="margin-top:4px;margin-bottom:12px" data-i18n="admin.settings.configHint">
               Diese Einstellungen gehören zur Konfiguration und wandern beim Kopieren mit.
             </p>
 
-            <!-- Hosts-Verzeichnis -->
+            <!-- Rubrik: Verzeichnisse -->
+            <div class="settings-rubrik" data-i18n="admin.settings.rubrikDirs">Verzeichnisse</div>
+
             <label for="settings-hosts-dir" data-i18n="admin.settings.hostsDir">Hosts-Verzeichnis</label>
             <div style="display:flex;gap:8px;align-items:center;margin-top:6px">
               <input type="text" id="settings-hosts-dir" class="settings-path-input"
@@ -1832,8 +1859,7 @@
               Unterverzeichnis für Host-Konfigurationen (Standard: hosts)
             </p>
 
-            <!-- Modules-Verzeichnis -->
-            <label for="settings-modules-dir" style="margin-top:12px" data-i18n="admin.settings.modulesDir">Module-Verzeichnis</label>
+            <label for="settings-modules-dir" style="display:block;margin-top:12px" data-i18n="admin.settings.modulesDir">Module-Verzeichnis</label>
             <div style="display:flex;gap:8px;align-items:center;margin-top:6px">
               <input type="text" id="settings-modules-dir" class="settings-path-input"
                      style="flex:1" placeholder="modules" spellcheck="false" autocomplete="off">
@@ -1842,8 +1868,7 @@
               Unterverzeichnis für NixOS-Module (Standard: modules)
             </p>
 
-            <!-- Home-Manager-Verzeichnis -->
-            <label for="settings-hm-dir" style="margin-top:12px" data-i18n="admin.settings.hmDir">Home-Manager-Verzeichnis</label>
+            <label for="settings-hm-dir" style="display:block;margin-top:12px" data-i18n="admin.settings.hmDir">Home-Manager-Verzeichnis</label>
             <div style="display:flex;gap:8px;align-items:center;margin-top:6px">
               <input type="text" id="settings-hm-dir" class="settings-path-input"
                      style="flex:1" placeholder="home" spellcheck="false" autocomplete="off">
@@ -1852,9 +1877,16 @@
               Unterverzeichnis für Home-Manager-Dateien (Standard: home)
             </p>
 
-            <!-- Flake-Update -->
-            <div style="margin-top:16px" id="flake-update-row">
-              <label class="toggle-row" style="cursor:pointer">
+            <div style="margin-top:12px">
+              <button id="settings-config-save" class="btn-surface btn-small"
+                      data-i18n="admin.settings.save">Speichern</button>
+            </div>
+
+            <!-- Rubrik: Git -->
+            <div class="settings-rubrik" style="margin-top:24px" data-i18n="admin.settings.rubrikGit">Git</div>
+
+            <div id="flake-update-row">
+              <label class="toggle-row">
                 <span data-i18n="admin.flakeUpdate">Flake bei Rebuild immer aktualisieren</span>
                 <span class="toggle-wrap">
                   <input type="checkbox" id="flake-update-toggle">
@@ -1863,8 +1895,7 @@
               </label>
             </div>
 
-            <!-- Remote einrichten -->
-            <div id="git-set-remote-row" class="hidden" style="margin-top:16px">
+            <div id="git-set-remote-row" class="hidden" style="margin-top:12px">
               <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
                 <p class="raw-panel-hint" data-i18n="git.setRemoteTitle">Remote-Repository einrichten</p>
                 <a href="/help#k7-3" target="_blank" style="font-size:0.8em;color:var(--blue);text-decoration:none;opacity:0.8" data-i18n="git.setRemoteHelpLink">? Hilfe</a>
@@ -1893,17 +1924,15 @@
               <p class="raw-panel-hint" style="margin-top:8px;font-size:0.85em" data-i18n="git.setRemoteRestartHint">Änderungen an Remote-Daten werden erst nach einem Programmneustart für den Start-Abgleich verwendet.</p>
             </div>
 
-            <!-- Git Push -->
-            <div id="git-push-settings-row" class="hidden" style="margin-top:16px">
-              <p class="raw-panel-hint" style="margin-bottom:6px" data-i18n="admin.settings.pushSection">Git Push</p>
-              <label class="toggle-row" style="cursor:pointer">
+            <div id="git-push-settings-row" class="hidden" style="margin-top:12px">
+              <label class="toggle-row">
                 <span data-i18n="admin.settings.pushAfterSave">Nach dem Speichern automatisch pushen</span>
                 <span class="toggle-wrap">
                   <input type="checkbox" id="push-after-save-toggle">
                   <span class="toggle-track"><span class="toggle-thumb"></span></span>
                 </span>
               </label>
-              <label class="toggle-row" style="cursor:pointer;margin-top:6px">
+              <label class="toggle-row" style="margin-top:6px">
                 <span data-i18n="admin.settings.pushAfterRebuild">Nach erfolgreichem Rebuild automatisch pushen</span>
                 <span class="toggle-wrap">
                   <input type="checkbox" id="push-after-rebuild-toggle">
@@ -1912,34 +1941,24 @@
               </label>
             </div>
 
-            <!-- Panel-Default -->
-            <div style="margin-top:16px">
-              <label class="toggle-row" style="cursor:pointer">
-                <span data-i18n="admin.settings.panelDefault">Dateien standardmäßig im Raw-Modus öffnen</span>
-                <span class="toggle-wrap">
-                  <input type="checkbox" id="panel-default-toggle">
-                  <span class="toggle-track"><span class="toggle-thumb"></span></span>
-                </span>
-              </label>
-            </div>
+            <!-- Rubrik: Editor -->
+            <div class="settings-rubrik" style="margin-top:24px" data-i18n="admin.settings.rubrikEditor">Editor</div>
 
-            <!-- Speichern-Button -->
-            <div style="margin-top:16px">
-              <button id="settings-config-save" class="btn-surface btn-small"
-                      data-i18n="admin.settings.save">Speichern</button>
-            </div>
-          </div>
+            <label class="toggle-row">
+              <span data-i18n="admin.settings.panelDefault">Dateien standardmäßig im Raw-Modus öffnen</span>
+              <span class="toggle-wrap">
+                <input type="checkbox" id="panel-default-toggle">
+                <span class="toggle-track"><span class="toggle-thumb"></span></span>
+              </span>
+            </label>
 
-          <!-- Validierungsregeln -->
-          <div class="admin-section">
-            <div class="admin-section-title" data-i18n="admin.validation.title">Validierung</div>
-            <p class="raw-panel-hint" style="margin-top:4px;margin-bottom:10px"
-               data-i18n="admin.validation.hint">
-              Legt fest welche statischen Prüfungen vor Rebuild/Dry-Run ausgeführt werden.
-              Die Einstellung wandert mit der Config.
-            </p>
-            <button id="validation-settings-btn" class="btn-surface btn-small"
-                    data-i18n="admin.validation.settingsBtn">Validierung anpassen</button>
+            <div style="margin-top:10px">
+              <button id="validation-settings-btn" class="btn-surface btn-small"
+                      data-i18n="admin.validation.settingsBtn">Validierung anpassen</button>
+              <p class="raw-panel-hint" style="margin-top:4px" data-i18n="admin.validation.hint">
+                Legt fest welche statischen Prüfungen vor Rebuild/Dry-Run ausgeführt werden.
+              </p>
+            </div>
           </div>
         </div>
 

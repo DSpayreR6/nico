@@ -34,6 +34,8 @@ DEFAULT_APP_SETTINGS = {
     "code_view_plain": False,
     "rebuild_log": False,
     "section_filter": "all",
+    "git_sync": True,
+    "git_status_only": False,
 }
 
 # Default config settings (travel with the config)

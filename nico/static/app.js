@@ -140,6 +140,8 @@ let activeTab       = 'configuration';
 let previewDebounce = null;
 let plainCodeView   = false;   // true = Brix-/Sektions-Marker aus Code ausgeblendet
 let _startGuardApproved = '';
+let _gitSync       = true;   // false = skip remote sync (pull on start, auto-push)
+let _gitStatusOnly = false;  // true = show local git status even when _gitSync=false
 
 // Section filter: 'all' | 'non-empty' | 'settings'
 let sectionFilter  = localStorage.getItem('nico-section-filter') || 'all';
@@ -281,13 +283,17 @@ async function checkStatus() {
         // Verzeichnis vorhanden, aber kein configuration.nix / flake.nix
         await showImportOverlay(false);
       } else {
-        const ok = await ensureGitStartGuard(data.nixos_config_dir);
-        if (!ok) return;
+        _gitSync       = data.git_sync !== false;
+        _gitStatusOnly = !!data.git_status_only;
+        if (_gitSync) {
+          const ok = await ensureGitStartGuard(data.nixos_config_dir);
+          if (!ok) return;
+        }
         showApp(data.nixos_config_dir);
         await loadConfig().catch(e => console.error('loadConfig:', e));
         Sidebar.setActiveFile('configuration.nix', 'configuration.nix');
-        checkGitStatus();
-        checkGitRemoteStatus();
+        if (_gitSync || _gitStatusOnly) checkGitStatus();
+        if (_gitSync) checkGitRemoteStatus();
       }
     } else {
       showSetupOverlay();
@@ -393,12 +399,14 @@ async function _finishSetup(data, skipImport = false) {
   // Kategorisiere alle vorhandenen .nix-Dateien (no-op für leere Verzeichnisse)
   await categorizeFiles();
 
-  const ok = await ensureGitStartGuard(data.nixos_config_dir);
-  if (!ok) return;
+  if (_gitSync) {
+    const ok = await ensureGitStartGuard(data.nixos_config_dir);
+    if (!ok) return;
+  }
 
   showApp(data.nixos_config_dir);
   await loadConfig();
-  checkGitStatus();
+  if (_gitSync || _gitStatusOnly) checkGitStatus();
 
   // Inform user if hardware-configuration.nix was found/copied
   if (data.hw_copied) {
@@ -1091,6 +1099,12 @@ function openAdmin() {
   _loadAdminSettings();
 }
 
+function _updateGitStatusOnlyVisibility() {
+  const syncOn  = document.getElementById('setting-git-sync')?.checked !== false;
+  const row     = document.getElementById('setting-git-status-only-row');
+  if (row) row.classList.toggle('hidden', syncOn);
+}
+
 function _loadAdminSettings() {
   // Load app settings + theme picker
   Promise.all([
@@ -1105,6 +1119,11 @@ function _loadAdminSettings() {
     if (cbFlakeLock) cbFlakeLock.checked = !!data.show_flake_lock;
     const cbRebuildTerminal = document.getElementById('setting-rebuild-terminal');
     if (cbRebuildTerminal) cbRebuildTerminal.checked = !!data.rebuild_terminal;
+    const cbGitSync = document.getElementById('setting-git-sync');
+    if (cbGitSync) cbGitSync.checked = data.git_sync !== false;
+    const cbGitStatusOnly = document.getElementById('setting-git-status-only');
+    if (cbGitStatusOnly) cbGitStatusOnly.checked = !!data.git_status_only;
+    _updateGitStatusOnlyVisibility();
 
     // Standard-Host Dropdown (nur bei Flake-Modus)
     const defaultHostRow = document.getElementById('default-host-row');
@@ -1222,6 +1241,37 @@ function _loadAdminSettings() {
         if (!cbShowFlakeLock.checked) Sidebar.clearFlkIfActive();
         Sidebar.loadTree();
       }).catch(() => showToast(t('toast.error'), 'error'));
+    });
+  }
+
+  // Auto-save: git_sync
+  const cbGitSyncEl = document.getElementById('setting-git-sync');
+  if (cbGitSyncEl && !cbGitSyncEl.dataset.listenerAttached) {
+    cbGitSyncEl.dataset.listenerAttached = '1';
+    cbGitSyncEl.addEventListener('change', () => {
+      _gitSync = cbGitSyncEl.checked;
+      _updateGitStatusOnlyVisibility();
+      csrfFetch('/api/app/settings', {
+        method:  'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ git_sync: cbGitSyncEl.checked }),
+      }).then(() => showToast(t('admin.settings.saved'), 'success'))
+        .catch(() => showToast(t('toast.error'), 'error'));
+    });
+  }
+
+  // Auto-save: git_status_only
+  const cbGitStatusOnlyEl = document.getElementById('setting-git-status-only');
+  if (cbGitStatusOnlyEl && !cbGitStatusOnlyEl.dataset.listenerAttached) {
+    cbGitStatusOnlyEl.dataset.listenerAttached = '1';
+    cbGitStatusOnlyEl.addEventListener('change', () => {
+      _gitStatusOnly = cbGitStatusOnlyEl.checked;
+      csrfFetch('/api/app/settings', {
+        method:  'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ git_status_only: cbGitStatusOnlyEl.checked }),
+      }).then(() => showToast(t('admin.settings.saved'), 'success'))
+        .catch(() => showToast(t('toast.error'), 'error'));
     });
   }
 
@@ -1452,8 +1502,9 @@ function _switchAdminTab(tab) {
     panel.classList.toggle('hidden', panel.dataset.adminPanel !== tab);
   });
   // Lazy-load per-tab data
+  if (tab === 'einstellungen') { loadSettingsPath(); }
   if (tab === 'zeitmaschine') { checkGitStatus(); loadAdminGitLog(); }
-  if (tab === 'administration') { loadSettingsPath(); loadAdminSymlinkStatus(); }
+  if (tab === 'administration') { loadAdminSymlinkStatus(); }
 }
 
 function initAdminTabs() {
@@ -4655,7 +4706,7 @@ async function openRebuild(mode = 'switch') {
       _rebuildES = null;
       if (msg.success) {
         csrfFetch('/api/config/settings').then(r => r.json()).then(cfg => {
-          if (cfg.push_after_rebuild) {
+          if (_gitSync && cfg.push_after_rebuild) {
             csrfFetch('/api/git/commit-push', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
