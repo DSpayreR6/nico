@@ -2104,6 +2104,37 @@ textarea:focus {
   background: rgba(137, 180, 250, .06);
 }
 
+/* ── Flatpak-Remotes ─────────────────────────────────────────────────────── */
+.fp-remotes-header {
+  font-size: 11px;
+  color: var(--overlay1);
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  margin-bottom: 6px;
+}
+.fp-remote-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin: 4px 0;
+}
+.fp-remote-row .fp-name {
+  width: 110px;
+  flex-shrink: 0;
+}
+.fp-remote-row .fp-url {
+  flex: 1;
+}
+.fp-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+}
+.fp-actions .btn-add-pkg {
+  width: auto;
+  flex: 1;
+}
+
 /* ── Paketsuch-Modal ─────────────────────────────────────────────────────── */
 .modal-wide {
   width: 620px;

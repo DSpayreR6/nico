@@ -7,6 +7,7 @@ can split the preview into collapsible sections that sync with the form.
 
 import hashlib
 import re
+import shlex
 
 from .brix import format_brick, inject_brick_blocks
 from .importer import flake_host_brick_name, flake_host_section
@@ -15,7 +16,7 @@ from .importer import flake_host_brick_name, flake_host_section
 #   # nico-version: a3f8c2d1          (legacy / no type)
 #   # nico-version: co#a3f8c2d1       (with type code)
 _VERSION_RE = re.compile(
-    r'^# nico-version: (?:[a-z]+#)?([0-9a-f]{8})\n', re.MULTILINE
+    r'^# nico-version: (?:[a-z]+#)?([0-9a-f]{8})(?:#[pr])?\n', re.MULTILINE
 )
 # Matches only the legacy format (no type prefix) – used to detect missing type
 _VERSION_RE_NOTYPE = re.compile(
@@ -406,6 +407,24 @@ def generate_configuration_nix(data: dict) -> str:
             prog_lines += ["  };"]
         else:
             prog_lines += ["  programs.firefox.enable = true;"]
+    flatpak_enable  = data.get("flatpak_enable",  False)
+    flatpak_remotes = [r for r in (data.get("flatpak_remotes") or []) if r.get("name") and r.get("url")]
+    if flatpak_enable:
+        prog_lines += ["  services.flatpak.enable = true;"]
+    if flatpak_remotes:
+        script_body = "\n".join(
+            f"      flatpak remote-add --if-not-exists {shlex.quote(r['name'])} {shlex.quote(r['url'])}"
+            for r in flatpak_remotes
+        )
+        prog_lines += [
+            "  systemd.services.flatpak-repo = {",
+            "    wantedBy = [ \"multi-user.target\" ];",
+            "    path = [ pkgs.flatpak ];",
+            "    script = ''",
+            script_body,
+            "    '';",
+            "  };",
+        ]
     if packages:
         pkg_lines = "\n".join(f"    {attr}" for attr in packages)
         prog_lines += [
@@ -835,6 +854,24 @@ def generate_host_nix(data: dict, host_name: str, hw_config: bool = False) -> st
             prog_lines += ["  };"]
         else:
             prog_lines += ["  programs.firefox.enable = true;"]
+    flatpak_enable  = data.get("flatpak_enable",  False)
+    flatpak_remotes = [r for r in (data.get("flatpak_remotes") or []) if r.get("name") and r.get("url")]
+    if flatpak_enable:
+        prog_lines += ["  services.flatpak.enable = true;"]
+    if flatpak_remotes:
+        script_body = "\n".join(
+            f"      flatpak remote-add --if-not-exists {shlex.quote(r['name'])} {shlex.quote(r['url'])}"
+            for r in flatpak_remotes
+        )
+        prog_lines += [
+            "  systemd.services.flatpak-repo = {",
+            "    wantedBy = [ \"multi-user.target\" ];",
+            "    path = [ pkgs.flatpak ];",
+            "    script = ''",
+            script_body,
+            "    '';",
+            "  };",
+        ]
     if packages:
         pkg_lines = "\n".join(f"    {attr}" for attr in packages)
         prog_lines += [

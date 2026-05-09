@@ -5105,6 +5105,46 @@ function getAllSnapperConfigs() {
   });
 }
 
+// ── Flatpak-Remotes ────────────────────────────────────────────────────────
+function renderFlatpakRemotes(remotes) {
+  const list = document.getElementById('flatpak-remotes-list');
+  if (!list) return;
+  list.innerHTML = remotes.map((r, i) => `
+    <div class="fp-remote-row" data-fp-idx="${i}">
+      <input type="text" class="fp-name" data-fp-idx="${i}" value="${escHtml(r.name || '')}"
+             placeholder="${escHtml(t('field.flatpakRemoteName'))}" spellcheck="false" autocomplete="off">
+      <input type="text" class="fp-url" data-fp-idx="${i}" value="${escHtml(r.url || '')}"
+             placeholder="https://..." spellcheck="false" autocomplete="off">
+      <button type="button" class="eu-remove-btn fp-remove-btn" data-fp-idx="${i}"
+              title="${escHtml(t('field.flatpakRemoteRemove'))}">${niIcon('x')}</button>
+    </div>
+  `).join('');
+  list.querySelectorAll('.fp-remove-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const idx = parseInt(btn.dataset.fpIdx, 10);
+      const cur = getAllFlatpakRemotes();
+      cur.splice(idx, 1);
+      renderFlatpakRemotes(cur);
+      schedulePreviewUpdate();
+    });
+  });
+  list.querySelectorAll('input').forEach(el => {
+    el.addEventListener('input', schedulePreviewUpdate);
+  });
+}
+
+function getAllFlatpakRemotes() {
+  const list = document.getElementById('flatpak-remotes-list');
+  if (!list) return [];
+  return [...list.querySelectorAll('.fp-remote-row')].map(row => {
+    const idx = row.dataset.fpIdx;
+    return {
+      name: row.querySelector(`.fp-name[data-fp-idx="${idx}"]`)?.value?.trim() || '',
+      url:  row.querySelector(`.fp-url[data-fp-idx="${idx}"]`)?.value?.trim()  || '',
+    };
+  });
+}
+
 // ── Passwort-Toggle ────────────────────────────────────────────────────────
 function initPasswordToggle() {
   const cb    = document.getElementById('user_has_password');
@@ -5246,6 +5286,8 @@ function getFormData() {
     firefox:             ch('firefox'),
     firefox_lang_packs:  ch('firefox') ? v('firefox_lang_packs') : '',
     firefox_prefs:       ch('firefox') ? v('firefox_prefs')      : '',
+    flatpak_enable:      ch('flatpak_enable'),
+    flatpak_remotes:     ch('flatpak_enable') ? getAllFlatpakRemotes() : [],
     packages,
     fonts,
     fonts_extra:         v('fonts_extra'),
@@ -5462,6 +5504,11 @@ function populateFormFromData(data) {
   if ('steam'              in data) ch('steam',               data.steam);
   if ('appimage'           in data) ch('appimage',            data.appimage);
   if ('firefox'            in data) ch('firefox',             data.firefox);
+  if ('flatpak_enable' in data) {
+    ch('flatpak_enable', data.flatpak_enable);
+    document.getElementById('flatpak-area')?.classList.toggle('hidden', !data.flatpak_enable);
+    renderFlatpakRemotes(data.flatpak_remotes || []);
+  }
   if ('flakes'             in data) ch('flakes',              data.flakes);
   if ('nix_optimize_store' in data) ch('nix_optimize_store',  data.nix_optimize_store);
   if ('nix_gc'             in data) ch('nix_gc',              data.nix_gc);
@@ -5580,6 +5627,8 @@ function clearCoForm() {
   toggleLibvirtdOptions(false);
   toggleVboxGuestOptions(false);
   document.getElementById('snapper-area')?.classList.add('hidden');
+  document.getElementById('flatpak-area')?.classList.add('hidden');
+  renderFlatpakRemotes([]);
   updateSectionVisibility();
 }
 
@@ -5720,6 +5769,24 @@ function bindUI() {
     schedulePreviewUpdate();
   });
 
+  on('flatpak_enable', 'change', e => {
+    document.getElementById('flatpak-area')?.classList.toggle('hidden', !e.target.checked);
+    schedulePreviewUpdate();
+  });
+  document.getElementById('flatpak-add-flathub-btn')?.addEventListener('click', () => {
+    const cur = getAllFlatpakRemotes();
+    if (!cur.some(r => r.name === 'flathub')) {
+      cur.push({ name: 'flathub', url: 'https://flathub.org/repo/flathub.flatpakrepo' });
+      renderFlatpakRemotes(cur);
+      schedulePreviewUpdate();
+    }
+  });
+  document.getElementById('flatpak-add-remote-btn')?.addEventListener('click', () => {
+    const cur = getAllFlatpakRemotes();
+    cur.push({ name: '', url: '' });
+    renderFlatpakRemotes(cur);
+    schedulePreviewUpdate();
+  });
   document.getElementById('extra_locale_enable')?.addEventListener('change', function() {
     document.getElementById('extra-locale-detail')?.classList.toggle('hidden', !this.checked);
   });

@@ -17,8 +17,14 @@
 - HM panel: shell, initExtra and packages directly editable
 - Validator: brix redundancy hint now shows the affected panel section
 
+- Flatpak support in the panel: enable Flatpak and manage remotes (name + URL) per host; Flathub quick-add button
+- Config integrity check: `testing/verify_config.py` compares current config semantically against a reference ZIP and reports moved, changed, or lost data
+- Git-Sync toggle in settings: disable remote sync (start guard, auto-push) while keeping optional local status display
+- Settings panel: interface improvements and layout polish
+
 ### Bug Fixes
 
+- Settings config path was only loaded when opening the Administration tab, not the Settings tab
 - Panel toggle: race condition on rapid clicking no longer causes inconsistent state
 - Brick move broken after switching to an HM file
 - Firefox freeze during rebuild in the web UI fixed (DOM batching, max 500 log lines)

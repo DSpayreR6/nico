@@ -108,9 +108,9 @@ def set_panel_mode(content: str, mode: str) -> str:
 
 
 def check_brix_integrity(content: str) -> bool:
-    """Return True if all brix open/close markers are properly paired."""
-    opens  = len(re.findall(r'^# <brix:', content, re.MULTILINE))
-    closes = len(re.findall(r'^# </brix:', content, re.MULTILINE))
+    """Return True if all brix/brick open/close markers are properly paired."""
+    opens  = len(re.findall(r'^# <bri(?:x|ck):', content, re.MULTILINE))
+    closes = len(re.findall(r'^# </bri(?:x|ck):', content, re.MULTILINE))
     return opens == closes
 
 

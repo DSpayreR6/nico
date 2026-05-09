@@ -702,6 +702,21 @@
                 <textarea id="firefox_prefs" name="firefox_prefs" rows="4"
                           placeholder='"intl.locale.requested" = "de-DE,de";'></textarea>
               </div>
+              <label class="toggle-row">
+                <span data-i18n="field.flatpak">Flatpak</span>
+                <span class="toggle-wrap">
+                  <input type="checkbox" id="flatpak_enable" name="flatpak_enable">
+                  <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                </span>
+              </label>
+              <div id="flatpak-area" class="sub-detail hidden">
+                <div class="fp-remotes-header" data-i18n="field.flatpakRemotes">Remotes</div>
+                <div id="flatpak-remotes-list"></div>
+                <div class="fp-actions">
+                  <button type="button" id="flatpak-add-flathub-btn" class="btn-add-pkg" data-i18n="btn.flatpakAddFlathub">+ Flathub</button>
+                  <button type="button" id="flatpak-add-remote-btn" class="btn-add-pkg" data-i18n="btn.flatpakAddRemote">+ Remote</button>
+                </div>
+              </div>
               <div id="packages-list" class="packages-list"></div>
               <button type="button" id="add-package-btn" class="btn-add-pkg"
                       data-i18n="btn.addPackage">+ Paket hinzufügen</button>

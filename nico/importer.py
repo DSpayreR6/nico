@@ -347,6 +347,21 @@ def _ts_parse_config(nix_content: str) -> 'tuple[dict, set[str]] | None':
     else:
         b('firefox', 'programs.firefox.enable')
 
+    # ── Flatpak ───────────────────────────────────────────────────────────────
+    b('flatpak_enable', 'services.flatpak.enable')
+    fp_vt = _vt('systemd.services.flatpak-repo')
+    if fp_vt:
+        inner = _np.extract_inner_block(fp_vt) or fp_vt
+        script_m = re.search(r"script\s*=\s*''(.*?)''", inner, re.DOTALL)
+        if script_m:
+            remotes = re.findall(
+                r'flatpak\s+remote-add\s+--if-not-exists\s+(\S+)\s+(\S+)',
+                script_m.group(1)
+            )
+            if remotes:
+                r['flatpak_remotes'] = [{"name": n, "url": u} for n, u in remotes]
+                _mark('systemd.services.flatpak-repo')
+
     # ── Pakete ────────────────────────────────────────────────────────────────
     if 'environment.systemPackages' in kv:
         pkgs_list = _np.extract_identifier_list(kv['environment.systemPackages']) or []
@@ -755,6 +770,19 @@ def parse_config(nix_content: str) -> dict:
     else:
         b('firefox',  r'programs\.firefox\.enable\s*=\s*(true|false)')
 
+    # ── Flatpak ───────────────────────────────────────────────────────────────
+    b('flatpak_enable', r'services\.flatpak\.enable\s*=\s*(true|false)')
+    fp_block = _block(c, 'systemd.services.flatpak-repo')
+    if fp_block:
+        script_m = re.search(r"script\s*=\s*''(.*?)''", fp_block, re.DOTALL)
+        if script_m:
+            remotes = re.findall(
+                r'flatpak\s+remote-add\s+--if-not-exists\s+(\S+)\s+(\S+)',
+                script_m.group(1)
+            )
+            if remotes:
+                r['flatpak_remotes'] = [{"name": n, "url": u} for n, u in remotes]
+
     # ── Pakete ────────────────────────────────────────────────────────────────
     m = re.search(
         r'environment\.systemPackages\s*=\s*with\s+pkgs\s*;\s*\[(.*?)\]',
@@ -1081,6 +1109,11 @@ def build_rest_brix(nix_content: str, recognized: dict) -> str:
     if 'firefox' in recognized:
         content = _remove_deep_block(content, 'programs.firefox')
         rm('firefox', r'\s*programs\.firefox\.enable\s*=\s*(?:true|false)\s*;')
+
+    # ── Flatpak ───────────────────────────────────────────────────────────────
+    rm('flatpak_enable', r'\s*services\.flatpak\.enable\s*=\s*(?:true|false)\s*;')
+    if 'flatpak_remotes' in recognized:
+        content = _remove_deep_block(content, 'systemd.services.flatpak-repo')
 
     # ── Pakete ────────────────────────────────────────────────────────────────
     rm_block('packages', r'\s*environment\.systemPackages\s*=\s*with\s+pkgs\s*;\s*\[.*?\]\s*;')
