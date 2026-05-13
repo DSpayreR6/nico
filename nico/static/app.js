@@ -4624,8 +4624,7 @@ async function openRebuild(mode = 'switch') {
   function _setBuildProgress(done, total, pkg) {
     const stableTotal = Math.max(maxBuildTotal, total || 0);
     maxBuildTotal = stableTotal;
-    const remain = Math.max(0, stableTotal - (done || 0));
-    counterEl.textContent  = stableTotal > 0 ? `noch ${remain} von ${stableTotal}` : '';
+    counterEl.textContent  = stableTotal > 0 ? `${done || 0} von ${stableTotal} gebaut` : '';
     buildPkgEl.textContent = pkg || '';
   }
 

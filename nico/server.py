@@ -1502,8 +1502,8 @@ def create_app() -> Flask:
             active_acts = {}
             # Aggregated download bytes across all substitute activities
             dl_state    = {'done': 0, 'expected': 0}
-            # Build derivation counter (counted from actBuild start/stop)
-            build_state = {'done': 0, 'total': 0}
+            # Build derivation counter; 'aggregate' switches to Builds-activity tracking
+            build_state = {'done': 0, 'total': 0, 'aggregate': False}
             # Global CLI-style progress, preferred when present
             global_state = {
                 'available': False,
@@ -1520,8 +1520,10 @@ def create_app() -> Flask:
             log_lines   = []
 
             # nix activity types
-            ACT_BUILD      = 105  # actBuild – individual derivation build
-            ACT_SUBSTITUTE = 107  # actSubstitute – download from binary cache
+            ACT_BUILD         = 105  # individual derivation build
+            ACT_SUBSTITUTE    = 108  # substituting path from binary cache (phase detection only)
+            ACT_FILE_TRANSFER = 101  # HTTP file transfer (compressed download bytes)
+            ACT_BUILDS        = 104  # aggregate builds tracker – resProgress gives total/done
 
             def _pkg_from_text(text):
                 m = _re.search(r'/nix/store/[a-z0-9]+-([^/\s\'.]+)', text)
@@ -1660,7 +1662,8 @@ def create_app() -> Flask:
                         if phase and not was_active:
                             yield _emit_phase(phase, True, pkg)
                         if nix_type == ACT_BUILD:
-                            build_state['total'] += 1
+                            if not build_state['aggregate']:
+                                build_state['total'] += 1
                             if build_state['total'] > 0:
                                 yield _emit_progress()
 
@@ -1670,13 +1673,14 @@ def create_app() -> Flask:
                         act      = active_acts.pop(act_id)
                         nix_type = act['nix_type']
 
-                        if act['phase'] == 'fetching':
-                            # Remove this activity's byte contribution from download totals
+                        if nix_type == ACT_FILE_TRANSFER:
+                            # Remove this transfer's byte contribution from download totals
                             dl_state['done']     = max(0, dl_state['done']     - act['dl_done'])
                             dl_state['expected'] = max(0, dl_state['expected'] - act['dl_expected'])
 
                         if nix_type == ACT_BUILD:
-                            build_state['done'] += 1
+                            if not build_state['aggregate']:
+                                build_state['done'] += 1
                             if build_state['total'] > 0:
                                 yield _emit_progress()
 
@@ -1696,8 +1700,8 @@ def create_app() -> Flask:
                         if act is None or len(fields) < 2:
                             return
                         done, expected = fields[0], fields[1]
-                        if act['phase'] == 'fetching' and isinstance(done, int) and isinstance(expected, int):
-                            # Update download byte totals by delta
+                        if act['nix_type'] == ACT_FILE_TRANSFER and isinstance(done, int) and isinstance(expected, int):
+                            # Compressed download bytes from HTTP file transfer
                             dl_state['done']     += done     - act['dl_done']
                             dl_state['expected'] += expected - act['dl_expected']
                             dl_state['done']      = max(0, dl_state['done'])
@@ -1706,6 +1710,14 @@ def create_app() -> Flask:
                             act['dl_expected']    = expected
                             if dl_state['expected'] > 0:
                                 yield _emit_dl()
+                        elif act['nix_type'] == ACT_BUILDS and isinstance(done, int) and isinstance(expected, int):
+                            # Aggregate build counter from Builds activity – available before actBuild starts
+                            build_state['aggregate'] = True
+                            build_state['done']  = done
+                            if expected > 0:
+                                build_state['total'] = expected
+                            if build_state['total'] > 0:
+                                yield _emit_progress()
 
             try:
                 staged_with_git = False
