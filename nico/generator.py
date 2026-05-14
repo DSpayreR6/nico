@@ -167,8 +167,12 @@ def generate_configuration_nix(data: dict) -> str:
     boot_efi_can_touch = data.get("boot_efi_can_touch",  False)
     boot_efi_mount     = (data.get("boot_efi_mount_point", "/boot") or "/boot").strip()
     boot_config_limit  = int(data.get("boot_config_limit",  5) or 5)
+    boot_kernel_params = (data.get("boot_kernel_params", "") or "").strip()
+    boot_initrd_systemd = data.get("boot_initrd_systemd", False)
+    plymouth_enabled   = data.get("plymouth_enabled",    False)
+    plymouth_theme     = (data.get("plymouth_theme", "") or "").strip()
 
-    if boot_loader != "none" or _has_section_brix(brix, "Boot"):
+    if boot_loader != "none" or boot_kernel_params or boot_initrd_systemd or plymouth_enabled or _has_section_brix(brix, "Boot"):
         lines += [_section("Boot")]
         if boot_loader != "none":
             if boot_loader == "systemd-boot":
@@ -181,6 +185,15 @@ def generate_configuration_nix(data: dict) -> str:
             lines += [f'  boot.loader.efi.canTouchEfiVariables = {"true" if boot_efi_can_touch else "false"};']
             if boot_efi_mount != "/boot":
                 lines += [f'  boot.loader.efi.efiSysMountPoint = "{boot_efi_mount}";']
+        if boot_kernel_params:
+            params = " ".join(f'"{p}"' for p in boot_kernel_params.split())
+            lines += [f"  boot.kernelParams = [ {params} ];"]
+        if boot_initrd_systemd:
+            lines += ["  boot.initrd.systemd.enable = true;"]
+        if plymouth_enabled:
+            lines += ["  boot.plymouth.enable = true;"]
+            if plymouth_theme:
+                lines += [f'  boot.plymouth.theme = "{plymouth_theme}";']
 
     # ── System ────────────────────────────────────────────────────────────
     lines += [_section("System")]
@@ -619,7 +632,11 @@ def generate_host_nix(data: dict, host_name: str, hw_config: bool = False) -> st
 
     # Boot
     boot_loader = data.get("boot_loader", "none") or "none"
-    if boot_loader != "none" or _has_section_brix(brix, "Boot"):
+    boot_kernel_params = (data.get("boot_kernel_params", "") or "").strip()
+    boot_initrd_systemd = data.get("boot_initrd_systemd", False)
+    plymouth_enabled = data.get("plymouth_enabled", False)
+    plymouth_theme = (data.get("plymouth_theme", "") or "").strip()
+    if boot_loader != "none" or boot_kernel_params or boot_initrd_systemd or plymouth_enabled or _has_section_brix(brix, "Boot"):
         boot_efi_can_touch = data.get("boot_efi_can_touch", False)
         boot_efi_mount = (data.get("boot_efi_mount_point", "/boot") or "/boot").strip()
         boot_config_limit = int(data.get("boot_config_limit", 5) or 5)
@@ -635,6 +652,15 @@ def generate_host_nix(data: dict, host_name: str, hw_config: bool = False) -> st
             lines += [f'  boot.loader.efi.canTouchEfiVariables = {"true" if boot_efi_can_touch else "false"};']
             if boot_efi_mount != "/boot":
                 lines += [f'  boot.loader.efi.efiSysMountPoint = "{boot_efi_mount}";']
+        if boot_kernel_params:
+            params = " ".join(f'"{p}"' for p in boot_kernel_params.split())
+            lines += [f"  boot.kernelParams = [ {params} ];"]
+        if boot_initrd_systemd:
+            lines += ["  boot.initrd.systemd.enable = true;"]
+        if plymouth_enabled:
+            lines += ["  boot.plymouth.enable = true;"]
+            if plymouth_theme:
+                lines += [f'  boot.plymouth.theme = "{plymouth_theme}";']
 
     # System
     sys_lines = []

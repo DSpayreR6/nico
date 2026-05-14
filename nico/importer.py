@@ -242,6 +242,18 @@ def _ts_parse_config(nix_content: str) -> 'tuple[dict, set[str]] | None':
         if v is not None:
             r['boot_config_limit'] = v; _mark('boot.loader.systemd-boot.configurationLimit')
 
+    vt = _vt('boot.kernelParams')
+    if vt:
+        inner = vt.strip()
+        if inner.startswith('[') and inner.endswith(']'):
+            params = re.findall(r'"([^"]*)"', inner)
+            if params:
+                r['boot_kernel_params'] = ' '.join(params); _mark('boot.kernelParams')
+
+    b('boot_initrd_systemd', 'boot.initrd.systemd.enable')
+    b('plymouth_enabled',    'boot.plymouth.enable')
+    s('plymouth_theme',      'boot.plymouth.theme')
+
     # ── Netzwerk ──────────────────────────────────────────────────────────────
     b('networkmanager', 'networking.networkmanager.enable')
     b('ssh',            'services.openssh.enable')

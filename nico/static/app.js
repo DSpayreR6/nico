@@ -4920,6 +4920,9 @@ function toggleOpenglOptions(show) {
 function toggleBootEfiOptions(show) {
   document.getElementById('boot-efi-options')?.classList.toggle('hidden', !show);
 }
+function togglePlymouthOptions(show) {
+  document.getElementById('plymouth-options')?.classList.toggle('hidden', !show);
+}
 function updateStateVersionStyle() {
   const el = document.getElementById('state_version');
   if (!el) return;
@@ -5250,6 +5253,10 @@ function getFormData() {
     boot_efi_can_touch:  ch('boot_efi_can_touch'),
     boot_efi_mount_point: v('boot_efi_mount_point') || '/boot',
     boot_config_limit:   parseInt(v('boot_config_limit') || '5', 10),
+    boot_kernel_params:  v('boot_kernel_params'),
+    plymouth_enabled:    ch('plymouth_enabled'),
+    boot_initrd_systemd: ch('boot_initrd_systemd'),
+    plymouth_theme:      v('plymouth_theme'),
     printing:            ch('printing'),
     avahi:               ch('avahi'),
     bluetooth:           ch('bluetooth'),
@@ -5488,7 +5495,14 @@ function populateFormFromData(data) {
     ch('firewall_udp_enable', data.firewall_udp_enable);
     document.getElementById('firewall-udp-detail')?.classList.toggle('hidden', !data.firewall_udp_enable);
   }
-  if ('boot_efi_can_touch' in data) ch('boot_efi_can_touch',  data.boot_efi_can_touch);
+  if ('boot_efi_can_touch'  in data) ch('boot_efi_can_touch',   data.boot_efi_can_touch);
+  if ('boot_kernel_params'  in data) v('boot_kernel_params',    data.boot_kernel_params || '');
+  if ('plymouth_enabled'    in data) {
+    ch('plymouth_enabled', data.plymouth_enabled);
+    togglePlymouthOptions(!!data.plymouth_enabled);
+  }
+  if ('boot_initrd_systemd' in data) ch('boot_initrd_systemd', data.boot_initrd_systemd);
+  if ('plymouth_theme'      in data) v('plymouth_theme',        data.plymouth_theme || '');
   if ('printing'           in data) ch('printing',            data.printing);
   if ('avahi'              in data) ch('avahi',               data.avahi);
   if ('bluetooth'          in data) ch('bluetooth',           data.bluetooth);
@@ -5596,6 +5610,8 @@ function clearCoForm() {
   setField('cpu_microcode', 'none');
   setField('boot_efi_mount_point', '/boot');
   setField('boot_config_limit', 5);
+  setField('boot_kernel_params', '');
+  setField('plymouth_theme', '');
   setField('nix_gc_frequency', 'weekly');
   setField('nix_gc_age', '30d');
   renderAllSnapperConfigs([]);
@@ -5618,6 +5634,7 @@ function clearCoForm() {
   toggleHmGitDetail(false);
   toggleHmXdgDetail(false);
   toggleBootEfiOptions(false);
+  togglePlymouthOptions(false);
   togglePipewireOptions(false);
   toggleGcOptions(false);
   toggleOpenglOptions(false);
@@ -5744,7 +5761,16 @@ function bindUI() {
 
   // Hardware / Virtualisierung / Backup sub-option visibility
   on('opengl',       'change', e => toggleOpenglOptions(e.target.checked));
-  on('boot_loader', 'change', e => { toggleBootEfiOptions(e.target.value !== 'none'); schedulePreviewUpdate(); });
+  on('boot_loader',      'change', e => { toggleBootEfiOptions(e.target.value !== 'none'); schedulePreviewUpdate(); });
+  on('plymouth_enabled', 'change', e => {
+    const checked = e.target.checked;
+    togglePlymouthOptions(checked);
+    if (checked) {
+      const cb = document.getElementById('boot_initrd_systemd');
+      if (cb && !cb.checked) cb.checked = true;
+    }
+    schedulePreviewUpdate();
+  });
   on('pipewire',  'change', e => { togglePipewireOptions(e.target.checked); schedulePreviewUpdate(); });
   on('virtualbox_guest', 'change', e => { toggleVboxGuestOptions(e.target.checked); schedulePreviewUpdate(); });
   on('docker',       'change', e => toggleDockerOptions(e.target.checked));

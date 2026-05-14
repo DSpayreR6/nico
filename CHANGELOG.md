@@ -17,6 +17,9 @@
 - HM panel: shell, initExtra and packages directly editable
 - Validator: brix redundancy hint now shows the affected panel section
 
+- Plymouth (bootsplash) support: enable/disable Plymouth per host, optional theme selection, automatic `boot.initrd.systemd.enable` dependency; full import/export roundtrip
+- Kernel parameters (`boot.kernelParams`) directly configurable in the Boot section; full import/export roundtrip
+
 - Flatpak support in the panel: enable Flatpak and manage remotes (name + URL) per host; Flathub quick-add button
 - Config integrity check: `testing/verify_config.py` compares current config semantically against a reference ZIP and reports moved, changed, or lost data
 - Git-Sync toggle in settings: disable remote sync (start guard, auto-push) while keeping optional local status display
