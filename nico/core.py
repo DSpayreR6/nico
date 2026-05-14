@@ -225,11 +225,11 @@ def hm_patch_init_extra(content: str, new_extra: str) -> str:
             indented = "\n".join(f"      {ln}" for ln in new_extra.splitlines())
             def _repl(_m, _k=key, _ind=indented):
                 return f"\n    {_k} = ''\n{_ind}\n    '';"
-            patched = re.sub(
+            patched, n = re.subn(
                 rf'\s*{ek}\s*=\s*\'\'[\s\S]*?\'\'[ \t]*;',
                 _repl, content, count=1
             )
-            if patched != content:
+            if n > 0:
                 return patched
             def _ins(_m, _k=key, _ind=indented):
                 body = _m.group(0)
