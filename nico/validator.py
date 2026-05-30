@@ -9,6 +9,7 @@ rules check the host's own files; otherwise the root config files are used.
 """
 from __future__ import annotations
 
+import json
 import os
 import re
 import subprocess
@@ -73,6 +74,10 @@ ALL_RULES: list[Rule] = [
          "HM allowUnfree konsistent",
          "Prüft ob nixpkgs.config.allowUnfree in NixOS- und HM-Config übereinstimmt.",
          "warning"),
+    Rule("flake_hm_branch",
+         "Home Manager Branch passt zu nixpkgs",
+         "Prüft ob der home-manager Input zur nixpkgs-Version passt und flake.lock nicht abweicht.",
+         "error", flake_only=True),
     Rule("snapper_btrfs",
          "Snapper-Mountpoints prüfen",
          "Prüft ob die konfigurierten Snapper-Mountpoints existieren und btrfs sind.",
@@ -474,6 +479,190 @@ def _section_hint(recognized: dict) -> str:
     return ", ".join(f'"{s}"' for s in sections)
 
 
+def _extract_flake_input_url(content: str, input_name: str) -> tuple[str | None, int | None]:
+    """Return (url, line_number) for a flake input, or (None, None) if not found."""
+    lines = content.split('\n')
+    pat_inline = re.compile(
+        rf'(?:inputs\s*\.\s*)?{re.escape(input_name)}\s*\.\s*url\s*=\s*"([^"]+)"'
+    )
+    for i, line in enumerate(lines, 1):
+        m = pat_inline.search(line)
+        if m:
+            return m.group(1), i
+
+    pat_block = re.compile(rf'(?:inputs\s*\.\s*)?{re.escape(input_name)}\s*=')
+    in_block = False
+    brace_depth = 0
+    for i, line in enumerate(lines, 1):
+        if not in_block:
+            if pat_block.search(line) and '{' in line:
+                in_block = True
+                brace_depth = line.count('{') - line.count('}')
+        else:
+            brace_depth += line.count('{') - line.count('}')
+            m = re.search(r'url\s*=\s*"([^"]+)"', line)
+            if m:
+                return m.group(1), i
+            if brace_depth <= 0:
+                in_block = False
+
+    return None, None
+
+
+def _parse_github_ref(url: str) -> str | None:
+    """Extract ref (branch/tag) from github:org/repo/ref URL. Returns None if no ref."""
+    if not url.startswith('github:'):
+        return None
+    parts = url[len('github:'):].split('/')
+    if len(parts) >= 3:
+        return '/'.join(parts[2:])
+    return None
+
+
+def _parse_nixpkgs_version(url: str) -> str | None:
+    """Return 'XX.YY' for versioned nixpkgs, 'unstable' for unstable, None otherwise."""
+    ref = _parse_github_ref(url)
+    if ref is None:
+        return None
+    return _parse_nixpkgs_version_from_ref(ref)
+
+
+def _parse_nixpkgs_version_from_ref(ref: str) -> str | None:
+    """Return 'XX.YY' for nixos-XX.YY refs, 'unstable' for unstable refs."""
+    m = re.match(r'nixos-(\d+\.\d+)', ref)
+    if m:
+        return m.group(1)
+    if 'unstable' in ref:
+        return 'unstable'
+    return None
+
+
+def _expected_hm_ref_for_nixpkgs_version(nixpkgs_version: str | None) -> str | None:
+    if not nixpkgs_version:
+        return None
+    if nixpkgs_version == 'unstable':
+        return 'master'
+    return f"release-{nixpkgs_version}"
+
+
+def _load_flake_lock_refs(nixos_dir: str) -> tuple[str | None, str | None] | None:
+    lock_path = Path(nixos_dir) / "flake.lock"
+    if not lock_path.exists():
+        return None
+    try:
+        data = json.loads(lock_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+
+    nodes = data.get("nodes") or {}
+
+    def node_ref(name: str) -> str | None:
+        node = nodes.get(name) or {}
+        for section in ("locked", "original"):
+            ref = (node.get(section) or {}).get("ref")
+            if isinstance(ref, str) and ref:
+                return ref
+        return None
+
+    return node_ref("nixpkgs"), node_ref("home-manager")
+
+
+def _rule_flake_hm_branch(nixos_dir: str, config: dict, is_flake: bool,
+                          host: str | None = None) -> list[Finding]:
+    flake_path = Path(nixos_dir) / "flake.nix"
+    if not flake_path.exists():
+        return []
+    try:
+        content = flake_path.read_text(encoding="utf-8")
+    except OSError:
+        return []
+    if 'home-manager' not in content:
+        return []
+
+    nixpkgs_url, nixpkgs_line = _extract_flake_input_url(content, 'nixpkgs')
+    hm_url, hm_line = _extract_flake_input_url(content, 'home-manager')
+    if hm_url is None:
+        return []
+
+    nixpkgs_version = _parse_nixpkgs_version(nixpkgs_url) if nixpkgs_url else None
+    hm_ref = _parse_github_ref(hm_url)
+    findings = []
+
+    if nixpkgs_version:
+        expected_ref = _expected_hm_ref_for_nixpkgs_version(nixpkgs_version)
+        if hm_ref is None:
+            findings.append(Finding(
+                rule_id="flake_hm_branch",
+                severity="error",
+                message=f"flake.nix Zeile {hm_line}: home-manager hat keinen expliziten Branch.",
+                detail=(
+                    f"flake.nix Zeile {nixpkgs_line}: nixpkgs → {nixpkgs_url}\n"
+                    f"flake.nix Zeile {hm_line}: home-manager → {hm_url}\n"
+                    f"Erwartet: github:nix-community/home-manager/{expected_ref}"
+                ),
+            ))
+        elif expected_ref and hm_ref != expected_ref:
+            findings.append(Finding(
+                rule_id="flake_hm_branch",
+                severity="error",
+                message=f"flake.nix Zeile {hm_line}: home-manager Branch '{hm_ref}' passt nicht zu nixpkgs {nixpkgs_version}.",
+                detail=(
+                    f"flake.nix Zeile {nixpkgs_line}: nixpkgs → {nixpkgs_url}\n"
+                    f"flake.nix Zeile {hm_line}: home-manager → {hm_url}\n"
+                    f"Erwartet: github:nix-community/home-manager/{expected_ref}"
+                ),
+            ))
+
+    lock_refs = _load_flake_lock_refs(nixos_dir)
+    if lock_refs:
+        lock_np_ref, lock_hm_ref = lock_refs
+        lock_np_version = _parse_nixpkgs_version_from_ref(lock_np_ref or "")
+        expected_lock_hm_ref = _expected_hm_ref_for_nixpkgs_version(lock_np_version)
+        if expected_lock_hm_ref and lock_hm_ref and lock_hm_ref != expected_lock_hm_ref:
+            findings.append(Finding(
+                rule_id="flake_hm_branch",
+                severity="error",
+                message="flake.lock: home-manager und nixpkgs sind auf unterschiedliche Release-Zweige gelockt.",
+                detail=(
+                    f"flake.lock: nixpkgs ref = {lock_np_ref or '<unbekannt>'}\n"
+                    f"flake.lock: home-manager ref = {lock_hm_ref}\n"
+                    f"Erwartet: home-manager ref = {expected_lock_hm_ref}\n"
+                    "Lockfile aktualisieren: nix flake update"
+                ),
+            ))
+
+        expected_flake_hm_ref = _expected_hm_ref_for_nixpkgs_version(nixpkgs_version)
+        if (expected_flake_hm_ref and lock_hm_ref and lock_hm_ref != expected_flake_hm_ref
+                and expected_flake_hm_ref != expected_lock_hm_ref):
+            findings.append(Finding(
+                rule_id="flake_hm_branch",
+                severity="warning",
+                message="flake.lock passt nicht zur home-manager-Auswahl in flake.nix.",
+                detail=(
+                    f"flake.nix Zeile {hm_line}: home-manager → {hm_url}\n"
+                    f"flake.lock: home-manager ref = {lock_hm_ref}\n"
+                    f"Erwartet nach flake.nix: {expected_flake_hm_ref}\n"
+                    "Lockfile aktualisieren: nix flake update"
+                ),
+            ))
+
+        flake_np_ref = _parse_github_ref(nixpkgs_url) if nixpkgs_url else None
+        if flake_np_ref and lock_np_ref and lock_np_ref != flake_np_ref:
+            findings.append(Finding(
+                rule_id="flake_hm_branch",
+                severity="warning",
+                message="flake.lock passt nicht zur nixpkgs-Auswahl in flake.nix.",
+                detail=(
+                    f"flake.nix Zeile {nixpkgs_line}: nixpkgs → {nixpkgs_url}\n"
+                    f"flake.lock: nixpkgs ref = {lock_np_ref}\n"
+                    f"Erwartet nach flake.nix: {flake_np_ref}\n"
+                    "Lockfile aktualisieren: nix flake update"
+                ),
+            ))
+
+    return findings
+
+
 def _rule_brix_redundant(nixos_dir: str, config: dict, is_flake: bool,
                          host: str | None = None) -> list[Finding]:
     from . import importer as _imp
@@ -687,6 +876,7 @@ _RULE_FNS: dict[str, object] = {
     "brix_redundant":    _rule_brix_redundant,
     "hm_user_defined":   _rule_hm_user_defined,
     "hm_allowunfree":    _rule_hm_allowunfree,
+    "flake_hm_branch":   _rule_flake_hm_branch,
     "snapper_btrfs":     _rule_snapper_btrfs,
     "snapper_in_host":   _rule_snapper_in_host,
 }

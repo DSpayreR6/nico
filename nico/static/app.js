@@ -7379,6 +7379,13 @@ const Sidebar = (() => {
   // ── Flake-Panel ──────────────────────────────────────────────────
 
   let _flakePreviewDebounce = null;
+  const FALLBACK_NIXOS_CHANNELS = [
+    'nixos-unstable',
+    'nixos-26.05',
+    'nixos-25.11',
+    'nixos-25.05',
+    'nixos-24.11',
+  ];
 
   function _scheduleFlakePreviewUpdate() {
     clearTimeout(_flakePreviewDebounce);
@@ -7420,6 +7427,32 @@ const Sidebar = (() => {
     };
   }
 
+  function _setNixpkgsChannelOptions(channels, selected) {
+    const el = document.getElementById('flake_nixpkgs_channel');
+    if (!el) return;
+    const current = selected ?? el.value ?? 'nixos-unstable';
+    const list = Array.isArray(channels) && channels.length ? [...channels] : [...FALLBACK_NIXOS_CHANNELS];
+    if (current && !list.includes(current)) list.unshift(current);
+    el.innerHTML = '';
+    list.forEach(channel => {
+      const opt = document.createElement('option');
+      opt.value = channel;
+      opt.textContent = channel;
+      el.appendChild(opt);
+    });
+    el.value = current;
+  }
+
+  async function _loadNixpkgsChannelOptions(selected) {
+    try {
+      const res = await csrfFetch('/api/nixos/channels');
+      const data = await res.json();
+      _setNixpkgsChannelOptions(data.channels, selected);
+    } catch (e) {
+      _setNixpkgsChannelOptions(FALLBACK_NIXOS_CHANNELS, selected);
+    }
+  }
+
   /**
    * Flake-Formular aus dem Dateiinhalt befüllen (nicht aus nico.json).
    * Wird aufgerufen wenn der User flake.nix öffnet – Datei ist die Wahrheit.
@@ -7457,6 +7490,7 @@ const Sidebar = (() => {
       const chk = (id, val) => { const el = document.getElementById(id); if (el) el.checked = !!val; };
       const sel = (id, val) => { const el = document.getElementById(id); if (el) el.value = val ?? el.value; };
 
+      await _loadNixpkgsChannelOptions(d.flake_nixpkgs_channel);
       set('flake_description',    d.flake_description);
       sel('flake_nixpkgs_channel', d.flake_nixpkgs_channel);
       chk('flake_hm_input',       d.flake_hm_input);
@@ -7490,6 +7524,7 @@ const Sidebar = (() => {
       const chk  = (id, val) => { const el = document.getElementById(id); if (el) el.checked = !!val; };
       const sel  = (id, val) => { const el = document.getElementById(id); if (el && val !== undefined) el.value = val; };
 
+      await _loadNixpkgsChannelOptions(data.flake_nixpkgs_channel ?? 'nixos-unstable');
       set('flake_description',    data.flake_description ?? '');
       sel('flake_nixpkgs_channel', data.flake_nixpkgs_channel ?? 'nixos-unstable');
       chk('flake_hm_input',       data.flake_hm_input);

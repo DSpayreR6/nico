@@ -9,6 +9,8 @@ import secrets
 import shutil
 import threading
 import tomllib
+import urllib.error
+import urllib.request
 from pathlib import Path
 
 from flask import Flask, Response, jsonify, render_template, request, stream_with_context
@@ -57,6 +59,45 @@ from .core import (
 
 _THEMES_DIR = Path(__file__).parent / "static" / "themes"
 _DEFAULT_THEME = "catppuccin-mocha"
+_NIXOS_CHANNELS_URL = "https://nix-channels.s3.amazonaws.com?delimiter=/"
+_FALLBACK_NIXOS_CHANNELS = [
+    "nixos-unstable",
+    "nixos-26.05",
+    "nixos-25.11",
+    "nixos-25.05",
+    "nixos-24.11",
+]
+_NIXOS_CHANNEL_RE = re.compile(r"\bnixos-(?:unstable|\d{2}\.\d{2})\b")
+
+
+def _sort_nixos_channels(channels: set[str], stable_limit: int = 4) -> list[str]:
+    stable = sorted(
+        (c for c in channels if re.fullmatch(r"nixos-\d{2}\.\d{2}", c)),
+        key=lambda c: tuple(int(part) for part in c.removeprefix("nixos-").split(".")),
+        reverse=True,
+    )
+    result = ["nixos-unstable"]
+    result.extend(stable[:stable_limit])
+    return result
+
+
+def _fetch_nixos_channels() -> tuple[list[str], str]:
+    try:
+        req = urllib.request.Request(
+            _NIXOS_CHANNELS_URL,
+            headers={"User-Agent": "NiCo channel updater"},
+        )
+        with urllib.request.urlopen(req, timeout=4) as resp:
+            html = resp.read(200_000).decode("utf-8", errors="replace")
+        channels = set(_NIXOS_CHANNEL_RE.findall(html))
+        if "nixos-unstable" not in channels:
+            channels.add("nixos-unstable")
+        result = _sort_nixos_channels(channels)
+        if len(result) > 1:
+            return result, "remote"
+    except (OSError, urllib.error.URLError, TimeoutError, UnicodeError):
+        pass
+    return list(_FALLBACK_NIXOS_CHANNELS), "fallback"
 
 def _load_theme_css(theme_name: str) -> str:
     toml_path = _THEMES_DIR / theme_name / "theme.toml"
@@ -143,6 +184,12 @@ def create_app() -> Flask:
         lang_dir = Path(__file__).parent / "static" / "lang"
         codes = sorted(p.stem for p in lang_dir.glob("*.json"))
         return jsonify(codes)
+
+    @app.route("/api/nixos/channels")
+    def nixos_channels():
+        """Return current NixOS flake channels with a local fallback."""
+        channels, source = _fetch_nixos_channels()
+        return jsonify({"channels": channels, "source": source})
 
     @app.route("/api/status")
     def status():

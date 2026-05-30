@@ -1040,6 +1040,15 @@ def generate_host_nix(data: dict, host_name: str, hw_config: bool = False) -> st
     return _add_version_hash(content, ftype="co")
 
 
+def _home_manager_ref_for_nixpkgs_channel(channel: str) -> str | None:
+    if "unstable" in channel:
+        return "master"
+    m = re.fullmatch(r"nixos-(\d+\.\d+)", channel)
+    if m:
+        return f"release-{m.group(1)}"
+    return None
+
+
 def generate_flake_nix(data: dict, nixos_dir: "str | Path | None" = None) -> str:
     """Generate flake.nix from panel data.
 
@@ -1069,15 +1078,19 @@ def generate_flake_nix(data: dict, nixos_dir: "str | Path | None" = None) -> str
     # ── inputs block ──────────────────────────────────────────────────────────
     inp: list[str] = [f'    nixpkgs.url = "github:NixOS/nixpkgs/{channel}";']
     if hm_input:
+        hm_ref = _home_manager_ref_for_nixpkgs_channel(channel)
+        hm_url = "github:nix-community/home-manager"
+        if hm_ref:
+            hm_url = f"{hm_url}/{hm_ref}"
         if hm_follows:
             inp += [
                 '    home-manager = {',
-                '      url = "github:nix-community/home-manager";',
+                f'      url = "{hm_url}";',
                 '      inputs.nixpkgs.follows = "nixpkgs";',
                 '    };',
             ]
         else:
-            inp.append('    home-manager.url = "github:nix-community/home-manager";')
+            inp.append(f'    home-manager.url = "{hm_url}";')
     if hw_input:
         inp.append('    nixos-hardware.url = "github:NixOS/nixos-hardware";')
     if pm_input:
