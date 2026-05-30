@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Planned / Backlog
+
+- **Disko Panel & Installer-Export:** New panel type for building a `disko.nix` via GUI (disk layout, partitions, filesystems, Btrfs subvolumes, LUKS). Export function bundles `disko.nix` + NixOS config + NiCo onto a USB stick. Target workflow: boot NixOS live ISO → mount stick → run disko → start NiCo → install config.
+
 ### New Features
 
 - Panel toggle redesigned as a card with a real toggle switch in the tab bar; save button replaces the eye icon in raw mode for a stable layout
@@ -35,6 +39,9 @@
 - Duplicate attribute validation now checks all `.nix` files in the config
 - NixOS data no longer incorrectly persisted in config.json
 - bashrcExtra and other unknown shell fields no longer deleted on regeneration
+- HM initExtra block no longer duplicated on every plain-text view toggle
+- Home Manager enable toggle in CO form now correctly saves and generates home.nix (home_manager dict was accidentally dropped before save)
+- `/api/files/info` now correctly detects Home Manager enabled state (wrong config key fixed)
 
 ---
 

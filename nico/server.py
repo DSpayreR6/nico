@@ -278,7 +278,6 @@ def create_app() -> Flask:
 
         incoming.pop("_co_path", None)
         incoming.pop("_co_ready", None)
-        incoming.pop("home_manager", None)
         config_manager.save_config(nixos_dir, incoming)
         return jsonify({"success": True})
 
@@ -2648,7 +2647,7 @@ def create_app() -> Flask:
         ]
         if cfg.get("flakes"):
             candidates.append(("flake.nix", root / "flake.nix"))
-        if cfg.get("home_manager_enable"):
+        if cfg.get("home_manager", {}).get("enabled"):
             candidates.append(("home.nix", root / "home.nix"))
 
         files = []
