@@ -10,6 +10,8 @@
 
 - Flake panel now loads NixOS channels dynamically from the official NixOS channel listing, with a local fallback
 - Home Manager flake input now follows the matching branch for the selected nixpkgs channel and validates matching `flake.lock` refs
+- Home Manager config files now live in `hm_dir/<username>.nix` instead of a single root `home.nix`; the configuration form shows a live file list and a "Create HM file" button; validation detects missing flake references, missing files, and orphaned root `home.nix`
+
 - Panel toggle redesigned as a card with a real toggle switch in the tab bar; save button replaces the eye icon in raw mode for a stable layout
 - Snapper individually configurable with free subvolumes and per-entry snapshot schedule
 - Double-start protection: second NiCo instance shows info page instead of silent restart
