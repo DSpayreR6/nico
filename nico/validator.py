@@ -67,17 +67,38 @@ ALL_RULES: list[Rule] = [
          "Erkennt Brix-Blöcke deren Inhalt vermutlich vollständig über das NiCo-Panel konfigurierbar wäre.",
          "info"),
     Rule("hm_user_defined",
-         "HM-User definiert",
-         "Prüft ob home-manager.users.<user> in der Flake-Config definiert ist.",
+         "HM-Referenz in Flake",
+         "Prüft ob home-manager.users.* in einer .nix-Datei referenziert wird wenn HM-Dateien vorhanden sind.",
          "warning", flake_only=True),
+    Rule("hm_missing_file",
+         "HM-Datei fehlt",
+         "Prüft ob in flake.nix referenzierte HM-Dateien auf Platte existieren.",
+         "error", flake_only=True),
+    Rule("hm_orphan_root",
+         "Verwaiste home.nix",
+         "Erkennt eine home.nix im Config-Root die in keiner anderen Datei referenziert wird.",
+         "info"),
     Rule("hm_allowunfree",
          "HM allowUnfree konsistent",
          "Prüft ob nixpkgs.config.allowUnfree in NixOS- und HM-Config übereinstimmt.",
          "warning"),
     Rule("flake_hm_branch",
          "Home Manager Branch passt zu nixpkgs",
-         "Prüft ob der home-manager Input zur nixpkgs-Version passt und flake.lock nicht abweicht.",
+         "Prüft ob der home-manager Input einen Release-Branch hat (release-XX.YY) "
+         "der zur nixpkgs-Version übereinstimmt.",
          "error", flake_only=True),
+    Rule("state_version_match",
+         "stateVersion passt zu nixpkgs",
+         "Prüft ob system.stateVersion in den NixOS-Configs zur nixpkgs-Release-Version passt.",
+         "warning", flake_only=True),
+    Rule("hm_state_version_match",
+         "HM stateVersion konsistent",
+         "Prüft ob home.stateVersion in HM-Configs mit system.stateVersion übereinstimmt.",
+         "warning"),
+    Rule("flake_hm_nix_assert",
+         "Nix-Assertion für HM-Branch",
+         "Informiert über einen optionalen Nix-Code-Schnipsel der den HM-Branch nativ bei der Flake-Evaluierung prüft.",
+         "info", flake_only=True),
     Rule("snapper_btrfs",
          "Snapper-Mountpoints prüfen",
          "Prüft ob die konfigurierten Snapper-Mountpoints existieren und btrfs sind.",
@@ -490,7 +511,10 @@ def _extract_flake_input_url(content: str, input_name: str) -> tuple[str | None,
         if m:
             return m.group(1), i
 
-    pat_block = re.compile(rf'(?:inputs\s*\.\s*)?{re.escape(input_name)}\s*=')
+    # Multi-line block: input_name = { ... url = "..." ... }
+    pat_block = re.compile(
+        rf'(?:inputs\s*\.\s*)?{re.escape(input_name)}\s*='
+    )
     in_block = False
     brace_depth = 0
     for i, line in enumerate(lines, 1):
@@ -567,8 +591,30 @@ def _load_flake_lock_refs(nixos_dir: str) -> tuple[str | None, str | None] | Non
     return node_ref("nixpkgs"), node_ref("home-manager")
 
 
+_NIX_HM_ASSERT_SNIPPET = """\
+# Diesen Block in deinen flake.nix outputs = { self, nixpkgs, home-manager, ... }:
+# let-Block einfügen und die Ausgabe mit 'if !_hmBranchOk then throw ...' wrappen:
+#
+#   let
+#     lib         = nixpkgs.lib;
+#     _lock       = builtins.fromJSON (builtins.readFile ./flake.lock);
+#     _hmRef      = _lock.nodes."home-manager".original.ref or "";
+#     _npRef      = _lock.nodes."nixpkgs".original.ref or "";
+#     _npVerM     = builtins.match "nixos-([0-9]+\\\\.[0-9]+)" _npRef;
+#     _expHmRef   = if _npVerM != null
+#                   then "release-${builtins.elemAt _npVerM 0}"
+#                   else null;
+#     _hmBranchOk = _expHmRef == null || _hmRef == _expHmRef;
+#   in
+#     if !_hmBranchOk then
+#       throw
+#         "flake.nix: home-manager Branch '${_hmRef}' passt nicht zu nixpkgs '${_npRef}'. Erwartet: '${_expHmRef}'."
+#     else
+#       { nixosConfigurations = { ... }; }"""
+
+
 def _rule_flake_hm_branch(nixos_dir: str, config: dict, is_flake: bool,
-                          host: str | None = None) -> list[Finding]:
+                           host: str | None = None) -> list[Finding]:
     flake_path = Path(nixos_dir) / "flake.nix"
     if not flake_path.exists():
         return []
@@ -586,39 +632,70 @@ def _rule_flake_hm_branch(nixos_dir: str, config: dict, is_flake: bool,
 
     nixpkgs_version = _parse_nixpkgs_version(nixpkgs_url) if nixpkgs_url else None
     hm_ref = _parse_github_ref(hm_url)
+
     findings = []
 
-    if nixpkgs_version:
+    if nixpkgs_version and nixpkgs_version != 'unstable':
         expected_ref = _expected_hm_ref_for_nixpkgs_version(nixpkgs_version)
+        np_loc = f"flake.nix Zeile {nixpkgs_line}: nixpkgs → {nixpkgs_url}"
+        hm_loc = f"flake.nix Zeile {hm_line}: home-manager → {hm_url}"
         if hm_ref is None:
             findings.append(Finding(
                 rule_id="flake_hm_branch",
                 severity="error",
-                message=f"flake.nix Zeile {hm_line}: home-manager hat keinen expliziten Branch.",
+                message=f"flake.nix Zeile {hm_line}: home-manager hat keinen Release-Branch.",
                 detail=(
-                    f"flake.nix Zeile {nixpkgs_line}: nixpkgs → {nixpkgs_url}\n"
-                    f"flake.nix Zeile {hm_line}: home-manager → {hm_url}\n"
-                    f"Erwartet: github:nix-community/home-manager/{expected_ref}"
+                    f"{np_loc}\n"
+                    f"{hm_loc}\n"
+                    f"nixpkgs nutzt Version {nixpkgs_version}, aber home-manager hat keinen Branch "
+                    f"(zieht 'master'). Korrekt: github:nix-community/home-manager/{expected_ref}"
                 ),
             ))
-        elif expected_ref and hm_ref != expected_ref:
+        elif hm_ref != expected_ref:
             findings.append(Finding(
                 rule_id="flake_hm_branch",
                 severity="error",
-                message=f"flake.nix Zeile {hm_line}: home-manager Branch '{hm_ref}' passt nicht zu nixpkgs {nixpkgs_version}.",
+                message=f"flake.nix Zeile {hm_line}: home-manager Branch '{hm_ref}' ≠ nixpkgs {nixpkgs_version}.",
                 detail=(
-                    f"flake.nix Zeile {nixpkgs_line}: nixpkgs → {nixpkgs_url}\n"
-                    f"flake.nix Zeile {hm_line}: home-manager → {hm_url}\n"
+                    f"{np_loc}\n"
+                    f"{hm_loc}\n"
                     f"Erwartet: github:nix-community/home-manager/{expected_ref}"
                 ),
             ))
+    elif nixpkgs_version == 'unstable':
+        expected_ref = _expected_hm_ref_for_nixpkgs_version(nixpkgs_version)
+        if hm_ref and hm_ref != expected_ref:
+            findings.append(Finding(
+                rule_id="flake_hm_branch",
+                severity="error",
+                message=f"flake.nix Zeile {hm_line}: home-manager Branch '{hm_ref}', aber nixpkgs ist unstable.",
+                detail=(
+                    f"flake.nix Zeile {nixpkgs_line}: nixpkgs → {nixpkgs_url}\n"
+                    f"flake.nix Zeile {hm_line}: home-manager → {hm_url}\n"
+                    "Für nixpkgs-unstable sollte home-manager auf 'master' zeigen."
+                ),
+            ))
+    elif nixpkgs_url is None and hm_ref is None:
+        findings.append(Finding(
+            rule_id="flake_hm_branch",
+            severity="warning",
+            message=f"flake.nix Zeile {hm_line}: home-manager hat keinen expliziten Branch.",
+            detail=(
+                f"flake.nix Zeile {hm_line}: home-manager → {hm_url}\n"
+                "Ohne Branch (release-XX.YY) wird 'master' verwendet – "
+                "kann bei stabilen nixpkgs-Releases zu Inkompatibilitäten führen."
+            ),
+        ))
 
     lock_refs = _load_flake_lock_refs(nixos_dir)
     if lock_refs:
         lock_np_ref, lock_hm_ref = lock_refs
         lock_np_version = _parse_nixpkgs_version_from_ref(lock_np_ref or "")
         expected_lock_hm_ref = _expected_hm_ref_for_nixpkgs_version(lock_np_version)
-        if expected_lock_hm_ref and lock_hm_ref and lock_hm_ref != expected_lock_hm_ref:
+        lock_hm_mismatch = bool(
+            expected_lock_hm_ref and lock_hm_ref and lock_hm_ref != expected_lock_hm_ref
+        )
+        if lock_hm_mismatch:
             findings.append(Finding(
                 rule_id="flake_hm_branch",
                 severity="error",
@@ -661,6 +738,141 @@ def _rule_flake_hm_branch(nixos_dir: str, config: dict, is_flake: bool,
             ))
 
     return findings
+
+
+def _rule_state_version_match(nixos_dir: str, config: dict, is_flake: bool,
+                               host: str | None = None) -> list[Finding]:
+    flake_path = Path(nixos_dir) / "flake.nix"
+    if not flake_path.exists():
+        return []
+    try:
+        content = flake_path.read_text(encoding="utf-8")
+    except OSError:
+        return []
+
+    nixpkgs_url, nixpkgs_line = _extract_flake_input_url(content, 'nixpkgs')
+    if not nixpkgs_url:
+        return []
+    nixpkgs_version = _parse_nixpkgs_version(nixpkgs_url)
+    if not nixpkgs_version or nixpkgs_version == 'unstable':
+        return []
+
+    pat = re.compile(r'system\s*\.\s*stateVersion\s*=\s*"([^"]+)"')
+    findings = []
+    base = Path(nixos_dir)
+
+    for nix_file in sorted(base.rglob("*.nix")):
+        if ".git" in nix_file.parts:
+            continue
+        try:
+            file_content = nix_file.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        try:
+            rel = str(nix_file.relative_to(base))
+        except ValueError:
+            rel = nix_file.name
+
+        for i, line in enumerate(file_content.split('\n'), 1):
+            m = pat.search(line)
+            if m:
+                state_ver = m.group(1)
+                if state_ver != nixpkgs_version:
+                    findings.append(Finding(
+                        rule_id="state_version_match",
+                        severity="warning",
+                        message=f"{rel} Zeile {i}: system.stateVersion \"{state_ver}\" ≠ nixpkgs {nixpkgs_version}.",
+                        detail=(
+                            f"flake.nix Zeile {nixpkgs_line}: nixpkgs → {nixpkgs_url}\n"
+                            f"{rel} Zeile {i}: system.stateVersion = \"{state_ver}\"\n"
+                            f"Erwartet: system.stateVersion = \"{nixpkgs_version}\""
+                        ),
+                    ))
+
+    return findings
+
+
+def _rule_hm_state_version_match(nixos_dir: str, config: dict, is_flake: bool,
+                                  host: str | None = None) -> list[Finding]:
+    from . import config_manager as _cm
+    cfg_settings = _cm.load_config_settings(nixos_dir)
+    hm_dir_name = cfg_settings.get("hm_dir") or "home"
+    base = Path(nixos_dir)
+    hm_dir = base / hm_dir_name
+
+    sys_pat = re.compile(r'system\s*\.\s*stateVersion\s*=\s*"([^"]+)"')
+    hm_pat  = re.compile(r'home\s*\.\s*stateVersion\s*=\s*"([^"]+)"')
+
+    system_versions: list[tuple[str, str, int]] = []
+    hm_versions:     list[tuple[str, str, int]] = []
+
+    for nix_file in sorted(base.rglob("*.nix")):
+        if ".git" in nix_file.parts:
+            continue
+        try:
+            file_content = nix_file.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        try:
+            rel = str(nix_file.relative_to(base))
+        except ValueError:
+            rel = nix_file.name
+
+        is_hm = hm_dir.exists() and nix_file.is_relative_to(hm_dir)
+        pat = hm_pat if is_hm else sys_pat
+        target = hm_versions if is_hm else system_versions
+
+        for i, line in enumerate(file_content.split('\n'), 1):
+            m = pat.search(line)
+            if m:
+                target.append((m.group(1), rel, i))
+
+    if not system_versions or not hm_versions:
+        return []
+
+    sys_ver, sys_rel, sys_line = system_versions[0]
+    findings = []
+    for hm_ver, hm_rel, hm_line in hm_versions:
+        if hm_ver != sys_ver:
+            findings.append(Finding(
+                rule_id="hm_state_version_match",
+                severity="warning",
+                message=f"{hm_rel} Zeile {hm_line}: home.stateVersion \"{hm_ver}\" ≠ system.stateVersion \"{sys_ver}\".",
+                detail=(
+                    f"{sys_rel} Zeile {sys_line}: system.stateVersion = \"{sys_ver}\"\n"
+                    f"{hm_rel} Zeile {hm_line}: home.stateVersion = \"{hm_ver}\"\n"
+                    "Beide Werte müssen identisch sein."
+                ),
+            ))
+
+    return findings
+
+
+def _rule_flake_hm_nix_assert(nixos_dir: str, config: dict, is_flake: bool,
+                                host: str | None = None) -> list[Finding]:
+    flake_path = Path(nixos_dir) / "flake.nix"
+    if not flake_path.exists():
+        return []
+    try:
+        content = flake_path.read_text(encoding="utf-8")
+    except OSError:
+        return []
+    if 'home-manager' not in content:
+        return []
+    # Skip if a lock-based assertion is already present
+    if 'flake.lock' in content and ('throw' in content or 'assertMsg' in content):
+        return []
+
+    return [Finding(
+        rule_id="flake_hm_nix_assert",
+        severity="info",
+        message="Kein Nix-nativer HM-Branch-Check in flake.nix gefunden.",
+        detail=(
+            "Optional: folgenden Schnipsel in den let-Block der flake.nix outputs-Funktion einfügen "
+            "– er wirft beim nix eval einen Fehler, bevor der Build startet.\n\n"
+            + _NIX_HM_ASSERT_SNIPPET
+        ),
+    )]
 
 
 def _rule_brix_redundant(nixos_dir: str, config: dict, is_flake: bool,
@@ -712,17 +924,16 @@ def _rule_brix_redundant(nixos_dir: str, config: dict, is_flake: bool,
 
 def _rule_hm_user_defined(nixos_dir: str, config: dict, is_flake: bool,
                           host: str | None = None) -> list[Finding]:
-    hm = config.get("home_manager") or {}
-    if not hm.get("enabled"):
+    from . import config_manager as _cm
+    cfg_settings = _cm.load_config_settings(nixos_dir)
+    hm_dir_name = cfg_settings.get("hm_dir") or "home"
+    hm_dir_path = Path(nixos_dir) / hm_dir_name
+    if not hm_dir_path.is_dir():
         return []
-    username = (hm.get("username") or "").strip()
-    if not username:
+    if not any(hm_dir_path.glob("*.nix")):
         return []
 
-    # Match both quoted and unquoted: home-manager.users.alice or home-manager.users."alice"
-    pattern = re.compile(
-        r'home-manager\s*\.\s*users\s*\.\s*"?' + re.escape(username) + r'"?',
-    )
+    pattern = re.compile(r'home-manager\s*\.\s*users\s*\.\s*"?[\w-]+"?')
     for nix_file in sorted(Path(nixos_dir).rglob("*.nix")):
         if ".git" in nix_file.parts:
             continue
@@ -736,56 +947,94 @@ def _rule_hm_user_defined(nixos_dir: str, config: dict, is_flake: bool,
     return [Finding(
         rule_id="hm_user_defined",
         severity="warning",
-        message=f'home-manager.users.{username} ist in keiner .nix-Datei definiert.',
-        detail="Nach einer HM-Integration muss der User explizit über "
-               f"home-manager.users.{username} eingebunden werden, "
-               "z. B. in flake.nix oder einem eingebundenen Modul.",
+        message=f"HM-Dateien in {hm_dir_name}/ vorhanden, aber home-manager.users.* fehlt in allen .nix-Dateien.",
+        detail=f"Die Dateien in {hm_dir_name}/ sind nicht im Flake referenziert. "
+               "In flake.nix oder einem eingebundenen Modul "
+               "home-manager.users.<username> = import ./<datei>.nix eintragen.",
+    )]
+
+
+def _rule_hm_missing_file(nixos_dir: str, config: dict, is_flake: bool,
+                           host: str | None = None) -> list[Finding]:
+    flake_path = Path(nixos_dir) / "flake.nix"
+    if not flake_path.exists():
+        return []
+    try:
+        content = flake_path.read_text(encoding="utf-8")
+    except OSError:
+        return []
+
+    pattern = re.compile(
+        r'home-manager\s*\.\s*users\s*\.\s*"?([\w-]+)"?\s*=\s*import\s+(\.\/[^\s;]+)',
+    )
+    findings = []
+    for m in pattern.finditer(content):
+        username   = m.group(1)
+        import_path = m.group(2).strip().rstrip(';').strip()
+        resolved   = (Path(nixos_dir) / import_path).resolve()
+        if not resolved.exists():
+            findings.append(Finding(
+                rule_id="hm_missing_file",
+                severity="error",
+                message=f"flake.nix: home-manager.users.{username} referenziert fehlende Datei: {import_path}",
+                detail=str(resolved),
+            ))
+    return findings
+
+
+def _rule_hm_orphan_root(nixos_dir: str, config: dict, is_flake: bool,
+                          host: str | None = None) -> list[Finding]:
+    root_home = Path(nixos_dir) / "home.nix"
+    if not root_home.exists():
+        return []
+
+    for nix_file in sorted(Path(nixos_dir).rglob("*.nix")):
+        if ".git" in nix_file.parts:
+            continue
+        if nix_file == root_home:
+            continue
+        try:
+            content = nix_file.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        if re.search(r'[./"]home\.nix["/\s]', content) or "home.nix" in content:
+            return []
+
+    return [Finding(
+        rule_id="hm_orphan_root",
+        severity="info",
+        message="home.nix im Config-Root ist in keiner anderen Datei referenziert.",
+        detail="Die Datei wird nirgendwo importiert und hat vermutlich keinen Effekt. "
+               "Sie kann gelöscht werden.",
     )]
 
 
 def _rule_hm_allowunfree(nixos_dir: str, config: dict, is_flake: bool,
                          host: str | None = None) -> list[Finding]:
-    hm = config.get("home_manager") or {}
-    if not hm.get("enabled"):
-        return []
     if not config.get("allowUnfree"):
         return []
 
-    pattern = re.compile(r'nixpkgs\s*\.\s*config\s*\.\s*allowUnfree\s*=\s*true')
-
+    from . import config_manager as _cm
+    cfg_settings = _cm.load_config_settings(nixos_dir)
+    hm_dir_name = cfg_settings.get("hm_dir") or "home"
     base = Path(nixos_dir)
-    cfg_settings = config.get("_cfg_settings") or {}
-    hm_dir_name = cfg_settings.get("hm_dir") or config.get("hm_dir") or "home"
-
-    # Collect HM-side .nix files: home.nix at root + everything under hm_dir
-    hm_files: list[Path] = []
-    root_home = base / "home.nix"
-    if root_home.exists():
-        hm_files.append(root_home)
     hm_subdir = base / hm_dir_name
-    if hm_subdir.is_dir():
-        hm_files.extend(
-            f for f in hm_subdir.rglob("*.nix") if ".git" not in f.parts
-        )
 
-    hm_has_unfree = False
+    hm_files: list[Path] = []
+    if hm_subdir.is_dir():
+        hm_files = [f for f in hm_subdir.rglob("*.nix") if ".git" not in f.parts]
+    if not hm_files:
+        return []
+
+    pattern = re.compile(r'nixpkgs\s*\.\s*config\s*\.\s*allowUnfree\s*=\s*true')
     for nix_file in hm_files:
         try:
             if pattern.search(nix_file.read_text(encoding="utf-8")):
-                hm_has_unfree = True
-                break
+                return []
         except OSError:
             continue
 
-    if hm_has_unfree:
-        return []
-
-    hm_hint = "home.nix"
-    if hm_files:
-        hm_hint = " oder ".join(str(f.relative_to(base)) for f in hm_files[:2])
-    else:
-        hm_hint = f"home.nix oder {hm_dir_name}/"
-
+    hm_hint = " oder ".join(str(f.relative_to(base)) for f in hm_files[:2])
     return [Finding(
         rule_id="hm_allowunfree",
         severity="warning",
@@ -867,16 +1116,21 @@ def _rule_snapper_in_host(nixos_dir: str, config: dict, is_flake: bool,
 # ── Rule function registry ─────────────────────────────────────────────────────
 
 _RULE_FNS: dict[str, object] = {
-    "user_in_config":    _rule_user_in_config,
-    "flake_host_exists": _rule_flake_host_exists,
-    "hardware_imported": _rule_hardware_imported,
-    "hardware_matches":  _rule_hardware_matches,
-    "duplicate_attrs":   _rule_duplicate_attrs,
-    "imports_exist":     _rule_imports_exist,
-    "brix_redundant":    _rule_brix_redundant,
-    "hm_user_defined":   _rule_hm_user_defined,
-    "hm_allowunfree":    _rule_hm_allowunfree,
-    "flake_hm_branch":   _rule_flake_hm_branch,
-    "snapper_btrfs":     _rule_snapper_btrfs,
-    "snapper_in_host":   _rule_snapper_in_host,
+    "user_in_config":        _rule_user_in_config,
+    "flake_host_exists":     _rule_flake_host_exists,
+    "hardware_imported":     _rule_hardware_imported,
+    "hardware_matches":      _rule_hardware_matches,
+    "duplicate_attrs":       _rule_duplicate_attrs,
+    "imports_exist":         _rule_imports_exist,
+    "brix_redundant":        _rule_brix_redundant,
+    "hm_user_defined":       _rule_hm_user_defined,
+    "hm_missing_file":       _rule_hm_missing_file,
+    "hm_orphan_root":        _rule_hm_orphan_root,
+    "hm_allowunfree":        _rule_hm_allowunfree,
+    "flake_hm_branch":       _rule_flake_hm_branch,
+    "state_version_match":   _rule_state_version_match,
+    "hm_state_version_match": _rule_hm_state_version_match,
+    "flake_hm_nix_assert":   _rule_flake_hm_nix_assert,
+    "snapper_btrfs":         _rule_snapper_btrfs,
+    "snapper_in_host":       _rule_snapper_in_host,
 }

@@ -151,27 +151,6 @@ DEFAULT_NIXOS_CONFIG = {
     # Brick blocks: {name: {"section": str, "order": int, "text": str}}
     "brick_blocks": {},
 
-    # ── Home Manager
-    "home_manager": {
-        "enabled":            False,
-        "git_enable":         False,
-        "git_name":           "",
-        "git_email":          "",
-        "git_default_branch": "main",
-        "shell":              "bash",
-        "shell_init_extra":   "",
-        "packages":           [],
-        "firefox":            False,
-        "xdg_user_dirs":      False,
-        "xdg_download":       "Downloads",
-        "xdg_documents":      "Documents",
-        "xdg_pictures":       "Pictures",
-        "xdg_music":          "Music",
-        "xdg_videos":         "Videos",
-        "xdg_desktop":        "Desktop",
-        "xdg_templates":      "Templates",
-        "xdg_publicshare":    "Public",
-    },
 }
 
 ADDITIVE_FIELDS = {"packages", "fonts", "fonts_extra", "brick_blocks"}
@@ -358,27 +337,14 @@ def load_config(nixos_config_dir: str) -> dict:
         if not data.get("snapper_configs"):
             data["snapper_configs"] = migrated
 
-    home_file = Path(nixos_config_dir) / "home.nix"
-    if home_file.exists():
-        try:
-            content = home_file.read_text(encoding="utf-8")
-            hm = _imp.parse_home_config(strip_brick_blocks(content))
-            data["home_manager"] = hm
-            data["hm_brick_blocks"] = extract_brick_blocks(content)
-        except OSError:
-            pass
-
     return data
 
 
 def save_config(nixos_config_dir: str, data: dict) -> None:
-    """Generate configuration.nix (and home.nix if home_manager.enabled)
-    and write them to nixos_config_dir immediately."""
+    """Generate configuration.nix and write it to nixos_config_dir."""
     import copy
     from . import generator as _gen
-    from . import hm_generator as _hm
-    from .brix import extract_brick_blocks, strip_brick_blocks, brix_content_to_bricks
-    from . import importer as _imp
+    from .brix import extract_brick_blocks
 
     data = copy.copy(data)
     nix_file  = Path(nixos_config_dir) / "configuration.nix"
@@ -396,25 +362,6 @@ def save_config(nixos_config_dir: str, data: dict) -> None:
         _gen.generate_configuration_nix(data), encoding="utf-8"
     )
 
-    # Home Manager
-    hm = data.get("home_manager") or {}
-    if hm.get("enabled"):
-        home_file = Path(nixos_config_dir) / "home.nix"
-        hm = dict(hm)
-        if not data.get("hm_brick_blocks") and home_file.exists():
-            try:
-                home_content = home_file.read_text(encoding="utf-8")
-                data["hm_brick_blocks"] = extract_brick_blocks(home_content)
-                if not data["hm_brick_blocks"]:
-                    clean_home = strip_brick_blocks(home_content)
-                    recognized_home = _imp.parse_home_config(clean_home)
-                    rest = _imp.build_home_rest_brix(clean_home, recognized_home)
-                    if rest.strip():
-                        data["hm_brick_blocks"] = brix_content_to_bricks(rest, section="End")
-            except OSError:
-                pass
-        hm["hm_brick_blocks"] = data.get("hm_brick_blocks", {})
-        home_file.write_text(_hm.generate_home_nix(hm), encoding="utf-8")
 
 
 # ── Multi-Host Support ────────────────────────────────────────────────────────

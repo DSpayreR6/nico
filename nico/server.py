@@ -387,7 +387,7 @@ def create_app() -> Flask:
         """Merge settings into app settings (~/.config/nico/settings.json)."""
         if err := _check_csrf(): return err
 
-        _APP_KEYS = frozenset({"language", "theme", "code_view_plain", "rebuild_log", "hidden_sections", "section_filter", "show_flake_lock", "default_host", "rebuild_terminal"})
+        _APP_KEYS = frozenset({"language", "theme", "code_view_plain", "rebuild_log", "hidden_sections", "section_filter", "show_flake_lock", "default_host", "rebuild_terminal", "rebuild_safe"})
         incoming = request.get_json(silent=True) or {}
         patch    = {k: v for k, v in incoming.items() if k in _APP_KEYS}
         if not patch:
@@ -599,26 +599,6 @@ def create_app() -> Flask:
                 except OSError:
                     pass
             result["flake_nix"] = generator.generate_flake_nix(data)
-
-        hm = dict(data.get("home_manager") or {})
-        if hm.get("enabled"):
-            home_nix_path = Path(nixos_dir) / "home.nix"
-            if home_nix_path.exists():
-                try:
-                    home_content = home_nix_path.read_text(encoding="utf-8")
-                    hm_brix = extract_brick_blocks(home_content)
-                    if hm_brix:
-                        data["hm_brick_blocks"] = hm_brix
-                    else:
-                        clean_home = strip_brick_blocks(home_content)
-                        recognized_home = importer.parse_home_config(clean_home)
-                        rest = importer.build_home_rest_brix(clean_home, recognized_home)
-                        if rest.strip():
-                            data["hm_brick_blocks"] = brix_content_to_bricks(rest, section="End")
-                except OSError:
-                    pass
-            hm["hm_brick_blocks"] = data.get("hm_brick_blocks", {})
-            result["home_nix"] = hm_generator.generate_home_nix(hm)
 
         return jsonify(result)
 
@@ -1281,6 +1261,7 @@ def create_app() -> Flask:
         update_flake      = bool(body.get("update_flake", False)) and use_flake
         push_shutdown     = bool(body.get("push_shutdown_after", False))
         shutdown_after    = bool(body.get("shutdown_after", False)) and not push_shutdown
+        safe_mode         = bool(body.get("safe_mode", False))
 
         if mode not in ('switch', 'boot', 'test'):
             return jsonify({"error": "ERR_INVALID_MODE"}), 400
@@ -1296,6 +1277,9 @@ def create_app() -> Flask:
         else:
             conf_path = nixos_path / "configuration.nix"
             rebuild_cmd = f"sudo nixos-rebuild {mode} -I nixos-config={_shlex.quote(str(conf_path))}"
+
+        if safe_mode:
+            rebuild_cmd += " --max-jobs 1 --cores 4"
 
         script_lines = [
             "#!/usr/bin/env bash",
@@ -1525,6 +1509,7 @@ def create_app() -> Flask:
                 sudo_password = pw
 
         update_flake = request.args.get('update_flake', '0') == '1' and use_flake
+        safe_mode    = request.args.get('safe_mode', '0') == '1'
 
         if use_flake:
             # Without git nix would try to copy via the git index and fail.
@@ -1538,6 +1523,9 @@ def create_app() -> Flask:
         else:
             cmd = ["sudo", "-S", "nixos-rebuild", mode, "-I", f"nixos-config={conf_path}",
                    "--log-format", "internal-json", "-v"]
+
+        if safe_mode:
+            cmd += ["--max-jobs", "1", "--cores", "4"]
 
         app_settings   = config_manager.get_app_settings()
         rebuild_log_on = bool(app_settings.get("rebuild_log", False))
@@ -2694,8 +2682,13 @@ def create_app() -> Flask:
         ]
         if cfg.get("flakes"):
             candidates.append(("flake.nix", root / "flake.nix"))
-        if cfg.get("home_manager", {}).get("enabled"):
-            candidates.append(("home.nix", root / "home.nix"))
+        hm_cfg = config_manager.load_config_settings(nixos_dir)
+        hm_dir_name = hm_cfg.get("hm_dir", "home") or "home"
+        hm_dir_path = (root / hm_dir_name).resolve()
+        if (str(hm_dir_path).startswith(str(root.resolve()))
+                and hm_dir_path.is_dir()):
+            for hm_file in sorted(hm_dir_path.glob("*.nix")):
+                candidates.append((f"{hm_dir_name}/{hm_file.name}", hm_file))
 
         files = []
         for name, path in candidates:
@@ -2916,6 +2909,55 @@ def create_app() -> Flask:
             git_manager.auto_commit(nixos_dir)
 
         return jsonify({"success": True, "written": written})
+
+    @app.route("/api/hm/files", methods=["GET"])
+    def hm_files():
+        nixos_dir, err = _require_setup()
+        if err:
+            return err
+        cfg_s = config_manager.load_config_settings(nixos_dir)
+        hm_dir_name = (cfg_s.get("hm_dir") or "home").strip() or "home"
+        hm_dir = (Path(nixos_dir) / hm_dir_name).resolve()
+        if not str(hm_dir).startswith(str(Path(nixos_dir).resolve())):
+            return jsonify({"files": []})
+        files = []
+        if hm_dir.is_dir():
+            for p in sorted(hm_dir.iterdir()):
+                if p.suffix == ".nix" and p.is_file():
+                    username = p.stem
+                    files.append({
+                        "filename": p.name,
+                        "username": username,
+                        "path":     str(p.relative_to(Path(nixos_dir))),
+                    })
+        return jsonify({"files": files})
+
+    @app.route("/api/hm/create", methods=["POST"])
+    def hm_create():
+        if err := _check_csrf(): return err
+        nixos_dir, err = _require_setup()
+        if err:
+            return err
+        body = request.get_json(silent=True) or {}
+        username      = (body.get("username") or "").strip()
+        home_dir      = (body.get("home_dir") or "").strip()
+        state_version = (body.get("state_version") or "").strip()
+        if not username or not re.match(r"^[a-z_][a-z0-9_-]*$", username):
+            return jsonify({"error": "ERR_INVALID_USERNAME"}), 400
+        cfg_s = config_manager.load_config_settings(nixos_dir)
+        hm_dir_name = (cfg_s.get("hm_dir") or "home").strip() or "home"
+        hm_dir = Path(nixos_dir) / hm_dir_name
+        if not str(hm_dir.resolve()).startswith(str(Path(nixos_dir).resolve())):
+            return jsonify({"error": "ERR_PATH"}), 400
+        hm_dir.mkdir(parents=True, exist_ok=True)
+        target = hm_dir / f"{username}.nix"
+        if target.exists():
+            return jsonify({"error": "ERR_FILE_EXISTS"}), 409
+        content = hm_generator.create_hm_file(username, home_dir, state_version)
+        target.write_text(content, encoding="utf-8")
+        git_manager.auto_commit(nixos_dir)
+        rel = str(target.relative_to(Path(nixos_dir)))
+        return jsonify({"success": True, "path": rel, "content": content})
 
     @app.route("/api/hm/patch", methods=["POST"])
     def hm_patch():

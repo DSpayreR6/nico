@@ -847,113 +847,9 @@
           <section class="collapsible" data-section="Home Manager">
             <h3 class="sec-toggle"><span data-i18n="sec.homeManager">Home Manager</span></h3>
             <div class="sec-body">
-              <label class="toggle-row">
-                <span data-i18n="hm.enable">Home Manager aktivieren</span>
-                <span class="toggle-wrap">
-                  <input type="checkbox" id="hm_enabled" name="hm_enabled">
-                  <span class="toggle-track"><span class="toggle-thumb"></span></span>
-                </span>
-              </label>
-              <p class="hint" style="margin-top:4px" data-i18n-html="hm.enableHint">
-                Erzeugt eine <code>home.nix</code> – Benutzername und stateVersion werden aus den System-Einstellungen übernommen.
-              </p>
 
-              <div id="hm-detail" class="hidden">
-
-                <!-- Git -->
-                <div class="hm-group">
-                  <label class="toggle-row" style="margin-top:10px">
-                    <span>Git</span>
-                    <span class="toggle-wrap">
-                      <input type="checkbox" id="hm_git_enable">
-                      <span class="toggle-track"><span class="toggle-thumb"></span></span>
-                    </span>
-                  </label>
-                  <div id="hm-git-detail" class="hidden">
-                    <label for="hm_git_name" data-i18n="hm.gitName">Name</label>
-                    <input type="text" id="hm_git_name" name="hm_git_name"
-                           placeholder="Max Muster" spellcheck="false">
-                    <label for="hm_git_email" data-i18n="hm.gitEmail">E-Mail</label>
-                    <input type="text" id="hm_git_email" name="hm_git_email"
-                           placeholder="max@example.com" spellcheck="false">
-                    <label for="hm_git_default_branch" data-i18n="hm.gitBranch">Default Branch</label>
-                    <input type="text" id="hm_git_default_branch" name="hm_git_default_branch"
-                           placeholder="main" spellcheck="false">
-                  </div>
-                </div>
-
-                <!-- Shell -->
-                <div class="hm-group">
-                  <label for="hm_shell" data-i18n="hm.shell">Shell</label>
-                  <select id="hm_shell" name="hm_shell">
-                    <option value="bash">bash</option>
-                    <option value="zsh">zsh</option>
-                    <option value="fish">fish</option>
-                  </select>
-
-                  <div class="lvl2-section" data-lvl2="hm-shell-extra">
-                    <div class="lvl2-toggle" data-i18n="hm.shellInitExtra">Shell-Init (extra)</div>
-                    <div class="lvl2-body">
-                      <p class="hint" style="margin-bottom:4px" data-i18n="hm.shellInitExtraHint">
-                        Wird ans Ende der Shell-Init-Datei angehängt.
-                      </p>
-                      <textarea id="hm_shell_init_extra" name="hm_shell_init_extra" rows="3"
-                                placeholder='export PATH="$HOME/.local/bin:$PATH"'
-                                spellcheck="false" class="mono-input"></textarea>
-                    </div>
-                  </div>
-                </div>
-
-                <!-- Pakete -->
-                <div class="hm-group">
-                  <label for="hm_packages">
-                    <span data-i18n="hm.packages">Pakete</span>
-                    <span class="hint" data-i18n="hm.packagesHint">(ein Nix-Attr pro Zeile)</span>
-                  </label>
-                  <textarea id="hm_packages" name="hm_packages" rows="3"
-                            placeholder="git&#10;ripgrep&#10;bat"
-                            spellcheck="false"></textarea>
-                </div>
-
-                <!-- Firefox -->
-                <label class="toggle-row">
-                  <span>Firefox</span>
-                  <span class="toggle-wrap">
-                    <input type="checkbox" id="hm_firefox">
-                    <span class="toggle-track"><span class="toggle-thumb"></span></span>
-                  </span>
-                </label>
-
-                <!-- XDG-Verzeichnisse -->
-                <label class="toggle-row" style="margin-top:6px">
-                  <span data-i18n="hm.xdgUserDirs">XDG-Benutzerverzeichnisse</span>
-                  <span class="toggle-wrap">
-                    <input type="checkbox" id="hm_xdg_user_dirs">
-                    <span class="toggle-track"><span class="toggle-thumb"></span></span>
-                  </span>
-                </label>
-                <div id="hm-xdg-detail" class="hidden">
-                  <div class="hm-xdg-grid">
-                    <label for="hm_xdg_download"    data-i18n="hm.xdgDownload">Downloads</label>
-                    <input type="text" id="hm_xdg_download"    value="Downloads" spellcheck="false">
-                    <label for="hm_xdg_documents"   data-i18n="hm.xdgDocuments">Dokumente</label>
-                    <input type="text" id="hm_xdg_documents"   value="Documents" spellcheck="false">
-                    <label for="hm_xdg_pictures"    data-i18n="hm.xdgPictures">Bilder</label>
-                    <input type="text" id="hm_xdg_pictures"    value="Pictures"  spellcheck="false">
-                    <label for="hm_xdg_music"       data-i18n="hm.xdgMusic">Musik</label>
-                    <input type="text" id="hm_xdg_music"       value="Music"     spellcheck="false">
-                    <label for="hm_xdg_videos"      data-i18n="hm.xdgVideos">Videos</label>
-                    <input type="text" id="hm_xdg_videos"      value="Videos"    spellcheck="false">
-                    <label for="hm_xdg_desktop"     data-i18n="hm.xdgDesktop">Desktop</label>
-                    <input type="text" id="hm_xdg_desktop"     value="Desktop"   spellcheck="false">
-                    <label for="hm_xdg_templates"   data-i18n="hm.xdgTemplates">Vorlagen</label>
-                    <input type="text" id="hm_xdg_templates"   value="Templates" spellcheck="false">
-                    <label for="hm_xdg_publicshare" data-i18n="hm.xdgPublicShare">Öffentlich</label>
-                    <input type="text" id="hm_xdg_publicshare" value="Public"    spellcheck="false">
-                  </div>
-                </div>
-
-              </div><!-- /hm-detail -->
+              <!-- HM-Dateiliste -->
+              <div id="hm-files-list" class="flake-hosts-list"></div>
 
               <!-- home-manager NixOS-Modul-Optionen -->
               <div style="margin-top:12px">
@@ -972,24 +868,15 @@
                   </span>
                 </label>
                 <label class="toggle-row" style="margin-top:8px">
-                  <span data-i18n="hm.sharedModules">Shared Modules</span>
+                  <span>plasma-manager</span>
                   <span class="toggle-wrap">
-                    <input type="checkbox" id="hm_shared_modules_enable" name="hm_shared_modules_enable">
+                    <input type="checkbox" id="hm_plasma_manager" name="hm_plasma_manager">
                     <span class="toggle-track"><span class="toggle-thumb"></span></span>
                   </span>
                 </label>
-                <div id="hm-shared-modules-detail" class="hidden">
-                  <label class="toggle-row" style="margin-top:6px">
-                    <span>plasma-manager</span>
-                    <span class="toggle-wrap">
-                      <input type="checkbox" id="hm_plasma_manager" name="hm_plasma_manager">
-                      <span class="toggle-track"><span class="toggle-thumb"></span></span>
-                    </span>
-                  </label>
-                  <label for="hm_shared_modules_extra" data-i18n="hm.sharedModulesExtra">Weitere (eine pro Zeile)</label>
-                  <textarea id="hm_shared_modules_extra" name="hm_shared_modules_extra" rows="3"
-                            placeholder="inputs.foo.homeModules.bar"></textarea>
-                </div>
+                <label for="hm_shared_modules_extra" data-i18n="hm.sharedModulesExtra">Weitere Module (eine pro Zeile)</label>
+                <textarea id="hm_shared_modules_extra" name="hm_shared_modules_extra" rows="3"
+                          placeholder="inputs.foo.homeModules.bar"></textarea>
               </div>
 
             </div>
@@ -1589,15 +1476,19 @@
           <div id="rph-fetching" class="rebuild-phase-col" data-phase="fetching">
             <span class="rph-dot"></span>
             <span class="rph-label">Fetching</span>
-            <span id="rph-fetch-done" class="rph-fetch-bytes"></span>
-            <span id="rph-fetch-remain" class="rph-fetch-remain"></span>
-            <span id="rph-fetch-copy" class="rph-fetch-copy"></span>
+            <span class="rph-status">
+              <span id="rph-fetch-done" class="rph-fetch-bytes"></span>
+              <span id="rph-fetch-remain" class="rph-fetch-remain"></span>
+              <span id="rph-fetch-copy" class="rph-fetch-copy"></span>
+            </span>
           </div>
           <div id="rph-building" class="rebuild-phase-col" data-phase="building">
             <span class="rph-dot"></span>
             <span class="rph-label">Building</span>
-            <span id="rph-build-counter" class="rph-build-counter"></span>
-            <span id="rph-build-pkg" class="rph-build-pkg"></span>
+            <span class="rph-status">
+              <span id="rph-build-counter" class="rph-build-counter"></span>
+              <span id="rph-build-pkg" class="rph-build-pkg"></span>
+            </span>
           </div>
           <div id="rph-activating" class="rebuild-phase-col" data-phase="activating">
             <span class="rph-dot"></span>

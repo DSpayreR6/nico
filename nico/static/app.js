@@ -706,6 +706,7 @@ async function loadConfig() {
   collapsedSections.add('__header__');
   applySectionCollapse();
   await updatePreview();
+  loadHmFileList();
 }
 
 // ── Admin-Bereich ──────────────────────────────────────────────────────────
@@ -4349,10 +4350,9 @@ function _showHostPicker(hosts, { allowAll = false, title = '', defaultHost = nu
  * Nur bei Flake-Modus angezeigt.
  */
 async function _showRebuildOptions(hostInfo, { hostname = '', mode = 'switch' } = {}) {
-  if (!hostInfo.flake_mode) return { updateFlake: false, useTerminal: false };
-
   let defaultFlakeUpdate = false;
   let defaultTerminal = false;
+  let defaultSafeMode = false;
   try {
     const [cfg, app] = await Promise.all([
       csrfFetch('/api/config/settings').then(r => r.json()),
@@ -4360,12 +4360,16 @@ async function _showRebuildOptions(hostInfo, { hostname = '', mode = 'switch' } 
     ]);
     defaultFlakeUpdate = !!cfg.flake_update_on_rebuild;
     defaultTerminal    = !!app.rebuild_terminal;
+    defaultSafeMode    = !!app.rebuild_safe;
   } catch {
     defaultFlakeUpdate = !!(document.getElementById('flake-update-toggle')?.checked);
   }
 
-  const _buildCmd = (upd) => {
-    const base = `sudo nixos-rebuild ${mode} --flake .#${hostname || 'hostname'}`;
+  if (!hostInfo.flake_mode) return { updateFlake: false, useTerminal: false, safeMode: defaultSafeMode, shutdownAfter: false, pushShutdownAfter: false };
+
+  const _buildCmd = (upd, safe) => {
+    const safeArgs = safe ? ' --max-jobs 1 --cores 4' : '';
+    const base = `sudo nixos-rebuild ${mode} --flake .#${hostname || 'hostname'}${safeArgs}`;
     return upd ? `nix flake update && ${base}` : base;
   };
 
@@ -4375,21 +4379,28 @@ async function _showRebuildOptions(hostInfo, { hostname = '', mode = 'switch' } 
     overlay.innerHTML = `
       <div class="dialog-box" style="min-width:360px">
         <h2 class="dialog-title">${t('rebuild.optionsTitle')}</h2>
-        <label class="toggle-row" style="margin:12px 0;cursor:pointer">
+        <label class="toggle-row" style="margin:12px 0 10px;cursor:pointer">
           <span>${t('rebuild.optFlakeUpdate')}</span>
           <span class="toggle-wrap">
             <input type="checkbox" id="_rbo-flake-update" ${defaultFlakeUpdate ? 'checked' : ''}>
             <span class="toggle-track"><span class="toggle-thumb"></span></span>
           </span>
         </label>
-        <label class="toggle-row" style="margin:4px 0 4px;cursor:pointer">
+        <label class="toggle-row" style="margin:0 0 10px;cursor:pointer">
+          <span>${t('rebuild.optSafeMode')}</span>
+          <span class="toggle-wrap">
+            <input type="checkbox" id="_rbo-safe-mode" ${defaultSafeMode ? 'checked' : ''}>
+            <span class="toggle-track"><span class="toggle-thumb"></span></span>
+          </span>
+        </label>
+        <label class="toggle-row" style="margin:0 0 10px;cursor:pointer">
           <span>${t('rebuild.optTerminal')}</span>
           <span class="toggle-wrap">
             <input type="checkbox" id="_rbo-terminal" ${defaultTerminal ? 'checked' : ''}>
             <span class="toggle-track"><span class="toggle-thumb"></span></span>
           </span>
         </label>
-        <div id="_rbo-terminal-opts" style="display:${defaultTerminal ? 'flex' : 'none'};flex-direction:column;gap:4px;margin:4px 0 12px;padding-left:14px;border-left:2px solid var(--border,#444)">
+        <div id="_rbo-terminal-opts" style="display:${defaultTerminal ? 'flex' : 'none'};flex-direction:column;gap:2px;margin:0 0 12px;padding-left:14px;border-left:2px solid var(--border,#444)">
           <label class="toggle-row" style="cursor:pointer">
             <span>${t('rebuild.optShutdown')}</span>
             <span class="toggle-wrap">
@@ -4421,13 +4432,15 @@ async function _showRebuildOptions(hostInfo, { hostname = '', mode = 'switch' } 
 
     const cmdEl         = overlay.querySelector('#_rbo-cmd');
     const flakeToggle   = overlay.querySelector('#_rbo-flake-update');
+    const safeToggle    = overlay.querySelector('#_rbo-safe-mode');
     const termToggle    = overlay.querySelector('#_rbo-terminal');
     const termOptsEl    = overlay.querySelector('#_rbo-terminal-opts');
     const shutdownCb    = overlay.querySelector('#_rbo-shutdown');
     const pushShutCb    = overlay.querySelector('#_rbo-push-shutdown');
-    const updateCmd     = () => { cmdEl.textContent = _buildCmd(flakeToggle.checked); };
+    const updateCmd     = () => { cmdEl.textContent = _buildCmd(flakeToggle.checked, safeToggle.checked); };
     updateCmd();
     flakeToggle.addEventListener('change', updateCmd);
+    safeToggle.addEventListener('change', updateCmd);
     termToggle.addEventListener('change', () => {
       termOptsEl.style.display = termToggle.checked ? 'flex' : 'none';
       if (!termToggle.checked) { shutdownCb.checked = false; pushShutCb.checked = false; }
@@ -4444,11 +4457,17 @@ async function _showRebuildOptions(hostInfo, { hostname = '', mode = 'switch' } 
 
     overlay.querySelector('#_rbo-ok').addEventListener('click', () => {
       const updateFlake     = !!flakeToggle.checked;
+      const safeMode        = !!safeToggle.checked;
       const useTerminal     = !!termToggle.checked;
       const shutdownAfter   = !!shutdownCb.checked;
       const pushShutdownAfter = !!pushShutCb.checked;
+      csrfFetch('/api/app/settings', {
+        method:  'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ rebuild_safe: safeMode }),
+      }).catch(() => {});
       overlay.remove();
-      resolve({ updateFlake, useTerminal, shutdownAfter, pushShutdownAfter });
+      resolve({ updateFlake, safeMode, useTerminal, shutdownAfter, pushShutdownAfter });
     });
     overlay.querySelector('#_rbo-cancel').addEventListener('click', () => {
       overlay.remove();
@@ -4502,7 +4521,7 @@ async function openRebuild(mode = 'switch') {
     const res = await csrfFetch('/api/rebuild/open-terminal', {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ hostname, mode, update_flake: opts.updateFlake, shutdown_after: opts.shutdownAfter, push_shutdown_after: opts.pushShutdownAfter }),
+      body:    JSON.stringify({ hostname, mode, update_flake: opts.updateFlake, safe_mode: opts.safeMode, shutdown_after: opts.shutdownAfter, push_shutdown_after: opts.pushShutdownAfter }),
     }).catch(() => null);
     if (!res || !res.ok) {
       const err = res ? (await res.json().catch(() => ({}))).error : null;
@@ -4564,7 +4583,7 @@ async function openRebuild(mode = 'switch') {
   const updateFlake = opts.updateFlake ? '1' : '0';
   const hostParam   = hostname  ? `&hostname=${encodeURIComponent(hostname)}`   : '';
   const nonceParam  = sudoNonce ? `&sudo_nonce=${encodeURIComponent(sudoNonce)}` : '';
-  const url = `/api/rebuild/stream?mode=${encodeURIComponent(mode)}&token=${encodeURIComponent(CSRF_TOKEN)}&update_flake=${updateFlake}${hostParam}${nonceParam}`;
+  const url = `/api/rebuild/stream?mode=${encodeURIComponent(mode)}&token=${encodeURIComponent(CSRF_TOKEN)}&update_flake=${updateFlake}&safe_mode=${opts.safeMode ? 1 : 0}${hostParam}${nonceParam}`;
   const es  = new EventSource(url);
   _rebuildES = es;
 
@@ -4902,15 +4921,55 @@ function toggleGcOptions(show) {
     ?.classList.toggle('hidden', !show);
 }
 
-// ── Home Manager visibility toggles ───────────────────────────────────────
-function toggleHmDetail(show) {
-  document.getElementById('hm-detail')?.classList.toggle('hidden', !show);
+// ── Home Manager CO-Form ──────────────────────────────────────────────────
+
+async function loadHmFileList() {
+  const container = document.getElementById('hm-files-list');
+  if (!container) return;
+  try {
+    const res   = await fetch('/api/hm/files');
+    const data  = await res.json();
+    const files = data.files || [];
+    const cards = files.map(f => `
+      <div class="flake-host-card">
+        <div class="flake-host-header">
+          <span class="flake-host-label">${_esc(f.filename)}</span>
+        </div>
+      </div>`).join('');
+    const addRow = `<div class="fh-add-row">
+      <button type="button" class="btn-add-user" id="hm-create-btn">
+        ${_esc(t('hm.createFile') || '+ HM-Datei erstellen')}
+      </button>
+    </div>`;
+    container.innerHTML = cards + addRow;
+    container.querySelector('#hm-create-btn')?.addEventListener('click', _hmCreateFile);
+  } catch (_) {
+    container.innerHTML = '';
+  }
 }
-function toggleHmGitDetail(show) {
-  document.getElementById('hm-git-detail')?.classList.toggle('hidden', !show);
-}
-function toggleHmXdgDetail(show) {
-  document.getElementById('hm-xdg-detail')?.classList.toggle('hidden', !show);
+
+async function _hmCreateFile() {
+  const username = (prompt(t('hm.promptUsername') || 'Benutzername (z.B. martin):') || '').trim();
+  if (!username) return;
+  const stateVersion = document.getElementById('state_version')?.value?.trim() || '';
+  const primaryUser  = getAllUsers()[0];
+  const homeDir      = primaryUser?.username === username
+    ? `/home/${username}` : `/home/${username}`;
+  const res  = await csrfFetch('/api/hm/create', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, home_dir: homeDir, state_version: stateVersion }),
+  });
+  const data = await res.json();
+  if (data.error) {
+    const msg = data.error === 'ERR_FILE_EXISTS'
+      ? (t('hm.errorFileExists') || 'Datei existiert bereits.')
+      : (t('hm.errorCreate') || 'Fehler beim Erstellen.');
+    alert(msg);
+    return;
+  }
+  await loadHmFileList();
+  _openFileInHmPanel(data.path);
 }
 
 // ── Hardware / Virtualisierung / Backup visibility toggles ────────────────
@@ -5226,9 +5285,6 @@ function getFormData() {
   const fonts = [...document.querySelectorAll('.font-check:checked')]
     .map(cb => cb.value);
 
-  // Home Manager packages: textarea (one per line) → array of non-empty strings
-  const hmPackages = (v('hm_packages') || '')
-    .split('\n').map(s => s.trim()).filter(Boolean);
   const packages = getPackageListData();
 
   return {
@@ -5303,32 +5359,11 @@ function getFormData() {
     nix_gc_frequency:    v('nix_gc_frequency'),
     nix_gc_age:          v('nix_gc_age'),
 
-    home_manager: {
-      enabled:            ch('hm_enabled'),
-      git_enable:         ch('hm_git_enable'),
-      git_name:           v('hm_git_name'),
-      git_email:          v('hm_git_email'),
-      git_default_branch: v('hm_git_default_branch') || 'main',
-      shell:              v('hm_shell') || 'bash',
-      shell_init_extra:   v('hm_shell_init_extra'),
-      packages:           hmPackages,
-      firefox:            ch('hm_firefox'),
-      xdg_user_dirs:      ch('hm_xdg_user_dirs'),
-      xdg_download:       v('hm_xdg_download')    || 'Downloads',
-      xdg_documents:      v('hm_xdg_documents')   || 'Documents',
-      xdg_pictures:       v('hm_xdg_pictures')    || 'Pictures',
-      xdg_music:          v('hm_xdg_music')        || 'Music',
-      xdg_videos:         v('hm_xdg_videos')       || 'Videos',
-      xdg_desktop:        v('hm_xdg_desktop')      || 'Desktop',
-      xdg_templates:      v('hm_xdg_templates')    || 'Templates',
-      xdg_publicshare:    v('hm_xdg_publicshare')  || 'Public',
-    },
-
     // Home Manager NixOS-Modul
     hm_use_global_pkgs:      ch('hm_use_global_pkgs'),
     hm_use_user_packages:    ch('hm_use_user_packages'),
-    hm_plasma_manager:       ch('hm_shared_modules_enable') ? ch('hm_plasma_manager') : false,
-    hm_shared_modules_extra: ch('hm_shared_modules_enable') ? v('hm_shared_modules_extra') : '',
+    hm_plasma_manager:       ch('hm_plasma_manager'),
+    hm_shared_modules_extra: v('hm_shared_modules_extra'),
 
     // Hardware
     enable_all_firmware: ch('enable_all_firmware'),
@@ -5615,24 +5650,10 @@ function clearCoForm() {
   setField('nix_gc_frequency', 'weekly');
   setField('nix_gc_age', '30d');
   renderAllSnapperConfigs([]);
-  setField('hm_git_default_branch', 'main');
-  setField('hm_shell', 'bash');
-  setField('hm_xdg_download', 'Downloads');
-  setField('hm_xdg_documents', 'Documents');
-  setField('hm_xdg_pictures', 'Pictures');
-  setField('hm_xdg_music', 'Music');
-  setField('hm_xdg_videos', 'Videos');
-  setField('hm_xdg_desktop', 'Desktop');
-  setField('hm_xdg_templates', 'Templates');
-  setField('hm_xdg_publicshare', 'Public');
   document.getElementById('extra-locale-detail')?.classList.add('hidden');
   document.getElementById('firewall-tcp-detail')?.classList.add('hidden');
   document.getElementById('firewall-udp-detail')?.classList.add('hidden');
   document.getElementById('firefox-detail')?.classList.add('hidden');
-  document.getElementById('hm-shared-modules-detail')?.classList.add('hidden');
-  toggleHmDetail(false);
-  toggleHmGitDetail(false);
-  toggleHmXdgDetail(false);
   toggleBootEfiOptions(false);
   togglePlymouthOptions(false);
   togglePipewireOptions(false);
@@ -5754,11 +5775,6 @@ function bindUI() {
   // GC sub-options visibility
   on('nix_gc', 'change', e => toggleGcOptions(e.target.checked));
 
-  // Home Manager visibility
-  on('hm_enabled',       'change', e => { toggleHmDetail(e.target.checked); schedulePreviewUpdate(); });
-  on('hm_git_enable',    'change', e => { toggleHmGitDetail(e.target.checked); schedulePreviewUpdate(); });
-  on('hm_xdg_user_dirs', 'change', e => { toggleHmXdgDetail(e.target.checked); schedulePreviewUpdate(); });
-
   // Hardware / Virtualisierung / Backup sub-option visibility
   on('opengl',       'change', e => toggleOpenglOptions(e.target.checked));
   on('boot_loader',      'change', e => { toggleBootEfiOptions(e.target.value !== 'none'); schedulePreviewUpdate(); });
@@ -5825,9 +5841,7 @@ function bindUI() {
   document.getElementById('firefox')?.addEventListener('change', function() {
     document.getElementById('firefox-detail')?.classList.toggle('hidden', !this.checked);
   });
-  document.getElementById('hm_shared_modules_enable')?.addEventListener('change', function() {
-    document.getElementById('hm-shared-modules-detail')?.classList.toggle('hidden', !this.checked);
-  });
+
 
   addSectionLineHints();
 

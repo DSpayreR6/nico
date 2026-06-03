@@ -8,10 +8,20 @@
 
 ### New Features
 
+### Bug Fixes
+
+---
+
+## 0.9.9 (2026-06-03)
+
+### New Features
+
+- Safe rebuild mode: "Safe rebuild" toggle in the rebuild options dialog limits the build to 1 parallel job (`--max-jobs 1 --cores 4`); prevents system crashes during RAM-intensive compilations; state persists between sessions
+- Rebuild monitor redesigned from 4 horizontal phase columns to 4 stacked rows; dot, label, and status columns align across all phases
+- All UI strings fully translated into all 7 supported languages (de, en, es, fr, ja, ru, zh)
 - Flake panel now loads NixOS channels dynamically from the official NixOS channel listing, with a local fallback
 - Home Manager flake input now follows the matching branch for the selected nixpkgs channel and validates matching `flake.lock` refs
 - Home Manager config files now live in `hm_dir/<username>.nix` instead of a single root `home.nix`; the configuration form shows a live file list and a "Create HM file" button; validation detects missing flake references, missing files, and orphaned root `home.nix`
-
 - Panel toggle redesigned as a card with a real toggle switch in the tab bar; save button replaces the eye icon in raw mode for a stable layout
 - Snapper individually configurable with free subvolumes and per-entry snapshot schedule
 - Double-start protection: second NiCo instance shows info page instead of silent restart
@@ -24,10 +34,8 @@
 - flake.lock optionally visible in the file tree
 - HM panel: shell, initExtra and packages directly editable
 - Validator: brix redundancy hint now shows the affected panel section
-
 - Plymouth (bootsplash) support: enable/disable Plymouth per host, optional theme selection, automatic `boot.initrd.systemd.enable` dependency; full import/export roundtrip
 - Kernel parameters (`boot.kernelParams`) directly configurable in the Boot section; full import/export roundtrip
-
 - Flatpak support in the panel: enable Flatpak and manage remotes (name + URL) per host; Flathub quick-add button
 - Config integrity check: `testing/verify_config.py` compares current config semantically against a reference ZIP and reports moved, changed, or lost data
 - Git-Sync toggle in settings: disable remote sync (start guard, auto-push) while keeping optional local status display

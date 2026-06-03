@@ -2,50 +2,7 @@
 Home Manager configuration generator.
 
 Generates a home.nix file from NiCo's Home Manager config data.
-This module is wired into the GUI via the HM file browser panel.
-
-Supported options (initial set, covering the most common 80/20 needs):
-  - programs.git            (name, email, defaultBranch)
-  - programs.bash/zsh/fish  (enable + init extras)
-  - home.packages           (list of pkgs attr names)
-  - programs.firefox        (enable)
-  - xdg.userDirs            (standard XDG directories)
-  - home.stateVersion       (required by Home Manager)
-  - home.username / home.homeDirectory
-
-Data shape (as stored in nico.json under the key "home_manager"):
-{
-  "enabled":          false,        # master switch
-  "username":         "",           # must match the system user
-  "home_dir":         "",           # e.g. /home/alice
-  "state_version":    "24.11",
-
-  "git_enable":       false,
-  "git_name":         "",
-  "git_email":        "",
-  "git_default_branch": "main",
-
-  "shell":            "bash",       # bash | zsh | fish
-  "shell_init_extra": "",           # appended to the shell init file
-
-  "packages":         [],           # list of pkgs attr names (strings)
-
-  "firefox":          false,
-
-  "xdg_user_dirs":    false,        # enable xdg.userDirs
-  "xdg_download":     "Downloads",
-  "xdg_documents":    "Documents",
-  "xdg_pictures":     "Pictures",
-  "xdg_music":        "Music",
-  "xdg_videos":       "Videos",
-  "xdg_desktop":      "Desktop",
-  "xdg_templates":    "Templates",
-  "xdg_publicshare":  "Public",
-}
-
-Usage:
-  from nico.hm_generator import generate_home_nix
-  nix_text = generate_home_nix(data["home_manager"])
+HM files live in hm_dir/<username>.nix (default: home/<username>.nix).
 """
 
 import hashlib
@@ -79,7 +36,6 @@ def _add_hm_version_hash(content: str, ftype: str = "hm") -> str:
 
 # Default values so callers can pass a partial dict
 HM_DEFAULTS: dict = {
-    "enabled":            False,
     "args":               [],
     "username":           "",
     "home_dir":           "",
@@ -305,4 +261,24 @@ def generate_home_nix(data: dict) -> str:
     content = "\n".join(lines)
     if brix:
         content = inject_brick_blocks(content, brix)
+    return _add_hm_version_hash(content, ftype="hm")
+
+
+def create_hm_file(username: str, home_dir: str, state_version: str) -> str:
+    """Generate a minimal home.nix for a new HM user file."""
+    home_dir = home_dir or f"/home/{username}"
+    lines = [
+        "{ config, pkgs, lib, ... }:",
+        "",
+        "{",
+        f'  home.username = "{username}";',
+        f'  home.homeDirectory = "{home_dir}";',
+        "",
+        "  programs.home-manager.enable = true;",
+        "",
+    ]
+    if state_version:
+        lines += [f'  home.stateVersion = "{state_version}";', ""]
+    lines += ["}", ""]
+    content = "\n".join(lines)
     return _add_hm_version_hash(content, ftype="hm")

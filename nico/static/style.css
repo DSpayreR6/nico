@@ -1768,17 +1768,18 @@ textarea:focus {
 
 /* Four-column phase bar */
 .rebuild-phases {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
   margin-bottom: 6px;
 }
 
 .rebuild-phase-col {
   display: flex;
-  flex-direction: column;
-  gap: 3px;
-  padding: 6px 8px;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 10px;
   border-radius: 5px;
   border: 1px solid var(--surface1);
   background: var(--crust);
@@ -1820,6 +1821,17 @@ textarea:focus {
   letter-spacing: 0.7px;
   text-transform: uppercase;
   color: var(--subtext1);
+  min-width: 72px;
+  flex-shrink: 0;
+}
+
+.rph-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
 }
 .rebuild-phase-col[data-phase="evaluating"].active .rph-label { color: var(--blue);   }
 .rebuild-phase-col[data-phase="fetching"].active   .rph-label { color: var(--teal);   }
@@ -1839,6 +1851,8 @@ textarea:focus {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  flex: 1;
+  min-width: 0;
 }
 
 /* Fetching column download bytes */

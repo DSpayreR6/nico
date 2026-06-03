@@ -301,6 +301,7 @@
   "rebuild.title":            "NixOS-Rebuild",
   "rebuild.optionsTitle":     "Rebuild-Optionen",
   "rebuild.optFlakeUpdate":   "Flake aktualisieren (nix flake update)",
+  "rebuild.optSafeMode":      "Abgesicherter Rebuild (max. 1 paralleler Build-Job)",
   "rebuild.optTerminal":      "In Terminal-Fenster ausführen",
   "rebuild.optShutdown":      "Nach Rebuild herunterfahren",
   "rebuild.optPushShutdown":  "Nach Rebuild Konfiguration hochladen und PC herunterfahren",
@@ -472,9 +473,9 @@
 
   "about.title":      "\u00DCber NiCo",
   "about.version":    "Version",
-  "about.versionVal": "0.9.8",
+  "about.versionVal": "0.9.9",
   "about.updated":    "Stand",
-  "about.updatedVal": "2026-05-06",
+  "about.updatedVal": "2026-06-03",
   "about.author":     "Erstellt von",
   "about.authorVal":  "DSpayreR6",
   "about.license":    "Lizenz",
@@ -809,6 +810,8 @@
   "hm.useUserPackages":       "useUserPackages – Pakete über nix-env installierbar",
   "hm.sharedModules":         "Shared Modules",
   "hm.sharedModulesExtra":    "Weitere Module (eine pro Zeile)",
+  "hm.createFile":            "Neue HM-Datei erstellen",
+  "hm.noFiles":               "Keine HM-Dateien vorhanden.",
 
   "integrity.modified": "⚠ {files} Datei(en) außerhalb von NiCo geändert.",
 
