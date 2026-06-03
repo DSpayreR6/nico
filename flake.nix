@@ -19,7 +19,7 @@
         in {
           default = pkgs.stdenv.mkDerivation {
             pname = "nico";
-            version = "0.9.4"; # update on each release
+            version = "0.9.9"; # update on each release
 
             src = ./.;
 
