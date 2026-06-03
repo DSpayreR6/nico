@@ -1,17 +1,5 @@
 # NiCo – Changelog
 
-## Unreleased
-
-### Planned / Backlog
-
-- **Disko Panel & Installer-Export:** New panel type for building a `disko.nix` via GUI (disk layout, partitions, filesystems, Btrfs subvolumes, LUKS). Export function bundles `disko.nix` + NixOS config + NiCo onto a USB stick. Target workflow: boot NixOS live ISO → mount stick → run disko → start NiCo → install config.
-
-### New Features
-
-### Bug Fixes
-
----
-
 ## 0.9.9 (2026-06-03)
 
 ### New Features
@@ -20,11 +8,8 @@
 - Rebuild monitor redesigned from 4 horizontal phase columns to 4 stacked rows; dot, label, and status columns align across all phases
 - All UI strings fully translated into all 7 supported languages (de, en, es, fr, ja, ru, zh)
 - Flake panel now loads NixOS channels dynamically from the official NixOS channel listing, with a local fallback
-- Home Manager flake input now follows the matching branch for the selected nixpkgs channel and validates matching `flake.lock` refs
-- Home Manager config files now live in `hm_dir/<username>.nix` instead of a single root `home.nix`; the configuration form shows a live file list and a "Create HM file" button; validation detects missing flake references, missing files, and orphaned root `home.nix`
 - Panel toggle redesigned as a card with a real toggle switch in the tab bar; save button replaces the eye icon in raw mode for a stable layout
 - Snapper individually configurable with free subvolumes and per-entry snapshot schedule
-- Double-start protection: second NiCo instance shows info page instead of silent restart
 - Git remote setup directly in the Config Settings tab
 - Git remote sync on startup (branch assignment, ahead/behind display)
 - Rebuild optionally runs in an external terminal window
@@ -43,6 +28,9 @@
 
 ### Bug Fixes
 
+- Double-start protection: second NiCo instance shows info page instead of silent restart
+- Home Manager flake input now follows the matching branch for the selected nixpkgs channel and validates matching `flake.lock` refs
+- Home Manager config files now live in `hm_dir/<username>.nix` instead of a single root `home.nix`; the configuration form shows a live file list and a "Create HM file" button; validation detects missing flake references, missing files, and orphaned root `home.nix`
 - Settings config path was only loaded when opening the Administration tab, not the Settings tab
 - Panel toggle: race condition on rapid clicking no longer causes inconsistent state
 - Brick move broken after switching to an HM file
@@ -59,7 +47,7 @@
 
 ## 0.9.4 (2026-05-01)
 
-### Bug fixes
+### Bug Fixes
 
 - Flake-Update-Einstellung wird jetzt sofort beim Ändern gespeichert (kein Speichern-Button mehr nötig)
 - `push_after_save` und `push_after_rebuild` wurden nicht persistiert (fehlten in `_CONFIG_KEYS`)
@@ -68,83 +56,57 @@
 
 ## 0.9.3 (2026-04-26)
 
-### Bug fixes
+### New Features
 
+- Git startup guard shows a compact status panel before action cards: last commit on remote and local side, commits ahead/behind with message preview, uncommitted files with color-coded labels
+- NiCo now sets `user.email = USER@hostname` and `user.name = USER` per config directory before every commit so git log shows which machine made each change
+- Config can be detached from NiCo: creates a ZIP backup, removes NiCo marker lines from all `.nix` files, deletes the metadata JSON, and clears the stored config path
+- Sidebar file tree: hover and context menus for files and directories; rename, delete, create, and `hardware-configuration.nix` import with `.bak` backup
+- All Unicode/emoji icons replaced with Lucide SVG icons (v1.9.0, ISC license); CSS `mask-image` approach; theme-swappable; 24 SVGs vendored locally
+- Initial security audit (bandit, pip-audit, manual review); GitHub Actions added for automated scanning and CodeQL; Dependabot enabled
+
+### Bug Fixes
+
+- Path-traversal bug fixed in brick file editor: `_modify_brick_in_file` now validates that the target path stays inside the config directory
 - Many minor bugfixes
-
-### Git startup guard: status overview
-The startup guard now shows a compact status panel before any action cards:
-- Last commit on remote and local side (hash, message, date, author), or a single "same state" row when both match
-- Commits ahead (local only) and commits behind (remote only) with message preview
-- Uncommitted local files with color-coded labels: **Geändert** (yellow), **Neu** (green), **Gelöscht** (red), **Umbenannt** (blue)
-
-### Git commit identity
-NiCo now always sets a local `user.email = USER@hostname` and `user.name = USER` per config directory before every commit, so git log shows which machine made each change.
-
-### Detach config from NiCo
-The active configuration can now be detached from NiCo. NiCo creates a ZIP backup of the current config, removes NiCo-specific comment and marker lines from all `.nix` files, deletes the config metadata JSON, clears the stored config path, and returns to the initial setup state.
-
-### Sidebar file manager and hardware import
-The sidebar file tree now has hover and context menus for files and directories. Files can be renamed or deleted directly in the tree; directories can additionally create files/directories and import a `hardware-configuration.nix`. Hardware import now supports both known local system paths and a manually entered file or directory path, and an existing target file is backed up as `.bak` before replacement.
-
-### Lucide icon set
-All Unicode/emoji icons throughout the UI have been replaced with a consistent set of Lucide SVG icons (v1.9.0, ISC license). Icons are rendered via CSS `mask-image` with `background-color: currentColor`, so they inherit the surrounding text color and are fully theme-swappable. Icon sizes can be overridden per context via the `--ni-icon-size` CSS custom property. The 24 used SVGs are vendored locally under `nico/static/vendor/lucide/`; the theme stylesheet lives at `nico/static/themes/default/icons.css`. The NixOS logo and language flag emojis are intentionally unchanged.
-
-### Security audit & CI
-Initial security audit covering bandit, pip-audit, and a manual code review. No CVEs found in dependencies. One path-traversal bug in the brick file editor was fixed: `_modify_brick_in_file` now validates that the target path stays inside the config directory. GitHub Actions workflows for automated scanning (bandit + pip-audit on every push) and CodeQL analysis added. Dependabot enabled for Python dependencies and Actions versions.
 
 ---
 
 ## 0.9.2 (2026-04-23)
 
-### Safer file and host switching
-When switching between `configuration.nix` and host files, NiCo now protects more reliably against data loss. Save and auto-save only run when the form has been fully loaded for the currently open file. The section filter selection is also stored as a program setting and restored on the next start.
+### New Features
 
-### Filter sections
-The left panel now has a filter icon next to the collapse/expand buttons. Clicking it opens three options: show all sections, show only sections with content, or use a custom selection. The chosen view is preserved for the next start. Sections with content are always shown regardless of the filter.
+- Safer file and host switching: save and auto-save only run when the form is fully loaded for the currently active file
+- Section filter: filter icon in the left panel shows all sections, only sections with content, or a custom selection; persists on restart
+- "Adjust sections" under Admin → Settings → NiCo Settings to define which sections are visible for the custom filter; travels with the config
+- Settings tab split into "NiCo Settings" (machine-local) and "Config Settings" (travel with the config)
+- Validation before rebuild via new "Validation" button in the NixOS menu; per-host for flake configs; configurable rules travel with the config
+- NixOS actions in the header: NixOS logo opens save snapshot (green), dry run (yellow), and rebuild (red)
+- Rebuild window shows raw output stream and a compact status monitor with progress and current build process; warnings and errors highlighted
+- Rebuild log written automatically on failure; can also be enabled for successful rebuilds in settings
+- Flake rebuilds now work without a Git repository; NiCo detects this and passes the absolute path to Nix
+- Symlink from `/etc/nixos` to the NiCo directory can be created in the admin area; original backed up as `/etc/nixos.bak`
+- Remote status banner on startup when the local repository is behind the remote
+- Prism.js syntax highlighter now served locally; no external CDN; license documented in `THIRD_PARTY_LICENSES.md`
+- Program settings (language, theme, view options) can be exported as JSON and imported on another device; config path is intentionally excluded
+- Nix import parser now uses tree-sitter for more accurate detection; falls back to regex when tree-sitter is unavailable
 
-### Adjust sections
-Under Admin → Settings → NiCo Settings, “Adjust sections” can now be used to define which sections should be visible for the “According to settings” filter. The selection works like the validation rules: toggles per section, stored in the machine-local program settings.
-
-### Settings tab reorganized
-The admin tab “Settings” is now split into two sub-tabs: **NiCo Settings** (machine-local) and **Config Settings** (travel with the config). This clearly separates what is stored where.
-
-### Validation before rebuild
-Before a rebuild, the configuration can now be checked for common problems via a new “Validation” button in the NixOS menu. NiCo checks, for example, whether the current user exists in the config, whether all import paths exist on disk, whether the hardware configuration is imported, and whether disk UUIDs match the current system. For flake configs with multiple hosts, NiCo first asks which host should be validated, and hardware checks then target that host specifically. Which checks are active can be configured individually under “Adjust validation” in the admin settings, and that selection travels with the config.
-
-### NixOS actions in the header
-The single dry-run button has been replaced with a clearer NixOS menu. Clicking the NixOS logo opens three color-coded actions: save snapshot (green), dry run (yellow), and system rebuild (red).
-
-### Better rebuild output
-The rebuild window now shows both the raw output stream and a compact status monitor with progress bars and the current build process, similar to `nix-output-monitor`. Warnings and errors are highlighted in color.
-
-### Rebuild log on failure
-If a rebuild fails, NiCo now automatically writes a complete log file (`nixos-rebuild.log`) into the config directory. This can also be enabled for successful rebuilds in the settings.
-
-### Rebuild without a Git repository
-Flake rebuilds now also work when the config directory is not a Git repository. NiCo detects this automatically and passes the absolute path directly to Nix.
-
-### Create `/etc/nixos` symlink
-In the admin area, a symlink from `/etc/nixos` to the NiCo directory can now be created. This allows NixOS tools such as `nixos-rebuild` to work without an explicit path. The original is backed up as `/etc/nixos.bak`.
-
-### Remote status in the Git banner (experimental)
-If the local Git repository is behind the remote, a blue info banner appears on startup showing the number of missing commits.
-
-### Prism.js is now local
-The Prism.js syntax highlighter is no longer loaded from an external CDN. It is now served directly by NiCo. License and attribution are documented in `THIRD_PARTY_LICENSES.md`.
-
-### Back up and restore program settings
-In the admin area under “Export”, NiCo program settings (language, theme, view options) can now be downloaded as a JSON file and imported again on another device. The config path is intentionally left untouched during import because it is machine-specific and should not travel.
-
-### Internal improvement: parser
-The Nix import parser now uses tree-sitter for more accurate detection of configuration options and only falls back to the previous regex parser when the environment does not support it.
+---
 
 ## 0.9.1 (2026-04-08)
 
-Backup before import, sidebar with file tree, revised header navigation, ZIP export of all config files, and automatic file categorization on startup.
+### New Features
+
+- Backup created automatically before import
+- Sidebar with file tree
+- Revised header navigation
+- ZIP export of all config files
+- Automatic file categorization on startup
 
 ---
 
 ## 0.0.1 (2026-04-07)
 
-First working foundation: Flask backend, configuration generator, panel UI, import, Brix system, Git time machine, Home Manager, and multilingual support (DE/EN).
+### New Features
+
+- First working foundation: Flask backend, configuration generator, panel UI, import, Brix system, Git time machine, Home Manager, and multilingual support (DE/EN)
