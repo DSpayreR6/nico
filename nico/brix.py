@@ -40,6 +40,14 @@ SECTION_ORDER: list[str] = [
 # (e.g. inside inputs = { } or outputs = { } in flake.nix).
 ZONE_SECTIONS: frozenset[str] = frozenset({"Inputs-Extra", "Outputs-Extra", "Outputs-Hosts"})
 
+# User-facing section names that map to their actual injection-point equivalents.
+# "Inputs" and "Outputs" in the move dialog mean "add inside the block", which
+# corresponds to the -Extra zone markers already present in generated flake.nix.
+SECTION_ALIASES: dict[str, str] = {
+    "Inputs": "Inputs-Extra",
+    "Outputs": "Outputs-Extra",
+}
+
 
 def _is_zone_section(section: str) -> bool:
     return section in ZONE_SECTIONS or section.startswith("Host: ")
@@ -243,7 +251,8 @@ def inject_brick_blocks(nix_content: str, blocks: dict[str, dict]) -> str:
     zone_bricks: dict[str, list[dict]] = {}
     regular_blocks: dict[str, dict] = {}
     for name, block in blocks.items():
-        sec = block.get("section", "")
+        sec = SECTION_ALIASES.get(block.get("section", ""), block.get("section", ""))
+        block = {**block, "section": sec}
         if _is_zone_section(sec):
             zone_bricks.setdefault(sec, []).append(block)
         else:

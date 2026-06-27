@@ -1504,7 +1504,7 @@ function _switchAdminTab(tab) {
   });
   // Lazy-load per-tab data
   if (tab === 'einstellungen') { loadSettingsPath(); }
-  if (tab === 'zeitmaschine') { checkGitStatus(); loadAdminGitLog(); }
+  if (tab === 'zeitmaschine') { checkGitStatus(); loadAdminGitLog(); loadGitignoreEditor(); }
   if (tab === 'administration') { loadAdminSymlinkStatus(); }
 }
 
@@ -1853,10 +1853,15 @@ function _showValidationResults(findings) {
       const detail = f.detail
         ? `<div style="margin-top:4px;color:var(--subtext0);font-size:12px;white-space:pre-line">${_esc(f.detail)}</div>`
         : '';
+      const action = f.rule_id === 'git_missing_gitignore'
+        ? `<button class="btn-surface btn-small" style="margin-top:6px;font-size:11px"
+             onclick="closeValidationResults();openAdmin();_switchAdminTab('zeitmaschine')"
+             data-i18n="admin.gitignore.goToSettings">${t('admin.gitignore.goToSettings')}</button>`
+        : '';
       return `<div style="display:flex;gap:10px;margin-bottom:14px;align-items:flex-start">
         <span style="color:${color};font-size:16px;flex-shrink:0;margin-top:1px">${icon}</span>
         <div>
-          <div style="font-size:13px">${_esc(f.message)}</div>${detail}
+          <div style="font-size:13px">${_esc(f.message)}</div>${detail}${action}
         </div>
       </div>`;
     }).join('');
@@ -2214,6 +2219,63 @@ async function _doGitInit() {
     showToast(t('git.initSuccess'), 'success');
   } else {
     showToast(d.message || t('git.initError'), 'error');
+  }
+}
+
+async function loadGitignoreEditor() {
+  const missing = document.getElementById('git-gitignore-missing');
+  const editor  = document.getElementById('git-gitignore-editor');
+  const textarea = document.getElementById('git-gitignore-content');
+  if (!missing || !editor || !textarea) return;
+
+  try {
+    const res  = await csrfFetch('/api/git/gitignore');
+    const data = await res.json();
+    if (data.exists) {
+      textarea.value = data.content;
+      missing.classList.add('hidden');
+      editor.classList.remove('hidden');
+    } else {
+      missing.classList.remove('hidden');
+      editor.classList.add('hidden');
+    }
+  } catch { /* git not set up yet */ }
+
+  const createBtn = document.getElementById('git-gitignore-create-btn');
+  if (createBtn && !createBtn.dataset.bound) {
+    createBtn.dataset.bound = '1';
+    createBtn.addEventListener('click', async () => {
+      const res  = await csrfFetch('/api/git/create-gitignore', { method: 'POST' });
+      const data = await res.json();
+      if (data.success) { showToast(t('admin.gitignore.created'), 'success'); loadGitignoreEditor(); }
+      else showToast(data.message || t('toast.error'), 'error');
+    });
+  }
+
+  const saveBtn = document.getElementById('git-gitignore-save-btn');
+  if (saveBtn && !saveBtn.dataset.bound) {
+    saveBtn.dataset.bound = '1';
+    saveBtn.addEventListener('click', async () => {
+      const res  = await csrfFetch('/api/git/create-gitignore', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: textarea.value }),
+      });
+      const data = await res.json();
+      if (data.success) showToast(t('admin.gitignore.saved'), 'success');
+      else showToast(data.message || t('toast.error'), 'error');
+    });
+  }
+
+  const addBtn = document.getElementById('git-gitignore-add-btn');
+  if (addBtn && !addBtn.dataset.bound) {
+    addBtn.dataset.bound = '1';
+    addBtn.addEventListener('click', async () => {
+      const res  = await csrfFetch('/api/git/create-gitignore', { method: 'POST' });
+      const data = await res.json();
+      if (data.success) { showToast(t('admin.gitignore.added'), 'success'); loadGitignoreEditor(); }
+      else showToast(data.message || t('toast.error'), 'error');
+    });
   }
 }
 
@@ -3688,7 +3750,7 @@ async function openBrixDelete() {
 }
 
 // ── Brix verschieben ────────────────────────────────────────────────────────
-const FLAKE_BRICK_SECTIONS = ['Start', 'Inputs', 'Outputs', 'End'];
+const FLAKE_BRICK_SECTIONS = ['Start', 'Inputs-Extra', 'Outputs-Extra', 'End'];
 const HM_BRICK_SECTIONS    = ['Start', 'Home Manager', 'End'];
 let _brixMoveTarget = null;
 

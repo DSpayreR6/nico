@@ -107,6 +107,18 @@ ALL_RULES: list[Rule] = [
          "Snapper in Host-Config",
          "Warnt wenn Snapper in einer Flake-Config mit mehreren Hosts in der Basis-Config steht.",
          "info", flake_only=True),
+    Rule("git_missing_gitignore",
+         ".gitignore prüfen",
+         "Warnt wenn .gitignore fehlt oder empfohlene Einträge für NiCo-Dateien (Logs, Backups) fehlen.",
+         "warning"),
+    Rule("git_large_log",
+         "Großes Rebuild-Log",
+         "Warnt wenn nixos-rebuild.log größer als 100 MB ist und versehentlich in Git committed werden könnte.",
+         "warning"),
+    Rule("git_foreign_files",
+         "Nicht-Nix-Dateien in Git",
+         "Listet Dateien die in Git getrackt werden aber keine .nix-Dateien sind.",
+         "info"),
 ]
 
 RULE_MAP: dict[str, Rule] = {r.id: r for r in ALL_RULES}
@@ -1113,6 +1125,91 @@ def _rule_snapper_in_host(nixos_dir: str, config: dict, is_flake: bool,
     )]
 
 
+_LOG_WARN_BYTES = 100 * 1024 * 1024  # 100 MB
+
+# Known NiCo-generated files that are problematic in git
+_KNOWN_PROBLEM_NAMES = {"nixos-rebuild.log", "vergleich.zip", "result", ".stfolder"}
+
+
+def _rule_git_missing_gitignore(nixos_dir: str, config: dict, is_flake: bool,
+                                host: str | None = None) -> list[Finding]:
+    from . import git_manager as _gm
+    if not _gm.is_git_repo(nixos_dir):
+        return []
+    path = Path(nixos_dir) / ".gitignore"
+    if not path.exists():
+        return [Finding(
+            rule_id="git_missing_gitignore",
+            severity="warning",
+            message="Keine .gitignore vorhanden – NiCo-Dateien (Logs, Backups) werden in Git committet.",
+            detail="In den Einstellungen → Zeitmaschine kann die .gitignore angelegt werden.",
+        )]
+    existing = {l.strip() for l in path.read_text(encoding="utf-8").splitlines()
+                if l.strip() and not l.startswith("#")}
+    missing = [e for e in _gm.GITIGNORE_ENTRIES if e not in existing]
+    if missing:
+        return [Finding(
+            rule_id="git_missing_gitignore",
+            severity="warning",
+            message=f".gitignore unvollständig – {len(missing)} empfohlene Einträge fehlen.",
+            detail="Fehlend: " + ", ".join(missing) + "\nIn den Einstellungen → Zeitmaschine ergänzen.",
+        )]
+    return []
+
+
+def _rule_git_large_log(nixos_dir: str, config: dict, is_flake: bool,
+                        host: str | None = None) -> list[Finding]:
+    log_path = Path(nixos_dir) / "nixos-rebuild.log"
+    if not log_path.exists():
+        return []
+    size = log_path.stat().st_size
+    if size < _LOG_WARN_BYTES:
+        return []
+    size_mb = size / (1024 * 1024)
+    return [Finding(
+        rule_id="git_large_log",
+        severity="warning",
+        message=f"nixos-rebuild.log ist {size_mb:.0f} MB groß.",
+        detail=f"Pfad: {log_path}\nDie Datei enthält nur Rebuild-Ausgabe und kann bedenkenlos gelöscht werden.",
+    )]
+
+
+def _rule_git_foreign_files(nixos_dir: str, config: dict, is_flake: bool,
+                            host: str | None = None) -> list[Finding]:
+    from . import git_manager as _gm
+    if not _gm.is_git_repo(nixos_dir):
+        return []
+    tracked = _gm.list_tracked_files(nixos_dir)
+    problem, info = [], []
+    for f in tracked:
+        p = Path(f)
+        if p.suffix == ".nix" or f in ("flake.lock", ".gitignore"):
+            continue
+        name = p.name
+        if (name in _KNOWN_PROBLEM_NAMES
+                or name.endswith(".bak")
+                or (name.endswith(".zip") and ("config" in name or name == "vergleich.zip"))):
+            problem.append(f)
+        else:
+            info.append(f)
+    findings = []
+    if problem:
+        findings.append(Finding(
+            rule_id="git_foreign_files",
+            severity="warning",
+            message=f"{len(problem)} bekannte Problemdatei(en) in Git getrackt (werden hochgeladen).",
+            detail="\n".join(problem),
+        ))
+    if info:
+        findings.append(Finding(
+            rule_id="git_foreign_files",
+            severity="info",
+            message=f"{len(info)} Nicht-Nix-Datei(en) in Git getrackt.",
+            detail="\n".join(info),
+        ))
+    return findings
+
+
 # ── Rule function registry ─────────────────────────────────────────────────────
 
 _RULE_FNS: dict[str, object] = {
@@ -1131,6 +1228,9 @@ _RULE_FNS: dict[str, object] = {
     "state_version_match":   _rule_state_version_match,
     "hm_state_version_match": _rule_hm_state_version_match,
     "flake_hm_nix_assert":   _rule_flake_hm_nix_assert,
-    "snapper_btrfs":         _rule_snapper_btrfs,
-    "snapper_in_host":       _rule_snapper_in_host,
+    "snapper_btrfs":          _rule_snapper_btrfs,
+    "snapper_in_host":        _rule_snapper_in_host,
+    "git_missing_gitignore":  _rule_git_missing_gitignore,
+    "git_large_log":          _rule_git_large_log,
+    "git_foreign_files":      _rule_git_foreign_files,
 }

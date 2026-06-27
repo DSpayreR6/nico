@@ -6,6 +6,7 @@ All state lives in config_manager; this file only handles HTTP concerns.
 import os
 import re
 import secrets
+import shlex
 import shutil
 import threading
 import tomllib
@@ -100,6 +101,8 @@ def _fetch_nixos_channels() -> tuple[list[str], str]:
     return list(_FALLBACK_NIXOS_CHANNELS), "fallback"
 
 def _load_theme_css(theme_name: str) -> str:
+    if not theme_name or "/" in theme_name or ".." in theme_name:
+        theme_name = _DEFAULT_THEME
     toml_path = _THEMES_DIR / theme_name / "theme.toml"
     if not toml_path.exists():
         toml_path = _THEMES_DIR / _DEFAULT_THEME / "theme.toml"
@@ -511,7 +514,9 @@ def create_app() -> Flask:
         if nixos_dir and rel_path:
             nixos_path = Path(nixos_dir).resolve()
             target = (nixos_path / rel_path).resolve()
-            if not str(target).startswith(str(nixos_path)):
+            try:
+                target.relative_to(nixos_path)
+            except ValueError:
                 return jsonify({"error": "ERR_PATH_OUTSIDE"}), 403
 
             if target.exists():
@@ -695,7 +700,9 @@ def create_app() -> Flask:
             return err
         target = (Path(nixos_dir) / rel_path).resolve()
         # Sicherheit: muss innerhalb nixos_dir liegen
-        if not str(target).startswith(str(Path(nixos_dir).resolve())):
+        try:
+            target.relative_to(Path(nixos_dir).resolve())
+        except ValueError:
             return jsonify({"error": "ERR_PATH_OUTSIDE"}), 403
         if target.suffix not in _READABLE_SUFFIXES:
             return jsonify({"error": "ERR_FILE_TYPE"}), 400
@@ -715,7 +722,9 @@ def create_app() -> Flask:
         if err:
             return err
         target = (Path(nixos_dir) / rel_path).resolve()
-        if not str(target).startswith(str(Path(nixos_dir).resolve())):
+        try:
+            target.relative_to(Path(nixos_dir).resolve())
+        except ValueError:
             return jsonify({"error": "ERR_PATH_OUTSIDE"}), 403
         if target.suffix not in _WRITABLE_SUFFIXES:
             return jsonify({"error": "ERR_FILE_TYPE"}), 400
@@ -2316,6 +2325,26 @@ def create_app() -> Flask:
         ok, msg = git_manager.git_commit_push_force(nixos_dir)
         return jsonify({"success": ok, "message": msg})
 
+    @app.route("/api/git/gitignore", methods=["GET"])
+    def get_gitignore():
+        nixos_dir, err = _require_setup()
+        if err: return err
+        exists, content = git_manager.read_gitignore(nixos_dir)
+        return jsonify({"exists": exists, "content": content})
+
+    @app.route("/api/git/create-gitignore", methods=["POST"])
+    def create_gitignore():
+        if err := _check_csrf(): return err
+        nixos_dir, err = _require_setup()
+        if err: return err
+        body = request.get_json(silent=True) or {}
+        content = body.get("content")
+        if content is not None:
+            ok, msg = git_manager.write_gitignore(nixos_dir, content)
+        else:
+            ok, msg = git_manager.create_gitignore(nixos_dir)
+        return jsonify({"success": ok, "message": msg})
+
     @app.route("/api/git/close-check")
     def git_close_check():
         nixos_dir, err = _require_setup()
@@ -3567,7 +3596,7 @@ def create_app() -> Flask:
 
         # Schritt 2: mv /etc/nixos /etc/nixos.bak && ln -s <nixos_dir> /etc/nixos
         cmd = ["sudo", "-S", "sh", "-c",
-               f"mv /etc/nixos /etc/nixos.bak && ln -s {Path(nixos_dir).resolve()} /etc/nixos"]
+               f"mv /etc/nixos /etc/nixos.bak && ln -s {shlex.quote(str(Path(nixos_dir).resolve()))} /etc/nixos"]
         try:
             result = _sp.run(cmd, input=(sudo_password + "\n") if sudo_password else "",
                              capture_output=True, text=True, timeout=15)

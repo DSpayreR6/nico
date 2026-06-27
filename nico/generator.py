@@ -335,7 +335,8 @@ def generate_configuration_nix(data: dict) -> str:
         if user_uid:
             lines += [f"    uid = {user_uid};"]
         if user_password:
-            lines += [f'    initialPassword = "{user_password}";']
+            _pw = user_password.replace("\\", "\\\\").replace('"', '\\"')
+            lines += [f'    initialPassword = "{_pw}";']
         lines += [f"    extraGroups = [ {groups_str} ];"]
         if user_shell != "bash":
             shell_pkg = {"zsh": "zsh", "fish": "fish", "nushell": "nushell"}.get(user_shell, user_shell)
@@ -375,7 +376,8 @@ def generate_configuration_nix(data: dict) -> str:
         if eu_uid:
             lines += [f"    uid = {eu_uid};"]
         if eu_pass:
-            lines += [f'    initialPassword = "{eu_pass}";']
+            _pw = eu_pass.replace("\\", "\\\\").replace('"', '\\"')
+            lines += [f'    initialPassword = "{_pw}";']
         lines += [f"    extraGroups = [ {eu_groups_str} ];"]
         if eu_shell != "bash":
             shell_pkg = {"zsh": "zsh", "fish": "fish", "nushell": "nushell"}.get(eu_shell, eu_shell)
@@ -805,7 +807,8 @@ def generate_host_nix(data: dict, host_name: str, hw_config: bool = False) -> st
         if (data.get("user_uid") or "").strip():
             lines += [f"    uid = {data['user_uid'].strip()};"]
         if data.get("user_initial_password"):
-            lines += [f'    initialPassword = "{data["user_initial_password"]}";']
+            _pw = data["user_initial_password"].replace("\\", "\\\\").replace('"', '\\"')
+            lines += [f'    initialPassword = "{_pw}";']
         lines += [f"    extraGroups = [ {groups_str} ];"]
         if user_shell != "bash":
             shell_pkg = {"zsh": "zsh", "fish": "fish", "nushell": "nushell"}.get(user_shell, user_shell)
@@ -843,7 +846,8 @@ def generate_host_nix(data: dict, host_name: str, hw_config: bool = False) -> st
         if eu_uid:
             lines += [f"    uid = {eu_uid};"]
         if eu_pass:
-            lines += [f'    initialPassword = "{eu_pass}";']
+            _pw = eu_pass.replace("\\", "\\\\").replace('"', '\\"')
+            lines += [f'    initialPassword = "{_pw}";']
         lines += [f"    extraGroups = [ {eu_groups_str} ];"]
         if eu_shell != "bash":
             shell_pkg = {"zsh": "zsh", "fish": "fish", "nushell": "nushell"}.get(eu_shell, eu_shell)

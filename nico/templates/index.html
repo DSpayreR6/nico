@@ -2056,6 +2056,30 @@
           </div>
         </div>
 
+        <!-- .gitignore -->
+        <div class="admin-section" id="git-gitignore-section">
+          <div class="admin-section-title" data-i18n="admin.gitignore.title">.gitignore</div>
+          <p class="admin-hint" data-i18n="admin.gitignore.hint">
+            Verhindert dass NiCo-interne Dateien (Logs, Backups) in Git committet werden.
+          </p>
+          <div id="git-gitignore-missing" class="hidden" style="margin-top:8px">
+            <button id="git-gitignore-create-btn" class="btn-surface btn-small"
+                    data-i18n="admin.gitignore.createBtn">Standard-Einträge anlegen</button>
+          </div>
+          <div id="git-gitignore-editor" class="hidden" style="margin-top:8px">
+            <textarea id="git-gitignore-content"
+                      style="width:100%;height:140px;font-family:monospace;font-size:12px;
+                             background:var(--surface0);color:var(--text);border:1px solid var(--surface2);
+                             border-radius:6px;padding:8px;resize:vertical;box-sizing:border-box"></textarea>
+            <div style="display:flex;gap:8px;margin-top:6px">
+              <button id="git-gitignore-save-btn" class="btn-primary btn-small"
+                      data-i18n="admin.gitignore.saveBtn">Speichern</button>
+              <button id="git-gitignore-add-btn" class="btn-surface btn-small"
+                      data-i18n="admin.gitignore.addBtn">Standard-Einträge ergänzen</button>
+            </div>
+          </div>
+        </div>
+
         <div class="admin-section">
           <p class="admin-hint" data-i18n="admin.gitHint">
             NiCo erstellt nach jedem Schreiben automatisch einen Git-Commit.

@@ -1,5 +1,23 @@
 # NiCo – Changelog
 
+## 0.9.10 (2026-06-27)
+
+### New Features
+
+- `.gitignore` management: automatically created with standard entries (logs, backups, zips) on `git init`; editor in the Zeitmaschine settings tab allows viewing, saving, and adding missing default entries
+- Validator: three new rules — missing `.gitignore` (warning, with direct link to settings), log file larger than 100 MB tracked in git (warning), non-`.nix` files tracked in git (info)
+
+### Bug Fixes
+
+- Brick section "Inputs" / "Outputs" in flake.nix now correctly maps to the injection point inside the respective block (`inputs = {}` / `outputs = {}`); previously placed the brick after the final closing brace
+- Security: command injection in symlink-create fixed — path in `sh -c` string now wrapped with `shlex.quote()`
+- Security: path traversal in file API fixed — `str.startswith()` replaced by `Path.relative_to()` (startswith allowed `/nixos-evil` to bypass `/nixos` check)
+- Security: theme name validation added — `..` and `/` rejected before path construction
+- Security: `initialPassword` in generated Nix now correctly escapes backslashes and double quotes
+- All new UI strings translated into all 7 supported languages (de, en, es, fr, ja, ru, zh)
+
+---
+
 ## 0.9.9 (2026-06-03)
 
 ### New Features

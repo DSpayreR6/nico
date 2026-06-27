@@ -21,6 +21,17 @@ _SSH_ENV = {
     "GIT_SSH_COMMAND": "ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10",
 }
 
+# Standard entries for .gitignore – NiCo-generated files that must not be committed.
+GITIGNORE_ENTRIES = [
+    "nixos-rebuild.log",
+    "nixos-config-*.zip",
+    "vergleich.zip",
+    "result",
+    "result-*",
+    "*.bak",
+    ".stfolder",
+]
+
 
 def _run(args: list[str], cwd: str, timeout: int = 10, remote: bool = False) -> tuple[int, str]:
     """Run a git command. Returns (returncode, combined stdout+stderr).
@@ -76,6 +87,54 @@ def _get_primary_remote_name(nixos_dir: str) -> str:
     return remote_names[0] if remote_names else ""
 
 
+def create_gitignore(nixos_dir: str) -> tuple[bool, str]:
+    """Add missing GITIGNORE_ENTRIES to .gitignore (creates file if absent)."""
+    path = Path(nixos_dir) / ".gitignore"
+    existing_lines = path.read_text(encoding="utf-8").splitlines() if path.exists() else []
+    existing = {l.strip() for l in existing_lines if l.strip() and not l.startswith("#")}
+    missing = [e for e in GITIGNORE_ENTRIES if e not in existing]
+    if not missing:
+        return True, ""
+    content = "\n".join(existing_lines)
+    if content and not content.endswith("\n"):
+        content += "\n"
+    if not content:
+        content = "# NiCo\n"
+    content += "\n".join(missing) + "\n"
+    try:
+        path.write_text(content, encoding="utf-8")
+        return True, ""
+    except Exception as exc:
+        return False, str(exc)
+
+
+def read_gitignore(nixos_dir: str) -> tuple[bool, str]:
+    """Return (exists, content) for .gitignore."""
+    path = Path(nixos_dir) / ".gitignore"
+    if not path.exists():
+        return False, ""
+    return True, path.read_text(encoding="utf-8")
+
+
+def write_gitignore(nixos_dir: str, content: str) -> tuple[bool, str]:
+    """Overwrite .gitignore with the given content."""
+    try:
+        (Path(nixos_dir) / ".gitignore").write_text(content, encoding="utf-8")
+        return True, ""
+    except Exception as exc:
+        return False, str(exc)
+
+
+def list_tracked_files(nixos_dir: str) -> list[str]:
+    """Return all files currently tracked by git."""
+    if not is_git_repo(nixos_dir):
+        return []
+    rc, out = _run(["ls-files"], cwd=nixos_dir)
+    if rc != 0:
+        return []
+    return [f.strip() for f in out.splitlines() if f.strip()]
+
+
 def init_repo(nixos_dir: str) -> tuple[bool, str]:
     """
     Initialize a git repository in nixos_dir and create an initial commit
@@ -87,6 +146,7 @@ def init_repo(nixos_dir: str) -> tuple[bool, str]:
         return False, f"git init fehlgeschlagen: {out}"
 
     _ensure_identity(nixos_dir)
+    create_gitignore(nixos_dir)  # ensure .gitignore exists before first commit
 
     _run(["add", "-A"], cwd=nixos_dir)
     rc, out = _run(["commit", "-m", "NiCo: Repository initialisiert"], cwd=nixos_dir)
