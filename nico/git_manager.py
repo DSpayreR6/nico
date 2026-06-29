@@ -659,9 +659,9 @@ def get_log(nixos_dir: str, n: int = 30) -> list[dict]:
 
 def rollback(nixos_dir: str, commit_hash: str) -> tuple[bool, str]:
     """
-    Restore managed Nix files from a previous commit without rewriting history.
-    Uses git checkout <hash> -- <file> for each file that existed at that commit,
-    then creates a new auto-commit to record the rollback.
+    Restore all tracked files from a previous commit without rewriting history.
+    Uses git ls-tree to discover every file present at that commit, checks out
+    each one, then creates a new auto-commit to record the rollback.
     Returns (success, message).
     """
     import re as _re
@@ -672,20 +672,28 @@ def rollback(nixos_dir: str, commit_hash: str) -> tuple[bool, str]:
 
     _ensure_identity(nixos_dir)
 
-    managed = ["configuration.nix", "flake.nix"]
+    rc, out = _run(["ls-tree", "-r", "--name-only", commit_hash], cwd=nixos_dir)
+    if rc != 0 or not out.strip():
+        return False, "Commit nicht gefunden oder enthält keine Dateien."
+
     restored = []
-    for fname in managed:
+    for fname in out.splitlines():
+        fname = fname.strip()
+        if not fname:
+            continue
         rc, _ = _run(["checkout", commit_hash, "--", fname], cwd=nixos_dir)
         if rc == 0:
             restored.append(fname)
 
     if not restored:
-        return False, "Keine Dateien für diesen Commit gefunden."
+        return False, "Keine Dateien wiederhergestellt."
 
     short = commit_hash[:7]
-    msg   = f"NiCo: Rollback zu {short} ({', '.join(restored)})"
+    msg   = f"NiCo: Rollback zu {short} ({len(restored)} Datei(en))"
     rc, out = _run(["commit", "-m", msg], cwd=nixos_dir)
-    if rc != 0 and "nothing to commit" not in out:
+    _no_change = ("nothing to commit" in out or "nichts zu committen" in out
+                  or "nothing added to commit" in out)
+    if rc != 0 and not _no_change:
         return False, f"Commit nach Rollback fehlgeschlagen: {out}"
 
-    return True, f"Wiederhergestellt: {', '.join(restored)} → {short}"
+    return True, f"Wiederhergestellt: {len(restored)} Datei(en) → {short}"

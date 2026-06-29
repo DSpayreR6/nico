@@ -6,6 +6,8 @@
 
 - Write dialog (`writeFiles`) now aborts if saving the form config fails; previously the write step ran regardless, which could produce a host `.nix` file without brick blocks
 - Redundant double-write of host `.nix` file in `/api/host/<name>/write` removed; brick data is now merged once and written in a single pass
+- Time machine `rollback()` now restores **all** files tracked by git at the target commit (via `git ls-tree -r`), including `hosts/*/default.nix`, `home/`, `modules/`, and any subdirectory; previously only `configuration.nix` and `flake.nix` were restored
+- Time machine rollback no longer shows a spurious error when all files were already at the target state ("nichts zu committen" / "nothing to commit" now correctly treated as success)
 
 ---
 
