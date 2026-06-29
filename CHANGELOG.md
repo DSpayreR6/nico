@@ -1,5 +1,14 @@
 # NiCo – Changelog
 
+## Unreleased
+
+### Bug Fixes
+
+- Write dialog (`writeFiles`) now aborts if saving the form config fails; previously the write step ran regardless, which could produce a host `.nix` file without brick blocks
+- Redundant double-write of host `.nix` file in `/api/host/<name>/write` removed; brick data is now merged once and written in a single pass
+
+---
+
 ## 0.9.10 (2026-06-27)
 
 ### New Features

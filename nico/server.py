@@ -668,13 +668,12 @@ def create_app() -> Flask:
         host_dir = Path(nixos_dir) / "hosts" / host_name
         host_nix = host_dir / "default.nix"
 
-        # Merge brix from existing file
+        # Merge brix from existing file into host_data before the single write below
         if host_nix.exists():
             on_disk_brix = extract_brick_blocks(host_nix.read_text())
             stored_brix  = host_data.get("brick_blocks", {})
             stored_brix.update(on_disk_brix)
             host_data["brick_blocks"] = stored_brix
-            config_manager.save_host_config(nixos_dir, host_name, host_data)
 
         hw_config = (host_dir / "hardware-configuration.nix").exists()
         host_dir.mkdir(parents=True, exist_ok=True)

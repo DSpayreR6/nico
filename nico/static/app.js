@@ -2413,7 +2413,7 @@ function hideIntegrityWarning() {
 async function saveConfig() {
   if (!_canSaveCurrentCoForm()) {
     showToast(t('toast.error'), 'error');
-    return;
+    return false;
   }
   const payload = getFormData();
   const isHostMode = !!_activeHost;
@@ -2433,6 +2433,7 @@ async function saveConfig() {
   if (data.success) {
     document.dispatchEvent(new CustomEvent('nico:config-saved'));
   }
+  return data.success ?? false;
 }
 
 // Silent auto-save: saves to JSON, no success toast, only error toast
@@ -2563,7 +2564,7 @@ async function writeFiles() {
 
   closeWriteConfirm();
   await Sidebar.flakeSave();
-  await saveConfig();
+  if (!await saveConfig()) return;
   const writeUrl = _activeHost
     ? `/api/host/${encodeURIComponent(_activeHost)}/write`
     : '/api/write';
