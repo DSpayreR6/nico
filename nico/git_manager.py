@@ -697,3 +697,77 @@ def rollback(nixos_dir: str, commit_hash: str) -> tuple[bool, str]:
         return False, f"Commit nach Rollback fehlgeschlagen: {out}"
 
     return True, f"Wiederhergestellt: {len(restored)} Datei(en) → {short}"
+
+
+def _parse_diff(diff_text: str) -> list[dict]:
+    """Parse unified diff text into hunk list with basic moved-line detection."""
+    raw = []
+    for line in diff_text.splitlines():
+        if (line.startswith("diff ") or line.startswith("index ")
+                or line.startswith("--- ") or line.startswith("+++ ")
+                or line.startswith("@@ ")):
+            continue
+        if line.startswith("+"):
+            raw.append({"type": "added",   "content": line[1:]})
+        elif line.startswith("-"):
+            raw.append({"type": "removed", "content": line[1:]})
+        elif line.startswith(" "):
+            raw.append({"type": "context", "content": line[1:]})
+
+    # Lines that appear as both added and removed (non-empty) are moves
+    added   = {h["content"] for h in raw if h["type"] == "added"   and h["content"].strip()}
+    removed = {h["content"] for h in raw if h["type"] == "removed" and h["content"].strip()}
+    moved   = added & removed
+
+    result = []
+    for h in raw:
+        if h["content"] in moved and h["type"] in ("added", "removed"):
+            result.append({"type": "moved", "content": h["content"]})
+        else:
+            result.append(h)
+    return result
+
+
+def get_diff(nixos_dir: str, from_hash: str, to_hash: str = "HEAD") -> dict:
+    """Return structured diff between two commits as {files: [...]}."""
+    import re as _re
+
+    def _valid(h: str) -> bool:
+        return bool(_re.fullmatch(r"[0-9a-f]{7,40}|HEAD|HEAD~\d+", h))
+
+    if not _valid(from_hash) or not _valid(to_hash):
+        return {"error": "Ungültiger Commit-Hash"}
+    if not is_git_repo(nixos_dir):
+        return {"error": "Kein Git-Repository"}
+
+    rc, out = _run(["diff", "-w", "--name-status", from_hash, to_hash],
+                   cwd=nixos_dir, timeout=30)
+    if rc != 0:
+        return {"error": out or "git diff fehlgeschlagen"}
+
+    status_map = {"A": "added", "M": "modified", "D": "deleted"}
+    files = []
+    for line in out.splitlines():
+        if not line.strip():
+            continue
+        parts = line.split("\t", 1)
+        if len(parts) != 2:
+            continue
+        status_char = parts[0][0]
+        filename = parts[1]
+        if status_char == "R":          # rename: "old\tnew"
+            fn_parts = filename.split("\t")
+            filename = fn_parts[-1]
+        status = status_map.get(status_char, "modified")
+
+        rc2, diff_out = _run(
+            ["diff", "-w", from_hash, to_hash, "--", filename],
+            cwd=nixos_dir, timeout=30,
+        )
+        files.append({
+            "filename": filename,
+            "status":   status,
+            "hunks":    _parse_diff(diff_out),
+        })
+
+    return {"files": files}

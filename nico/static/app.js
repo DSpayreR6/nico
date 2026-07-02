@@ -1940,6 +1940,29 @@ async function loadAdminGitLog() {
       return;
     }
 
+    // Populate diff selects
+    const fromSel = document.getElementById('diff-from-select');
+    const toSel   = document.getElementById('diff-to-select');
+    if (fromSel && toSel) {
+      fromSel.innerHTML = '';
+      toSel.innerHTML   = `<option value="HEAD">HEAD</option>`;
+      for (const c of commits) {
+        const short   = c.hash.slice(0, 7);
+        const dateParts = (c.date || '').split(' ');
+        const dateStr   = dateParts.length >= 2 ? `${dateParts[0]} ${dateParts[1].slice(0, 5)}` : c.date;
+        const label   = `${short}  ${dateStr}  ${c.message.slice(0, 40)}`;
+        fromSel.appendChild(Object.assign(document.createElement('option'), { value: c.hash, textContent: label }));
+        toSel.appendChild(Object.assign(document.createElement('option'),   { value: c.hash, textContent: label }));
+      }
+      // Default: from = second commit, to = HEAD
+      if (fromSel.options.length > 1) fromSel.selectedIndex = 1;
+    }
+
+    // Show diff button in NixOS menu when git repo has commits
+    if (commits.length >= 2) {
+      document.getElementById('nixos-diff-btn')?.classList.remove('hidden');
+    }
+
     container.innerHTML = '';
     for (const c of commits) {
       const shortHash = c.hash.slice(0, 7);
@@ -5811,6 +5834,50 @@ function showToast(message, type = 'success') {
   }, 3000);
 }
 
+// ── Diff viewer ────────────────────────────────────────────────────────────
+async function openDiff(fromHash, toHash, title) {
+  const label = title || `${fromHash.slice(0, 7)} → ${toHash === 'HEAD' ? 'HEAD' : toHash.slice(0, 7)}`;
+  try {
+    const res  = await csrfFetch(`/api/git/diff?from=${encodeURIComponent(fromHash)}&to=${encodeURIComponent(toHash)}`);
+    const data = await res.json();
+    if (data.error) { showToast(data.error, 'error'); return; }
+    openViewer(label, _renderDiff(data));
+  } catch {
+    showToast(t('toast.error'), 'error');
+  }
+}
+
+function _renderDiff(data) {
+  const files = data.files || [];
+  if (!files.length) {
+    return `<div class="diff-empty">${escHtml(t('diff.noChanges'))}</div>`;
+  }
+  const statusIcon = { added: '+', modified: '~', deleted: '−' };
+  const statusClass = { added: 'diff-status-added', modified: 'diff-status-modified', deleted: 'diff-status-deleted' };
+  const linePrefix = { added: '+', removed: '−', moved: '~', context: ' ' };
+
+  let html = '<div class="diff-viewer">';
+  for (const f of files) {
+    const icon  = statusIcon[f.status]  || '~';
+    const cls   = statusClass[f.status] || 'diff-status-modified';
+    const lines = (f.hunks || []).map(h => {
+      const lineCls = `diff-line diff-line-${escHtml(h.type)}`;
+      const prefix  = linePrefix[h.type] ?? ' ';
+      return `<div class="${lineCls}">${escHtml(prefix + h.content)}</div>`;
+    }).join('');
+    html += `
+      <div class="diff-file">
+        <div class="diff-file-header" onclick="this.nextElementSibling.classList.toggle('open')">
+          <span class="${cls}">${icon}</span>
+          <span class="diff-filename">${escHtml(f.filename)}</span>
+        </div>
+        <div class="diff-file-body">${lines || `<div class="diff-empty">${escHtml(t('diff.noLines'))}</div>`}</div>
+      </div>`;
+  }
+  html += '</div>';
+  return html;
+}
+
 // ── Generic content viewer ─────────────────────────────────────────────────
 function openViewer(title, html) {
   document.getElementById('viewer-title').textContent = title;
@@ -6058,6 +6125,7 @@ function bindUI() {
     on('nixos-dryrun-btn',   'click', () => { close(); runSaveAndDryRun(); });
     on('nixos-rebuild-btn',  'click', () => { close(); openRebuild('switch'); });
     on('nixos-git-push-btn', 'click', () => { close(); gitPushManual(); });
+    on('nixos-diff-btn',     'click', () => { close(); openDiff('HEAD~1', 'HEAD', t('diff.lastCommitTitle')); });
   })();
 
   async function gitPushManual() {
@@ -6177,6 +6245,12 @@ function bindUI() {
   on('about-overlay', 'click', e => { if (e.target.id === 'about-overlay') document.getElementById('about-overlay').classList.add('hidden'); });
   on('viewer-close-btn', 'click', closeViewer);
   on('viewer-overlay', 'click', e => { if (e.target.id === 'viewer-overlay') closeViewer(); });
+
+  on('diff-show-btn', 'click', () => {
+    const from = document.getElementById('diff-from-select')?.value;
+    const to   = document.getElementById('diff-to-select')?.value;
+    if (from) openDiff(from, to || 'HEAD');
+  });
 
   // Quit
   on('quit-btn', 'click', async () => {

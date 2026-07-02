@@ -178,6 +178,8 @@
                       data-i18n="header.nixosRebuild">System-Neubau</button>
               <button id="nixos-git-push-btn" class="nixos-action nixos-blue hidden"
                       data-i18n="header.nixosGitPush">Git Push</button>
+              <button id="nixos-diff-btn" class="nixos-action nixos-blue hidden"
+                      data-i18n="header.nixosDiff">Diff (letzter Commit)</button>
             </div>
           </div>
           <button id="admin-btn" class="btn-header-icon"
@@ -2101,6 +2103,22 @@
               <button id="git-gitignore-add-btn" class="btn-surface btn-small"
                       data-i18n="admin.gitignore.addBtn">Standard-Einträge ergänzen</button>
             </div>
+          </div>
+        </div>
+
+        <div class="admin-section">
+          <div class="admin-section-title" data-i18n="diff.title">Commit-Diff</div>
+          <p class="admin-hint" data-i18n="diff.hint">Vergleich zwischen zwei Commits. „Von" ist der ältere Stand, „Bis" der neuere.</p>
+          <div class="diff-select-row">
+            <div class="diff-select-group">
+              <label class="diff-select-label" data-i18n="diff.from">Von</label>
+              <select id="diff-from-select" class="diff-select"></select>
+            </div>
+            <div class="diff-select-group">
+              <label class="diff-select-label" data-i18n="diff.to">Bis</label>
+              <select id="diff-to-select" class="diff-select"></select>
+            </div>
+            <button id="diff-show-btn" class="btn-primary btn-small" data-i18n="diff.show">Diff anzeigen</button>
           </div>
         </div>
 

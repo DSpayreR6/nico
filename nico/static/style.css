@@ -2781,6 +2781,76 @@ button:disabled {
 
 .rollback-btn:hover { background: rgba(243,139,168,.12); opacity: 1; }
 
+/* ── Diff-Select-Row ─────────────────────────────────────────────────────── */
+.diff-select-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+.diff-select-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+  min-width: 140px;
+}
+.diff-select-label {
+  font-size: 0.8em;
+  color: var(--subtext0);
+}
+.diff-select {
+  background: var(--surface0);
+  color: var(--text);
+  border: 1px solid var(--surface2);
+  border-radius: 6px;
+  padding: 5px 8px;
+  font-size: 0.85em;
+  cursor: pointer;
+}
+
+/* ── Diff Viewer ─────────────────────────────────────────────────────────── */
+.diff-viewer {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.diff-file {
+  border: 1px solid var(--surface1);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.diff-file-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: var(--surface0);
+  cursor: pointer;
+  user-select: none;
+  font-size: 0.85em;
+}
+.diff-file-header:hover { background: var(--surface1); }
+.diff-status-added    { color: var(--green); font-weight: 700; }
+.diff-status-modified { color: var(--yellow); font-weight: 700; }
+.diff-status-deleted  { color: var(--red); font-weight: 700; }
+.diff-filename { font-family: var(--mono); flex: 1; }
+.diff-file-body { display: none; overflow-x: auto; }
+.diff-file-body.open { display: block; }
+.diff-line {
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.5;
+  padding: 0 10px;
+  white-space: pre;
+}
+.diff-line-added   { background: rgba(166,227,161,.12); color: var(--green); }
+.diff-line-removed { background: rgba(243,139,168,.12); color: var(--red); }
+.diff-line-moved   { background: rgba(148,226,213,.10); color: var(--teal); }
+.diff-line-context { color: var(--subtext0); }
+.diff-empty { color: var(--subtext0); font-size: 0.85em; padding: 12px; text-align: center; }
+
 /* ── Benutzer-Sektion: Summary-Row + Detail-Card ────────────────────────── */
 .user-summary-row {
   display: flex;

@@ -2412,6 +2412,21 @@ def create_app() -> Flask:
         ok, msg = git_manager.rollback(nixos_dir, commit_hash)
         return jsonify({"success": ok, "message": msg})
 
+    @app.route("/api/git/diff")
+    def git_diff():
+        """Return structured diff between two commits."""
+        nixos_dir, err = _require_setup()
+        if err:
+            return err
+        from_hash = request.args.get("from", "").strip()
+        to_hash   = request.args.get("to",   "HEAD").strip()
+        if not from_hash:
+            return jsonify({"error": "ERR_MISSING_FROM"}), 400
+        result = git_manager.get_diff(nixos_dir, from_hash, to_hash)
+        if "error" in result:
+            return jsonify(result), 400
+        return jsonify(result)
+
     # ------------------------------------------------------------------ filesystem
 
     @app.route("/api/files")
