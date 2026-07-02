@@ -24,7 +24,7 @@
 
 **Nico-Projektregeln:**
 - Drei-Ebenen-Einstellungsarchitektur:
-  1. **App-Settings** (`nico-settings.json` im Projektroot): Gehören zu NiCo selbst und speichern nur Einstellungen, die auf diesem Rechner relevant sind
+  1. **App-Settings** (`~/.config/nico/settings.json`, XDG – Entscheidung 2026-07-02, Details in vorgaben.txt): Gehören zu NiCo selbst und speichern nur Einstellungen, die auf diesem Rechner relevant sind. Alte `nico-settings.json` im Projektroot wird einmalig migriert.
      - `nixos_config_dir`: Pfad zum Config-Verzeichnis
      - `language`: UI-Sprache (de, en, ...)
      - `theme`: UI-Theme (Platzhalter für später)
@@ -40,6 +40,7 @@
 - Immer zuerst einen kurzen Plan machen, bevor Code geschrieben oder geändert wird (außer bei winzigen Fixes)
 - nach erfolgreicher implementierung oder relevanten änderungen immer fragen ob ein commit gemacht werden soll.
 - wenn funktionen geändert, hinzugefügt oder gelöscht wurden, nachfragen ob changelog angepasst werden soll
+- Code-Revision (Abschnitt in manifest.md) nur durch Fable oder stärkere Modelle; kleinere Modelle prüfen oder revidieren dort nichts
 
 **Mehrsprachigkeit:**
 - Geplante Sprachen: de, en, es, fr, ja, ru, zh
