@@ -2,12 +2,28 @@
 
 ## Unreleased
 
+---
+
+## 0.9.11 (2026-07-02)
+
+### New Features
+
+- Pre-fetch dry-run: before each rebuild NiCo runs a short `nixos-rebuild build --dry-run` to determine the total download size; enables a stable, accurate fetch progress bar in the rebuild monitor; can be disabled in admin settings
+- Rebuild log viewer: after a completed rebuild a "Log öffnen" button appears in the rebuild overlay; opens the full `nixos-rebuild.log` in a scrollable overlay
+- Config diff viewer: compare any two commits in the Zeitmaschine tab; also accessible via the NixOS menu ("Diff – letzter Commit"); shows only `.nix` files; `flake.lock` is listed as an info note instead of a raw diff
+
 ### Bug Fixes
 
+- Diff viewer overlay was hidden behind the admin overlay (z-index fix: `#viewer-overlay` raised to 60)
+- Diff file bodies now start expanded instead of collapsed
+- NixOS menu "Diff" button is now visible immediately on app start (not only after opening the Zeitmaschine tab)
+- Config diff now only shows lines that were truly added or removed; lines that merely changed position within the file (reordered by NiCo on write) are excluded
+- `flake.lock` diff is suppressed to avoid thousands of hash lines; a short note is shown instead
 - Write dialog (`writeFiles`) now aborts if saving the form config fails; previously the write step ran regardless, which could produce a host `.nix` file without brick blocks
 - Redundant double-write of host `.nix` file in `/api/host/<name>/write` removed; brick data is now merged once and written in a single pass
 - Time machine `rollback()` now restores **all** files tracked by git at the target commit (via `git ls-tree -r`), including `hosts/*/default.nix`, `home/`, `modules/`, and any subdirectory; previously only `configuration.nix` and `flake.nix` were restored
-- Time machine rollback no longer shows a spurious error when all files were already at the target state ("nichts zu committen" / "nothing to commit" now correctly treated as success)
+- Time machine rollback no longer shows a spurious error when all files were already at the target state
+- All UI strings translated into all 7 supported languages (de, en, es, fr, ja, ru, zh)
 
 ---
 
