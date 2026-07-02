@@ -306,7 +306,7 @@
   "rebuild.pushDone": "プッシュ完了。",
   "common.close": "__TODO__",
   "diff.title": "__TODO__", "diff.hint": "__TODO__", "diff.from": "__TODO__", "diff.to": "__TODO__",
-  "diff.show": "__TODO__", "diff.noChanges": "__TODO__", "diff.noLines": "__TODO__",
+  "diff.show": "__TODO__", "diff.noChanges": "__TODO__", "diff.noLines": "__TODO__", "diff.lockUpdated": "flake.lock が更新されました – Nixpkgs バージョンが変わりました (nix flake update)。",
   "diff.lastCommitTitle": "__TODO__", "header.nixosDiff": "__TODO__",
   "admin.gitTitle": "Git履歴 & ロールバック",
   "admin.gitHint": "NiCoは書き込みのたびに自動的にGitコミットを作成します。「リセット」は選択した状態にNixファイルを復元します – Git履歴は完全に保持されます。",

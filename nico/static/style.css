@@ -37,6 +37,8 @@ body {
 /* Dir-Browser und Sudo-Dialog liegen immer über anderen Overlays */
 #dirbrowser-overlay { z-index: 100; }
 #sudo-overlay       { z-index: 200; }
+/* Viewer liegt über Admin-Overlay (DOM-Reihenfolge wäre sonst falsch) */
+#viewer-overlay     { z-index: 60;  }
 
 /* Admin-Bereich: Vollbild-Seite unterhalb des Headers */
 #admin-overlay {
@@ -2849,7 +2851,8 @@ button:disabled {
 .diff-line-removed { background: rgba(243,139,168,.12); color: var(--red); }
 .diff-line-moved   { background: rgba(148,226,213,.10); color: var(--teal); }
 .diff-line-context { color: var(--subtext0); }
-.diff-empty { color: var(--subtext0); font-size: 0.85em; padding: 12px; text-align: center; }
+.diff-empty     { color: var(--subtext0); font-size: 0.85em; padding: 12px; text-align: center; }
+.diff-lock-note { color: var(--teal);    font-size: 0.85em; padding: 8px 12px; }
 
 /* ── Benutzer-Sektion: Summary-Row + Detail-Card ────────────────────────── */
 .user-summary-row {

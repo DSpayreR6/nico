@@ -700,32 +700,27 @@ def rollback(nixos_dir: str, commit_hash: str) -> tuple[bool, str]:
 
 
 def _parse_diff(diff_text: str) -> list[dict]:
-    """Parse unified diff text into hunk list with basic moved-line detection."""
+    """Parse unified diff text into hunk list.
+
+    Only added/removed lines are collected; context lines are ignored.
+    Lines that appear identically in both added and removed sets were merely
+    reordered by the editor (not semantically changed) and are excluded, so
+    only truly new or truly deleted content remains.
+    """
     raw = []
     for line in diff_text.splitlines():
-        if (line.startswith("diff ") or line.startswith("index ")
-                or line.startswith("--- ") or line.startswith("+++ ")
-                or line.startswith("@@ ")):
+        if line.startswith(("diff ", "index ", "--- ", "+++ ", "@@ ")):
             continue
         if line.startswith("+"):
             raw.append({"type": "added",   "content": line[1:]})
         elif line.startswith("-"):
             raw.append({"type": "removed", "content": line[1:]})
-        elif line.startswith(" "):
-            raw.append({"type": "context", "content": line[1:]})
 
-    # Lines that appear as both added and removed (non-empty) are moves
-    added   = {h["content"] for h in raw if h["type"] == "added"   and h["content"].strip()}
-    removed = {h["content"] for h in raw if h["type"] == "removed" and h["content"].strip()}
-    moved   = added & removed
+    added_set   = {h["content"] for h in raw if h["type"] == "added"}
+    removed_set = {h["content"] for h in raw if h["type"] == "removed"}
+    reordered   = added_set & removed_set
 
-    result = []
-    for h in raw:
-        if h["content"] in moved and h["type"] in ("added", "removed"):
-            result.append({"type": "moved", "content": h["content"]})
-        else:
-            result.append(h)
-    return result
+    return [h for h in raw if h["content"] not in reordered]
 
 
 def get_diff(nixos_dir: str, from_hash: str, to_hash: str = "HEAD") -> dict:
@@ -745,6 +740,8 @@ def get_diff(nixos_dir: str, from_hash: str, to_hash: str = "HEAD") -> dict:
     if rc != 0:
         return {"error": out or "git diff fehlgeschlagen"}
 
+    _DIFF_EXTENSIONS = {".nix", ".lock"}  # only config-relevant files
+
     status_map = {"A": "added", "M": "modified", "D": "deleted"}
     files = []
     for line in out.splitlines():
@@ -758,7 +755,19 @@ def get_diff(nixos_dir: str, from_hash: str, to_hash: str = "HEAD") -> dict:
         if status_char == "R":          # rename: "old\tnew"
             fn_parts = filename.split("\t")
             filename = fn_parts[-1]
+
+        # Only show .nix files and flake.lock
+        ext = "." + filename.rsplit(".", 1)[-1] if "." in filename else ""
+        if ext not in _DIFF_EXTENSIONS:
+            continue
+
         status = status_map.get(status_char, "modified")
+
+        # flake.lock: don't diff content, just signal that it changed
+        if filename == "flake.lock" or filename.endswith("/flake.lock"):
+            files.append({"filename": filename, "status": status,
+                          "hunks": [], "lock_updated": True})
+            continue
 
         rc2, diff_out = _run(
             ["diff", "-w", from_hash, to_hash, "--", filename],

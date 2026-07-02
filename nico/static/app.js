@@ -294,6 +294,10 @@ async function checkStatus() {
         Sidebar.setActiveFile('configuration.nix', 'configuration.nix');
         if (_gitSync || _gitStatusOnly) checkGitStatus();
         if (_gitSync) checkGitRemoteStatus();
+        if (_gitSync) csrfFetch('/api/git/log').then(r => r.json()).then(d => {
+          if ((d.commits || []).length >= 2)
+            document.getElementById('nixos-diff-btn')?.classList.remove('hidden');
+        }).catch(() => {});
       }
     } else {
       showSetupOverlay();
@@ -5852,18 +5856,37 @@ function _renderDiff(data) {
   if (!files.length) {
     return `<div class="diff-empty">${escHtml(t('diff.noChanges'))}</div>`;
   }
-  const statusIcon = { added: '+', modified: '~', deleted: '−' };
+  const statusIcon  = { added: '+', modified: '~', deleted: '−' };
   const statusClass = { added: 'diff-status-added', modified: 'diff-status-modified', deleted: 'diff-status-deleted' };
-  const linePrefix = { added: '+', removed: '−', moved: '~', context: ' ' };
 
   let html = '<div class="diff-viewer">';
+  let anyFile = false;
   for (const f of files) {
-    const icon  = statusIcon[f.status]  || '~';
-    const cls   = statusClass[f.status] || 'diff-status-modified';
-    const lines = (f.hunks || []).map(h => {
+    const icon = statusIcon[f.status]  || '~';
+    const cls  = statusClass[f.status] || 'diff-status-modified';
+
+    if (f.lock_updated) {
+      anyFile = true;
+      html += `
+        <div class="diff-file">
+          <div class="diff-file-header">
+            <span class="${cls}">${icon}</span>
+            <span class="diff-filename">${escHtml(f.filename)}</span>
+          </div>
+          <div class="diff-file-body open">
+            <div class="diff-lock-note">${escHtml(t('diff.lockUpdated'))}</div>
+          </div>
+        </div>`;
+      continue;
+    }
+
+    const relevant = (f.hunks || []).filter(h => h.type === 'added' || h.type === 'removed');
+    if (!relevant.length) continue;
+    anyFile = true;
+    const lines = relevant.map(h => {
       const lineCls = `diff-line diff-line-${escHtml(h.type)}`;
-      const prefix  = linePrefix[h.type] ?? ' ';
-      return `<div class="${lineCls}">${escHtml(prefix + h.content)}</div>`;
+      const prefix  = h.type === 'added' ? '+' : '−';
+      return `<div class="${lineCls}">${escHtml(prefix + ' ' + h.content)}</div>`;
     }).join('');
     html += `
       <div class="diff-file">
@@ -5871,9 +5894,10 @@ function _renderDiff(data) {
           <span class="${cls}">${icon}</span>
           <span class="diff-filename">${escHtml(f.filename)}</span>
         </div>
-        <div class="diff-file-body">${lines || `<div class="diff-empty">${escHtml(t('diff.noLines'))}</div>`}</div>
+        <div class="diff-file-body open">${lines}</div>
       </div>`;
   }
+  if (!anyFile) html += `<div class="diff-empty">${escHtml(t('diff.noChanges'))}</div>`;
   html += '</div>';
   return html;
 }

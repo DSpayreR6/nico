@@ -311,7 +311,7 @@
   "diff.to": "To",
   "diff.show": "Show diff",
   "diff.noChanges": "__TODO__",
-  "diff.noLines": "__TODO__",
+  "diff.noLines": "__TODO__", "diff.lockUpdated": "flake.lock updated – different Nixpkgs version (nix flake update).",
   "diff.lastCommitTitle": "Last commit vs. HEAD",
   "header.nixosDiff": "Diff (last commit)",
   "admin.gitTitle": "Git / Time Machine",

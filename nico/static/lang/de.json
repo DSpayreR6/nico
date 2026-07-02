@@ -324,12 +324,13 @@
   "common.close":             "Schließen",
 
   "diff.title":           "Commit-Diff",
-  "diff.hint":            "Vergleich zwischen zwei Commits. „Von" ist der ältere Stand, „Bis" der neuere.",
+  "diff.hint":            "Vergleich zwischen zwei Commits. „Von“ ist der ältere Stand, „Bis“ der neuere.",
   "diff.from":            "Von",
   "diff.to":              "Bis",
   "diff.show":            "Diff anzeigen",
   "diff.noChanges":       "Keine Änderungen zwischen diesen Commits.",
   "diff.noLines":         "Keine Zeilen.",
+  "diff.lockUpdated":     "flake.lock aktualisiert – anderer Nixpkgs-Stand (nix flake update).",
   "diff.lastCommitTitle": "Letzter Commit vs. HEAD",
   "header.nixosDiff":     "Diff (letzter Commit)",
 

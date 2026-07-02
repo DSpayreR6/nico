@@ -306,7 +306,7 @@
   "rebuild.pushDone": "Envoyé.",
   "common.close": "__TODO__",
   "diff.title": "__TODO__", "diff.hint": "__TODO__", "diff.from": "__TODO__", "diff.to": "__TODO__",
-  "diff.show": "__TODO__", "diff.noChanges": "__TODO__", "diff.noLines": "__TODO__",
+  "diff.show": "__TODO__", "diff.noChanges": "__TODO__", "diff.noLines": "__TODO__", "diff.lockUpdated": "flake.lock mis à jour – version Nixpkgs différente (nix flake update).",
   "diff.lastCommitTitle": "__TODO__", "header.nixosDiff": "__TODO__",
   "admin.gitTitle": "Historique Git & rollback",
   "admin.gitHint": "NiCo crée automatiquement un commit Git après chaque écriture. « Réinitialiser » restaure les fichiers Nix à l'état sélectionné – l'historique Git est entièrement préservé.",
