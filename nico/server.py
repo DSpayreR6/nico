@@ -390,7 +390,7 @@ def create_app() -> Flask:
         """Merge settings into app settings (~/.config/nico/settings.json)."""
         if err := _check_csrf(): return err
 
-        _APP_KEYS = frozenset({"language", "theme", "code_view_plain", "rebuild_log", "hidden_sections", "section_filter", "show_flake_lock", "default_host", "rebuild_terminal", "rebuild_safe"})
+        _APP_KEYS = frozenset({"language", "theme", "code_view_plain", "rebuild_log", "hidden_sections", "section_filter", "show_flake_lock", "default_host", "rebuild_terminal", "rebuild_safe", "prefetch_dry_run"})
         incoming = request.get_json(silent=True) or {}
         patch    = {k: v for k, v in incoming.items() if k in _APP_KEYS}
         if not patch:
@@ -1535,8 +1535,9 @@ def create_app() -> Flask:
         if safe_mode:
             cmd += ["--max-jobs", "1", "--cores", "4"]
 
-        app_settings   = config_manager.get_app_settings()
-        rebuild_log_on = bool(app_settings.get("rebuild_log", False))
+        app_settings        = config_manager.get_app_settings()
+        rebuild_log_on      = bool(app_settings.get("rebuild_log", False))
+        prefetch_dry_run_on = bool(app_settings.get("prefetch_dry_run", True))
         log_path       = Path(nixos_dir) / "nixos-rebuild.log"
 
         def _generate():
@@ -1792,6 +1793,38 @@ def create_app() -> Flask:
                         return
                     yield f"data: {_json.dumps({'type': 'output', 'line': '── nixos-rebuild ──'})}\n\n"
 
+                # Pre-fetch dry-run: evaluate dependency graph to get stable total download size
+                if prefetch_dry_run_on:
+                    if use_flake:
+                        dr_cmd = ["nixos-rebuild", "build", "--dry-run", "--flake", flake_arg]
+                    else:
+                        dr_cmd = ["nixos-rebuild", "build", "--dry-run",
+                                  "-I", f"nixos-config={conf_path}"]
+                    try:
+                        yield _emit_phase('analysing', True)
+                        dr = _sp.Popen(
+                            dr_cmd,
+                            cwd=nixos_dir,
+                            stdout=_sp.PIPE,
+                            stderr=_sp.STDOUT,
+                            text=True,
+                            bufsize=1,
+                        )
+                        total_mib = 0.0
+                        for dr_line in dr.stdout:
+                            m = _re.search(
+                                r'these \d+ paths will be fetched \(([0-9.]+)\s+MiB download',
+                                dr_line,
+                            )
+                            if m:
+                                total_mib += float(m.group(1))
+                        dr.wait()
+                        yield _emit_phase('analysing', False)
+                        if total_mib > 0:
+                            yield f"data: {_json.dumps({'type': 'prefetch_total', 'mib': total_mib})}\n\n"
+                    except Exception:
+                        yield _emit_phase('analysing', False)
+
                 proc = _sp.Popen(
                     cmd,
                     cwd=nixos_dir,       # flake.nix muss im cwd liegen
@@ -1838,15 +1871,17 @@ def create_app() -> Flask:
                             yield _emit_phase('activating', True)
                 proc.wait()
                 success = proc.returncode == 0
+                log_written = False
                 if not success or rebuild_log_on:
                     try:
                         with open(log_path, 'w', encoding='utf-8') as _lf:
                             _lf.write('\n'.join(log_lines))
+                        log_written = True
                     except Exception:
                         pass
                 if not success:
                     yield f"data: {_json.dumps({'type': 'output', 'line': f'── Log gespeichert: {log_path} ──'})}\n\n"
-                yield f"data: {_json.dumps({'type': 'done', 'success': success, 'exit_code': proc.returncode})}\n\n"
+                yield f"data: {_json.dumps({'type': 'done', 'success': success, 'exit_code': proc.returncode, 'log_written': log_written})}\n\n"
             except FileNotFoundError:
                 msg = "nixos-rebuild not found. Is NiCo running on a NixOS system?"
                 yield f"data: {_json.dumps({'type': 'error', 'message': msg})}\n\n"
@@ -1861,6 +1896,21 @@ def create_app() -> Flask:
                 'X-Accel-Buffering': 'no',  # disable nginx/proxy buffering
             },
         )
+
+    @app.route("/api/rebuild/log")
+    def rebuild_log():
+        """Return the last nixos-rebuild log as plain text."""
+        nixos_dir, err = _require_setup()
+        if err:
+            return err
+        log_path = Path(nixos_dir) / "nixos-rebuild.log"
+        if not log_path.exists():
+            return jsonify({"error": "ERR_NO_LOG"}), 404
+        try:
+            content = log_path.read_text(encoding="utf-8", errors="replace")
+        except Exception as exc:
+            return jsonify({"error": str(exc)}), 500
+        return Response(content, mimetype="text/plain; charset=utf-8")
 
     # ------------------------------------------------------------------- help
 

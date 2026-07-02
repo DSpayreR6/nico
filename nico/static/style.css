@@ -1129,6 +1129,14 @@ button:active { transform: scale(.97); }
   color: var(--crust);
 }
 
+.btn-secondary {
+  background: var(--surface1);
+  color: var(--text);
+}
+.btn-secondary:hover {
+  background: var(--surface2);
+}
+
 .btn-yellow {
   background: var(--yellow);
   color: var(--crust);
@@ -1739,6 +1747,23 @@ textarea:focus {
 }
 
 /* ── Rebuild output ──────────────────────────────────────────────────────── */
+.viewer-content {
+  background: var(--crust);
+  border: 1px solid var(--surface1);
+  border-radius: 6px;
+  padding: 12px 14px;
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text);
+  white-space: pre-wrap;
+  word-break: break-all;
+  min-height: 60px;
+  max-height: 65vh;
+  overflow-y: auto;
+  margin-top: 8px;
+}
+
 .rebuild-log {
   background: var(--crust);
   border: 1px solid var(--surface1);

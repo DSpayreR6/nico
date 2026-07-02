@@ -1120,6 +1120,8 @@ function _loadAdminSettings() {
     if (cbFlakeLock) cbFlakeLock.checked = !!data.show_flake_lock;
     const cbRebuildTerminal = document.getElementById('setting-rebuild-terminal');
     if (cbRebuildTerminal) cbRebuildTerminal.checked = !!data.rebuild_terminal;
+    const cbPrefetchDryRun = document.getElementById('setting-prefetch-dry-run');
+    if (cbPrefetchDryRun) cbPrefetchDryRun.checked = data.prefetch_dry_run !== false;
     const cbGitSync = document.getElementById('setting-git-sync');
     if (cbGitSync) cbGitSync.checked = data.git_sync !== false;
     const cbGitStatusOnly = document.getElementById('setting-git-status-only');
@@ -1223,6 +1225,20 @@ function _loadAdminSettings() {
         method:  'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({ rebuild_terminal: cbRebuildTerminal.checked }),
+      }).then(() => showToast(t('admin.settings.saved'), 'success'))
+        .catch(() => showToast(t('toast.error'), 'error'));
+    });
+  }
+
+  // Auto-save Checkbox: prefetch_dry_run
+  const cbPrefetchDryRun = document.getElementById('setting-prefetch-dry-run');
+  if (cbPrefetchDryRun && !cbPrefetchDryRun.dataset.listenerAttached) {
+    cbPrefetchDryRun.dataset.listenerAttached = '1';
+    cbPrefetchDryRun.addEventListener('change', () => {
+      csrfFetch('/api/app/settings', {
+        method:  'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ prefetch_dry_run: cbPrefetchDryRun.checked }),
       }).then(() => showToast(t('admin.settings.saved'), 'success'))
         .catch(() => showToast(t('toast.error'), 'error'));
     });
@@ -4604,6 +4620,7 @@ async function openRebuild(mode = 'switch') {
   const monitorEl    = document.getElementById('rebuild-monitor');
   const resultEl     = document.getElementById('rebuild-result');
   const closeBtn     = document.getElementById('rebuild-close-btn');
+  const logBtn       = document.getElementById('rebuild-log-btn');
   const pushBtn      = document.getElementById('rebuild-push-btn');
   const pushInfoEl   = document.getElementById('rebuild-push-info');
   const counterEl    = document.getElementById('rph-build-counter');
@@ -4630,6 +4647,7 @@ async function openRebuild(mode = 'switch') {
     fetchCopyEl.textContent   = '';
     document.querySelectorAll('.rebuild-phase-col').forEach(el => el.classList.remove('active'));
     closeBtn.disabled = true;
+    logBtn.classList.add('hidden');
     pushBtn.classList.add('hidden');
     pushBtn.disabled = false;
     pushInfoEl.classList.add('hidden');
@@ -4650,13 +4668,14 @@ async function openRebuild(mode = 'switch') {
   const es  = new EventSource(url);
   _rebuildES = es;
 
-  let isRunning      = true;
-  let firstErrorLine = '';
+  let isRunning         = true;
+  let firstErrorLine    = '';
   let hasGlobalProgress = false;
-  let maxBuildTotal = 0;
-  let maxDlExpected = 0;
-  let maxCopiedTotal = 0;
+  let maxBuildTotal     = 0;
+  let maxDlExpected     = 0;
+  let maxCopiedTotal    = 0;
   let maxCopiedExpected = 0;
+  let prefetchTotalBytes = 0;
 
   function _flushLog() {
     _logRafId = null;
@@ -4715,7 +4734,9 @@ async function openRebuild(mode = 'switch') {
     maxCopiedTotal = Math.max(maxCopiedTotal, copiedTotal || 0);
     maxCopiedExpected = Math.max(maxCopiedExpected, copiedExpected || 0);
 
-    const stableExpected = maxDlExpected;
+    const stableExpected = prefetchTotalBytes > 0
+      ? Math.max(maxDlExpected, prefetchTotalBytes)
+      : maxDlExpected;
     const stableCopiedTotal = maxCopiedTotal;
     const stableCopiedExpected = maxCopiedExpected;
     const remain = Math.max(0, stableExpected - (done || 0));
@@ -4765,6 +4786,9 @@ async function openRebuild(mode = 'switch') {
       if (hasGlobalProgress) return;
       _setDlProgress(msg.done, msg.expected);
 
+    } else if (msg.type === 'prefetch_total') {
+      prefetchTotalBytes = (msg.mib || 0) * 1024 * 1024;
+
     } else if (msg.type === 'global_progress') {
       hasGlobalProgress = true;
       _setBuildProgress(msg.built_done || 0, msg.built_total || 0, buildPkgEl.textContent || '');
@@ -4783,6 +4807,21 @@ async function openRebuild(mode = 'switch') {
         ? niIcon('check-circle') + ' ' + t('rebuild.success')
         : niIcon('x-circle') + ' ' + t('rebuild.failed') + (firstErrorLine ? ': ' + firstErrorLine.substring(0, 80) : '');
       _finishMonitor(msg.success, label);
+      if (msg.log_written) {
+        logBtn.classList.remove('hidden');
+        logBtn.onclick = async () => {
+          try {
+            const res  = await csrfFetch('/api/rebuild/log');
+            const text = await res.text();
+            const pre  = document.createElement('pre');
+            pre.style.margin = '0';
+            pre.textContent  = text;
+            openViewer(t('rebuild.openLog'), pre.outerHTML);
+          } catch {
+            showToast(t('toast.error'), 'error');
+          }
+        };
+      }
       es.close();
       _rebuildES = null;
       if (msg.success) {
@@ -5772,6 +5811,18 @@ function showToast(message, type = 'success') {
   }, 3000);
 }
 
+// ── Generic content viewer ─────────────────────────────────────────────────
+function openViewer(title, html) {
+  document.getElementById('viewer-title').textContent = title;
+  document.getElementById('viewer-content').innerHTML = html;
+  document.getElementById('viewer-overlay').classList.remove('hidden');
+}
+
+function closeViewer() {
+  document.getElementById('viewer-overlay').classList.add('hidden');
+  document.getElementById('viewer-content').innerHTML = '';
+}
+
 // ── Event bindings ─────────────────────────────────────────────────────────
 function on(id, event, handler) {
   document.getElementById(id)?.addEventListener(event, handler);
@@ -6124,6 +6175,8 @@ function bindUI() {
   });
   on('about-close-btn', 'click', () => document.getElementById('about-overlay').classList.add('hidden'));
   on('about-overlay', 'click', e => { if (e.target.id === 'about-overlay') document.getElementById('about-overlay').classList.add('hidden'); });
+  on('viewer-close-btn', 'click', closeViewer);
+  on('viewer-overlay', 'click', e => { if (e.target.id === 'viewer-overlay') closeViewer(); });
 
   // Quit
   on('quit-btn', 'click', async () => {

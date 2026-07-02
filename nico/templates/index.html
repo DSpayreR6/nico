@@ -1469,6 +1469,10 @@
       <pre id="rebuild-log" class="rebuild-log"></pre>
       <div id="rebuild-monitor" class="rebuild-monitor">
         <div class="rebuild-phases">
+          <div id="rph-analysing" class="rebuild-phase-col" data-phase="analysing">
+            <span class="rph-dot"></span>
+            <span class="rph-label" data-i18n="rebuild.phaseAnalysing">Analysing</span>
+          </div>
           <div id="rph-evaluating" class="rebuild-phase-col" data-phase="evaluating">
             <span class="rph-dot"></span>
             <span class="rph-label">Evaluating</span>
@@ -1499,8 +1503,20 @@
       </div>
       <div class="confirm-buttons" style="margin-top:16px">
         <span id="rebuild-push-info" class="hidden" style="color:var(--green);font-size:.85rem;align-self:center"></span>
+        <button id="rebuild-log-btn" class="btn-secondary hidden" data-i18n="rebuild.openLog">Log öffnen</button>
         <button id="rebuild-push-btn" class="btn-yellow hidden" data-i18n="rebuild.commitPush">Commit &amp; Push</button>
         <button id="rebuild-close-btn" class="btn-green" data-i18n="rebuild.close">Schließen</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Generischer Content-Viewer ────────────────────────────────────── -->
+  <div id="viewer-overlay" class="overlay hidden">
+    <div class="modal modal-wide">
+      <div class="modal-logo" id="viewer-title"></div>
+      <div id="viewer-content" class="viewer-content"></div>
+      <div class="confirm-buttons" style="margin-top:16px">
+        <button id="viewer-close-btn" class="btn-green" data-i18n="common.close">Schließen</button>
       </div>
     </div>
   </div>
@@ -1768,6 +1784,14 @@
                 <span class="toggle-track"><span class="toggle-thumb"></span></span>
               </span>
             </label>
+            <label class="toggle-row" style="margin-top:8px">
+              <span data-i18n="admin.settings.prefetchDryRun">Pre-Rebuild Analyse (stabiler Fetch-Fortschritt)</span>
+              <span class="toggle-wrap">
+                <input type="checkbox" id="setting-prefetch-dry-run">
+                <span class="toggle-track"><span class="toggle-thumb"></span></span>
+              </span>
+            </label>
+            <p class="raw-panel-hint" style="margin-top:2px;margin-bottom:0" data-i18n="admin.settings.prefetchDryRunHint">Führt vor jedem Rebuild einen kurzen Dry-Run durch, um die Gesamtmenge der zu ladenden Pakete vorab zu ermitteln. Erhöht die Startzeit leicht, ermöglicht aber einen echten Fortschrittsbalken.</p>
           </div>
         </div>
 
