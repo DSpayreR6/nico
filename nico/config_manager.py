@@ -1,7 +1,7 @@
 """
 Config management for NiCo.  Three layers:
 
-  1. App settings  (<nico-root>/nico-settings.json)
+  1. App settings  (~/.config/nico/settings.json, XDG)
      Program-level preferences that stay on the machine:
        - nixos_config_dir: path to the config directory
        - language: UI language (de, en, ...)
@@ -20,11 +20,40 @@ Config management for NiCo.  Three layers:
        - hosts/*/default.nix → per-host config (read/written by load/save_host_config)
 """
 
+import os
 import re
 import subprocess
 from pathlib import Path
 
-APP_SETTINGS_FILE = Path(__file__).parent.parent / "nico-settings.json"
+
+def _xdg_config_home() -> Path:
+    env = os.environ.get("XDG_CONFIG_HOME", "").strip()
+    return Path(env) if env else Path.home() / ".config"
+
+
+# App settings live in the XDG config dir: the package dir is read-only when
+# NiCo is installed from the Nix store (decision 2026-07-02, see vorgaben.txt).
+APP_SETTINGS_FILE = _xdg_config_home() / "nico" / "settings.json"
+
+# Pre-XDG location next to the package – migrated once, then never written again.
+_LEGACY_APP_SETTINGS_FILE = Path(__file__).parent.parent / "nico-settings.json"
+
+
+def _migrate_legacy_app_settings() -> None:
+    """One-time move of a pre-XDG nico-settings.json into APP_SETTINGS_FILE."""
+    import json
+    if APP_SETTINGS_FILE.exists() or not _LEGACY_APP_SETTINGS_FILE.exists():
+        return
+    try:
+        content = _LEGACY_APP_SETTINGS_FILE.read_text(encoding="utf-8")
+        json.loads(content)  # migrate only valid JSON
+        APP_SETTINGS_FILE.parent.mkdir(parents=True, exist_ok=True)
+        APP_SETTINGS_FILE.write_text(content, encoding="utf-8")
+        _LEGACY_APP_SETTINGS_FILE.rename(
+            _LEGACY_APP_SETTINGS_FILE.with_name("nico-settings.json.bak")
+        )
+    except Exception:
+        pass  # unreadable legacy file: start fresh with defaults
 
 # Default app settings (program-level, stay on the machine)
 DEFAULT_APP_SETTINGS = {
@@ -170,13 +199,14 @@ def _detect_state_version() -> str:
     return DEFAULT_NIXOS_CONFIG["state_version"]
 
 
-# ── App-level settings (~/.config/nico/settings.json) ────────────────────────
+# ── App-level settings (APP_SETTINGS_FILE, XDG) ──────────────────────────────
 # Program preferences that stay on this machine: config path, language, theme.
 
 def get_app_settings() -> dict:
     import json
     import copy
     import time
+    _migrate_legacy_app_settings()
     defaults = copy.deepcopy(DEFAULT_APP_SETTINGS)
     if not APP_SETTINGS_FILE.exists():
         return defaults
@@ -199,6 +229,7 @@ def save_app_settings(settings: dict) -> None:
     import tempfile
     existing = get_app_settings()
     existing.update(settings)
+    APP_SETTINGS_FILE.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.NamedTemporaryFile(
         "w",
         encoding="utf-8",

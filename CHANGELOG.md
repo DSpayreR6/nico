@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Bug Fixes
+
+- App settings moved to `~/.config/nico/settings.json` (XDG); an existing `nico-settings.json` next to the program is migrated once automatically – fixes crashes when NiCo is installed as a Nix package (read-only store)
+- Raw editor: saving `configuration.nix`/`flake.nix` in raw mode (`#r`) no longer fails with ERR_MANAGED_FILE
+- Custom `hosts_dir` from config.json is now respected everywhere (host save/write, preview, validator, frontend paths)
+- Validator: `flake_host_exists` rule no longer broken by dict-shaped host entries
+- Preview with flakes enabled no longer returns a server error before setup is complete
+
 ---
 
 ## 0.9.11 (2026-07-02)

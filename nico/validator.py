@@ -224,7 +224,10 @@ def _host_paths(nixos_dir: str, config: dict, host: str | None) -> tuple[Path, s
     """Return (base_dir, config_filename) for the given host (or root config)."""
     base = Path(nixos_dir)
     if host:
-        hosts_dir = config.get("hosts_dir", "hosts")
+        # hosts_dir is a config-level setting (config.json), not part of the NixOS data dict
+        from . import config_manager as _cm
+        cfg_settings = _cm.load_config_settings(nixos_dir)
+        hosts_dir = (cfg_settings.get("hosts_dir") or "hosts").strip() or "hosts"
         return base / hosts_dir / host, "default.nix"
     return base, "configuration.nix"
 
@@ -276,8 +279,11 @@ def _rule_flake_host_exists(nixos_dir: str, config: dict, is_flake: bool,
     if not flake_path.exists():
         return []
 
-    # When a specific host is selected, only check that one
-    hosts: list[str] = [host] if host else (config.get("flake_hosts") or [])
+    # When a specific host is selected, only check that one.
+    # config["flake_hosts"] entries are dicts ({"name": ...}); normalize to names.
+    raw_hosts = [host] if host else (config.get("flake_hosts") or [])
+    hosts = [h.get("name") if isinstance(h, dict) else h for h in raw_hosts]
+    hosts = [h for h in hosts if h]
     if not hosts:
         return []
 
@@ -288,12 +294,12 @@ def _rule_flake_host_exists(nixos_dir: str, config: dict, is_flake: bool,
 
     defined = set(re.findall(r'nixosConfigurations\s*\.\s*"?([\w-]+)"?', content))
     findings = []
-    for host in hosts:
-        if host not in defined:
+    for host_name in hosts:
+        if host_name not in defined:
             findings.append(Finding(
                 rule_id="flake_host_exists",
                 severity="error",
-                message=f'Host "{host}" fehlt unter nixosConfigurations in flake.nix.',
+                message=f'Host "{host_name}" fehlt unter nixosConfigurations in flake.nix.',
                 detail="Host ist konfiguriert, aber nicht als Flake-Output deklariert.",
             ))
     return findings

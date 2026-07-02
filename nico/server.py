@@ -149,6 +149,11 @@ def create_app() -> Flask:
             return jsonify({"error": "ERR_CSRF"}), 403
         return None
 
+    def _hosts_dir_name(nixos_dir: str) -> str:
+        """Configured hosts directory name (config.json hosts_dir, default 'hosts')."""
+        cfg = config_manager.load_config_settings(nixos_dir)
+        return (cfg.get("hosts_dir") or "hosts").strip() or "hosts"
+
     # ------------------------------------------------------------------ routes
 
     # Cache-buster: changes every server restart so browsers always reload static files
@@ -528,7 +533,10 @@ def create_app() -> Flask:
                 except OSError:
                     pass
 
-            host_match = re.search(r"(?:^|/)hosts/([^/]+)/default\.nix$", rel_path)
+            hosts_dir_name = _hosts_dir_name(nixos_dir)
+            host_match = re.search(
+                rf"(?:^|/){re.escape(hosts_dir_name)}/([^/]+)/default\.nix$", rel_path
+            )
             if rel_path == "configuration.nix":
                 if (nixos_path / "hardware-configuration.nix").exists():
                     data["hardware_config"] = True
@@ -536,7 +544,7 @@ def create_app() -> Flask:
                     "configuration_nix": generator.generate_configuration_nix(data)
                 })
             if host_match:
-                host_dir = nixos_path / "hosts" / host_match.group(1)
+                host_dir = nixos_path / hosts_dir_name / host_match.group(1)
                 hw_config = (host_dir / "hardware-configuration.nix").exists()
                 return jsonify({
                     "configuration_nix": generator.generate_host_nix(
@@ -593,16 +601,17 @@ def create_app() -> Flask:
             "configuration_nix": generator.generate_configuration_nix(data)
         }
         if data.get("flakes"):
-            flake_nix_path = Path(nixos_dir) / "flake.nix"
-            if flake_nix_path.exists():
-                try:
-                    flake_content = flake_nix_path.read_text(encoding="utf-8")
-                    flake_brix = extract_brick_blocks(flake_content)
-                    flake_brix = importer.ensure_flake_host_bricks(flake_content, flake_brix)
-                    if flake_brix:
-                        data["flake_brick_blocks"] = flake_brix
-                except OSError:
-                    pass
+            if nixos_dir:
+                flake_nix_path = Path(nixos_dir) / "flake.nix"
+                if flake_nix_path.exists():
+                    try:
+                        flake_content = flake_nix_path.read_text(encoding="utf-8")
+                        flake_brix = extract_brick_blocks(flake_content)
+                        flake_brix = importer.ensure_flake_host_bricks(flake_content, flake_brix)
+                        if flake_brix:
+                            data["flake_brick_blocks"] = flake_brix
+                    except OSError:
+                        pass
             result["flake_nix"] = generator.generate_flake_nix(data)
 
         return jsonify(result)
@@ -642,7 +651,7 @@ def create_app() -> Flask:
         if err:
             return err
         data = request.get_json(silent=True) or {}
-        expected = f"hosts/{host_name}/default.nix"
+        expected = f"{_hosts_dir_name(nixos_dir)}/{host_name}/default.nix"
         if not data.get("_co_ready") or data.get("_co_path") != expected:
             return jsonify({"error": "ERR_STALE_FORM"}), 409
         data.pop("_co_path", None)
@@ -665,7 +674,8 @@ def create_app() -> Flask:
         if host_data is None:
             return jsonify({"error": "ERR_NO_CONFIG"}), 400
 
-        host_dir = Path(nixos_dir) / "hosts" / host_name
+        hosts_dir_name = _hosts_dir_name(nixos_dir)
+        host_dir = Path(nixos_dir) / hosts_dir_name / host_name
         host_nix = host_dir / "default.nix"
 
         # Merge brix from existing file into host_data before the single write below
@@ -685,7 +695,7 @@ def create_app() -> Flask:
             except Exception:
                 pass
 
-        return jsonify({"success": True, "written": [f"hosts/{host_name}/default.nix"], **_maybe_auto_push(nixos_dir)})
+        return jsonify({"success": True, "written": [f"{hosts_dir_name}/{host_name}/default.nix"], **_maybe_auto_push(nixos_dir)})
 
     # ── Datei-Viewer / Roh-Editor ─────────────────────────────────────────────
     # Erlaubte Suffixe für GET (lesen) und POST (schreiben)
@@ -2970,9 +2980,6 @@ def create_app() -> Flask:
                 return jsonify({"error": "ERR_SYSTEM_PATH"}), 403
             if target.suffix != '.nix':
                 return jsonify({"error": "ERR_NOT_NIX"}), 400
-            # Refuse to overwrite NiCo-managed files via this endpoint
-            if target.name in ('configuration.nix', 'flake.nix'):
-                return jsonify({"error": "ERR_MANAGED_FILE"}), 400
             try:
                 # Refuse to overwrite NiCo-managed files unless explicitly in raw mode
                 if target.name in ('configuration.nix', 'flake.nix'):

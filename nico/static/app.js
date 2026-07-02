@@ -157,6 +157,24 @@ let _brixContextFtype = 'co';                 // ftype of context file
 
 // ── Multi-Host State ───────────────────────────────────────────────────────
 let _activeHost     = '';          // '' = defaults, 'nix-desktop' etc.
+let _hostsDir       = 'hosts';     // config.json hosts_dir – refreshed in loadConfig()
+
+async function refreshHostsDir() {
+  try {
+    const res  = await csrfFetch('/api/config/settings');
+    const data = await res.json();
+    _hostsDir = (data.hosts_dir || 'hosts').trim() || 'hosts';
+  } catch { /* keep current value */ }
+}
+
+function hostCoPath(hostName) {
+  return `${_hostsDir}/${hostName}/default.nix`;
+}
+
+function matchHostCoPath(path) {
+  const esc = _hostsDir.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return path.match(new RegExp(`(?:^|/)${esc}/([^/]+)/default\\.nix$`));
+}
 
 // Search state
 // currentFiles is the source of truth for multi-file search.
@@ -693,6 +711,7 @@ function hideConfirm() {
 
 // ── Config load / save ─────────────────────────────────────────────────────
 async function loadConfig() {
+  await refreshHostsDir();
   _activeHost = '';
   _brixTargetFile  = 'configuration.nix';
   _brixContextFile = 'configuration.nix';
@@ -1496,14 +1515,17 @@ function _loadAdminSettings() {
           modules_dir: modulesDir,
           hm_dir: hmDir,
         }),
-      }).then(() => showToast(t('admin.settings.saved'), 'success'))
+      }).then(() => {
+        _hostsDir = hostsDir;
+        showToast(t('admin.settings.saved'), 'success');
+      })
         .catch(() => showToast(t('toast.error'), 'error'));
     });
   }
 }
 
 function _expectedCoPath() {
-  return _activeHost ? `hosts/${_activeHost}/default.nix` : 'configuration.nix';
+  return _activeHost ? hostCoPath(_activeHost) : 'configuration.nix';
 }
 
 function _canSaveCurrentCoForm() {
@@ -5613,8 +5635,8 @@ async function confirmClosePushPrompt() {
 }
 
 async function loadHostConfig(hostName) {
-  await _populateCoFormFromFile(`hosts/${hostName}/default.nix`);
-  Sidebar.refreshPanelToggle(`hosts/${hostName}/default.nix`, 'co');
+  await _populateCoFormFromFile(hostCoPath(hostName));
+  Sidebar.refreshPanelToggle(hostCoPath(hostName), 'co');
   await updatePreview();
 }
 
@@ -7199,7 +7221,7 @@ const Sidebar = (() => {
       switchTab('configuration');
       _brixTargetFtype  = 'co';
       _brixContextFtype = 'co';
-      const hostMatch = path.match(/(?:^|\/)hosts\/([^/]+)\/default\.nix$/);
+      const hostMatch = matchHostCoPath(path);
       if (fileName === 'configuration.nix' && !path.includes('/')) {
         _activeHost = '';
         await _populateCoFormFromFile(path, data.content);
