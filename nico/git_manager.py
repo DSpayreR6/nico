@@ -676,11 +676,10 @@ def rollback(nixos_dir: str, commit_hash: str) -> tuple[bool, str]:
     if rc != 0 or not out.strip():
         return False, "Commit nicht gefunden oder enthält keine Dateien."
 
+    target_files = {f.strip() for f in out.splitlines() if f.strip()}
+
     restored = []
-    for fname in out.splitlines():
-        fname = fname.strip()
-        if not fname:
-            continue
+    for fname in sorted(target_files):
         rc, _ = _run(["checkout", commit_hash, "--", fname], cwd=nixos_dir)
         if rc == 0:
             restored.append(fname)
@@ -688,15 +687,30 @@ def rollback(nixos_dir: str, commit_hash: str) -> tuple[bool, str]:
     if not restored:
         return False, "Keine Dateien wiederhergestellt."
 
+    # Tracked files that were added after the target commit must be removed,
+    # otherwise the working tree is a mix of both states.
+    removed = []
+    rc_cur, cur_out = _run(["ls-files"], cwd=nixos_dir)
+    if rc_cur == 0:
+        for fname in cur_out.splitlines():
+            fname = fname.strip()
+            if fname and fname not in target_files:
+                rc_rm, _ = _run(["rm", "-f", "--", fname], cwd=nixos_dir)
+                if rc_rm == 0:
+                    removed.append(fname)
+
     short = commit_hash[:7]
-    msg   = f"NiCo: Rollback zu {short} ({len(restored)} Datei(en))"
+    parts = [f"{len(restored)} Datei(en)"]
+    if removed:
+        parts.append(f"{len(removed)} entfernt")
+    msg   = f"NiCo: Rollback zu {short} ({', '.join(parts)})"
     rc, out = _run(["commit", "-m", msg], cwd=nixos_dir)
     _no_change = ("nothing to commit" in out or "nichts zu committen" in out
                   or "nothing added to commit" in out)
     if rc != 0 and not _no_change:
         return False, f"Commit nach Rollback fehlgeschlagen: {out}"
 
-    return True, f"Wiederhergestellt: {len(restored)} Datei(en) → {short}"
+    return True, f"Wiederhergestellt: {', '.join(parts)} → {short}"
 
 
 def _parse_diff(diff_text: str) -> list[dict]:
