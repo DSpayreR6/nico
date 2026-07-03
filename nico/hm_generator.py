@@ -5,11 +5,10 @@ Generates a home.nix file from NiCo's Home Manager config data.
 HM files live in hm_dir/<username>.nix (default: home/<username>.nix).
 """
 
-import hashlib
 import re
 
 from .brix import inject_brick_blocks
-from .generator import nix_esc
+from .generator import _add_version_hash, nix_esc
 
 _MARKER_WIDTH = 78
 
@@ -28,11 +27,7 @@ def _hm_section(name: str) -> str:
 
 def _add_hm_version_hash(content: str, ftype: str = "hm") -> str:
     """Insert '# nico-version: [type#]<hash>' on line 2 of content."""
-    h = hashlib.sha256(content.encode()).hexdigest()[:8]
-    lines = content.split("\n")
-    prefix = f"{ftype}#" if ftype else ""
-    lines.insert(1, f"# nico-version: {prefix}{h}")
-    return "\n".join(lines)
+    return _add_version_hash(content, ftype=ftype)
 
 
 # Default values so callers can pass a partial dict

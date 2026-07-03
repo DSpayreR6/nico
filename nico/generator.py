@@ -56,12 +56,17 @@ _VERSION_RE_NOTYPE = re.compile(
 )
 
 
+def content_hash(content: str) -> str:
+    """8-hex sha256 digest used by all nico-version lines."""
+    return hashlib.sha256(content.encode()).hexdigest()[:8]
+
+
 def _add_version_hash(content: str, ftype: str = "") -> str:
     """Insert '# nico-version: [type#]<hash>' on line 2 of content.
     The hash covers the content *without* the nico-version line itself.
     ftype: optional type code (e.g. 'co', 'fl') prepended as '<ftype>#'.
     """
-    h = hashlib.sha256(content.encode()).hexdigest()[:8]
+    h = content_hash(content)
     prefix = f"{ftype}#" if ftype else ""
     lines = content.split("\n")
     lines.insert(1, f"# nico-version: {prefix}{h}")
@@ -82,7 +87,7 @@ def check_version_hash(file_content: str) -> str:
     stored = m.group(1)
     # Remove the entire nico-version line (with or without type prefix) to get canonical content
     canonical = _VERSION_RE.sub("", file_content, count=1)
-    computed = hashlib.sha256(canonical.encode()).hexdigest()[:8]
+    computed = content_hash(canonical)
     return "ok" if computed == stored else "modified"
 
 # Width of the section marker line (total chars)

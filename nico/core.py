@@ -6,7 +6,6 @@ Can be imported independently of Flask (e.g. for testing or future frontends).
 """
 from __future__ import annotations
 
-import hashlib
 import re
 from pathlib import Path
 
@@ -126,16 +125,16 @@ def set_type_in_content(content: str, ftype: str) -> str:
     if _VERSION_ANY_RE.search(content):
         panel_flag   = get_panel_mode(content)
         canonical    = _VERSION_ANY_RE.sub('', content, count=1)
-        h            = hashlib.sha256(canonical.encode()).hexdigest()[:8]
+        h            = generator.content_hash(canonical)
         panel_suffix = f'#{panel_flag}' if panel_flag else ''
         new_line     = f"# nico-version: {ftype}#{h}{panel_suffix}\n"
         return _VERSION_ANY_RE.sub(new_line, content, count=1)
     if ftype == 'co':
         canonical = NICO_HEADER + content
-        h = hashlib.sha256(canonical.encode()).hexdigest()[:8]
+        h = generator.content_hash(canonical)
         nico_line = f"# nico-version: {ftype}#{h}\n"
         return f"{NICO_HEADER}{nico_line}{content}"
-    h = hashlib.sha256(content.encode()).hexdigest()[:8]
+    h = generator.content_hash(content)
     nico_line = f"# nico-version: {ftype}#{h}\n"
     return f"{nico_line}{content}"
 
@@ -275,7 +274,7 @@ def hm_update_hash(content: str) -> str:
         r'^# nico-version: (?:[a-z]+#)?[0-9a-f]{8}(?:#[pr])?\n', '',
         content, count=1, flags=re.MULTILINE
     )
-    new_hash = hashlib.sha256(canonical.encode()).hexdigest()[:8]
+    new_hash = generator.content_hash(canonical)
     return re.sub(
         r'^(# nico-version: (?:[a-z]+#)?)[0-9a-f]{8}',
         rf'\g<1>{new_hash}',
