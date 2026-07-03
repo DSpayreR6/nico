@@ -663,9 +663,14 @@ def _home_manager_ref_for_nixpkgs_channel(channel: str) -> str | None:
 def generate_flake_nix(data: dict, nixos_dir: "str | Path | None" = None) -> str:
     """Generate flake.nix from panel data.
 
-    nixos_dir: kept for signature compatibility, no longer used for host scanning.
+    nixos_dir: used to resolve the configured hosts_dir (config.json).
     Host data comes exclusively from data["flake_hosts"].
     """
+    hosts_dir = "hosts"
+    if nixos_dir:
+        from . import config_manager as _cm
+        hosts_dir = (_cm.load_config_settings(str(nixos_dir)).get("hosts_dir") or "hosts").strip() or "hosts"
+
     hostname    = data.get("hostname", "nixos") or "nixos"
     description = data.get("flake_description") or f"NixOS configuration for {hostname}"
     channel     = data.get("flake_nixpkgs_channel") or "nixos-unstable"
@@ -751,8 +756,8 @@ def generate_flake_nix(data: dict, nixos_dir: "str | Path | None" = None) -> str
                 f'      system = "{nix_esc(arch)}";',
                 "      modules = [",
                 "        ./configuration.nix",
-                f"        ./hosts/{name}/hardware-configuration.nix",
-                f"        ./hosts/{name}",
+                f"        ./{hosts_dir}/{name}/hardware-configuration.nix",
+                f"        ./{hosts_dir}/{name}",
             ]
             if hm_input and hm_module:
                 body.append("        home-manager.nixosModules.home-manager")

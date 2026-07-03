@@ -1261,14 +1261,19 @@ def copy_nix_tree(source_dir: str | Path, nixos_dir: str | Path) -> list[str]:
                     copied.append(str(rel))
         return copied
 
+    # Hidden path segments (.git, .direnv, …) are never deleted or copied –
+    # same visibility rules as tree listing and ZIP export.
     for existing in dst.rglob("*"):
-        if existing.is_file() and existing.suffix in (".nix", ".lock"):
+        if (existing.is_file() and existing.suffix in (".nix", ".lock")
+                and not any(p.startswith('.') for p in existing.relative_to(dst).parts)):
             existing.unlink()
 
     copied = []
     for f in sorted(src.rglob("*")):
         if f.is_file() and f.suffix in (".nix", ".lock"):
             rel = f.relative_to(src)
+            if any(p.startswith('.') for p in rel.parts):
+                continue
             dest_file = dst / rel
             dest_file.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(f, dest_file)

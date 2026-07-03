@@ -569,7 +569,9 @@ def read_config_file(nixos_dir: str, rel_path: str, *, persist_stamp: bool = Tru
     elif ftype is not None:
         override = hint_type or path_type
         if override and override != ftype:
-            content = insert_type(content, override)
+            # insert_type() only handles legacy headers without type – a typed
+            # header must be rewritten (incl. hash) via set_type_in_content().
+            content = set_type_in_content(content, override)
             if persist_stamp:
                 try:
                     target.write_text(content, encoding="utf-8")
@@ -704,33 +706,21 @@ def load_and_normalize_config(nixos_dir: str) -> dict:
         except OSError:
             pass
 
+    # Legacy root home.nix (pre HM-refactor): read-only. Bricks are still
+    # exposed for display, but the file is never normalized or rewritten –
+    # HM files live in hm_dir/<username>.nix; the validator (hm_orphan_root)
+    # reports a leftover root home.nix.
     home_nix_path = Path(nixos_dir) / "home.nix"
     if home_nix_path.exists():
         try:
-            home_content = home_nix_path.read_text(encoding="utf-8")
-            hash_status = generator.check_version_hash(home_content)
-            if get_nico_type(home_content) is not None and hash_status in ("modified", "no_hash"):
-                existing_bricks = extract_brick_blocks(home_content)
-                home_without_bricks = strip_brick_blocks(home_content)
-                hm = importer.parse_home_config(home_without_bricks)
-                rest = importer.build_home_rest_brix(home_without_bricks, hm)
-                blocks = dict(existing_bricks)
-                if rest.strip():
-                    rest_blocks = brix_content_to_bricks(rest, section="End", existing_blocks=blocks)
-                    blocks.update(rest_blocks)
-                data["hm_brick_blocks"] = blocks
-                home_data = dict(hm)
-                home_data["hm_brick_blocks"] = blocks
-                home_nix_path.write_text(
-                    hm_generator.generate_home_nix(home_data), encoding="utf-8"
-                )
-            else:
-                data["hm_brick_blocks"] = extract_brick_blocks(home_content)
+            data["hm_brick_blocks"] = extract_brick_blocks(
+                home_nix_path.read_text(encoding="utf-8")
+            )
         except OSError:
             pass
 
     modified = []
-    for fname in ("configuration.nix", "flake.nix", "home.nix"):
+    for fname in ("configuration.nix", "flake.nix"):
         p = Path(nixos_dir) / fname
         if p.exists():
             if generator.check_version_hash(p.read_text(encoding="utf-8")) == "modified":
@@ -773,31 +763,8 @@ def write_config_files(
             flake_file.write_text(generator.generate_flake_nix(data, nixos_dir=str(nixos_path)), encoding="utf-8")
             written.append("flake.nix")
 
-    hm = dict(data.get("home_manager") or {})
-    if hm.get("enabled"):
-        home_file = nixos_path / "home.nix"
-        _home_nico = (
-            not home_file.exists()
-            or get_nico_type(home_file.read_text(encoding="utf-8")) is not None
-        )
-        if _home_nico:
-            if home_file.exists():
-                try:
-                    home_content = home_file.read_text(encoding="utf-8")
-                    hm_brix = extract_brick_blocks(home_content)
-                    if hm_brix:
-                        data["hm_brick_blocks"] = hm_brix
-                    elif not data.get("hm_brick_blocks"):
-                        clean_home = strip_brick_blocks(home_content)
-                        recognized_home = importer.parse_home_config(clean_home)
-                        rest = importer.build_home_rest_brix(clean_home, recognized_home)
-                        if rest.strip():
-                            data["hm_brick_blocks"] = brix_content_to_bricks(rest, section="End")
-                except OSError:
-                    pass
-            hm["hm_brick_blocks"] = data.get("hm_brick_blocks", {})
-            home_file.write_text(hm_generator.generate_home_nix(hm), encoding="utf-8")
-            written.append("home.nix")
+    # Root home.nix is legacy (pre HM-refactor) and never written anymore;
+    # HM files are managed separately in hm_dir/<username>.nix.
 
     if commit:
         try:

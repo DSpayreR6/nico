@@ -48,6 +48,10 @@ ALL_RULES: list[Rule] = [
          "Flake-Host vorhanden",
          "Prüft ob der gewählte Host unter nixosConfigurations in flake.nix steht.",
          "error", flake_only=True),
+    Rule("host_orphaned",
+         "Verwaister Host",
+         "Erkennt Host-Verzeichnisse die weder in flake.nix noch über imports eingebunden sind.",
+         "info"),
     Rule("hardware_imported",
          "Hardware-Config eingebunden",
          "Prüft ob hardware-configuration.nix in imports eingebunden ist.",
@@ -306,6 +310,87 @@ def _rule_flake_host_exists(nixos_dir: str, config: dict, is_flake: bool,
                 detail="Host ist konfiguriert, aber nicht als Flake-Output deklariert.",
             ))
     return findings
+
+
+def _rule_host_orphaned(nixos_dir: str, config: dict, is_flake: bool,
+                        host: str | None = None) -> list[Finding]:
+    """Report host directories on disk that are not wired into the build.
+
+    Flake mode: the directory is not referenced anywhere in flake.nix.
+    Non-flake mode: the directory is not reachable via imports from
+    configuration.nix. Orphaned hosts may be intentional – info only.
+    """
+    base = Path(nixos_dir)
+    from . import config_manager as _cm
+    cfg_settings = _cm.load_config_settings(nixos_dir)
+    hosts_dir = (cfg_settings.get("hosts_dir") or "hosts").strip() or "hosts"
+    hosts_root = base / hosts_dir
+    if not hosts_root.is_dir():
+        return []
+
+    host_names = sorted(
+        d.name for d in hosts_root.iterdir()
+        if d.is_dir() and (d / "default.nix").is_file()
+    )
+    if not host_names:
+        return []
+
+    if is_flake:
+        flake_path = base / "flake.nix"
+        if not flake_path.exists():
+            return []
+        try:
+            content = flake_path.read_text(encoding="utf-8")
+        except OSError:
+            return []
+        defined = set(re.findall(r'nixosConfigurations\s*\.\s*"?([\w-]+)"?', content))
+        orphans = [
+            n for n in host_names
+            if n not in defined and f"{hosts_dir}/{n}" not in content
+        ]
+    else:
+        # Collect every file reachable via imports starting at configuration.nix.
+        reachable: set[Path] = set()
+        queue = [base / "configuration.nix"]
+        while queue:
+            f = queue.pop().resolve()
+            if f in reachable or not f.is_file():
+                continue
+            reachable.add(f)
+            try:
+                content = f.read_text(encoding="utf-8")
+            except OSError:
+                continue
+            # Unlike _extract_imports (./-only), also follow ../-imports here:
+            # modules in subdirectories commonly bind hosts via ../hosts/<name>.
+            from .brix import strip_brick_blocks
+            clean = strip_brick_blocks(content)
+            m = re.search(r'imports\s*=\s*\[([^\]]*)\]', clean, re.DOTALL)
+            if not m:
+                continue
+            seg = re.sub(r'#[^\n]*', '', m.group(1))
+            rels = re.findall(r'(?<!["\w])(\.\.?/[\w./\-]+)', seg)
+            rels += re.findall(r'"(\.\.?/[^"]+)"', seg)
+            for rel in rels:
+                p = f.parent / rel
+                if p.is_dir():
+                    p = p / "default.nix"
+                queue.append(p)
+        orphans = [
+            n for n in host_names
+            if (hosts_root / n / "default.nix").resolve() not in reachable
+        ]
+
+    return [
+        Finding(
+            rule_id="host_orphaned",
+            severity="info",
+            message=f'Host "{n}" ist nirgends eingebunden und wird beim Rebuild ignoriert.',
+            message_key="validator.f.host_orphaned", params=[n],
+            detail="Kann Absicht sein – das Verzeichnis bleibt unangetastet.",
+        )
+        for n in orphans
+    ]
 
 
 def _rule_hardware_imported(nixos_dir: str, config: dict, is_flake: bool,
@@ -1224,6 +1309,7 @@ def _rule_git_foreign_files(nixos_dir: str, config: dict, is_flake: bool,
 _RULE_FNS: dict[str, object] = {
     "user_in_config":        _rule_user_in_config,
     "flake_host_exists":     _rule_flake_host_exists,
+    "host_orphaned":         _rule_host_orphaned,
     "hardware_imported":     _rule_hardware_imported,
     "hardware_matches":      _rule_hardware_matches,
     "duplicate_attrs":       _rule_duplicate_attrs,

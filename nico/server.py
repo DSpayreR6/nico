@@ -215,8 +215,11 @@ def create_app() -> Flask:
             pass
 
     def _safe_import_dest(root: Path, rel_name: str) -> "Path | None":
-        """Resolve rel_name below root; None when it would escape (zip-slip)."""
+        """Resolve rel_name below root; None when it would escape (zip-slip)
+        or contains hidden path segments (.git, .direnv, …)."""
         if not rel_name or Path(rel_name).is_absolute():
+            return None
+        if any(part.startswith('.') for part in Path(rel_name).parts):
             return None
         dest = (root / rel_name).resolve()
         try:
@@ -554,18 +557,21 @@ def create_app() -> Flask:
             return err
         incoming = request.get_json(silent=True) or {}
         data = config_manager.load_config(nixos_dir) or {}
-        data.update(incoming)
+        # Same data basis as save_flake_config: overlay the existing flake.nix
+        # (preserves fields without panel UI, e.g. flake_arch), then incoming.
         flake_nix_path = Path(nixos_dir) / "flake.nix"
         if flake_nix_path.exists():
             try:
                 flake_content = flake_nix_path.read_text(encoding="utf-8")
+                data.update(importer.parse_flake_nix(flake_content))
                 flake_brix = extract_brick_blocks(flake_content)
                 flake_brix = importer.ensure_flake_host_bricks(flake_content, flake_brix)
                 if flake_brix:
                     data["flake_brick_blocks"] = flake_brix
             except OSError:
                 pass
-        return jsonify({"flake_nix": generator.generate_flake_nix(data)})
+        data.update(incoming)
+        return jsonify({"flake_nix": generator.generate_flake_nix(data, nixos_dir=nixos_dir)})
 
     @app.route("/api/preview", methods=["POST"])
     def preview():
@@ -681,7 +687,7 @@ def create_app() -> Flask:
                             data["flake_brick_blocks"] = flake_brix
                     except OSError:
                         pass
-            result["flake_nix"] = generator.generate_flake_nix(data)
+            result["flake_nix"] = generator.generate_flake_nix(data, nixos_dir=nixos_dir)
 
         return jsonify(result)
 
@@ -980,9 +986,10 @@ def create_app() -> Flask:
 
         dst = Path(nixos_dir)
 
-        # Bestehende .nix/.lock entfernen
+        # Bestehende .nix/.lock entfernen (nur sichtbare Pfade – nie .git & Co.)
         for existing in dst.rglob("*"):
-            if existing.is_file() and existing.suffix in (".nix", ".lock"):
+            if (existing.is_file() and existing.suffix in (".nix", ".lock")
+                    and not any(p.startswith('.') for p in existing.relative_to(dst).parts)):
                 try:
                     existing.unlink()
                 except OSError:
@@ -1328,9 +1335,13 @@ def create_app() -> Flask:
 
         nixos_path = Path(nixos_dir).resolve()
 
+        stage_before_rebuild = False
         if use_flake:
             if git_manager.is_git_repo(nixos_dir):
                 flake_arg = f".#{hostname}"
+                # Same staging as the SSE rebuild: flake eval in a git repo
+                # only sees tracked files.
+                stage_before_rebuild = True
             else:
                 flake_arg = f"path:{nixos_path.as_posix()}#{hostname}"
             rebuild_cmd = f"sudo nixos-rebuild {mode} --flake {_shlex.quote(flake_arg)}"
@@ -1345,6 +1356,8 @@ def create_app() -> Flask:
             "#!/usr/bin/env bash",
             f"cd {_shlex.quote(str(nixos_path))}",
         ]
+        if stage_before_rebuild:
+            script_lines.append("git add -A")
         if shutdown_after or push_shutdown:
             script_lines.append("_rebuild_ok=0")
             if update_flake:
@@ -1454,7 +1467,7 @@ def create_app() -> Flask:
 
         try:
             flake_path.write_text(
-                generator.generate_flake_nix(data), encoding="utf-8"
+                generator.generate_flake_nix(data, nixos_dir=nixos_dir), encoding="utf-8"
             )
         except OSError as exc:
             return jsonify({"error": str(exc)}), 500
@@ -1502,7 +1515,7 @@ def create_app() -> Flask:
 
         try:
             flake_path.write_text(
-                generator.generate_flake_nix(data), encoding="utf-8"
+                generator.generate_flake_nix(data, nixos_dir=nixos_dir), encoding="utf-8"
             )
         except OSError as exc:
             return jsonify({"error": str(exc)}), 500
@@ -1815,12 +1828,16 @@ def create_app() -> Flask:
                                 yield _emit_progress()
 
             try:
+                # Flake eval in a git repo only sees tracked files – stage new
+                # files so `.#host` matches the on-disk state. Non-flake builds
+                # never need staging, so git is left untouched there.
                 staged_with_git = False
                 stage_msg = ""
-                try:
-                    staged_with_git, stage_msg = git_manager.stage_all(nixos_dir)
-                except Exception:
-                    staged_with_git, stage_msg = False, ""
+                if use_flake:
+                    try:
+                        staged_with_git, stage_msg = git_manager.stage_all(nixos_dir)
+                    except Exception:
+                        staged_with_git, stage_msg = False, ""
 
                 if staged_with_git:
                     yield f"data: {_json.dumps({'type': 'output', 'line': '── git add -A ──'})}\n\n"
@@ -2061,8 +2078,6 @@ def create_app() -> Flask:
           2. Fallback: nix-instantiate --parse  – syntax only
         """
         import subprocess
-        import tempfile
-        import os as _os
 
         nixos_dir, err = _require_setup()
         if err:
@@ -2133,116 +2148,73 @@ def create_app() -> Flask:
                 return jsonify({"ok": False, "mode": "none",  "output": "ERR_DRY_NO_NIX"})
 
         # ── Non-flake mode ────────────────────────────────────────────────
-        host_name = (body.get("_host") or "").strip()
+        # Checks exactly what a non-flake rebuild would build: configuration.nix
+        # plus whatever it imports itself. Host directories not imported anywhere
+        # are reported by the validator (host_orphaned), not by dry-run.
 
-        # Read root brix from file (source of truth)
         cfg_nix = Path(nixos_dir) / "configuration.nix"
         if not cfg_nix.exists():
             return jsonify({"ok": False, "mode": "semantic", "output": "ERR_NO_CONFIG"}), 400
 
-        tempfiles: list[str] = []
-
-        def _mktemp_nix(dirpath: str, prefix: str) -> str:
-            fd, path = tempfile.mkstemp(
-                prefix=prefix,
-                suffix=".nix",
-                dir=dirpath,
-            )
-            tempfiles.append(path)
-            return fd, path
-
-        def _nix_abs_import(path: Path) -> str:
-            return path.resolve().as_posix()
-
-        if host_name:
-            cfg_s = config_manager.load_config_settings(nixos_dir)
-            hosts_dir_name = cfg_s.get("hosts_dir", "hosts") or "hosts"
-            host_dir = Path(nixos_dir) / hosts_dir_name / host_name
-            host_nix = host_dir / "default.nix"
-            if not host_nix.exists():
-                return jsonify({"ok": False, "mode": "semantic", "output": "ERR_HOST_NOT_FOUND"}), 404
-
-            wrapper_content = "\n".join([
-                "{ ... }:",
-                "{",
-                "  imports = [",
-                f"    {_nix_abs_import(cfg_nix)}",
-                f"    {_nix_abs_import(host_nix)}",
-                "  ];",
-                "}",
-                "",
-            ])
-
-            fd, tmpfile = _mktemp_nix(nixos_dir, "nico_validate_")
-            with _os.fdopen(fd, "w", encoding="utf-8") as f:
-                f.write(wrapper_content)
-        else:
-            tmpfile = str(cfg_nix)
+        tmpfile = str(cfg_nix)
 
         try:
+            # Attempt 1: full NixOS module evaluation.
+            # Use the standard nixos-config lookup so dry-run matches
+            # nixos-rebuild behavior for non-default config roots.
             try:
-                # Attempt 1: full NixOS module evaluation.
-                # Use the standard nixos-config lookup so dry-run matches
-                # nixos-rebuild behavior for non-default config roots.
-                try:
-                    result = subprocess.run(
-                        [
-                            "nix-instantiate",
-                            "--eval",
-                            "<nixpkgs/nixos>",
-                            "-A", "config.system.build.toplevel.drvPath",
-                            "-I", f"nixos-config={tmpfile}",
-                        ],
-                        cwd=nixos_dir,
-                        capture_output=True, text=True, timeout=60
-                    )
-                    if result.returncode == 0:
-                        return jsonify({
-                            "ok": True,
-                            "mode": "semantic",
-                            "output": "✓ Semantische Prüfung erfolgreich – keine Fehler gefunden.",
-                        })
-                    raw_err = (result.stderr or result.stdout or "").strip()
-                    nixpkgs_missing = (
-                        "nixpkgs/nixos" in raw_err and
-                        ("was not found" in raw_err or "cannot find" in raw_err.lower()
-                         or "not found in" in raw_err)
-                    )
-                    if not nixpkgs_missing:
-                        cleaned = _clean_nix_error(raw_err, tmpfile)
-                        return jsonify({"ok": False, "mode": "semantic", "output": cleaned})
-                except subprocess.TimeoutExpired:
-                    return jsonify({"ok": False, "mode": "semantic", "output": "ERR_DRY_TIMEOUT_SEM"})
-                except FileNotFoundError:
-                    return jsonify({"ok": False, "mode": "none", "output": "ERR_DRY_NO_NIX"})
-                except Exception:
-                    pass  # fall through to syntax-only
-
-                # Attempt 2: syntax-only fallback
                 result = subprocess.run(
-                    ["nix-instantiate", "--parse", tmpfile],
-                    capture_output=True, text=True, timeout=15
+                    [
+                        "nix-instantiate",
+                        "--eval",
+                        "<nixpkgs/nixos>",
+                        "-A", "config.system.build.toplevel.drvPath",
+                        "-I", f"nixos-config={tmpfile}",
+                    ],
+                    cwd=nixos_dir,
+                    capture_output=True, text=True, timeout=60
                 )
                 if result.returncode == 0:
                     return jsonify({
                         "ok": True,
-                        "mode": "syntax",
-                        "output": "✓ Syntax korrekt – keine Fehler gefunden.\n"
-                                  "(Hinweis: Nur Syntax-Prüfung; <nixpkgs/nixos> nicht verfügbar.)",
+                        "mode": "semantic",
+                        "output": "✓ Semantische Prüfung erfolgreich – keine Fehler gefunden.",
                     })
-                raw_err = (result.stderr or result.stdout or "Unbekannter Fehler.").strip()
-                return jsonify({"ok": False, "mode": "syntax", "output": _clean_nix_error(raw_err, tmpfile)})
-
+                raw_err = (result.stderr or result.stdout or "").strip()
+                nixpkgs_missing = (
+                    "nixpkgs/nixos" in raw_err and
+                    ("was not found" in raw_err or "cannot find" in raw_err.lower()
+                     or "not found in" in raw_err)
+                )
+                if not nixpkgs_missing:
+                    cleaned = _clean_nix_error(raw_err, tmpfile)
+                    return jsonify({"ok": False, "mode": "semantic", "output": cleaned})
+            except subprocess.TimeoutExpired:
+                return jsonify({"ok": False, "mode": "semantic", "output": "ERR_DRY_TIMEOUT_SEM"})
             except FileNotFoundError:
                 return jsonify({"ok": False, "mode": "none", "output": "ERR_DRY_NO_NIX"})
-            except subprocess.TimeoutExpired:
-                return jsonify({"ok": False, "mode": "syntax", "output": "ERR_DRY_TIMEOUT_SYN"})
-        finally:
-            for path in reversed(tempfiles):
-                try:
-                    _os.unlink(path)
-                except FileNotFoundError:
-                    pass
+            except Exception:
+                pass  # fall through to syntax-only
+
+            # Attempt 2: syntax-only fallback
+            result = subprocess.run(
+                ["nix-instantiate", "--parse", tmpfile],
+                capture_output=True, text=True, timeout=15
+            )
+            if result.returncode == 0:
+                return jsonify({
+                    "ok": True,
+                    "mode": "syntax",
+                    "output": "✓ Syntax korrekt – keine Fehler gefunden.\n"
+                              "(Hinweis: Nur Syntax-Prüfung; <nixpkgs/nixos> nicht verfügbar.)",
+                })
+            raw_err = (result.stderr or result.stdout or "Unbekannter Fehler.").strip()
+            return jsonify({"ok": False, "mode": "syntax", "output": _clean_nix_error(raw_err, tmpfile)})
+
+        except FileNotFoundError:
+            return jsonify({"ok": False, "mode": "none", "output": "ERR_DRY_NO_NIX"})
+        except subprocess.TimeoutExpired:
+            return jsonify({"ok": False, "mode": "syntax", "output": "ERR_DRY_TIMEOUT_SYN"})
 
     # -------------------------------------------------------------------- sudo
 
@@ -3022,14 +2994,25 @@ def create_app() -> Flask:
         nixos_path = Path(nixos_dir).resolve()
         target = (nixos_path / rel).resolve()
         try:
-            target.relative_to(nixos_path)
+            rel_resolved = target.relative_to(nixos_path)
         except ValueError:
             return jsonify({"error": "ERR_PATH_OUTSIDE"}), 403
+
+        # HM patching is only valid for .nix files below hm_dir; without this
+        # check the endpoint could rewrite configuration.nix/flake.nix & Co.
+        cfg_settings = config_manager.load_config_settings(nixos_dir)
+        hm_dir = (cfg_settings.get("hm_dir") or "home").strip() or "home"
+        if target.suffix != ".nix" or rel_resolved.parts[:1] != (hm_dir,):
+            return jsonify({"error": "ERR_NOT_HM_FILE"}), 400
 
         try:
             content = target.read_text(encoding="utf-8")
         except OSError:
             return jsonify({"error": "ERR_FILE_READ"}), 500
+
+        ftype = _get_nico_type(content)
+        if ftype not in (None, "", "hm"):
+            return jsonify({"error": "ERR_NOT_HM_FILE"}), 400
 
         if "username"      in body: content = _hm_patch_str( content, "home.username",               body["username"])
         if "home_dir"      in body: content = _hm_patch_str( content, "home.homeDirectory",          body["home_dir"])
@@ -3279,9 +3262,11 @@ def create_app() -> Flask:
             rest_brix  = importer.build_rest_brix(content, recognized)
 
             # Clear existing .nix/.lock files for a clean 1:1 copy
+            # (visible paths only – never touch .git/.direnv & Co.)
             dst = Path(nixos_dir)
             for existing in dst.rglob("*"):
-                if existing.is_file() and existing.suffix in (".nix", ".lock"):
+                if (existing.is_file() and existing.suffix in (".nix", ".lock")
+                        and not any(p.startswith('.') for p in existing.relative_to(dst).parts)):
                     existing.unlink()
 
             files_copied = []
@@ -3290,8 +3275,11 @@ def create_app() -> Flask:
                 fcont = file_item.get("content", "")
                 if not rel:
                     continue
+                # Same policy as copy_nix_tree: only .nix/.lock files are imported.
+                if Path(rel).suffix not in (".nix", ".lock"):
+                    continue
                 dest = _safe_import_dest(dst, rel)
-                if dest is None:  # path traversal: entry would land outside config dir
+                if dest is None:  # traversal or hidden path segment
                     continue
                 dest.parent.mkdir(parents=True, exist_ok=True)
                 dest.write_text(fcont, encoding="utf-8")

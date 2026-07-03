@@ -15,9 +15,9 @@ Config management for NiCo.  Three layers:
        - flake_update_on_rebuild: whether to run flake update before rebuild
 
   3. NixOS config data lives EXCLUSIVELY in the .nix files:
-       - configuration.nix  → main system config (read/written by load/save_config)
-       - home.nix           → home-manager config (read/written by load/save_config)
-       - hosts/*/default.nix → per-host config (read/written by load/save_host_config)
+       - configuration.nix       → main system config (read/written by load/save_config)
+       - {hm_dir}/<username>.nix → home-manager files (managed via hm endpoints)
+       - hosts/*/default.nix     → per-host config (read/written by load/save_host_config)
 """
 
 import os
@@ -314,7 +314,7 @@ def init_nico_dir(nixos_config_dir: str) -> None:
 
 
 def load_config(nixos_config_dir: str) -> dict:
-    """Parse configuration.nix (and home.nix if present) into a config dict.
+    """Parse configuration.nix into a config dict.
     Always returns a dict with defaults for any fields not found in the files."""
     import copy
     from . import importer as _imp

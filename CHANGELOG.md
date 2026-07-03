@@ -6,6 +6,7 @@
 
 - Validation results and the rule list are now translatable (all 7 languages; non-German strings pending as placeholders)
 - Package search links point to the configured nixpkgs channel instead of a hardcoded one
+- New validator rule `host_orphaned`: reports host directories that are not wired into the build (imports/flake.nix) in both flake and non-flake mode
 
 ### Bug Fixes
 
@@ -23,6 +24,15 @@
 - Config diff no longer swallows real changes when identical lines appear multiple times
 - Requests with a foreign Host header are rejected (DNS-rebinding guard); the restart helper page requires a token
 - Opening a file via GET no longer writes a type stamp unless the request comes from the NiCo UI itself
+- Non-flake dry-run no longer writes a temporary wrapper file into the config directory; it checks exactly what a non-flake rebuild would build (`configuration.nix`)
+- Rebuild staging unified: `git add -A` only runs for flake configs in a git repo (needed so flake eval sees new files) and now happens in both the streamed and the terminal rebuild
+- `/api/hm/patch` only accepts `.nix` files below the configured home-manager directory; it can no longer rewrite arbitrary config files
+- Import policy unified: hidden paths (`.git`, `.direnv`, …) are never copied, deleted or written by any import; browser-based import only accepts `.nix`/`.lock` files
+- Changing a file's type now rewrites an already-typed `nico-version` header (previously a silent no-op that let UI and disk disagree)
+- Legacy root `home.nix` is treated read-only; loading a config no longer rewrites it
+- Flake preview uses the same data basis as saving; an existing `system` architecture is no longer shown as the default in the preview
+- Newly generated flake host bodies respect the configured `hosts_dir`
+- Removed debug console logging of configuration snippets from the code preview
 
 ---
 

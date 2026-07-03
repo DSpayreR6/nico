@@ -3011,14 +3011,10 @@ async function updatePreview() {
     if (activeTab === 'flake') switchTab('configuration');
   }
 
-  const hmTab = document.getElementById('hm-tab');
-  if (data.home_nix) {
-    renderCodePreview(data.home_nix, 'preview-hm', 'home.nix');
-    hmTab?.classList.remove('hidden');
-  } else {
-    hmTab?.classList.add('hidden');
-    if (activeTab === 'hm') switchTab('configuration');
-  }
+  // Legacy hm preview tab removed: no endpoint sends home_nix anymore
+  // (root home.nix is legacy; HM files live in hm_dir/<username>.nix).
+  document.getElementById('hm-tab')?.classList.add('hidden');
+  if (activeTab === 'hm') switchTab('configuration');
 
   // Keep preview-tabs bar always hidden – tabs concept was discarded
   document.getElementById('preview-tabs')?.classList.add('hidden');
@@ -3400,32 +3396,12 @@ function renderAnnotatedPreview(code, containerId = 'preview-configuration', fil
 function renderCodePreview(code, containerId = 'preview-configuration', file = 'configuration.nix') {
   const container = document.getElementById(containerId);
   if (!container) return;
-  console.log('[renderCodePreview] start', {
-    containerId,
-    file,
-    plainCodeView,
-    codeLength: code?.length ?? 0,
-  });
   container.dataset.sourceCode = code;
   container.dataset.sourceFile = file;
   if (plainCodeView) {
-    const stripped = stripAnnotations(code);
-    console.log('[renderCodePreview] plain', {
-      containerId,
-      file,
-      originalLength: code?.length ?? 0,
-      strippedLength: stripped?.length ?? 0,
-      changed: stripped !== code,
-      preview: stripped.slice(0, 300),
-    });
-    renderPlainPreview(containerId, stripped);
+    renderPlainPreview(containerId, stripAnnotations(code));
     return;
   }
-  console.log('[renderCodePreview] annotated', {
-    containerId,
-    file,
-    preview: String(code).slice(0, 300),
-  });
   renderAnnotatedPreview(code, containerId, file);
 }
 
