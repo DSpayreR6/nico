@@ -125,6 +125,21 @@ def create_app() -> Flask:
     # One CSRF token per server process – regenerated on each start
     _csrf_token = secrets.token_hex(32)
 
+    # DNS-rebinding guard: NiCo binds to 127.0.0.1, but a hostile domain can
+    # resolve to 127.0.0.1 and read API responses from a browser. Reject any
+    # request whose Host header is not a local one.
+    _ALLOWED_HOST_NAMES = {"127.0.0.1", "localhost", "[::1]", "::1"}
+
+    @app.before_request
+    def _check_host_header():
+        host = request.host or ""
+        if host.startswith("["):                      # IPv6: [::1]:5000
+            hostname = host.split("]", 1)[0] + "]"
+        else:
+            hostname = host.rsplit(":", 1)[0]
+        if hostname not in _ALLOWED_HOST_NAMES:
+            return jsonify({"error": "ERR_HOST_HEADER"}), 403
+
     # Sudo-Passwort-Nonces: nonce → (password, expiry_timestamp)
     # POST /api/sudo/acquire speichert, rebuild_stream/symlink lesen einmalig.
     import time as _time_mod
