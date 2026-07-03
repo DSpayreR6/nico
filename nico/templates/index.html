@@ -1077,6 +1077,15 @@
               <label for="flake_description" data-i18n="fl.field.description">Beschreibung</label>
               <input type="text" id="flake_description" name="flake_description"
                      placeholder="NixOS configuration for hostname">
+
+              <label for="flake_arch">
+                <span data-i18n="fl.field.arch">Architektur</span>
+                <span class="hint" data-i18n="fl.hint.arch">__TODO__</span>
+              </label>
+              <select id="flake_arch" name="flake_arch">
+                <option value="x86_64-linux">x86_64-linux</option>
+                <option value="aarch64-linux">aarch64-linux</option>
+              </select>
             </div>
           </section>
 

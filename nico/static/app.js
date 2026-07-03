@@ -7651,6 +7651,7 @@ const Sidebar = (() => {
 
     return {
       flake_description:     v('flake_description')?.value    ?? '',
+      flake_arch:            v('flake_arch')?.value           || 'x86_64-linux',
       flake_nixpkgs_channel: v('flake_nixpkgs_channel')?.value ?? 'nixos-unstable',
       flake_hm_input:        v('flake_hm_input')?.checked     ?? false,
       flake_hm_follows:      v('flake_hm_follows')?.checked   ?? true,
@@ -7659,6 +7660,20 @@ const Sidebar = (() => {
       flake_plasma_manager:  v('flake_plasma_manager')?.checked ?? false,
       flake_hosts,
     };
+  }
+
+  // Exotic architectures (riscv64, …) from imported flakes get an extra
+  // option so the select can represent them instead of silently falling
+  // back to x86_64-linux on save.
+  function _ensureArchOption(val) {
+    const el = document.getElementById('flake_arch');
+    if (!el || !val) return;
+    if (![...el.options].some(o => o.value === val)) {
+      const opt = document.createElement('option');
+      opt.value = val;
+      opt.textContent = val;
+      el.appendChild(opt);
+    }
   }
 
   function _setNixpkgsChannelOptions(channels, selected) {
@@ -7711,6 +7726,7 @@ const Sidebar = (() => {
       // Felder mit Defaults, dann geparste Werte drüber
       const d = {
         flake_description:     '',
+        flake_arch:            'x86_64-linux',
         flake_nixpkgs_channel: 'nixos-unstable',
         flake_hm_input:        false,
         flake_hm_follows:      true,
@@ -7726,6 +7742,8 @@ const Sidebar = (() => {
 
       await _loadNixpkgsChannelOptions(d.flake_nixpkgs_channel);
       set('flake_description',    d.flake_description);
+      _ensureArchOption(d.flake_arch);
+      sel('flake_arch',            d.flake_arch);
       sel('flake_nixpkgs_channel', d.flake_nixpkgs_channel);
       chk('flake_hm_input',       d.flake_hm_input);
       chk('flake_hm_follows',     d.flake_hm_follows);
@@ -7760,6 +7778,8 @@ const Sidebar = (() => {
 
       await _loadNixpkgsChannelOptions(data.flake_nixpkgs_channel ?? 'nixos-unstable');
       set('flake_description',    data.flake_description ?? '');
+      _ensureArchOption(data.flake_arch);
+      sel('flake_arch',            data.flake_arch ?? 'x86_64-linux');
       sel('flake_nixpkgs_channel', data.flake_nixpkgs_channel ?? 'nixos-unstable');
       chk('flake_hm_input',       data.flake_hm_input);
       chk('flake_hm_follows',     data.flake_hm_follows !== false);

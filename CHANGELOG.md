@@ -7,6 +7,9 @@
 - Validation results and the rule list are now translatable (all 7 languages; non-German strings pending as placeholders)
 - Package search links point to the configured nixpkgs channel instead of a hardcoded one
 - New validator rule `host_orphaned`: reports host directories that are not wired into the build (imports/flake.nix) in both flake and non-flake mode
+- Flake panel: new "System architecture" selector (x86_64-linux/aarch64-linux); exotic architectures from imported flakes are preserved as extra options
+- New validator rule `flake_arch_matches`: hints when flake.nix targets a different CPU architecture than this machine
+- All language files are fully translated again (validator strings, HM strings, new keys) – no `__TODO__` placeholders left outside the help page
 
 ### Bug Fixes
 

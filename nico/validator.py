@@ -52,6 +52,10 @@ ALL_RULES: list[Rule] = [
          "Verwaister Host",
          "Erkennt Host-Verzeichnisse die weder in flake.nix noch über imports eingebunden sind.",
          "info"),
+    Rule("flake_arch_matches",
+         "Architektur passt zum Rechner",
+         "Vergleicht die system-Architekturen in flake.nix mit der Architektur dieses Rechners.",
+         "info", flake_only=True),
     Rule("hardware_imported",
          "Hardware-Config eingebunden",
          "Prüft ob hardware-configuration.nix in imports eingebunden ist.",
@@ -390,6 +394,38 @@ def _rule_host_orphaned(nixos_dir: str, config: dict, is_flake: bool,
             detail="Kann Absicht sein – das Verzeichnis bleibt unangetastet.",
         )
         for n in orphans
+    ]
+
+
+def _rule_flake_arch_matches(nixos_dir: str, config: dict, is_flake: bool,
+                             host: str | None = None) -> list[Finding]:
+    """Warn (info) when flake.nix targets a different CPU architecture than
+    this machine. A rebuild for a foreign arch fails before activation, but
+    the nix error is cryptic – this rule translates it into a plain hint.
+    Mismatches are legitimate when maintaining a config for another device."""
+    import platform
+    flake_path = Path(nixos_dir) / "flake.nix"
+    if not flake_path.exists():
+        return []
+    try:
+        content = flake_path.read_text(encoding="utf-8")
+    except OSError:
+        return []
+    machine = platform.machine()
+    if not machine:
+        return []
+    local = f"{machine}-linux"
+    archs = set(re.findall(r'system\s*=\s*"([\w-]+-linux)"', content))
+    return [
+        Finding(
+            rule_id="flake_arch_matches",
+            severity="info",
+            message=f'flake.nix: Architektur "{arch}" ≠ dieser Rechner ("{local}").',
+            message_key="validator.f.flake_arch_matches", params=[arch, local],
+            detail="Beabsichtigt, wenn die Config für ein anderes Gerät gepflegt wird.",
+        )
+        for arch in sorted(archs)
+        if arch != local
     ]
 
 
@@ -1310,6 +1346,7 @@ _RULE_FNS: dict[str, object] = {
     "user_in_config":        _rule_user_in_config,
     "flake_host_exists":     _rule_flake_host_exists,
     "host_orphaned":         _rule_host_orphaned,
+    "flake_arch_matches":    _rule_flake_arch_matches,
     "hardware_imported":     _rule_hardware_imported,
     "hardware_matches":      _rule_hardware_matches,
     "duplicate_attrs":       _rule_duplicate_attrs,
