@@ -36,6 +36,14 @@ def nix_attr(name) -> str:
     s = str(name)
     return s if _NIX_ATTR_RE.match(s) else f'"{nix_esc(s)}"'
 
+
+def _int_or(value, default: int) -> int:
+    """Parse value as int; fall back to default instead of raising."""
+    try:
+        return int(str(value).strip())
+    except (TypeError, ValueError):
+        return default
+
 # Matches nico-version lines in both formats:
 #   # nico-version: a3f8c2d1          (legacy / no type)
 #   # nico-version: co#a3f8c2d1       (with type code)
@@ -152,7 +160,7 @@ def generate_configuration_nix(data: dict) -> str:
     username         = data.get("username",              "")
     user_description = data.get("user_description",      "")
     user_password    = data.get("user_initial_password", "")
-    user_uid         = data.get("user_uid",              "").strip()
+    user_uid         = str(data.get("user_uid") or "").strip()
     user_groups_list = data.get("user_groups",           ["wheel", "networkmanager"])
     user_groups_extra_raw = data.get("user_groups_extra", "").strip()
     user_groups_extra = [g for g in user_groups_extra_raw.split() if g]
@@ -190,7 +198,7 @@ def generate_configuration_nix(data: dict) -> str:
     boot_loader        = data.get("boot_loader",         "none")
     boot_efi_can_touch = data.get("boot_efi_can_touch",  False)
     boot_efi_mount     = (data.get("boot_efi_mount_point", "/boot") or "/boot").strip()
-    boot_config_limit  = int(data.get("boot_config_limit",  5) or 5)
+    boot_config_limit  = _int_or(data.get("boot_config_limit"), 5)
     boot_kernel_params = (data.get("boot_kernel_params", "") or "").strip()
     boot_initrd_systemd = data.get("boot_initrd_systemd", False)
     plymouth_enabled   = data.get("plymouth_enabled",    False)
@@ -356,7 +364,7 @@ def generate_configuration_nix(data: dict) -> str:
         ]
         if user_description:
             lines += [f'    description = "{nix_esc(user_description)}";']
-        if user_uid:
+        if user_uid.isdigit():
             lines += [f"    uid = {user_uid};"]
         if user_password:
             _pw = nix_esc(user_password)
@@ -397,7 +405,7 @@ def generate_configuration_nix(data: dict) -> str:
         lines += [f"  users.users.{nix_attr(eu_name)} = {{", "    isNormalUser = true;"]
         if eu_desc:
             lines += [f'    description = "{nix_esc(eu_desc)}";']
-        if eu_uid:
+        if eu_uid.isdigit():
             lines += [f"    uid = {eu_uid};"]
         if eu_pass:
             _pw = nix_esc(eu_pass)
@@ -665,7 +673,7 @@ def generate_host_nix(data: dict, host_name: str, hw_config: bool = False) -> st
     if boot_loader != "none" or boot_kernel_params or boot_initrd_systemd or plymouth_enabled or _has_section_brix(brix, "Boot"):
         boot_efi_can_touch = data.get("boot_efi_can_touch", False)
         boot_efi_mount = (data.get("boot_efi_mount_point", "/boot") or "/boot").strip()
-        boot_config_limit = int(data.get("boot_config_limit", 5) or 5)
+        boot_config_limit = _int_or(data.get("boot_config_limit"), 5)
         lines += [_section("Boot")]
         if boot_loader != "none":
             if boot_loader == "systemd-boot":
@@ -828,8 +836,9 @@ def generate_host_nix(data: dict, host_name: str, hw_config: bool = False) -> st
         ]
         if data.get("user_description"):
             lines += [f'    description = "{nix_esc(data["user_description"])}";']
-        if (data.get("user_uid") or "").strip():
-            lines += [f"    uid = {data['user_uid'].strip()};"]
+        host_uid = str(data.get("user_uid") or "").strip()
+        if host_uid.isdigit():
+            lines += [f"    uid = {host_uid};"]
         if data.get("user_initial_password"):
             _pw = nix_esc(data["user_initial_password"])
             lines += [f'    initialPassword = "{_pw}";']
@@ -867,7 +876,7 @@ def generate_host_nix(data: dict, host_name: str, hw_config: bool = False) -> st
         lines += [f"  users.users.{nix_attr(eu_name)} = {{", "    isNormalUser = true;"]
         if eu_desc:
             lines += [f'    description = "{nix_esc(eu_desc)}";']
-        if eu_uid:
+        if eu_uid.isdigit():
             lines += [f"    uid = {eu_uid};"]
         if eu_pass:
             _pw = nix_esc(eu_pass)
