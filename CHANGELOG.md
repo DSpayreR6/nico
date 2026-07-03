@@ -12,6 +12,7 @@
 - Importer regex fallback (used when tree-sitter is unavailable) no longer splits statements at the `;` of `with pkgs;`/`assert …;` and now recognizes the same option set as the tree-sitter path
 - ZIP import and directory import now reject file paths that would escape the config directory (zip-slip)
 - All user-entered string values (hostname, descriptions, time zone, snapper names, flatpak remotes, home-manager fields, …) are now escaped when written into `.nix` files; quotes or `${` no longer produce broken or injectable Nix
+- "/etc/nixos kopieren" during symlink setup now creates a ZIP backup and auto-commit before replacing existing `.nix` files in the config directory
 
 ---
 

@@ -3675,6 +3675,17 @@ def create_app() -> Flask:
 
         # Schritt 1: .nix-Dateien kopieren (falls gewünscht)
         if copy_files:
+            # copy_nix_tree deletes existing .nix/.lock first – secure them like
+            # the import endpoints do (ZIP backup + auto-commit).
+            if importer.dir_has_non_zip_files(nixos_dir):
+                try:
+                    importer.backup_to_zip(nixos_dir)
+                except OSError as exc:
+                    return jsonify({"error": "ERR_BACKUP_FAILED", "detail": str(exc)}), 500
+            try:
+                git_manager.auto_commit(nixos_dir, label="NiCo: Sicherung vor /etc/nixos-Kopie")
+            except Exception:
+                pass
             try:
                 importer.copy_nix_tree(str(etc_nixos), nixos_dir)
             except Exception as e:
