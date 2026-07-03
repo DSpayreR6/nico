@@ -720,7 +720,13 @@ def parse_home_config(nix_content: str) -> dict:
 
 
 def build_home_rest_brix(nix_content: str, recognized: dict) -> str:
-    """Return unsupported Home Manager statements as legacy brix blocks."""
+    """Return unsupported Home Manager statements as legacy brix blocks.
+
+    Side effect (intentional): when the shell block contains fields the panel
+    cannot represent, recognized["shell"] is set to None IN PLACE so the
+    caller's hm_generator run keeps the original block as brix instead of
+    regenerating (and thereby truncating) it.
+    """
     content = strip_brick_blocks(nix_content)
 
     # Remove NiCo header comments, version line, section markers and wrapper.
@@ -763,7 +769,9 @@ def build_home_rest_brix(nix_content: str, recognized: dict) -> str:
                 inner_check
             )
             if inner_check.strip():
-                # Block has unrecognized fields → keep as brix, skip regeneration
+                # Block has unrecognized fields → keep as brix, skip regeneration.
+                # Deliberate in-place mutation of the caller's dict – this is the
+                # signal hm_generator relies on (see docstring).
                 recognized["shell"] = None
             else:
                 rm(rf'\s*programs\.{re.escape(shell)}\s*=\s*\{{(?:[^{{}}]|\{{[^{{}}]*\}})*\}}\s*;')
