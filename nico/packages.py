@@ -10,7 +10,7 @@ import subprocess
 import urllib.parse
 
 
-def search_nixpkgs(query: str) -> list[dict]:
+def search_nixpkgs(query: str, channel: str = "unstable") -> list[dict]:
     try:
         result = subprocess.run(
             [
@@ -54,7 +54,7 @@ def search_nixpkgs(query: str) -> list[dict]:
             "description": info.get("description", ""),
             "url": (
                 "https://search.nixos.org/packages"
-                f"?channel=24.11&show={urllib.parse.quote(attr)}"
+                f"?channel={urllib.parse.quote(channel)}&show={urllib.parse.quote(attr)}"
                 f"&query={urllib.parse.quote(query)}"
             ),
         })

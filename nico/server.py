@@ -1957,8 +1957,17 @@ def create_app() -> Flask:
         query = request.args.get("q", "").strip()
         if len(query) < 2:
             return jsonify({"results": []})
+        channel = "unstable"
+        d = _nixos_dir()
+        if d:
+            try:
+                cfg_ch = (config_manager.load_config(d) or {}).get("flake_nixpkgs_channel") or ""
+                if cfg_ch.strip():
+                    channel = cfg_ch.strip().removeprefix("nixos-")
+            except Exception:
+                pass
         try:
-            results = pkg_mod.search_nixpkgs(query)
+            results = pkg_mod.search_nixpkgs(query, channel=channel)
             return jsonify({"results": results})
         except RuntimeError as e:
             return jsonify({"error": "ERR_PKG_SEARCH", "detail": str(e)}), 502
