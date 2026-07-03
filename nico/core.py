@@ -533,8 +533,10 @@ def list_config_tree(nixos_dir: str) -> dict:
     return {"tree": _build_tree(root), "root": str(root)}
 
 
-def read_config_file(nixos_dir: str, rel_path: str) -> dict:
-    """Read a config-relative file with the same normalization rules as the web UI."""
+def read_config_file(nixos_dir: str, rel_path: str, *, persist_stamp: bool = True) -> dict:
+    """Read a config-relative file with the same normalization rules as the web UI.
+    persist_stamp: write type stamps back to disk (endpoints pass False for
+    requests without a valid CSRF token, so cross-site GETs never write)."""
     rel = (rel_path or "").strip()
     if not rel:
         raise ValueError("ERR_NO_PATH")
@@ -562,19 +564,21 @@ def read_config_file(nixos_dir: str, rel_path: str) -> dict:
     if ftype == "":
         stamp = hint_type or path_type or classify_filename(target.name) or "nd"
         content = insert_type(content, stamp)
-        try:
-            target.write_text(content, encoding="utf-8")
-        except OSError:
-            pass
+        if persist_stamp:
+            try:
+                target.write_text(content, encoding="utf-8")
+            except OSError:
+                pass
         ftype = stamp
     elif ftype is not None:
         override = hint_type or path_type
         if override and override != ftype:
             content = insert_type(content, override)
-            try:
-                target.write_text(content, encoding="utf-8")
-            except OSError:
-                pass
+            if persist_stamp:
+                try:
+                    target.write_text(content, encoding="utf-8")
+                except OSError:
+                    pass
             ftype = override
 
     if ftype == "hm":
@@ -627,6 +631,8 @@ def write_raw_config_file(
 
     result = {"success": True, "written": [rel]}
     try:
+        if not config_manager.get_app_settings().get("git_sync", True):
+            return result
         cfg = config_manager.load_config_settings(nixos_dir)
         if cfg.get("push_after_save"):
             ok, msg, code = git_manager.git_push(nixos_dir)

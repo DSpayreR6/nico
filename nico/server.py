@@ -44,7 +44,10 @@ from .core import (
     hm_patch_str       as _hm_patch_str,
     hm_update_hash     as _hm_update_hash,
     insert_type        as _insert_type,
+    list_config_tree   as _list_config_tree,
     modify_brick_in_file as _modify_brick_in_file,
+    read_config_file   as _read_config_file,
+    write_raw_config_file as _write_raw_config_file,
     normalize_hm_content as _normalize_hm_content,
     load_and_normalize_config as _load_and_normalize_config,
     run_enabled_validation as _run_enabled_validation,
@@ -732,30 +735,33 @@ def create_app() -> Flask:
         return jsonify({"success": True, "written": [f"{hosts_dir_name}/{host_name}/default.nix"], **_maybe_auto_push(nixos_dir)})
 
     # ── Datei-Viewer / Roh-Editor ─────────────────────────────────────────────
-    # Erlaubte Suffixe für GET (lesen) und POST (schreiben)
-    _READABLE_SUFFIXES  = {".nix", ".lock", ".json", ".md"}
-    _WRITABLE_SUFFIXES  = {".nix"}
+    # Suffix-Regeln leben in core (_READABLE_SUFFIXES/_WRITABLE_SUFFIXES)
+
+    def _core_file_error(exc: ValueError, *, suffix_code: str, outside_code: str):
+        """Map ValueError from core file helpers to an API error response."""
+        code = str(exc)
+        if code == "ERR_FILE_TYPE":
+            return jsonify({"error": suffix_code}), 400
+        if code.startswith("ERR_"):
+            return jsonify({"error": code}), 400
+        return jsonify({"error": outside_code}), 403  # relative_to: path escapes root
 
     @app.route("/api/file/<path:rel_path>", methods=["GET"])
     def read_file(rel_path):
         nixos_dir, err = _require_setup()
         if err:
             return err
-        target = (Path(nixos_dir) / rel_path).resolve()
-        # Sicherheit: muss innerhalb nixos_dir liegen
         try:
-            target.relative_to(Path(nixos_dir).resolve())
-        except ValueError:
-            return jsonify({"error": "ERR_PATH_OUTSIDE"}), 403
-        if target.suffix not in _READABLE_SUFFIXES:
-            return jsonify({"error": "ERR_FILE_TYPE"}), 400
-        if not target.exists():
+            result = _read_config_file(nixos_dir, rel_path,
+                                       persist_stamp=_check_csrf() is None)
+        except ValueError as exc:
+            return _core_file_error(exc, suffix_code="ERR_FILE_TYPE",
+                                    outside_code="ERR_PATH_OUTSIDE")
+        except FileNotFoundError:
             return jsonify({"error": "ERR_NOT_FOUND"}), 404
-        return jsonify({
-            "path":     rel_path,
-            "content":  target.read_text(encoding="utf-8"),
-            "writable": target.suffix in _WRITABLE_SUFFIXES,
-        })
+        except OSError:
+            return jsonify({"error": "ERR_FILE_READ"}), 500
+        return jsonify(result)
 
     @app.route("/api/file/<path:rel_path>", methods=["POST"])
     def write_file_raw(rel_path):
@@ -764,18 +770,17 @@ def create_app() -> Flask:
         nixos_dir, err = _require_setup()
         if err:
             return err
-        target = (Path(nixos_dir) / rel_path).resolve()
-        try:
-            target.relative_to(Path(nixos_dir).resolve())
-        except ValueError:
-            return jsonify({"error": "ERR_PATH_OUTSIDE"}), 403
-        if target.suffix not in _WRITABLE_SUFFIXES:
-            return jsonify({"error": "ERR_FILE_TYPE"}), 400
         body = request.get_json(silent=True) or {}
-        content = body.get("content", "")
-        target.write_text(content, encoding="utf-8")
-        git_manager.auto_commit(nixos_dir, label=body.get("label", ""))
-        return jsonify({"success": True, **_maybe_auto_push(nixos_dir)})
+        try:
+            result = _write_raw_config_file(nixos_dir, rel_path,
+                                            body.get("content", ""),
+                                            label=body.get("label", ""))
+        except ValueError as exc:
+            return _core_file_error(exc, suffix_code="ERR_FILE_TYPE",
+                                    outside_code="ERR_PATH_OUTSIDE")
+        except OSError:
+            return jsonify({"error": "ERR_WRITE"}), 500
+        return jsonify(result)
 
     # ------------------------------------------------------------------ export
 
@@ -2490,55 +2495,7 @@ def create_app() -> Flask:
         nixos_dir, err = _require_setup()
         if err:
             return err
-
-        root     = Path(nixos_dir)
-        _cfg_s   = config_manager.load_config_settings(nixos_dir)
-        _hm_dir  = _cfg_s.get("hm_dir", "home").strip() or "home"
-        _app_s   = config_manager.get_app_settings()
-        _show_flake_lock = bool(_app_s.get("show_flake_lock", False))
-
-        def _classify_by_path(item: Path, root: Path) -> str | None:
-            rel   = item.relative_to(root)
-            parts = rel.parts  # e.g. ('home', 'martin.nix')
-            if len(parts) >= 2 and parts[0] == _hm_dir:
-                return 'hm'
-            return _classify_filename(item.name)
-
-        def build_tree(directory: Path) -> list:
-            entries = []
-            try:
-                items = sorted(directory.iterdir(), key=lambda p: (p.is_file(), p.name.lower()))
-            except PermissionError:
-                return entries
-            for item in items:
-                # Skip hidden files/dirs and NiCo's own internal directory
-                if item.name.startswith('.') or (item.name == 'nico' and item.is_dir()):
-                    continue
-                if item.is_dir():
-                    children = build_tree(item)
-                    entries.append({
-                        "name": item.name,
-                        "type": "dir",
-                        "path": str(item.relative_to(root)),
-                        "children": children,
-                    })
-                elif item.suffix == '.nix':
-                    entries.append({
-                        "name":      item.name,
-                        "type":      "file",
-                        "path":      str(item.relative_to(root)),
-                        "file_type": _FILENAME_TYPE_HINTS.get(item.name) or _classify_by_path(item, root),
-                    })
-                elif item.name == 'flake.lock' and _show_flake_lock:
-                    entries.append({
-                        "name":      item.name,
-                        "type":      "file",
-                        "path":      str(item.relative_to(root)),
-                        "file_type": "flk",
-                    })
-            return entries
-
-        return jsonify({"tree": build_tree(root), "root": str(root)})
+        return jsonify(_list_config_tree(nixos_dir))
 
     def _hardware_config_meta(candidate: Path, root: Path) -> dict:
         inside_config = False
@@ -2912,9 +2869,9 @@ def create_app() -> Flask:
     @app.route("/api/file")
     def read_file_by_query():
         """Read a .nix or .lock file from the nixos config dir.
-        Also detects/stamps the nico file-type code on first open:
-        if the nico-version line has no type prefix, 'nd' is written in-place.
-        Returns: { content, path, file_type }
+        Also detects/stamps the nico file-type code on first open (only for
+        same-origin requests carrying the CSRF token).
+        Returns: { content, path, file_type, writable }
           file_type: 'co'|'nd'|'fl'|'hw'|'mo'|'hm' or null (no nico-version)
         """
         nixos_dir, err = _require_setup()
@@ -2922,81 +2879,20 @@ def create_app() -> Flask:
             return err
 
         rel = request.args.get("path", "").strip()
-        if not rel:
-            return jsonify({"error": "ERR_NO_PATH"}), 400
-
-        root = Path(nixos_dir)
-        target = (root / rel).resolve()
-
-        # Security: must be inside config dir and must be .nix or .lock
         try:
-            target.relative_to(root.resolve())
-        except ValueError:
+            result = _read_config_file(nixos_dir, rel,
+                                       persist_stamp=_check_csrf() is None)
+        except ValueError as exc:
+            if str(exc) == "ERR_FILE_TYPE":
+                return jsonify({"error": "ERR_NOT_NIX"}), 400
+            if str(exc).startswith("ERR_"):
+                return jsonify({"error": str(exc)}), 400
             return jsonify({"error": "ERR_SYSTEM_PATH"}), 403
-
-        if target.suffix not in ('.nix', '.lock'):
-            return jsonify({"error": "ERR_NOT_NIX"}), 400
-
-        if not target.exists():
+        except FileNotFoundError:
             return jsonify({"error": "ERR_FILE_NOT_FOUND"}), 404
-
-        try:
-            content = target.read_text(encoding='utf-8')
         except OSError:
             return jsonify({"error": "ERR_FILE_READ"}), 500
-
-        if target.name == 'flake.lock':
-            return jsonify({"content": content, "path": rel, "file_type": "flk"})
-
-        # Typ aus Dateinamen-Hint (für hw/fl – immer gültig, kein Schreiben nötig)
-        hint_type = _FILENAME_TYPE_HINTS.get(target.name)
-
-        # Pfad-basierte Klassifizierung: home/<hm_dir>/*.nix → hm
-        _cfg_s   = config_manager.load_config_settings(nixos_dir)
-        _hm_dir  = _cfg_s.get("hm_dir", "home").strip() or "home"
-        _rel_parts = Path(rel).parts
-        path_type = (
-            'hm' if len(_rel_parts) >= 2 and _rel_parts[0] == _hm_dir
-            else None
-        )
-
-        # Detect file type from nico-version header
-        ftype = _get_nico_type(content)
-        if ftype == "":
-            # nico-version exists but no type → stamp and save
-            # Priorität: expliziter Hint → Pfad → Dateiname → nd
-            stamp = hint_type or path_type or _classify_filename(target.name) or "nd"
-            content = _insert_type(content, stamp)
-            # Write side effect only for same-origin requests (valid CSRF
-            # token); a cross-site GET must never modify files.
-            if _check_csrf() is None:
-                try:
-                    target.write_text(content, encoding='utf-8')
-                except OSError:
-                    pass   # non-fatal (z.B. ro-Datei): Typ trotzdem im Speicher setzen
-            ftype = stamp
-        elif ftype is None:
-            # Keine nico-version-Zeile → immer Dialog zeigen (null → Frontend öffnet Typ-Dialog)
-            ftype = None
-        else:
-            # Vorhandener Stempel – Hint/Pfad-Klassifizierung überschreibt ggf. falschen Stempel
-            override = hint_type or path_type
-            if override and override != ftype:
-                content = _insert_type(content, override)
-                if _check_csrf() is None:  # see stamping above: no writes on cross-site GET
-                    try:
-                        target.write_text(content, encoding='utf-8')
-                    except OSError:
-                        pass
-                ftype = override
-
-        if ftype == 'hm':
-            try:
-                content, _ = _normalize_hm_content(content)
-            except Exception:
-                pass
-
-        return jsonify({"content": content, "path": rel, "file_type": ftype})
+        return jsonify(result)
 
 
     @app.route("/api/file", methods=["POST"])
