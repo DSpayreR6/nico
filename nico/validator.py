@@ -22,8 +22,10 @@ from pathlib import Path
 class Finding:
     rule_id: str
     severity: str    # "error" | "warning" | "info"
-    message: str
+    message: str          # German fallback text
     detail: str = ""
+    message_key: str = ""            # i18n key (validator.f.*) for the frontend
+    params: "tuple | list" = ()      # positional params for {0},{1},… in the key
 
 
 @dataclass
@@ -169,13 +171,14 @@ def run_validation(
             findings.append(Finding(
                 rule_id=rule.id,
                 severity="info",
-                message=f"Regel '{rule.id}' konnte nicht ausgefuehrt werden.",
+                message=f"Regel '{rule.id}' konnte nicht ausgefuehrt werden.", message_key="validator.f.rule_failed", params=[rule.id],
                 detail=str(exc),
             ))
 
     return [
         {"rule_id": f.rule_id, "severity": f.severity,
-         "message": f.message, "detail": f.detail}
+         "message": f.message, "detail": f.detail,
+         "message_key": f.message_key, "params": [str(p) for p in f.params]}
         for f in findings
     ]
 
@@ -266,7 +269,7 @@ def _rule_user_in_config(nixos_dir: str, config: dict, is_flake: bool,
         return [Finding(
             rule_id="user_in_config",
             severity="error",
-            message=f'Benutzer "{current}" ist in keiner Config-Datei angelegt.',
+            message=f'Benutzer "{current}" ist in keiner Config-Datei angelegt.', message_key="validator.f.user_in_config", params=[current],
             detail="Nach einem Rebuild wäre kein Login möglich. "
                    f"Benutzer unter users.users.{current} eintragen.",
         )]
@@ -299,7 +302,7 @@ def _rule_flake_host_exists(nixos_dir: str, config: dict, is_flake: bool,
             findings.append(Finding(
                 rule_id="flake_host_exists",
                 severity="error",
-                message=f'Host "{host_name}" fehlt unter nixosConfigurations in flake.nix.',
+                message=f'Host "{host_name}" fehlt unter nixosConfigurations in flake.nix.', message_key="validator.f.flake_host_exists", params=[host_name],
                 detail="Host ist konfiguriert, aber nicht als Flake-Output deklariert.",
             ))
     return findings
@@ -325,7 +328,7 @@ def _rule_hardware_imported(nixos_dir: str, config: dict, is_flake: bool,
         return [Finding(
             rule_id="hardware_imported",
             severity="warning",
-            message=f"hardware-configuration.nix existiert, ist aber nicht in {co_name} eingebunden.",
+            message=f"hardware-configuration.nix existiert, ist aber nicht in {co_name} eingebunden.", message_key="validator.f.hardware_imported", params=[co_name],
             detail="In imports = [ ./hardware-configuration.nix ] aufnehmen.",
         )]
     return []
@@ -366,7 +369,7 @@ def _rule_hardware_matches(nixos_dir: str, config: dict, is_flake: bool,
         return [Finding(
             rule_id="hardware_matches",
             severity="warning",
-            message="Hardware-Config enthält Disk-UUIDs die auf diesem System nicht existieren.",
+            message="Hardware-Config enthält Disk-UUIDs die auf diesem System nicht existieren.", message_key="validator.f.hardware_matches", params=[],
             detail="Unbekannte UUIDs: " + ", ".join(sample) + extra,
         )]
     return []
@@ -425,7 +428,7 @@ def _rule_duplicate_attrs(nixos_dir: str, config: dict, is_flake: bool,
             findings.append(Finding(
                 rule_id="duplicate_attrs",
                 severity="error",
-                message=f"{label}: Doppelte Attribute gefunden.",
+                message=f"{label}: Doppelte Attribute gefunden.", message_key="validator.f.duplicate_attrs", params=[label],
                 detail="\n".join(parts),
             ))
     return findings
@@ -451,7 +454,7 @@ def _rule_imports_exist(nixos_dir: str, config: dict, is_flake: bool,
                 findings.append(Finding(
                     rule_id="imports_exist",
                     severity="error",
-                    message=f"Fehlende Datei in {nix_file.name}, Zeile {line_no}: {raw_path}",
+                    message=f"Fehlende Datei in {nix_file.name}, Zeile {line_no}: {raw_path}", message_key="validator.f.imports_exist", params=[nix_file.name, line_no, raw_path],
                     detail=str(resolved),
                 ))
     return findings
@@ -661,7 +664,7 @@ def _rule_flake_hm_branch(nixos_dir: str, config: dict, is_flake: bool,
             findings.append(Finding(
                 rule_id="flake_hm_branch",
                 severity="error",
-                message=f"flake.nix Zeile {hm_line}: home-manager hat keinen Release-Branch.",
+                message=f"flake.nix Zeile {hm_line}: home-manager hat keinen Release-Branch.", message_key="validator.f.flake_hm_branch.no_release", params=[hm_line],
                 detail=(
                     f"{np_loc}\n"
                     f"{hm_loc}\n"
@@ -673,7 +676,7 @@ def _rule_flake_hm_branch(nixos_dir: str, config: dict, is_flake: bool,
             findings.append(Finding(
                 rule_id="flake_hm_branch",
                 severity="error",
-                message=f"flake.nix Zeile {hm_line}: home-manager Branch '{hm_ref}' ≠ nixpkgs {nixpkgs_version}.",
+                message=f"flake.nix Zeile {hm_line}: home-manager Branch '{hm_ref}' ≠ nixpkgs {nixpkgs_version}.", message_key="validator.f.flake_hm_branch.mismatch", params=[hm_line, hm_ref, nixpkgs_version],
                 detail=(
                     f"{np_loc}\n"
                     f"{hm_loc}\n"
@@ -686,7 +689,7 @@ def _rule_flake_hm_branch(nixos_dir: str, config: dict, is_flake: bool,
             findings.append(Finding(
                 rule_id="flake_hm_branch",
                 severity="error",
-                message=f"flake.nix Zeile {hm_line}: home-manager Branch '{hm_ref}', aber nixpkgs ist unstable.",
+                message=f"flake.nix Zeile {hm_line}: home-manager Branch '{hm_ref}', aber nixpkgs ist unstable.", message_key="validator.f.flake_hm_branch.unstable", params=[hm_line, hm_ref],
                 detail=(
                     f"flake.nix Zeile {nixpkgs_line}: nixpkgs → {nixpkgs_url}\n"
                     f"flake.nix Zeile {hm_line}: home-manager → {hm_url}\n"
@@ -697,7 +700,7 @@ def _rule_flake_hm_branch(nixos_dir: str, config: dict, is_flake: bool,
         findings.append(Finding(
             rule_id="flake_hm_branch",
             severity="warning",
-            message=f"flake.nix Zeile {hm_line}: home-manager hat keinen expliziten Branch.",
+            message=f"flake.nix Zeile {hm_line}: home-manager hat keinen expliziten Branch.", message_key="validator.f.flake_hm_branch.no_branch", params=[hm_line],
             detail=(
                 f"flake.nix Zeile {hm_line}: home-manager → {hm_url}\n"
                 "Ohne Branch (release-XX.YY) wird 'master' verwendet – "
@@ -717,7 +720,7 @@ def _rule_flake_hm_branch(nixos_dir: str, config: dict, is_flake: bool,
             findings.append(Finding(
                 rule_id="flake_hm_branch",
                 severity="error",
-                message="flake.lock: home-manager und nixpkgs sind auf unterschiedliche Release-Zweige gelockt.",
+                message="flake.lock: home-manager und nixpkgs sind auf unterschiedliche Release-Zweige gelockt.", message_key="validator.f.flake_hm_branch.lock_diverged", params=[],
                 detail=(
                     f"flake.lock: nixpkgs ref = {lock_np_ref or '<unbekannt>'}\n"
                     f"flake.lock: home-manager ref = {lock_hm_ref}\n"
@@ -732,7 +735,7 @@ def _rule_flake_hm_branch(nixos_dir: str, config: dict, is_flake: bool,
             findings.append(Finding(
                 rule_id="flake_hm_branch",
                 severity="warning",
-                message="flake.lock passt nicht zur home-manager-Auswahl in flake.nix.",
+                message="flake.lock passt nicht zur home-manager-Auswahl in flake.nix.", message_key="validator.f.flake_hm_branch.lock_hm", params=[],
                 detail=(
                     f"flake.nix Zeile {hm_line}: home-manager → {hm_url}\n"
                     f"flake.lock: home-manager ref = {lock_hm_ref}\n"
@@ -746,7 +749,7 @@ def _rule_flake_hm_branch(nixos_dir: str, config: dict, is_flake: bool,
             findings.append(Finding(
                 rule_id="flake_hm_branch",
                 severity="warning",
-                message="flake.lock passt nicht zur nixpkgs-Auswahl in flake.nix.",
+                message="flake.lock passt nicht zur nixpkgs-Auswahl in flake.nix.", message_key="validator.f.flake_hm_branch.lock_nixpkgs", params=[],
                 detail=(
                     f"flake.nix Zeile {nixpkgs_line}: nixpkgs → {nixpkgs_url}\n"
                     f"flake.lock: nixpkgs ref = {lock_np_ref}\n"
@@ -799,7 +802,7 @@ def _rule_state_version_match(nixos_dir: str, config: dict, is_flake: bool,
                     findings.append(Finding(
                         rule_id="state_version_match",
                         severity="warning",
-                        message=f"{rel} Zeile {i}: system.stateVersion \"{state_ver}\" ≠ nixpkgs {nixpkgs_version}.",
+                        message=f"{rel} Zeile {i}: system.stateVersion \"{state_ver}\" ≠ nixpkgs {nixpkgs_version}.", message_key="validator.f.state_version_match", params=[rel, i, state_ver, nixpkgs_version],
                         detail=(
                             f"flake.nix Zeile {nixpkgs_line}: nixpkgs → {nixpkgs_url}\n"
                             f"{rel} Zeile {i}: system.stateVersion = \"{state_ver}\"\n"
@@ -855,7 +858,7 @@ def _rule_hm_state_version_match(nixos_dir: str, config: dict, is_flake: bool,
             findings.append(Finding(
                 rule_id="hm_state_version_match",
                 severity="warning",
-                message=f"{hm_rel} Zeile {hm_line}: home.stateVersion \"{hm_ver}\" ≠ system.stateVersion \"{sys_ver}\".",
+                message=f"{hm_rel} Zeile {hm_line}: home.stateVersion \"{hm_ver}\" ≠ system.stateVersion \"{sys_ver}\".", message_key="validator.f.hm_state_version_match", params=[hm_rel, hm_line, hm_ver, sys_ver],
                 detail=(
                     f"{sys_rel} Zeile {sys_line}: system.stateVersion = \"{sys_ver}\"\n"
                     f"{hm_rel} Zeile {hm_line}: home.stateVersion = \"{hm_ver}\"\n"
@@ -884,7 +887,7 @@ def _rule_flake_hm_nix_assert(nixos_dir: str, config: dict, is_flake: bool,
     return [Finding(
         rule_id="flake_hm_nix_assert",
         severity="info",
-        message="Kein Nix-nativer HM-Branch-Check in flake.nix gefunden.",
+        message="Kein Nix-nativer HM-Branch-Check in flake.nix gefunden.", message_key="validator.f.flake_hm_nix_assert", params=[],
         detail=(
             "Optional: folgenden Schnipsel in den let-Block der flake.nix outputs-Funktion einfügen "
             "– er wirft beim nix eval einen Fehler, bevor der Build startet.\n\n"
@@ -930,7 +933,7 @@ def _rule_brix_redundant(nixos_dir: str, config: dict, is_flake: bool,
                 findings.append(Finding(
                     rule_id="brix_redundant",
                     severity="info",
-                    message=f'Brix "{name}": Inhalt kann vermutlich im NiCo-Panel eingegeben werden – bitte prüfen.',
+                    message=f'Brix "{name}": Inhalt kann vermutlich im NiCo-Panel eingegeben werden – bitte prüfen.', message_key="validator.f.brix_redundant", params=[name],
                     detail=f"Erkannte Optionen in Sektion {hint}. "
                            "Nach einem Import prüfen ob alle Einstellungen korrekt übernommen wurden.",
                 ))
@@ -965,7 +968,7 @@ def _rule_hm_user_defined(nixos_dir: str, config: dict, is_flake: bool,
     return [Finding(
         rule_id="hm_user_defined",
         severity="warning",
-        message=f"HM-Dateien in {hm_dir_name}/ vorhanden, aber home-manager.users.* fehlt in allen .nix-Dateien.",
+        message=f"HM-Dateien in {hm_dir_name}/ vorhanden, aber home-manager.users.* fehlt in allen .nix-Dateien.", message_key="validator.f.hm_user_defined", params=[hm_dir_name],
         detail=f"Die Dateien in {hm_dir_name}/ sind nicht im Flake referenziert. "
                "In flake.nix oder einem eingebundenen Modul "
                "home-manager.users.<username> = import ./<datei>.nix eintragen.",
@@ -994,7 +997,7 @@ def _rule_hm_missing_file(nixos_dir: str, config: dict, is_flake: bool,
             findings.append(Finding(
                 rule_id="hm_missing_file",
                 severity="error",
-                message=f"flake.nix: home-manager.users.{username} referenziert fehlende Datei: {import_path}",
+                message=f"flake.nix: home-manager.users.{username} referenziert fehlende Datei: {import_path}", message_key="validator.f.hm_missing_file", params=[username, import_path],
                 detail=str(resolved),
             ))
     return findings
@@ -1021,7 +1024,7 @@ def _rule_hm_orphan_root(nixos_dir: str, config: dict, is_flake: bool,
     return [Finding(
         rule_id="hm_orphan_root",
         severity="info",
-        message="home.nix im Config-Root ist in keiner anderen Datei referenziert.",
+        message="home.nix im Config-Root ist in keiner anderen Datei referenziert.", message_key="validator.f.hm_orphan_root", params=[],
         detail="Die Datei wird nirgendwo importiert und hat vermutlich keinen Effekt. "
                "Sie kann gelöscht werden.",
     )]
@@ -1056,7 +1059,7 @@ def _rule_hm_allowunfree(nixos_dir: str, config: dict, is_flake: bool,
     return [Finding(
         rule_id="hm_allowunfree",
         severity="warning",
-        message="nixpkgs.config.allowUnfree fehlt in der HM-Konfiguration.",
+        message="nixpkgs.config.allowUnfree fehlt in der HM-Konfiguration.", message_key="validator.f.hm_allowunfree", params=[],
         detail=f"allowUnfree ist in NiCo aktiviert, aber in {hm_hint} "
                "ist nixpkgs.config.allowUnfree = true nicht gesetzt. "
                "Unfree-Pakete in Home Manager werden sonst abgelehnt.",
@@ -1085,7 +1088,7 @@ def _rule_snapper_btrfs(nixos_dir: str, config: dict, is_flake: bool,
             findings.append(Finding(
                 rule_id="snapper_btrfs",
                 severity="error",
-                message=f'{target}: Mountpoint "{mount}" existiert nicht.',
+                message=f'{target}: Mountpoint "{mount}" existiert nicht.', message_key="validator.f.snapper_btrfs.missing", params=[target, mount],
                 detail="Der eingetragene Pfad muss auf diesem System vorhanden sein.",
             ))
             continue
@@ -1093,7 +1096,7 @@ def _rule_snapper_btrfs(nixos_dir: str, config: dict, is_flake: bool,
             findings.append(Finding(
                 rule_id="snapper_btrfs",
                 severity="error",
-                message=f'{target}: Mountpoint "{mount}" ist nicht gemountet.',
+                message=f'{target}: Mountpoint "{mount}" ist nicht gemountet.', message_key="validator.f.snapper_btrfs.not_mounted", params=[target, mount],
                 detail="Snapper kann nur auf gemountete Dateisysteme angewendet werden.",
             ))
             continue
@@ -1109,7 +1112,7 @@ def _rule_snapper_btrfs(nixos_dir: str, config: dict, is_flake: bool,
             findings.append(Finding(
                 rule_id="snapper_btrfs",
                 severity="error",
-                message=f'{target}: "{mount}" ist kein btrfs-Dateisystem (erkannt: "{fstype}").',
+                message=f'{target}: "{mount}" ist kein btrfs-Dateisystem (erkannt: "{fstype}").', message_key="validator.f.snapper_btrfs.not_btrfs", params=[target, mount, fstype],
                 detail="Snapper unterstützt nur btrfs. Der Mountpoint muss ein btrfs-Subvolume sein.",
             ))
     return findings
@@ -1125,7 +1128,7 @@ def _rule_snapper_in_host(nixos_dir: str, config: dict, is_flake: bool,
     return [Finding(
         rule_id="snapper_in_host",
         severity="info",
-        message="Snapper ist in der Basis-Config konfiguriert, nicht pro Host.",
+        message="Snapper ist in der Basis-Config konfiguriert, nicht pro Host.", message_key="validator.f.snapper_in_host", params=[],
         detail="Bei mehreren Flake-Hosts haben Hosts unterschiedliche Subvolumes. "
                "Die Snapper-Config sollte in der jeweiligen Host-Config stehen.",
     )]
@@ -1147,7 +1150,7 @@ def _rule_git_missing_gitignore(nixos_dir: str, config: dict, is_flake: bool,
         return [Finding(
             rule_id="git_missing_gitignore",
             severity="warning",
-            message="Keine .gitignore vorhanden – NiCo-Dateien (Logs, Backups) werden in Git committet.",
+            message="Keine .gitignore vorhanden – NiCo-Dateien (Logs, Backups) werden in Git committet.", message_key="validator.f.git_missing_gitignore.none", params=[],
             detail="In den Einstellungen → Zeitmaschine kann die .gitignore angelegt werden.",
         )]
     existing = {l.strip() for l in path.read_text(encoding="utf-8").splitlines()
@@ -1157,7 +1160,7 @@ def _rule_git_missing_gitignore(nixos_dir: str, config: dict, is_flake: bool,
         return [Finding(
             rule_id="git_missing_gitignore",
             severity="warning",
-            message=f".gitignore unvollständig – {len(missing)} empfohlene Einträge fehlen.",
+            message=f".gitignore unvollständig – {len(missing)} empfohlene Einträge fehlen.", message_key="validator.f.git_missing_gitignore.incomplete", params=[len(missing)],
             detail="Fehlend: " + ", ".join(missing) + "\nIn den Einstellungen → Zeitmaschine ergänzen.",
         )]
     return []
@@ -1175,7 +1178,7 @@ def _rule_git_large_log(nixos_dir: str, config: dict, is_flake: bool,
     return [Finding(
         rule_id="git_large_log",
         severity="warning",
-        message=f"nixos-rebuild.log ist {size_mb:.0f} MB groß.",
+        message=f"nixos-rebuild.log ist {size_mb:.0f} MB groß.", message_key="validator.f.git_large_log", params=[f"{size_mb:.0f}"],
         detail=f"Pfad: {log_path}\nDie Datei enthält nur Rebuild-Ausgabe und kann bedenkenlos gelöscht werden.",
     )]
 
@@ -1203,14 +1206,14 @@ def _rule_git_foreign_files(nixos_dir: str, config: dict, is_flake: bool,
         findings.append(Finding(
             rule_id="git_foreign_files",
             severity="warning",
-            message=f"{len(problem)} bekannte Problemdatei(en) in Git getrackt (werden hochgeladen).",
+            message=f"{len(problem)} bekannte Problemdatei(en) in Git getrackt (werden hochgeladen).", message_key="validator.f.git_foreign_files.problem", params=[len(problem)],
             detail="\n".join(problem),
         ))
     if info:
         findings.append(Finding(
             rule_id="git_foreign_files",
             severity="info",
-            message=f"{len(info)} Nicht-Nix-Datei(en) in Git getrackt.",
+            message=f"{len(info)} Nicht-Nix-Datei(en) in Git getrackt.", message_key="validator.f.git_foreign_files.info", params=[len(info)],
             detail="\n".join(info),
         ))
     return findings

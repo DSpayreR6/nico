@@ -44,6 +44,16 @@ function t(key, ...args) {
   return str;
 }
 
+/** Like t(), but falls back to a server-provided text (e.g. German validator
+ *  messages) when the key is missing or still a __TODO__ placeholder. */
+function tOr(key, fallback, ...args) {
+  const raw = key ? _lang[key] : undefined;
+  if (!raw || raw === '__TODO__') return fallback;
+  let str = raw;
+  args.forEach((a, i) => { str = str.replaceAll(`{${i}}`, String(a)); });
+  return str;
+}
+
 /**
  * Translate an API error code (e.g. "ERR_NO_DIR") to a localised string.
  * Falls back to the raw code if no translation is found.
@@ -1752,10 +1762,10 @@ async function openValidationSettings() {
     row.dataset.ruleId = rule.id;
     row.innerHTML = `
       <span style="display:flex;flex-direction:column;gap:2px;flex:1;min-width:0">
-        <span style="display:flex;align-items:center">${dot}<strong>${_esc(rule.label)}</strong>
+        <span style="display:flex;align-items:center">${dot}<strong>${_esc(tOr(`validator.rule.${rule.id}.label`, rule.label))}</strong>
           ${rule.flake_only ? '<span class="badge" style="margin-left:6px;font-size:10px;padding:1px 5px;background:var(--surface1);border-radius:4px">Flake</span>' : ''}
         </span>
-        <span class="raw-panel-hint" style="margin:0 0 0 14px">${_esc(rule.description)}</span>
+        <span class="raw-panel-hint" style="margin:0 0 0 14px">${_esc(tOr(`validator.rule.${rule.id}.desc`, rule.description))}</span>
       </span>
       <span class="toggle-wrap" style="margin-left:12px;flex-shrink:0">
         <input type="checkbox" data-rule="${rule.id}" ${checked ? 'checked' : ''}>
@@ -1901,7 +1911,7 @@ function _showValidationResults(findings) {
       return `<div style="display:flex;gap:10px;margin-bottom:14px;align-items:flex-start">
         <span style="color:${color};font-size:16px;flex-shrink:0;margin-top:1px">${icon}</span>
         <div>
-          <div style="font-size:13px">${_esc(f.message)}</div>${detail}${action}
+          <div style="font-size:13px">${_esc(tOr(f.message_key, f.message, ...(f.params || [])))}</div>${detail}${action}
         </div>
       </div>`;
     }).join('');
