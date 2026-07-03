@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### New Features
+
+- Validation results and the rule list are now translatable (all 7 languages; non-German strings pending as placeholders)
+- Package search links point to the configured nixpkgs channel instead of a hardcoded one
+
 ### Bug Fixes
 
 - App settings moved to `~/.config/nico/settings.json` (XDG); an existing `nico-settings.json` next to the program is migrated once automatically – fixes crashes when NiCo is installed as a Nix package (read-only store)
@@ -13,6 +18,11 @@
 - ZIP import and directory import now reject file paths that would escape the config directory (zip-slip)
 - All user-entered string values (hostname, descriptions, time zone, snapper names, flatpak remotes, home-manager fields, …) are now escaped when written into `.nix` files; quotes or `${` no longer produce broken or injectable Nix
 - "/etc/nixos kopieren" during symlink setup now creates a ZIP backup and auto-commit before replacing existing `.nix` files in the config directory
+- Non-numeric boot menu limit no longer causes a server error; falls back to 5
+- Zeitmaschine rollback now also removes files that were added after the target commit
+- Config diff no longer swallows real changes when identical lines appear multiple times
+- Requests with a foreign Host header are rejected (DNS-rebinding guard); the restart helper page requires a token
+- Opening a file via GET no longer writes a type stamp unless the request comes from the NiCo UI itself
 
 ---
 
