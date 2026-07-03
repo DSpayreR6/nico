@@ -180,6 +180,43 @@ def create_app() -> Flask:
         except ValueError:
             return False
 
+    def _apply_import_result(nixos_dir: str, recognized: dict, rest_brix: str) -> dict:
+        """Merge parsed import data into nico.json: recognized fields, rest
+        content as bricks, hardware_config flag. Saves and returns data."""
+        data = config_manager.load_config(nixos_dir) or {}
+        for key, val in recognized.items():
+            data[key] = val
+        if rest_brix.strip():
+            blocks = data.get("brick_blocks", {})
+            rest_blocks = brix_content_to_bricks(rest_brix, section="Start", existing_blocks=blocks)
+            blocks.update(rest_blocks)
+            data["brick_blocks"] = blocks
+        if (Path(nixos_dir) / "hardware-configuration.nix").exists():
+            data["hardware_config"] = True
+        config_manager.save_config(nixos_dir, data)
+        return data
+
+    def _reimport_flake(nixos_dir: str, data: dict) -> None:
+        """Parse an imported flake.nix, merge its fields, regenerate it cleanly."""
+        flake_path = Path(nixos_dir) / "flake.nix"
+        if not flake_path.exists():
+            return
+        data["flakes"] = True
+        try:
+            flake_content = flake_path.read_text(encoding="utf-8")
+            flake_fields  = importer.parse_flake_nix(flake_content)
+            flake_brix    = importer.build_flake_brix(flake_content)
+            flake_brix    = importer.ensure_flake_host_bricks(flake_content, flake_brix)
+            data.update(flake_fields)
+            config_manager.save_config(nixos_dir, data)
+            data["flake_brick_blocks"] = flake_brix
+            flake_path.write_text(
+                generator.generate_flake_nix(data, nixos_dir=nixos_dir),
+                encoding="utf-8",
+            )
+        except OSError:
+            pass
+
     def _safe_import_dest(root: Path, rel_name: str) -> "Path | None":
         """Resolve rel_name below root; None when it would escape (zip-slip)."""
         if not rel_name or Path(rel_name).is_absolute():
@@ -982,39 +1019,8 @@ def create_app() -> Flask:
             except OSError:
                 pass
 
-        data = config_manager.load_config(nixos_dir) or {}
-        for key, val in recognized.items():
-            data[key] = val
-
-        if rest_brix.strip():
-            blocks = data.get("brick_blocks", {})
-            rest_blocks = brix_content_to_bricks(rest_brix, section="Start", existing_blocks=blocks)
-            blocks.update(rest_blocks)
-            data["brick_blocks"] = blocks
-
-        if (dst / "hardware-configuration.nix").exists():
-            data["hardware_config"] = True
-
-        config_manager.save_config(nixos_dir, data)
-
-        # flake.nix parsen falls vorhanden
-        flake_path = dst / "flake.nix"
-        if flake_path.exists():
-            data["flakes"] = True
-            try:
-                flake_content = flake_path.read_text(encoding="utf-8")
-                flake_fields  = importer.parse_flake_nix(flake_content)
-                flake_brix    = importer.build_flake_brix(flake_content)
-                flake_brix    = importer.ensure_flake_host_bricks(flake_content, flake_brix)
-                data.update(flake_fields)
-                config_manager.save_config(nixos_dir, data)
-                data["flake_brick_blocks"] = flake_brix
-                flake_path.write_text(
-                    generator.generate_flake_nix(data, nixos_dir=nixos_dir),
-                    encoding="utf-8",
-                )
-            except OSError:
-                pass
+        data = _apply_import_result(nixos_dir, recognized, rest_brix)
+        _reimport_flake(nixos_dir, data)
 
         return jsonify({
             "success":      True,
@@ -3323,39 +3329,11 @@ def create_app() -> Flask:
             return jsonify({"error": "ERR_NO_PATH"}), 400
 
         # ── Common: merge into nico.json ─────────────────────────────────────
-        data = config_manager.load_config(nixos_dir) or {}
-        for key, val in recognized.items():
-            data[key] = val
-
-        if rest_brix.strip():
-            blocks = data.get("brick_blocks", {})
-            rest_blocks = brix_content_to_bricks(rest_brix, section="Start", existing_blocks=blocks)
-            blocks.update(rest_blocks)
-            data["brick_blocks"] = blocks
-
-        if (Path(nixos_dir) / "hardware-configuration.nix").exists():
-            data["hardware_config"] = True
-
-        config_manager.save_config(nixos_dir, data)
+        data = _apply_import_result(nixos_dir, recognized, rest_brix)
 
         # Flake.nix: parse → panel-Felder + Brix, dann sauber regenerieren
         if any(Path(f).name == "flake.nix" for f in files_copied):
-            data["flakes"] = True
-            flake_path = Path(nixos_dir) / "flake.nix"
-            try:
-                flake_content = flake_path.read_text(encoding="utf-8")
-                flake_fields  = importer.parse_flake_nix(flake_content)
-                flake_brix    = importer.build_flake_brix(flake_content)
-                flake_brix    = importer.ensure_flake_host_bricks(flake_content, flake_brix)
-                data.update(flake_fields)
-                config_manager.save_config(nixos_dir, data)
-                data["flake_brick_blocks"] = flake_brix
-                flake_path.write_text(
-                    generator.generate_flake_nix(data, nixos_dir=nixos_dir),
-                    encoding="utf-8",
-                )
-            except OSError:
-                pass
+            _reimport_flake(nixos_dir, data)
 
         return jsonify({
             "success":      True,
@@ -3458,19 +3436,6 @@ def create_app() -> Flask:
         recognized = importer.parse_config(content)
         rest_brix  = importer.build_rest_brix(content, recognized)
 
-        data = config_manager.load_config(nixos_dir) or {}
-
-        # Merge recognized fields (never overwrite packages or brick_blocks)
-        for key, val in recognized.items():
-            data[key] = val
-
-        # Save rest as individual bricks
-        if rest_brix.strip():
-            blocks = data.get("brick_blocks", {})
-            rest_blocks = brix_content_to_bricks(rest_brix, section="Start", existing_blocks=blocks)
-            blocks.update(rest_blocks)
-            data["brick_blocks"] = blocks
-
         # Copy all .nix/.lock files from /etc/nixos into the config dir
         files_copied = []
         try:
@@ -3478,10 +3443,7 @@ def create_app() -> Flask:
         except Exception:
             pass  # source might not exist or be readable
 
-        if (Path(nixos_dir) / "hardware-configuration.nix").exists():
-            data["hardware_config"] = True
-
-        config_manager.save_config(nixos_dir, data)
+        _apply_import_result(nixos_dir, recognized, rest_brix)
 
         return jsonify({
             "success":      True,
