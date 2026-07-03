@@ -200,7 +200,10 @@ def modify_brick_in_file(
 
 def hm_patch_str(content: str, key: str, value: str) -> str:
     ek = re.escape(key)
-    return re.sub(rf'({ek}\s*=\s*)"[^"]*"', rf'\1"{value}"', content)
+    # Lambda replacement: value must not be interpreted as re.sub template
+    # (backslashes/\g would break); nix_esc keeps the .nix string valid.
+    quoted = f'"{generator.nix_esc(value)}"'
+    return re.sub(rf'({ek}\s*=\s*)"[^"]*"', lambda m: m.group(1) + quoted, content)
 
 
 def hm_patch_bool(content: str, key: str, value: bool) -> str:
