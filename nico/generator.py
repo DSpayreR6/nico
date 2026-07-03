@@ -12,6 +12,30 @@ import shlex
 from .brix import format_brick, inject_brick_blocks
 from .importer import flake_host_brick_name, flake_host_section
 
+_NIX_ATTR_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_'-]*$")
+
+
+def nix_esc(value) -> str:
+    """Escape a value for use inside a double-quoted Nix string ("...")."""
+    return (str(value)
+            .replace("\\", "\\\\")
+            .replace('"', '\\"')
+            .replace("${", "\\${")
+            .replace("\r", "")
+            .replace("\n", "\\n")
+            .replace("\t", "\\t"))
+
+
+def nix_ind_esc(value) -> str:
+    """Escape a value for use inside an indented Nix string (''...'')."""
+    return str(value).replace("''", "'''").replace("${", "''${")
+
+
+def nix_attr(name) -> str:
+    """Render a name as a Nix attrpath component; quote when not a plain identifier."""
+    s = str(name)
+    return s if _NIX_ATTR_RE.match(s) else f'"{nix_esc(s)}"'
+
 # Matches nico-version lines in both formats:
 #   # nico-version: a3f8c2d1          (legacy / no type)
 #   # nico-version: co#a3f8c2d1       (with type code)
@@ -184,23 +208,23 @@ def generate_configuration_nix(data: dict) -> str:
                 lines += ["  boot.loader.grub.enable = true;"]
             lines += [f'  boot.loader.efi.canTouchEfiVariables = {"true" if boot_efi_can_touch else "false"};']
             if boot_efi_mount != "/boot":
-                lines += [f'  boot.loader.efi.efiSysMountPoint = "{boot_efi_mount}";']
+                lines += [f'  boot.loader.efi.efiSysMountPoint = "{nix_esc(boot_efi_mount)}";']
         if boot_kernel_params:
-            params = " ".join(f'"{p}"' for p in boot_kernel_params.split())
+            params = " ".join(f'"{nix_esc(p)}"' for p in boot_kernel_params.split())
             lines += [f"  boot.kernelParams = [ {params} ];"]
         if boot_initrd_systemd:
             lines += ["  boot.initrd.systemd.enable = true;"]
         if plymouth_enabled:
             lines += ["  boot.plymouth.enable = true;"]
             if plymouth_theme:
-                lines += [f'  boot.plymouth.theme = "{plymouth_theme}";']
+                lines += [f'  boot.plymouth.theme = "{nix_esc(plymouth_theme)}";']
 
     # ── System ────────────────────────────────────────────────────────────
     lines += [_section("System")]
     if hostname:
-        lines += [f'  networking.hostName = "{hostname}";']
+        lines += [f'  networking.hostName = "{nix_esc(hostname)}";']
     lines += [
-        f'  system.stateVersion = "{state_version}";' if state_version
+        f'  system.stateVersion = "{nix_esc(state_version)}";' if state_version
         else '  # system.stateVersion = "";  # TODO: set NixOS state version'
     ]
 
@@ -208,33 +232,33 @@ def generate_configuration_nix(data: dict) -> str:
     extra_locale = data.get("extra_locale", "")
     loc_lines = []
     if timezone:
-        loc_lines += [f'  time.timeZone = "{timezone}";', ""]
+        loc_lines += [f'  time.timeZone = "{nix_esc(timezone)}";', ""]
     if locale:
-        loc_lines += [f'  i18n.defaultLocale = "{locale}";']
+        loc_lines += [f'  i18n.defaultLocale = "{nix_esc(locale)}";']
     if extra_locale:
         loc_lines += [
             "  i18n.extraLocaleSettings = {",
-            f'    LC_ADDRESS        = "{extra_locale}";',
-            f'    LC_IDENTIFICATION = "{extra_locale}";',
-            f'    LC_MEASUREMENT    = "{extra_locale}";',
-            f'    LC_MONETARY       = "{extra_locale}";',
-            f'    LC_NAME           = "{extra_locale}";',
-            f'    LC_NUMERIC        = "{extra_locale}";',
-            f'    LC_PAPER          = "{extra_locale}";',
-            f'    LC_TELEPHONE      = "{extra_locale}";',
-            f'    LC_TIME           = "{extra_locale}";',
+            f'    LC_ADDRESS        = "{nix_esc(extra_locale)}";',
+            f'    LC_IDENTIFICATION = "{nix_esc(extra_locale)}";',
+            f'    LC_MEASUREMENT    = "{nix_esc(extra_locale)}";',
+            f'    LC_MONETARY       = "{nix_esc(extra_locale)}";',
+            f'    LC_NAME           = "{nix_esc(extra_locale)}";',
+            f'    LC_NUMERIC        = "{nix_esc(extra_locale)}";',
+            f'    LC_PAPER          = "{nix_esc(extra_locale)}";',
+            f'    LC_TELEPHONE      = "{nix_esc(extra_locale)}";',
+            f'    LC_TIME           = "{nix_esc(extra_locale)}";',
             "  };",
         ]
     if kb_layout:
         loc_lines += [
             "",
             "  services.xserver.xkb = {",
-            f'    layout = "{kb_layout}";',
-            f'    variant = "{kb_variant}";',
+            f'    layout = "{nix_esc(kb_layout)}";',
+            f'    variant = "{nix_esc(kb_variant)}";',
             "  };",
         ]
     if kb_console:
-        loc_lines += [f'  console.keyMap = "{kb_console}";']
+        loc_lines += [f'  console.keyMap = "{nix_esc(kb_console)}";']
     if loc_lines or _has_section_brix(brix, "Lokalisierung"):
         lines += [_section("Lokalisierung")] + loc_lines
 
@@ -301,7 +325,7 @@ def generate_configuration_nix(data: dict) -> str:
             lines += [
                 "  services.displayManager.autoLogin = {",
                 "    enable = true;",
-                f'    user = "{autologin_user}";',
+                f'    user = "{nix_esc(autologin_user)}";',
                 "  };",
             ]
 
@@ -324,18 +348,18 @@ def generate_configuration_nix(data: dict) -> str:
 
     # ── Benutzer ───────────────────────────────────────────────────────────
     if username:
-        groups_str = " ".join(f'"{g}"' for g in user_all_groups)
+        groups_str = " ".join(f'"{nix_esc(g)}"' for g in user_all_groups)
         lines += [
             _section("Benutzer"),
-            f"  users.users.{username} = {{",
+            f"  users.users.{nix_attr(username)} = {{",
             "    isNormalUser = true;",
         ]
         if user_description:
-            lines += [f'    description = "{user_description}";']
+            lines += [f'    description = "{nix_esc(user_description)}";']
         if user_uid:
             lines += [f"    uid = {user_uid};"]
         if user_password:
-            _pw = user_password.replace("\\", "\\\\").replace('"', '\\"')
+            _pw = nix_esc(user_password)
             lines += [f'    initialPassword = "{_pw}";']
         lines += [f"    extraGroups = [ {groups_str} ];"]
         if user_shell != "bash":
@@ -369,14 +393,14 @@ def generate_configuration_nix(data: dict) -> str:
         eu_groups = eu.get("groups") or ["wheel", "networkmanager"]
         eu_shell  = (eu.get("shell") or "bash").strip()
         eu_extra  = (eu.get("extra_nix") or "").strip()
-        eu_groups_str = " ".join(f'"{g}"' for g in eu_groups)
-        lines += [f"  users.users.{eu_name} = {{", "    isNormalUser = true;"]
+        eu_groups_str = " ".join(f'"{nix_esc(g)}"' for g in eu_groups)
+        lines += [f"  users.users.{nix_attr(eu_name)} = {{", "    isNormalUser = true;"]
         if eu_desc:
-            lines += [f'    description = "{eu_desc}";']
+            lines += [f'    description = "{nix_esc(eu_desc)}";']
         if eu_uid:
             lines += [f"    uid = {eu_uid};"]
         if eu_pass:
-            _pw = eu_pass.replace("\\", "\\\\").replace('"', '\\"')
+            _pw = nix_esc(eu_pass)
             lines += [f'    initialPassword = "{_pw}";']
         lines += [f"    extraGroups = [ {eu_groups_str} ];"]
         if eu_shell != "bash":
@@ -412,7 +436,7 @@ def generate_configuration_nix(data: dict) -> str:
         if lang_list or pref_lines:
             prog_lines += ["  programs.firefox = {", "    enable = true;"]
             if lang_list:
-                packs = " ".join(f'"{p}"' for p in lang_list)
+                packs = " ".join(f'"{nix_esc(p)}"' for p in lang_list)
                 prog_lines += [f"    languagePacks = [ {packs} ];"]
             if pref_lines:
                 prog_lines += ["    preferences = {"]
@@ -428,7 +452,7 @@ def generate_configuration_nix(data: dict) -> str:
         prog_lines += ["  services.flatpak.enable = true;"]
     if flatpak_remotes:
         script_body = "\n".join(
-            f"      flatpak remote-add --if-not-exists {shlex.quote(r['name'])} {shlex.quote(r['url'])}"
+            f"      flatpak remote-add --if-not-exists {nix_ind_esc(shlex.quote(r['name']))} {nix_ind_esc(shlex.quote(r['url']))}"
             for r in flatpak_remotes
         )
         prog_lines += [
@@ -474,8 +498,8 @@ def generate_configuration_nix(data: dict) -> str:
         nix_lines += [
             "  nix.gc = {",
             "    automatic = true;",
-            f'    dates = "{nix_gc_freq}";',
-            f'    options = "--delete-older-than {nix_gc_age}";',
+            f'    dates = "{nix_esc(nix_gc_freq)}";',
+            f'    options = "--delete-older-than {nix_esc(nix_gc_age)}";',
             "  };",
         ]
     if nix_lines or _has_section_brix(brix, "Nix & System"):
@@ -560,8 +584,8 @@ def generate_configuration_nix(data: dict) -> str:
         name  = cfg.get("name", "")
         mount = cfg.get("mountpoint", "")
         return [
-            f"  services.snapper.configs.{name} = {{",
-            f'    SUBVOLUME = "{mount}";',
+            f"  services.snapper.configs.{nix_attr(name)} = {{",
+            f'    SUBVOLUME = "{nix_esc(mount)}";',
             "    TIMELINE_CREATE = true;",
             "    TIMELINE_CLEANUP = true;",
             f"    TIMELINE_LIMIT_HOURLY = {cfg.get('hourly', 5)};",
@@ -653,44 +677,44 @@ def generate_host_nix(data: dict, host_name: str, hw_config: bool = False) -> st
                 lines += ["  boot.loader.grub.enable = true;"]
             lines += [f'  boot.loader.efi.canTouchEfiVariables = {"true" if boot_efi_can_touch else "false"};']
             if boot_efi_mount != "/boot":
-                lines += [f'  boot.loader.efi.efiSysMountPoint = "{boot_efi_mount}";']
+                lines += [f'  boot.loader.efi.efiSysMountPoint = "{nix_esc(boot_efi_mount)}";']
         if boot_kernel_params:
-            params = " ".join(f'"{p}"' for p in boot_kernel_params.split())
+            params = " ".join(f'"{nix_esc(p)}"' for p in boot_kernel_params.split())
             lines += [f"  boot.kernelParams = [ {params} ];"]
         if boot_initrd_systemd:
             lines += ["  boot.initrd.systemd.enable = true;"]
         if plymouth_enabled:
             lines += ["  boot.plymouth.enable = true;"]
             if plymouth_theme:
-                lines += [f'  boot.plymouth.theme = "{plymouth_theme}";']
+                lines += [f'  boot.plymouth.theme = "{nix_esc(plymouth_theme)}";']
 
     # System
     sys_lines = []
     hostname = data.get("hostname", "")
     if hostname:
-        sys_lines += [f'  networking.hostName = "{hostname}";']
+        sys_lines += [f'  networking.hostName = "{nix_esc(hostname)}";']
     if sys_lines:
         lines += [_section("System")] + sys_lines
 
     # Lokalisierung
     loc_lines = []
     if data.get("timezone"):
-        loc_lines += [f'  time.timeZone = "{data["timezone"]}";', ""]
+        loc_lines += [f'  time.timeZone = "{nix_esc(data["timezone"])}";', ""]
     if data.get("locale"):
-        loc_lines += [f'  i18n.defaultLocale = "{data["locale"]}";']
+        loc_lines += [f'  i18n.defaultLocale = "{nix_esc(data["locale"])}";']
     extra_locale = data.get("extra_locale", "")
     if extra_locale:
         loc_lines += [
             "  i18n.extraLocaleSettings = {",
-            f'    LC_ADDRESS        = "{extra_locale}";',
-            f'    LC_IDENTIFICATION = "{extra_locale}";',
-            f'    LC_MEASUREMENT    = "{extra_locale}";',
-            f'    LC_MONETARY       = "{extra_locale}";',
-            f'    LC_NAME           = "{extra_locale}";',
-            f'    LC_NUMERIC        = "{extra_locale}";',
-            f'    LC_PAPER          = "{extra_locale}";',
-            f'    LC_TELEPHONE      = "{extra_locale}";',
-            f'    LC_TIME           = "{extra_locale}";',
+            f'    LC_ADDRESS        = "{nix_esc(extra_locale)}";',
+            f'    LC_IDENTIFICATION = "{nix_esc(extra_locale)}";',
+            f'    LC_MEASUREMENT    = "{nix_esc(extra_locale)}";',
+            f'    LC_MONETARY       = "{nix_esc(extra_locale)}";',
+            f'    LC_NAME           = "{nix_esc(extra_locale)}";',
+            f'    LC_NUMERIC        = "{nix_esc(extra_locale)}";',
+            f'    LC_PAPER          = "{nix_esc(extra_locale)}";',
+            f'    LC_TELEPHONE      = "{nix_esc(extra_locale)}";',
+            f'    LC_TIME           = "{nix_esc(extra_locale)}";',
             "  };",
         ]
     kb_layout = data.get("keyboard_layout", "")
@@ -698,12 +722,12 @@ def generate_host_nix(data: dict, host_name: str, hw_config: bool = False) -> st
         loc_lines += [
             "",
             "  services.xserver.xkb = {",
-            f'    layout = "{kb_layout}";',
-            f'    variant = "{data.get("keyboard_variant", "")}";',
+            f'    layout = "{nix_esc(kb_layout)}";',
+            f'    variant = "{nix_esc(data.get("keyboard_variant", ""))}";',
             "  };",
         ]
     if data.get("keyboard_console"):
-        loc_lines += [f'  console.keyMap = "{data["keyboard_console"]}";']
+        loc_lines += [f'  console.keyMap = "{nix_esc(data["keyboard_console"])}";']
     if loc_lines or _has_section_brix(brix, "Lokalisierung"):
         lines += [_section("Lokalisierung")] + loc_lines
 
@@ -767,7 +791,7 @@ def generate_host_nix(data: dict, host_name: str, hw_config: bool = False) -> st
             lines += [
                 "  services.displayManager.autoLogin = {",
                 "    enable = true;",
-                f'    user = "{autologin_user}";',
+                f'    user = "{nix_esc(autologin_user)}";',
                 "  };",
             ]
 
@@ -795,19 +819,19 @@ def generate_host_nix(data: dict, host_name: str, hw_config: bool = False) -> st
         user_groups_extra_raw = (data.get("user_groups_extra") or "").strip()
         user_groups_extra = [g for g in user_groups_extra_raw.split() if g]
         user_all_groups = sorted(set(user_groups_list + user_groups_extra)) or ["wheel"]
-        groups_str = " ".join(f'"{g}"' for g in user_all_groups)
+        groups_str = " ".join(f'"{nix_esc(g)}"' for g in user_all_groups)
         user_shell = data.get("user_shell", "bash") or "bash"
         lines += [
             _section("Benutzer"),
-            f"  users.users.{username} = {{",
+            f"  users.users.{nix_attr(username)} = {{",
             "    isNormalUser = true;",
         ]
         if data.get("user_description"):
-            lines += [f'    description = "{data["user_description"]}";']
+            lines += [f'    description = "{nix_esc(data["user_description"])}";']
         if (data.get("user_uid") or "").strip():
             lines += [f"    uid = {data['user_uid'].strip()};"]
         if data.get("user_initial_password"):
-            _pw = data["user_initial_password"].replace("\\", "\\\\").replace('"', '\\"')
+            _pw = nix_esc(data["user_initial_password"])
             lines += [f'    initialPassword = "{_pw}";']
         lines += [f"    extraGroups = [ {groups_str} ];"]
         if user_shell != "bash":
@@ -839,14 +863,14 @@ def generate_host_nix(data: dict, host_name: str, hw_config: bool = False) -> st
         eu_groups = eu.get("groups") or ["wheel", "networkmanager"]
         eu_shell  = (eu.get("shell") or "bash").strip()
         eu_extra  = (eu.get("extra_nix") or "").strip()
-        eu_groups_str = " ".join(f'"{g}"' for g in eu_groups)
-        lines += [f"  users.users.{eu_name} = {{", "    isNormalUser = true;"]
+        eu_groups_str = " ".join(f'"{nix_esc(g)}"' for g in eu_groups)
+        lines += [f"  users.users.{nix_attr(eu_name)} = {{", "    isNormalUser = true;"]
         if eu_desc:
-            lines += [f'    description = "{eu_desc}";']
+            lines += [f'    description = "{nix_esc(eu_desc)}";']
         if eu_uid:
             lines += [f"    uid = {eu_uid};"]
         if eu_pass:
-            _pw = eu_pass.replace("\\", "\\\\").replace('"', '\\"')
+            _pw = nix_esc(eu_pass)
             lines += [f'    initialPassword = "{_pw}";']
         lines += [f"    extraGroups = [ {eu_groups_str} ];"]
         if eu_shell != "bash":
@@ -875,7 +899,7 @@ def generate_host_nix(data: dict, host_name: str, hw_config: bool = False) -> st
         if lang_list or pref_lines_raw:
             prog_lines += ["  programs.firefox = {", "    enable = true;"]
             if lang_list:
-                prog_lines += [f"    languagePacks = [ {' '.join(f'\"' + p + '\"' for p in lang_list)} ];"]
+                prog_lines += [f"    languagePacks = [ {' '.join(f'\"' + nix_esc(p) + '\"' for p in lang_list)} ];"]
             if pref_lines_raw:
                 prog_lines += ["    preferences = {"]
                 for pl in pref_lines_raw:
@@ -890,7 +914,7 @@ def generate_host_nix(data: dict, host_name: str, hw_config: bool = False) -> st
         prog_lines += ["  services.flatpak.enable = true;"]
     if flatpak_remotes:
         script_body = "\n".join(
-            f"      flatpak remote-add --if-not-exists {shlex.quote(r['name'])} {shlex.quote(r['url'])}"
+            f"      flatpak remote-add --if-not-exists {nix_ind_esc(shlex.quote(r['name']))} {nix_ind_esc(shlex.quote(r['url']))}"
             for r in flatpak_remotes
         )
         prog_lines += [
@@ -940,8 +964,8 @@ def generate_host_nix(data: dict, host_name: str, hw_config: bool = False) -> st
         nix_lines += [
             "  nix.gc = {",
             "    automatic = true;",
-            f'    dates = "{data.get("nix_gc_frequency", "weekly")}";',
-            f'    options = "--delete-older-than {data.get("nix_gc_age", "30d")}";',
+            f'    dates = "{nix_esc(data.get("nix_gc_frequency", "weekly"))}";',
+            f'    options = "--delete-older-than {nix_esc(data.get("nix_gc_age", "30d"))}";',
             "  };",
         ]
     if nix_lines or _has_section_brix(brix, "Nix & System"):
@@ -1007,8 +1031,8 @@ def generate_host_nix(data: dict, host_name: str, hw_config: bool = False) -> st
         for sn_cfg in (data.get("snapper_configs") or []):
             if sn_cfg.get("name") and sn_cfg.get("mountpoint"):
                 backup_lines += [
-                    f"  services.snapper.configs.{sn_cfg['name']} = {{",
-                    f'    SUBVOLUME = "{sn_cfg["mountpoint"]}";',
+                    f"  services.snapper.configs.{nix_attr(sn_cfg['name'])} = {{",
+                    f'    SUBVOLUME = "{nix_esc(sn_cfg["mountpoint"])}";',
                     "    TIMELINE_CREATE = true;",
                     "    TIMELINE_CLEANUP = true;",
                     f"    TIMELINE_LIMIT_HOURLY = {sn_cfg.get('hourly', 5)};",
@@ -1089,12 +1113,12 @@ def generate_flake_nix(data: dict, nixos_dir: "str | Path | None" = None) -> str
         if hm_follows:
             inp += [
                 '    home-manager = {',
-                f'      url = "{hm_url}";',
+                f'      url = "{nix_esc(hm_url)}";',
                 '      inputs.nixpkgs.follows = "nixpkgs";',
                 '    };',
             ]
         else:
-            inp.append(f'    home-manager.url = "{hm_url}";')
+            inp.append(f'    home-manager.url = "{nix_esc(hm_url)}";')
     if hw_input:
         inp.append('    nixos-hardware.url = "github:NixOS/nixos-hardware";')
     if pm_input:
@@ -1113,7 +1137,7 @@ def generate_flake_nix(data: dict, nixos_dir: "str | Path | None" = None) -> str
         "# Generated by NiCo – NixOS Configurator\n"
         "{\n"
         + _section("Start") + "\n"
-        + f'  description = "{description}";\n'
+        + f'  description = "{nix_esc(description)}";\n'
         + _section("Inputs") + "\n"
         + "  inputs = {\n"
         + f"{inputs_block}\n"
@@ -1141,7 +1165,7 @@ def generate_flake_nix(data: dict, nixos_dir: "str | Path | None" = None) -> str
 
         def _default_host_body(name: str) -> str:
             body = [
-                f'      system = "{arch}";',
+                f'      system = "{nix_esc(arch)}";',
                 "      modules = [",
                 "        ./configuration.nix",
                 f"        ./hosts/{name}/hardware-configuration.nix",

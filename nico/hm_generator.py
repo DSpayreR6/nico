@@ -9,6 +9,7 @@ import hashlib
 import re
 
 from .brix import inject_brick_blocks
+from .generator import nix_esc
 
 _MARKER_WIDTH = 78
 
@@ -173,9 +174,9 @@ def generate_home_nix(data: dict) -> str:
 
     # ── Identity ─────────────────────────────────────────────────────────
     if username:
-        lines += [f'  home.username      = "{username}";']
+        lines += [f'  home.username      = "{nix_esc(username)}";']
     if home_dir:
-        lines += [f'  home.homeDirectory = "{home_dir}";']
+        lines += [f'  home.homeDirectory = "{nix_esc(home_dir)}";']
 
     # ── Packages ─────────────────────────────────────────────────────────
     if packages:
@@ -191,13 +192,13 @@ def generate_home_nix(data: dict) -> str:
     if git_enable:
         lines += ["", "  programs.git = {", "    enable = true;"]
         if git_name:
-            lines += [f'    userName  = "{git_name}";']
+            lines += [f'    userName  = "{nix_esc(git_name)}";']
         if git_email:
-            lines += [f'    userEmail = "{git_email}";']
+            lines += [f'    userEmail = "{nix_esc(git_email)}";']
         if git_branch:
             lines += [
                 "    extraConfig = {",
-                f'      init.defaultBranch = "{git_branch}";',
+                f'      init.defaultBranch = "{nix_esc(git_branch)}";',
                 "    };",
             ]
         lines += ["  };"]
@@ -245,12 +246,12 @@ def generate_home_nix(data: dict) -> str:
         for nix_key, data_key in xdg_values:
             value = _g(data, data_key)
             if value:
-                lines += [f'    {nix_key} = "${{config.home.homeDirectory}}/{value}";']
+                lines += [f'    {nix_key} = "${{config.home.homeDirectory}}/{nix_esc(value)}";']
         lines += ["  };"]
 
     # ── stateVersion ────────────────────────────────────────────────────
     if state_version:
-        lines += ["", f'  home.stateVersion = "{state_version}";']
+        lines += ["", f'  home.stateVersion = "{nix_esc(state_version)}";']
 
     lines += [
         _hm_section(HM_SECTION_END),
@@ -271,14 +272,14 @@ def create_hm_file(username: str, home_dir: str, state_version: str) -> str:
         "{ config, pkgs, lib, ... }:",
         "",
         "{",
-        f'  home.username = "{username}";',
-        f'  home.homeDirectory = "{home_dir}";',
+        f'  home.username = "{nix_esc(username)}";',
+        f'  home.homeDirectory = "{nix_esc(home_dir)}";',
         "",
         "  programs.home-manager.enable = true;",
         "",
     ]
     if state_version:
-        lines += [f'  home.stateVersion = "{state_version}";', ""]
+        lines += [f'  home.stateVersion = "{nix_esc(state_version)}";', ""]
     lines += ["}", ""]
     content = "\n".join(lines)
     return _add_hm_version_hash(content, ftype="hm")
