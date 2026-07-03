@@ -730,11 +730,24 @@ def _parse_diff(diff_text: str) -> list[dict]:
         elif line.startswith("-"):
             raw.append({"type": "removed", "content": line[1:]})
 
-    added_set   = {h["content"] for h in raw if h["type"] == "added"}
-    removed_set = {h["content"] for h in raw if h["type"] == "removed"}
-    reordered   = added_set & removed_set
+    # Cancel reordered lines pairwise (multiset): each removed occurrence
+    # neutralizes at most one added occurrence of the same content, so a real
+    # net addition/removal of duplicated lines is preserved.
+    from collections import Counter
+    added_counts   = Counter(h["content"] for h in raw if h["type"] == "added")
+    removed_counts = Counter(h["content"] for h in raw if h["type"] == "removed")
+    cancel = {c: min(added_counts[c], removed_counts[c])
+              for c in added_counts.keys() & removed_counts.keys()}
 
-    return [h for h in raw if h["content"] not in reordered]
+    skipped: dict[tuple, int] = {}
+    result = []
+    for h in raw:
+        key = (h["type"], h["content"])
+        if skipped.get(key, 0) < cancel.get(h["content"], 0):
+            skipped[key] = skipped.get(key, 0) + 1
+            continue
+        result.append(h)
+    return result
 
 
 def get_diff(nixos_dir: str, from_hash: str, to_hash: str = "HEAD") -> dict:
