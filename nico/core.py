@@ -733,7 +733,7 @@ def load_and_normalize_config(nixos_dir: str) -> dict:
     for fname in ("configuration.nix", "flake.nix", "home.nix"):
         p = Path(nixos_dir) / fname
         if p.exists():
-            if generator.check_version_hash(p.read_text()) == "modified":
+            if generator.check_version_hash(p.read_text(encoding="utf-8")) == "modified":
                 modified.append(fname)
     data["_modified_files"] = modified
     return data
@@ -754,9 +754,9 @@ def write_config_files(
     conf_file = nixos_path / "configuration.nix"
 
     if conf_file.exists():
-        data["brick_blocks"] = extract_brick_blocks(conf_file.read_text())
+        data["brick_blocks"] = extract_brick_blocks(conf_file.read_text(encoding="utf-8"))
 
-    conf_file.write_text(generator.generate_configuration_nix(data))
+    conf_file.write_text(generator.generate_configuration_nix(data), encoding="utf-8")
     written = ["configuration.nix"]
 
     if data.get("flakes"):
@@ -770,7 +770,7 @@ def write_config_files(
                 flake_brix = importer.ensure_flake_host_bricks(_flake_content, flake_brix)
                 if flake_brix:
                     data["flake_brick_blocks"] = flake_brix
-            flake_file.write_text(generator.generate_flake_nix(data, nixos_dir=str(nixos_path)))
+            flake_file.write_text(generator.generate_flake_nix(data, nixos_dir=str(nixos_path)), encoding="utf-8")
             written.append("flake.nix")
 
     hm = dict(data.get("home_manager") or {})
@@ -796,7 +796,7 @@ def write_config_files(
                 except OSError:
                     pass
             hm["hm_brick_blocks"] = data.get("hm_brick_blocks", {})
-            home_file.write_text(hm_generator.generate_home_nix(hm))
+            home_file.write_text(hm_generator.generate_home_nix(hm), encoding="utf-8")
             written.append("home.nix")
 
     if commit:

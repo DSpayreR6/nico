@@ -256,13 +256,21 @@ def load_config_settings(nixos_dir: str) -> dict:
 
 
 def save_config_settings(nixos_dir: str, settings: dict) -> None:
-    """Save config.json to the nixos config directory."""
+    """Save config.json to the nixos config directory (atomic, like app settings)."""
     import json
+    import os
+    import tempfile
     f = _config_json(nixos_dir)
     existing = load_config_settings(nixos_dir)
     existing.update(settings)
-    with open(f, "w") as fh:
+    with tempfile.NamedTemporaryFile(
+        "w", encoding="utf-8", dir=f.parent, delete=False,
+    ) as fh:
         json.dump(existing, fh, indent=2, ensure_ascii=False)
+        fh.flush()
+        os.fsync(fh.fileno())
+        tmp_name = fh.name
+    Path(tmp_name).replace(f)
 
 
 # ── Legacy: nico.json migration ───────────────────────────────────────────────

@@ -749,14 +749,14 @@ def create_app() -> Flask:
 
         # Merge brix from existing file into host_data before the single write below
         if host_nix.exists():
-            on_disk_brix = extract_brick_blocks(host_nix.read_text())
+            on_disk_brix = extract_brick_blocks(host_nix.read_text(encoding="utf-8"))
             stored_brix  = host_data.get("brick_blocks", {})
             stored_brix.update(on_disk_brix)
             host_data["brick_blocks"] = stored_brix
 
         hw_config = (host_dir / "hardware-configuration.nix").exists()
         host_dir.mkdir(parents=True, exist_ok=True)
-        host_nix.write_text(generator.generate_host_nix(host_data, host_name, hw_config))
+        host_nix.write_text(generator.generate_host_nix(host_data, host_name, hw_config), encoding="utf-8")
 
         if do_commit:
             try:
