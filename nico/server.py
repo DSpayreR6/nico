@@ -2967,10 +2967,13 @@ def create_app() -> Flask:
             # Priorität: expliziter Hint → Pfad → Dateiname → nd
             stamp = hint_type or path_type or _classify_filename(target.name) or "nd"
             content = _insert_type(content, stamp)
-            try:
-                target.write_text(content, encoding='utf-8')
-            except OSError:
-                pass   # non-fatal (z.B. ro-Datei): Typ trotzdem im Speicher setzen
+            # Write side effect only for same-origin requests (valid CSRF
+            # token); a cross-site GET must never modify files.
+            if _check_csrf() is None:
+                try:
+                    target.write_text(content, encoding='utf-8')
+                except OSError:
+                    pass   # non-fatal (z.B. ro-Datei): Typ trotzdem im Speicher setzen
             ftype = stamp
         elif ftype is None:
             # Keine nico-version-Zeile → immer Dialog zeigen (null → Frontend öffnet Typ-Dialog)
@@ -2980,10 +2983,11 @@ def create_app() -> Flask:
             override = hint_type or path_type
             if override and override != ftype:
                 content = _insert_type(content, override)
-                try:
-                    target.write_text(content, encoding='utf-8')
-                except OSError:
-                    pass
+                if _check_csrf() is None:  # see stamping above: no writes on cross-site GET
+                    try:
+                        target.write_text(content, encoding='utf-8')
+                    except OSError:
+                        pass
                 ftype = override
 
         if ftype == 'hm':

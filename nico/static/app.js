@@ -20,13 +20,11 @@ function niIcon(name) {
 // ── CSRF ──────────────────────────────────────────────────────────────────
 const CSRF_TOKEN = document.querySelector('meta[name="csrf-token"]')?.content ?? '';
 
-/** Drop-in fetch replacement that adds the CSRF token to all mutating requests. */
+/** Drop-in fetch replacement that adds the CSRF token to every request.
+ *  GET needs it too: /api/file only persists its type stamp for requests
+ *  that prove same-origin via the token. */
 function csrfFetch(url, options = {}) {
-  const method  = (options.method || 'GET').toUpperCase();
-  const headers = { ...(options.headers || {}) };
-  if (method !== 'GET' && method !== 'HEAD') {
-    headers['X-CSRF-Token'] = CSRF_TOKEN;
-  }
+  const headers = { ...(options.headers || {}), 'X-CSRF-Token': CSRF_TOKEN };
   return fetch(url, { ...options, headers });
 }
 
@@ -3028,7 +3026,7 @@ async function updatePreview() {
 async function _refreshPreviewForFile(file = 'configuration.nix') {
   if (file === 'flake.nix') {
     if (activeFile?.path === 'flake.nix') {
-      const res = await fetch(`/api/file?path=${encodeURIComponent(file)}`);
+      const res = await csrfFetch(`/api/file?path=${encodeURIComponent(file)}`);
       const data = await res.json();
       if (!data.error) {
         await _renderFileIntoView(file, data, { skipTypeDialog: true });
@@ -6540,7 +6538,7 @@ const Sidebar = (() => {
       toolsDropdown?.classList.add('hidden');
       if (!activeFile) return;
       try {
-        const res  = await fetch(`/api/file?path=${encodeURIComponent(activeFile.path)}`);
+        const res  = await csrfFetch(`/api/file?path=${encodeURIComponent(activeFile.path)}`);
         const data = await res.json();
         if (data.error) { showToast(tErr(data.error), 'error'); return; }
         await navigator.clipboard.writeText(data.content);
@@ -7271,7 +7269,7 @@ const Sidebar = (() => {
 
   async function _loadFileIntoView(path, { skipTypeDialog = false } = {}) {
     try {
-      const res  = await fetch(`/api/file?path=${encodeURIComponent(path)}`);
+      const res  = await csrfFetch(`/api/file?path=${encodeURIComponent(path)}`);
       const data = await res.json();
       // Abbruch falls der Nutzer zwischenzeitlich eine andere Datei gewählt hat
       if (activeFile?.path !== path) return;
@@ -8119,7 +8117,7 @@ const Sidebar = (() => {
     }
     if (activeFile?.path) {
       try {
-        const res = await fetch(`/api/file?path=${encodeURIComponent(activeFile.path)}`);
+        const res = await csrfFetch(`/api/file?path=${encodeURIComponent(activeFile.path)}`);
         const data = await res.json();
         if (data.error) {
           showToast(tErr(data.error) || t('toast.error'), 'error');
@@ -8205,7 +8203,7 @@ const Sidebar = (() => {
 
   async function _refreshPanelToggle(path, ftype) {
     try {
-      const r = await fetch(`/api/file?path=${encodeURIComponent(path)}`);
+      const r = await csrfFetch(`/api/file?path=${encodeURIComponent(path)}`);
       const d = await r.json();
       if (!d.error) _updatePanelToggle(ftype, d.content || '');
     } catch {}
