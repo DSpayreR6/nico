@@ -103,9 +103,13 @@ def _load_theme_css() -> str:
 def _serve_already_running_page(preferred_port: int) -> None:
     """Open a browser page offering restart when NiCo is already running."""
     import http.server
+    import secrets
 
     mini_port = _find_free_port(preferred_port + 1)
     theme_css = _load_theme_css()
+    # Restart requires this token; it is embedded in the page, which is only
+    # served to requests with a local Host header (DNS-rebinding guard).
+    restart_token = secrets.token_hex(16)
 
     _HTML = """<!DOCTYPE html>
 <html lang="de">
@@ -168,7 +172,7 @@ THEME_CSS
       btn.disabled = true;
       btn.textContent = 'Wird neu gestartet\u2026';
       msg.textContent = 'Alte Instanz wird beendet\u2026';
-      try { await fetch('http://127.0.0.1:MINI_PORT/restart', {method:'POST'}); } catch {}
+      try { await fetch('http://127.0.0.1:MINI_PORT/restart', {method:'POST', headers:{'X-Restart-Token':'RESTART_TOKEN'}}); } catch {}
       msg.textContent = 'Warte auf NiCo\u2026';
       for (let i = 0; i < 60; i++) {
         await new Promise(r => setTimeout(r, 300));
@@ -187,10 +191,18 @@ THEME_CSS
     html = (_HTML
             .replace("THEME_CSS", theme_css)
             .replace("MINI_PORT", str(mini_port))
-            .replace("PREF_PORT", str(preferred_port)))
+            .replace("PREF_PORT", str(preferred_port))
+            .replace("RESTART_TOKEN", restart_token))
 
     class _Handler(http.server.BaseHTTPRequestHandler):
+        def _host_ok(self) -> bool:
+            host = (self.headers.get("Host") or "").rsplit(":", 1)[0]
+            return host in ("127.0.0.1", "localhost")
+
         def do_GET(self):
+            if not self._host_ok():
+                self._reply(403, "application/json", b'{"error":"forbidden"}')
+                return
             if self.path == "/status":
                 running = False
                 try:
@@ -206,7 +218,13 @@ THEME_CSS
                 self._reply(200, "text/html; charset=utf-8", html.encode())
 
         def do_POST(self):
+            if not self._host_ok():
+                self._reply(403, "application/json", b'{"error":"forbidden"}')
+                return
             if self.path == "/restart":
+                if self.headers.get("X-Restart-Token", "") != restart_token:
+                    self._reply(403, "application/json", b'{"error":"forbidden"}')
+                    return
                 _shutdown_running_instance(preferred_port)
                 for _ in range(50):
                     time.sleep(0.1)
