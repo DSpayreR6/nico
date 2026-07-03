@@ -19,7 +19,7 @@ from flask import Flask, Response, jsonify, render_template, request, stream_wit
 from . import config_manager, generator, git_manager, hm_generator, importer
 from .brix import (extract_brick_blocks, inject_brick_blocks, strip_brick_blocks,
                    format_brick, next_order_for_section, SECTION_ORDER,
-                   expand_nested_legacy, brix_content_to_bricks,
+                   brix_content_to_bricks,
                    check_bracket_balance)
 from .core import (
     NICO_HEADER as _NICO_HEADER,
@@ -28,9 +28,6 @@ from .core import (
     _FORBIDDEN_PATH_PREFIXES,
     _SAFE_NAME_RE,
     _VALID_FILE_TYPES,
-    _VERSION_ANY_RE,
-    _VERSION_NOTYPE_RE,
-    _VERSION_WITHTYPE_RE,
     brick_body         as _brick_body,
     classify_filename  as _classify_filename,
     clean_nix_error    as _clean_nix_error,
@@ -396,8 +393,6 @@ def create_app() -> Flask:
         existing = config_manager.load_config(nixos_dir) or {}
 
         # These fields are managed by dedicated endpoints – never overwrite from the form
-        # brick_blocks live in the .nix file, not nico.json – only keep the counter
-        incoming["brick_next_id"]   = existing.get("brick_next_id",   1)
         # hardware_config is set by the setup/import endpoints, not the form
         incoming["hardware_config"] = existing.get("hardware_config", False)
         # flake_* fields are managed by /api/config/flake

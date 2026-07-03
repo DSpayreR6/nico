@@ -49,9 +49,6 @@ def classify_filename(name: str) -> str | None:
 _VERSION_NOTYPE_RE = re.compile(
     r'^(# nico-version: )([0-9a-f]{8})', re.MULTILINE
 )
-_VERSION_WITHTYPE_RE = re.compile(
-    r'^(# nico-version: )[a-z]+#([0-9a-f]{8})', re.MULTILINE
-)
 _VERSION_ANY_RE = re.compile(
     r'^# nico-version: (?:[a-z]+#)?[0-9a-f]{8}(?:#[pr])?\n?', re.MULTILINE
 )

@@ -22,7 +22,6 @@ Config management for NiCo.  Three layers:
 
 import os
 import re
-import subprocess
 from pathlib import Path
 
 
@@ -181,22 +180,6 @@ DEFAULT_NIXOS_CONFIG = {
     "brick_blocks": {},
 
 }
-
-ADDITIVE_FIELDS = {"packages", "fonts", "fonts_extra", "brick_blocks"}
-
-
-def _detect_state_version() -> str:
-    """Read running NixOS version via nixos-version, extract major.minor."""
-    try:
-        out = subprocess.run(
-            ["nixos-version"], capture_output=True, text=True, timeout=5
-        ).stdout.strip()
-        m = re.match(r'^(\d+\.\d+)', out)
-        if m:
-            return m.group(1)
-    except Exception:
-        pass
-    return DEFAULT_NIXOS_CONFIG["state_version"]
 
 
 # ── App-level settings (APP_SETTINGS_FILE, XDG) ──────────────────────────────
@@ -392,7 +375,6 @@ def save_config(nixos_config_dir: str, data: dict) -> None:
     nix_file.write_text(
         _gen.generate_configuration_nix(data), encoding="utf-8"
     )
-
 
 
 # ── Multi-Host Support ────────────────────────────────────────────────────────
