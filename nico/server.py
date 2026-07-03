@@ -154,6 +154,17 @@ def create_app() -> Flask:
         cfg = config_manager.load_config_settings(nixos_dir)
         return (cfg.get("hosts_dir") or "hosts").strip() or "hosts"
 
+    def _safe_import_dest(root: Path, rel_name: str) -> "Path | None":
+        """Resolve rel_name below root; None when it would escape (zip-slip)."""
+        if not rel_name or Path(rel_name).is_absolute():
+            return None
+        dest = (root / rel_name).resolve()
+        try:
+            dest.relative_to(root.resolve())
+        except ValueError:
+            return None
+        return dest
+
     # ------------------------------------------------------------------ routes
 
     # Cache-buster: changes every server restart so browsers always reload static files
@@ -924,7 +935,9 @@ def create_app() -> Flask:
                 if member.is_dir():
                     continue
                 name = member.filename
-                dest = dst / name
+                dest = _safe_import_dest(dst, name)
+                if dest is None:  # zip-slip: entry would land outside config dir
+                    continue
                 dest.parent.mkdir(parents=True, exist_ok=True)
                 dest.write_bytes(zf.read(member))
                 files_copied.append(name)
@@ -3345,7 +3358,9 @@ def create_app() -> Flask:
                 fcont = file_item.get("content", "")
                 if not rel:
                     continue
-                dest = dst / rel
+                dest = _safe_import_dest(dst, rel)
+                if dest is None:  # path traversal: entry would land outside config dir
+                    continue
                 dest.parent.mkdir(parents=True, exist_ok=True)
                 dest.write_text(fcont, encoding="utf-8")
                 files_copied.append(rel)
