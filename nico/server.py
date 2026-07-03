@@ -154,6 +154,14 @@ def create_app() -> Flask:
         cfg = config_manager.load_config_settings(nixos_dir)
         return (cfg.get("hosts_dir") or "hosts").strip() or "hosts"
 
+    def _path_inside(child: Path, root: Path) -> bool:
+        """True when child (resolved) lies inside root (resolved)."""
+        try:
+            child.resolve().relative_to(root.resolve())
+            return True
+        except ValueError:
+            return False
+
     def _safe_import_dest(root: Path, rel_name: str) -> "Path | None":
         """Resolve rel_name below root; None when it would escape (zip-slip)."""
         if not rel_name or Path(rel_name).is_absolute():
@@ -2801,8 +2809,7 @@ def create_app() -> Flask:
         hm_cfg = config_manager.load_config_settings(nixos_dir)
         hm_dir_name = hm_cfg.get("hm_dir", "home") or "home"
         hm_dir_path = (root / hm_dir_name).resolve()
-        if (str(hm_dir_path).startswith(str(root.resolve()))
-                and hm_dir_path.is_dir()):
+        if _path_inside(hm_dir_path, root) and hm_dir_path.is_dir():
             for hm_file in sorted(hm_dir_path.glob("*.nix")):
                 candidates.append((f"{hm_dir_name}/{hm_file.name}", hm_file))
 
@@ -3031,7 +3038,7 @@ def create_app() -> Flask:
         cfg_s = config_manager.load_config_settings(nixos_dir)
         hm_dir_name = (cfg_s.get("hm_dir") or "home").strip() or "home"
         hm_dir = (Path(nixos_dir) / hm_dir_name).resolve()
-        if not str(hm_dir).startswith(str(Path(nixos_dir).resolve())):
+        if not _path_inside(hm_dir, Path(nixos_dir)):
             return jsonify({"files": []})
         files = []
         if hm_dir.is_dir():
@@ -3060,7 +3067,7 @@ def create_app() -> Flask:
         cfg_s = config_manager.load_config_settings(nixos_dir)
         hm_dir_name = (cfg_s.get("hm_dir") or "home").strip() or "home"
         hm_dir = Path(nixos_dir) / hm_dir_name
-        if not str(hm_dir.resolve()).startswith(str(Path(nixos_dir).resolve())):
+        if not _path_inside(hm_dir, Path(nixos_dir)):
             return jsonify({"error": "ERR_PATH"}), 400
         hm_dir.mkdir(parents=True, exist_ok=True)
         target = hm_dir / f"{username}.nix"
