@@ -9,6 +9,7 @@
 - Custom `hosts_dir` from config.json is now respected everywhere (host save/write, preview, validator, frontend paths)
 - Validator: `flake_host_exists` rule no longer broken by dict-shaped host entries
 - Preview with flakes enabled no longer returns a server error before setup is complete
+- Importer regex fallback (used when tree-sitter is unavailable) no longer splits statements at the `;` of `with pkgs;`/`assert …;` and now recognizes the same option set as the tree-sitter path
 
 ---
 
