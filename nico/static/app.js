@@ -7347,6 +7347,21 @@ const Sidebar = (() => {
   let _hmPanelAC  = null;
   let _hmCurrentContent = '';
   let _hmCurrentPath = '';
+  let _hmSaveTimer   = null;
+  let _hmPendingSave = null;
+
+  /** Führt einen noch anstehenden HM-Autosave sofort aus (mit den alten
+   *  DOM-Werten), bevor das Panel für eine andere Datei neu befüllt wird.
+   *  Verhindert, dass ein verspäteter Timer die Werte der neuen Datei in
+   *  die alte Datei schreibt (Vorfall 2026-07-12, guenther.nix). */
+  function _hmFlushPendingSave() {
+    if (!_hmSaveTimer) return;
+    clearTimeout(_hmSaveTimer);
+    _hmSaveTimer = null;
+    const fn = _hmPendingSave;
+    _hmPendingSave = null;
+    fn?.();
+  }
 
   // ── HM-Panel Parser ──────────────────────────────────────────────
 
@@ -7438,6 +7453,10 @@ const Sidebar = (() => {
   function _populateHmPanel(content, filePath) {
     const container = document.getElementById('panel-hm-content');
     if (!container) return;
+
+    // Anstehenden Autosave der vorherigen Datei ausführen, solange das
+    // alte Formular noch im DOM steht
+    _hmFlushPendingSave();
 
     const customArgs   = _nixGetHmArgs(content);
     const username     = _nixGetStr(content,  'home.username');
@@ -7559,10 +7578,6 @@ const Sidebar = (() => {
       row.querySelector('.hm-arg-name').focus();
     });
 
-    // Aktuellen Inhalt als Schreib-Basis festhalten
-    let _hmContent = content;
-    let _hmSaveTimer = null;
-
     function _buildHmPatchPayload(path) {
       const args = [...argsList.querySelectorAll('.hm-arg-row')]
         .map(row => row.querySelector('.hm-arg-name')?.value.trim() ?? '')
@@ -7583,6 +7598,7 @@ const Sidebar = (() => {
     }
 
     async function _doHmSave() {
+      _hmSaveTimer = null;
       const payload = _buildHmPatchPayload(filePath);
       try {
         const res  = await csrfFetch('/api/hm/patch', {
@@ -7592,9 +7608,11 @@ const Sidebar = (() => {
         });
         const data = await res.json();
         if (data.success) {
-          _hmContent = data.content;
-          _hmCurrentContent = data.content;
-          renderCodePreview(data.content, 'preview-hm', filePath);
+          // Preview nur aktualisieren, wenn das Panel noch dieselbe Datei zeigt
+          if (filePath === _hmCurrentPath) {
+            _hmCurrentContent = data.content;
+            renderCodePreview(data.content, 'preview-hm', filePath);
+          }
           showToast(t('hm.saved'), 'success');
           return true;
         } else {
@@ -7610,49 +7628,8 @@ const Sidebar = (() => {
     if (_hmPanelAC) _hmPanelAC.abort();
     _hmPanelAC = new AbortController();
     const _hmSig = _hmPanelAC.signal;
-    container.addEventListener('input',  () => { clearTimeout(_hmSaveTimer); _hmSaveTimer = setTimeout(_doHmSave, 800); }, { signal: _hmSig });
-    container.addEventListener('change', () => { clearTimeout(_hmSaveTimer); _hmSaveTimer = setTimeout(_doHmSave, 800); }, { signal: _hmSig });
-  }
-
-  async function _saveHmPanelNow() {
-    if (!_hmCurrentPath || activeTab !== 'hm') return true;
-    const container = document.getElementById('panel-hm-content');
-    if (!container || document.getElementById('panel-hm')?.classList.contains('hidden')) return true;
-
-    const args = [...container.querySelectorAll('.hm-arg-row')]
-      .map(row => row.querySelector('.hm-arg-name')?.value.trim() ?? '')
-      .filter(Boolean);
-    const pkgRaw = container.querySelector('#hm-packages-ta')?.value ?? '';
-    const payload = {
-      path:          _hmCurrentPath,
-      args,
-      username:      document.getElementById('hm-username')?.value     ?? '',
-      home_dir:      document.getElementById('hm-homeDir')?.value      ?? '',
-      state_version: document.getElementById('hm-stateVersion')?.value ?? '',
-      hm_enable:     document.getElementById('hm-hmEnable')?.checked   ?? false,
-      packages:      pkgRaw.trim().split(/\s+/).filter(Boolean),
-    };
-    const initExtraEl = document.getElementById('hm-initExtra');
-    if (initExtraEl) payload.shell_init_extra = initExtraEl.value;
-
-    try {
-      const res  = await csrfFetch('/api/hm/patch', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify(payload),
-      });
-      const data = await res.json();
-      if (!data.success) {
-        showToast(tErr(data.error) || t('toast.error'), 'error');
-        return false;
-      }
-      _hmCurrentContent = data.content;
-      renderCodePreview(data.content, 'preview-hm', _hmCurrentPath);
-      return true;
-    } catch (e) {
-      showToast(t('toast.error'), 'error');
-      return false;
-    }
+    container.addEventListener('input',  () => { clearTimeout(_hmSaveTimer); _hmPendingSave = _doHmSave; _hmSaveTimer = setTimeout(_doHmSave, 800); }, { signal: _hmSig });
+    container.addEventListener('change', () => { clearTimeout(_hmSaveTimer); _hmPendingSave = _doHmSave; _hmSaveTimer = setTimeout(_doHmSave, 800); }, { signal: _hmSig });
   }
 
   // ── Flake-Panel ──────────────────────────────────────────────────

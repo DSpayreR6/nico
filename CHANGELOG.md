@@ -16,6 +16,7 @@
 
 ### Bug Fixes
 
+- HM panel autosave race fixed: a pending autosave timer survived switching to another HM file and wrote the new file's form values onto the old file's path (corrupted guenther.nix with martin's values on 2026-07-12). Pending saves are now flushed with the old values before the panel is repopulated; the preview only updates if the panel still shows the same file; dead `_saveHmPanelNow` removed
 - Git start guard no longer destroys unpushed local commits: with uncommitted changes only (not behind the remote) it now offers "discard local changes" (keeps commits) instead of a hard reset to the remote; when local commits would be lost, the fetch action is marked red with an explicit warning
 - Switching files no longer silently discards unsaved raw-editor edits; they are auto-saved like form changes
 - The plain/annotated code view toggle no longer saves files as a side effect; it only re-renders the preview
