@@ -1281,7 +1281,7 @@ def create_app() -> Flask:
 
     @app.route("/api/rebuild/default-host")
     def rebuild_default_host():
-        """Return the default host for rebuild (saved setting, hostname match, or null)."""
+        """Return the default host for rebuild (hostname match, saved setting, or null)."""
         nixos_dir, err = _require_setup()
         if err:
             return err
@@ -1290,18 +1290,22 @@ def create_app() -> Flask:
             return jsonify({"default_host": None})
 
         hosts = _get_flake_hosts(nixos_dir, data)
-        app_settings = config_manager.get_app_settings()
-        saved = (app_settings.get("default_host") or "").strip()
 
-        if saved and saved in hosts:
-            return jsonify({"default_host": saved})
-        if saved and saved not in hosts:
-            config_manager.save_app_settings({"default_host": ""})
-
+        # Machine identity always wins: a stored default may have been synced
+        # or migrated from another machine and must never override the host
+        # NiCo is actually running on.
         import socket as _socket
         machine = _socket.gethostname()
         if machine in hosts:
             return jsonify({"default_host": machine})
+
+        # Fallback for machines whose hostname matches no flake host.
+        app_settings = config_manager.get_app_settings()
+        saved = (app_settings.get("default_host") or "").strip()
+        if saved and saved in hosts:
+            return jsonify({"default_host": saved})
+        if saved and saved not in hosts:
+            config_manager.save_app_settings({"default_host": ""})
 
         return jsonify({"default_host": None})
 

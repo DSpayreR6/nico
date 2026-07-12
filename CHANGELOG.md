@@ -13,6 +13,8 @@
 
 ### Bug Fixes
 
+- File tree no longer follows directory symlinks (e.g. nixos-rebuild's `./result` into the Nix store); sidebar loads instantly instead of taking seconds
+- Rebuild host suggestion: the machine's own hostname now always wins over a saved default host; a stale value (synced/migrated from another machine) can no longer suggest the wrong host
 - App settings moved to `~/.config/nico/settings.json` (XDG); an existing `nico-settings.json` next to the program is migrated once automatically – fixes crashes when NiCo is installed as a Nix package (read-only store)
 - Raw editor: saving `configuration.nix`/`flake.nix` in raw mode (`#r`) no longer fails with ERR_MANAGED_FILE
 - Custom `hosts_dir` from config.json is now respected everywhere (host save/write, preview, validator, frontend paths)
