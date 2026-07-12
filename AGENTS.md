@@ -45,7 +45,7 @@
 **Mehrsprachigkeit:**
 - Geplante Sprachen: de, en, es, fr, ja, ru, zh
 - Neue Sprache = neue `.json` in `nico/static/lang/` → erscheint automatisch (`/api/langs` scannt das Verzeichnis)
-- Flag-Emoji-Map in `app.js` (`LANG_FLAGS`) bei neuer Sprache ergänzen
+- Flag-Emoji-Map in `nico/static/js/core.js` (`LANG_FLAGS`) bei neuer Sprache ergänzen
 - `section_links.json`: de → de-Links, alle anderen → en-Fallback (später sprachspezifisch erweiterbar)
 - Übersetzungsstrings während Entwicklung als `__TODO__` – keine ausformulierten Strings
 
