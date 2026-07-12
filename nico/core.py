@@ -502,6 +502,11 @@ def list_config_tree(nixos_dir: str) -> dict:
         for item in items:
             if item.name.startswith(".") or (item.name == "nico" and item.is_dir()):
                 continue
+            # Never descend into directory symlinks: e.g. nixos-rebuild's
+            # ./result -> /nix/store/...-nixos-system-... would pull the whole
+            # system closure (thousands of dirs) into the tree.
+            if item.is_symlink() and item.is_dir():
+                continue
             rel_path = str(item.relative_to(root))
             if item.is_dir():
                 entries.append({
