@@ -10,9 +10,15 @@
 - Flake panel: new "System architecture" selector (x86_64-linux/aarch64-linux); exotic architectures from imported flakes are preserved as extra options
 - New validator rule `flake_arch_matches`: hints when flake.nix targets a different CPU architecture than this machine
 - All language files are fully translated again (validator strings, HM strings, new keys) – no `__TODO__` placeholders left outside the help page
+- Validation results are shown as numbered cards ("Hinweis N von M") in the same style as the git start guard dialog
+- Validator rule `git_foreign_files` reports one combined message (file list, config.json note, git-history hint) instead of two separate findings; rule `flake_hm_nix_assert` (optional Nix snippet hint) removed
+- Rebuild options dialog: the copyable command now uses the full config path (works from any directory) and wraps instead of scrolling horizontally
 
 ### Bug Fixes
 
+- Git start guard no longer destroys unpushed local commits: with uncommitted changes only (not behind the remote) it now offers "discard local changes" (keeps commits) instead of a hard reset to the remote; when local commits would be lost, the fetch action is marked red with an explicit warning
+- Switching files no longer silently discards unsaved raw-editor edits; they are auto-saved like form changes
+- The plain/annotated code view toggle no longer saves files as a side effect; it only re-renders the preview
 - File tree no longer follows directory symlinks (e.g. nixos-rebuild's `./result` into the Nix store); sidebar loads instantly instead of taking seconds
 - Rebuild host suggestion: the machine's own hostname now always wins over a saved default host; a stale value (synced/migrated from another machine) can no longer suggest the wrong host
 - App settings moved to `~/.config/nico/settings.json` (XDG); an existing `nico-settings.json` next to the program is migrated once automatically – fixes crashes when NiCo is installed as a Nix package (read-only store)

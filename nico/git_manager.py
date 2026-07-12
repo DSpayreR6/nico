@@ -333,6 +333,17 @@ def git_reset_hard(nixos_dir: str) -> tuple[bool, str]:
     return True, out
 
 
+def git_discard_changes(nixos_dir: str) -> tuple[bool, str]:
+    """Discard uncommitted changes and untracked files. Local commits stay intact."""
+    if not is_git_repo(nixos_dir):
+        return False, "Kein Git-Repository."
+    rc, out = _run(["reset", "--hard", "HEAD"], cwd=nixos_dir)
+    if rc != 0:
+        return False, out or "git reset fehlgeschlagen"
+    _run(["clean", "-fd"], cwd=nixos_dir)
+    return True, out
+
+
 def git_commit_push(nixos_dir: str, label: str = "") -> tuple[bool, str]:
     """Commit all local changes and push to remote."""
     if not is_git_repo(nixos_dir):

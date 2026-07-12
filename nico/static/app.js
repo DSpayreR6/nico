@@ -864,14 +864,28 @@ function showGitStartGuard(check, configDir) {
     let secondaryHtml = '';
 
     if (isScenario2) {
-      cardsHtml = `
+      // 'dirty' impliziert behind == 0 (sonst wäre state behind/diverged):
+      // Remote-Reset würde hier ungepushte lokale Commits mitvernichten –
+      // stattdessen nur unkommittierte Änderungen verwerfen (Commits bleiben).
+      const hasAhead  = (check.ahead || 0) > 0;
+      const fetchCard = check.state === 'dirty'
+        ? `
         <div class="git-guard-card">
           <div class="git-guard-card-info">
-            <div class="git-guard-card-title">${escHtml(t('git.guard.s2.fetchTitle'))}</div>
-            <div class="git-guard-card-desc">${escHtml(t('git.guard.s2.fetchDesc'))}</div>
+            <div class="git-guard-card-title">${escHtml(t('git.guard.s2.discardTitle'))}</div>
+            <div class="git-guard-card-desc">${escHtml(t('git.guard.s2.discardDesc'))}</div>
           </div>
-          <button type="button" data-card="fetch" class="action-btn btn-green">${escHtml(t('git.guard.s2.fetchBtn'))}</button>
-        </div>
+          <button type="button" data-card="discard" class="action-btn btn-green">${escHtml(t('git.guard.s2.discardBtn'))}</button>
+        </div>`
+        : `
+        <div class="git-guard-card${hasAhead ? ' git-guard-card--warn' : ''}">
+          <div class="git-guard-card-info">
+            <div class="git-guard-card-title">${escHtml(t('git.guard.s2.fetchTitle'))}</div>
+            <div class="git-guard-card-desc">${escHtml(t('git.guard.s2.fetchDesc'))}${hasAhead ? ' ' + escHtml(t('git.guard.s2.fetchWarnAhead', check.ahead)) : ''}</div>
+          </div>
+          <button type="button" data-card="fetch" class="action-btn ${hasAhead ? 'btn-red' : 'btn-green'}">${escHtml(t('git.guard.s2.fetchBtn'))}</button>
+        </div>`;
+      cardsHtml = `${fetchCard}
         <div class="git-guard-card git-guard-card--warn">
           <div class="git-guard-card-info">
             <div class="git-guard-card-title">${escHtml(t('git.guard.s2.sendTitle'))}</div>
@@ -1018,9 +1032,18 @@ function showGitStartGuard(check, configDir) {
             send:  '/api/git/commit-push-force',
           };
           const errKeyMap = {
-            fetch: 'git.guard.s2.fetchError',
-            send:  'git.guard.s2.sendError',
+            fetch:   'git.guard.s2.fetchError',
+            send:    'git.guard.s2.sendError',
+            discard: 'git.guard.s2.discardError',
           };
+          // discard: only uncommitted changes are dropped, local commits survive
+          if (cardId === 'discard') {
+            const r = await csrfFetch('/api/git/discard-local', { method: 'POST' });
+            const d = await r.json();
+            if (!d.success) throw new Error(d.message || '');
+            location.reload();
+            return;
+          }
           // For fetch: reset-hard brings us to the tracked remote branch, then pull gets latest
           if (cardId === 'fetch') {
             const r1 = await csrfFetch('/api/git/reset-hard', { method: 'POST' });
@@ -1897,24 +1920,30 @@ function _showValidationResults(findings) {
   } else {
     const iconNames = { error: 'x-circle', warning: 'alert-triangle', info: 'info' };
     const colors = { error: 'var(--red)', warning: 'var(--yellow)', info: 'var(--blue)' };
-    body.innerHTML = findings.map(f => {
+    // Card look mirrors the git start guard dialog; "Hinweis N von M" header
+    // makes findings referenceable and shows that more may follow below the fold.
+    body.innerHTML = '<div class="git-guard-cards">' + findings.map((f, idx) => {
       const icon  = niIcon(iconNames[f.severity] || 'info');
       const color = colors[f.severity] || 'var(--text)';
+      const counter = tOr('admin.validation.findingCounter',
+                          `Hinweis ${idx + 1} von ${findings.length}`,
+                          idx + 1, findings.length);
       const detail = f.detail
-        ? `<div style="margin-top:4px;color:var(--subtext0);font-size:12px;white-space:pre-line">${_esc(f.detail)}</div>`
+        ? `<div class="git-guard-card-desc" style="margin-top:4px;white-space:pre-line">${_esc(f.detail)}</div>`
         : '';
       const action = f.rule_id === 'git_missing_gitignore'
         ? `<button class="btn-surface btn-small" style="margin-top:6px;font-size:11px"
              onclick="closeValidationResults();openAdmin();_switchAdminTab('zeitmaschine')"
              data-i18n="admin.gitignore.goToSettings">${t('admin.gitignore.goToSettings')}</button>`
         : '';
-      return `<div style="display:flex;gap:10px;margin-bottom:14px;align-items:flex-start">
+      return `<div class="git-guard-card" style="align-items:flex-start">
         <span style="color:${color};font-size:16px;flex-shrink:0;margin-top:1px">${icon}</span>
-        <div>
+        <div class="git-guard-card-info">
+          <div class="git-guard-card-title">${_esc(counter)}</div>
           <div style="font-size:13px">${_esc(tOr(f.message_key, f.message, ...(f.params || [])))}</div>${detail}${action}
         </div>
       </div>`;
-    }).join('');
+    }).join('') + '</div>';
   }
 
   document.getElementById('validation-results-overlay').classList.remove('hidden');
@@ -4465,6 +4494,7 @@ async function _showRebuildOptions(hostInfo, { hostname = '', mode = 'switch' } 
   let defaultFlakeUpdate = false;
   let defaultTerminal = false;
   let defaultSafeMode = false;
+  let configDir = '';
   try {
     const [cfg, app] = await Promise.all([
       csrfFetch('/api/config/settings').then(r => r.json()),
@@ -4473,16 +4503,20 @@ async function _showRebuildOptions(hostInfo, { hostname = '', mode = 'switch' } 
     defaultFlakeUpdate = !!cfg.flake_update_on_rebuild;
     defaultTerminal    = !!app.rebuild_terminal;
     defaultSafeMode    = !!app.rebuild_safe;
+    configDir          = (app.nixos_config_dir || '').trim();
   } catch {
     defaultFlakeUpdate = !!(document.getElementById('flake-update-toggle')?.checked);
   }
 
   if (!hostInfo.flake_mode) return { updateFlake: false, useTerminal: false, safeMode: defaultSafeMode, shutdownAfter: false, pushShutdownAfter: false };
 
+  // Vollständiger Pfad statt '.#host': der kopierte Befehl muss aus jedem
+  // Verzeichnis heraus funktionieren (manifest.md "nächste Ziele").
   const _buildCmd = (upd, safe) => {
     const safeArgs = safe ? ' --max-jobs 1 --cores 4' : '';
-    const base = `sudo nixos-rebuild ${mode} --flake .#${hostname || 'hostname'}${safeArgs}`;
-    return upd ? `nix flake update && ${base}` : base;
+    const flakeDir = configDir || '.';
+    const base = `sudo nixos-rebuild ${mode} --flake ${flakeDir}#${hostname || 'hostname'}${safeArgs}`;
+    return upd ? `nix flake update --flake ${flakeDir} && ${base}` : base;
   };
 
   return new Promise(resolve => {
@@ -4531,7 +4565,7 @@ async function _showRebuildOptions(hostInfo, { hostname = '', mode = 'switch' } 
         <div style="margin-bottom:12px">
           <div style="font-size:0.78em;color:var(--fg-muted);margin-bottom:4px">${t('rebuild.cmdLabel')}</div>
           <div style="display:flex;align-items:center;gap:6px">
-            <code id="_rbo-cmd" style="flex:1;font-size:0.8em;background:var(--bg-code,var(--bg2));padding:6px 8px;border-radius:4px;overflow-x:auto;white-space:nowrap"></code>
+            <code id="_rbo-cmd" style="flex:1;font-size:0.8em;background:var(--bg-code,var(--bg2));padding:6px 8px;border-radius:4px;white-space:pre-wrap;word-break:break-all"></code>
             <button id="_rbo-copy" class="btn-surface btn-small" title="${t('rebuild.cmdCopy')}">⎘</button>
           </div>
         </div>
@@ -7110,6 +7144,15 @@ const Sidebar = (() => {
       const ok = await _flakeSave();
       if (!ok) return;
     }
+    // Ungespeicherte Raw-Edits vor dem Wechsel sichern (Formulare werden oben
+    // auto-gespeichert; der Raw-Editor darf nicht stillschweigend verlieren)
+    if (_rawEditPath) {
+      const rawTa = document.getElementById('raw-file-editor');
+      if (rawTa && rawTa.value !== _rawEditOrig) {
+        const ok = await _saveRawFile();
+        if (!ok) return;
+      }
+    }
 
     activeFile = { path, name };
     _brixTargetFile  = path;
@@ -7136,6 +7179,8 @@ const Sidebar = (() => {
   let _rawEditPath   = null;
   // Header-Zeilen (nico-version + NiCo-Kommentare) der aktuellen Raw-Datei
   let _rawEditHeader = '';
+  // Editor-Inhalt beim Öffnen der Raw-Ansicht (für Dirty-Erkennung beim Dateiwechsel)
+  let _rawEditOrig   = '';
   // Panel-Default aus Config-Settings ('p' oder 'r')
   let _panelDefault  = 'p';
 
@@ -8000,6 +8045,7 @@ const Sidebar = (() => {
 
     const { header, body } = _splitNicoHeader(content);
     _rawEditHeader = header;
+    _rawEditOrig   = body;
 
     const lineCount = body.split('\n').length;
     const lineNums  = Array.from({length: lineCount}, (_, i) => i + 1).join('\n');
@@ -8082,6 +8128,7 @@ const Sidebar = (() => {
       });
       const data = await res.json();
       if (data.success) {
+        _rawEditOrig = body;
         showToast(t('sidebar.rawSaveOk'), 'success');
         return true;
       } else {
@@ -8096,46 +8143,19 @@ const Sidebar = (() => {
 
   async function _togglePlainCodeViewInSidebar() {
     plainCodeView = !plainCodeView;
-    console.log('[plain-toggle] toggled', {
-      plainCodeView,
-      activeTab,
-      activeFile,
-    });
     applyPlainCodeViewBtn();
     csrfFetch('/api/app/settings', {
       method:  'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify({ code_view_plain: plainCodeView }),
     }).catch(() => {});
-    if (_rawEditPath) {
-      const ok = await _saveRawFile();
-      if (!ok) return;
-    } else if (activeTab === 'hm') {
-      const ok = await _saveHmPanelNow();
-      if (!ok) return;
-    } else if (activeTab === 'flake' && _flakeFormDirty) {
-      const ok = await _flakeSave();
-      if (!ok) return;
-    } else if (_formDirty) {
-      const ok = await _autoSave();
-      if (!ok) return;
-      _formDirty = false;
-    }
-    if (activeFile?.path) {
-      try {
-        const res = await csrfFetch(`/api/file?path=${encodeURIComponent(activeFile.path)}`);
-        const data = await res.json();
-        if (data.error) {
-          showToast(tErr(data.error) || t('toast.error'), 'error');
-          return;
-        }
-        await _renderFileIntoView(activeFile.path, data, { skipTypeDialog: true });
-      } catch (e) {
-        showToast(t('sidebar.loadError'), 'error');
-      }
-      return;
-    }
-    await _reloadFile();
+    // Reiner Ansichts-Umschalter: nichts speichern, nichts vom Server laden.
+    // Re-Render aus dem zuletzt gerenderten Code (dataset.sourceCode ist durch
+    // renderCodePreview immer aktuell). Der Raw-Editor ist davon unberührt.
+    if (_rawEditPath) return;
+    document.querySelectorAll('[data-source-code]').forEach(el => {
+      if (el.id) renderCodePreview(el.dataset.sourceCode, el.id, el.dataset.sourceFile);
+    });
   }
 
   function _clearRawView() {

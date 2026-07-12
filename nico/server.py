@@ -2385,6 +2385,15 @@ def create_app() -> Flask:
         ok, msg = git_manager.git_reset_hard(nixos_dir)
         return jsonify({"success": ok, "message": msg})
 
+    @app.route("/api/git/discard-local", methods=["POST"])
+    def git_discard_local():
+        if err := _check_csrf(): return err
+        nixos_dir, err = _require_setup()
+        if err:
+            return err
+        ok, msg = git_manager.git_discard_changes(nixos_dir)
+        return jsonify({"success": ok, "message": msg})
+
     @app.route("/api/git/commit-push", methods=["POST"])
     def git_commit_push():
         if err := _check_csrf(): return err

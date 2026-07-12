@@ -105,10 +105,6 @@ ALL_RULES: list[Rule] = [
          "HM stateVersion konsistent",
          "Prüft ob home.stateVersion in HM-Configs mit system.stateVersion übereinstimmt.",
          "warning"),
-    Rule("flake_hm_nix_assert",
-         "Nix-Assertion für HM-Branch",
-         "Informiert über einen optionalen Nix-Code-Schnipsel der den HM-Branch nativ bei der Flake-Evaluierung prüft.",
-         "info", flake_only=True),
     Rule("snapper_btrfs",
          "Snapper-Mountpoints prüfen",
          "Prüft ob die konfigurierten Snapper-Mountpoints existieren und btrfs sind.",
@@ -126,8 +122,8 @@ ALL_RULES: list[Rule] = [
          "Warnt wenn nixos-rebuild.log größer als 100 MB ist und versehentlich in Git committed werden könnte.",
          "warning"),
     Rule("git_foreign_files",
-         "Nicht-Nix-Dateien in Git",
-         "Listet Dateien die in Git getrackt werden aber keine .nix-Dateien sind.",
+         "Fremddateien in Git",
+         "Listet Dateien, die nicht zur Config gehören, aber in Git getrackt und hochgeladen werden.",
          "info"),
 ]
 
@@ -733,28 +729,6 @@ def _load_flake_lock_refs(nixos_dir: str) -> tuple[str | None, str | None] | Non
     return node_ref("nixpkgs"), node_ref("home-manager")
 
 
-_NIX_HM_ASSERT_SNIPPET = """\
-# Diesen Block in deinen flake.nix outputs = { self, nixpkgs, home-manager, ... }:
-# let-Block einfügen und die Ausgabe mit 'if !_hmBranchOk then throw ...' wrappen:
-#
-#   let
-#     lib         = nixpkgs.lib;
-#     _lock       = builtins.fromJSON (builtins.readFile ./flake.lock);
-#     _hmRef      = _lock.nodes."home-manager".original.ref or "";
-#     _npRef      = _lock.nodes."nixpkgs".original.ref or "";
-#     _npVerM     = builtins.match "nixos-([0-9]+\\\\.[0-9]+)" _npRef;
-#     _expHmRef   = if _npVerM != null
-#                   then "release-${builtins.elemAt _npVerM 0}"
-#                   else null;
-#     _hmBranchOk = _expHmRef == null || _hmRef == _expHmRef;
-#   in
-#     if !_hmBranchOk then
-#       throw
-#         "flake.nix: home-manager Branch '${_hmRef}' passt nicht zu nixpkgs '${_npRef}'. Erwartet: '${_expHmRef}'."
-#     else
-#       { nixosConfigurations = { ... }; }"""
-
-
 def _rule_flake_hm_branch(nixos_dir: str, config: dict, is_flake: bool,
                            host: str | None = None) -> list[Finding]:
     flake_path = Path(nixos_dir) / "flake.nix"
@@ -988,33 +962,6 @@ def _rule_hm_state_version_match(nixos_dir: str, config: dict, is_flake: bool,
             ))
 
     return findings
-
-
-def _rule_flake_hm_nix_assert(nixos_dir: str, config: dict, is_flake: bool,
-                                host: str | None = None) -> list[Finding]:
-    flake_path = Path(nixos_dir) / "flake.nix"
-    if not flake_path.exists():
-        return []
-    try:
-        content = flake_path.read_text(encoding="utf-8")
-    except OSError:
-        return []
-    if 'home-manager' not in content:
-        return []
-    # Skip if a lock-based assertion is already present
-    if 'flake.lock' in content and ('throw' in content or 'assertMsg' in content):
-        return []
-
-    return [Finding(
-        rule_id="flake_hm_nix_assert",
-        severity="info",
-        message="Kein Nix-nativer HM-Branch-Check in flake.nix gefunden.", message_key="validator.f.flake_hm_nix_assert", params=[],
-        detail=(
-            "Optional: folgenden Schnipsel in den let-Block der flake.nix outputs-Funktion einfügen "
-            "– er wirft beim nix eval einen Fehler, bevor der Build startet.\n\n"
-            + _NIX_HM_ASSERT_SNIPPET
-        ),
-    )]
 
 
 def _rule_brix_redundant(nixos_dir: str, config: dict, is_flake: bool,
@@ -1258,7 +1205,6 @@ def _rule_snapper_in_host(nixos_dir: str, config: dict, is_flake: bool,
 _LOG_WARN_BYTES = 100 * 1024 * 1024  # 100 MB
 
 # Known NiCo-generated files that are problematic in git
-_KNOWN_PROBLEM_NAMES = {"nixos-rebuild.log", "vergleich.zip", "result", ".stfolder"}
 
 
 def _rule_git_missing_gitignore(nixos_dir: str, config: dict, is_flake: bool,
@@ -1310,34 +1256,38 @@ def _rule_git_foreign_files(nixos_dir: str, config: dict, is_flake: bool,
     if not _gm.is_git_repo(nixos_dir):
         return []
     tracked = _gm.list_tracked_files(nixos_dir)
-    problem, info = [], []
+    foreign = []
+    config_json_tracked = False
     for f in tracked:
         p = Path(f)
         if p.suffix == ".nix" or f in ("flake.lock", ".gitignore"):
             continue
-        name = p.name
-        if (name in _KNOWN_PROBLEM_NAMES
-                or name.endswith(".bak")
-                or (name.endswith(".zip") and ("config" in name or name == "vergleich.zip"))):
-            problem.append(f)
-        else:
-            info.append(f)
-    findings = []
-    if problem:
-        findings.append(Finding(
-            rule_id="git_foreign_files",
-            severity="warning",
-            message=f"{len(problem)} bekannte Problemdatei(en) in Git getrackt (werden hochgeladen).", message_key="validator.f.git_foreign_files.problem", params=[len(problem)],
-            detail="\n".join(problem),
-        ))
-    if info:
-        findings.append(Finding(
-            rule_id="git_foreign_files",
-            severity="info",
-            message=f"{len(info)} Nicht-Nix-Datei(en) in Git getrackt.", message_key="validator.f.git_foreign_files.info", params=[len(info)],
-            detail="\n".join(info),
-        ))
-    return findings
+        if f == "config.json":
+            # NiCo's own config settings: meant to travel with the config,
+            # so it is not a foreign file – but users must not delete it.
+            config_json_tracked = True
+            continue
+        foreign.append(f)
+    if not foreign:
+        return []
+
+    detail_lines = foreign + [""]
+    if config_json_tracked:
+        detail_lines.append(
+            "config.json gehört zu NiCo (Config-Einstellungen) und muss "
+            "erhalten bleiben – nicht löschen."
+        )
+    detail_lines.append(
+        "Hinweis: Lokal gelöschte Dateien verschwinden beim nächsten "
+        "Sicherungspunkt aus dem aktuellen Stand, bleiben aber in der "
+        "Git-Historie (auch im Remote) erhalten."
+    )
+    return [Finding(
+        rule_id="git_foreign_files",
+        severity="info",
+        message=f"{len(foreign)} Dateien, die nicht zur Config gehören, werden in Git getrackt und hochgeladen.", message_key="validator.f.git_foreign_files", params=[len(foreign)],
+        detail="\n".join(detail_lines),
+    )]
 
 
 # ── Rule function registry ─────────────────────────────────────────────────────
@@ -1359,7 +1309,6 @@ _RULE_FNS: dict[str, object] = {
     "flake_hm_branch":       _rule_flake_hm_branch,
     "state_version_match":   _rule_state_version_match,
     "hm_state_version_match": _rule_hm_state_version_match,
-    "flake_hm_nix_assert":   _rule_flake_hm_nix_assert,
     "snapper_btrfs":          _rule_snapper_btrfs,
     "snapper_in_host":        _rule_snapper_in_host,
     "git_missing_gitignore":  _rule_git_missing_gitignore,
