@@ -385,6 +385,19 @@ def register(app, ctx):
         config_manager.save_host_config(nixos_dir, host_name, data)
         return jsonify({"success": True})
 
+    def _maybe_auto_push(nixos_dir: str) -> dict:
+        """Push after save if push_after_save is enabled. Returns extra response fields."""
+        try:
+            if not config_manager.get_app_settings().get("git_sync", True):
+                return {}
+            cfg = config_manager.load_config_settings(nixos_dir)
+            if not cfg.get("push_after_save"):
+                return {}
+            ok, msg, code = git_manager.git_push(nixos_dir)
+            return {"pushed": ok, "push_error": "" if ok else msg, "push_error_code": "" if ok else code}
+        except Exception:
+            return {}
+
     @app.route("/api/host/<host_name>/write", methods=["POST"])
     def write_host_file(host_name):
         if err := _check_csrf():

@@ -8,7 +8,7 @@ import shutil
 
 from flask import jsonify, request
 
-from .. import config_manager, git_manager
+from .. import git_manager
 
 
 def register(app, ctx):
@@ -68,19 +68,6 @@ def register(app, ctx):
         if err:
             return jsonify({"commits": []})
         return jsonify({"commits": git_manager.get_log(nixos_dir)})
-
-    def _maybe_auto_push(nixos_dir: str) -> dict:
-        """Push after save if push_after_save is enabled. Returns extra response fields."""
-        try:
-            if not config_manager.get_app_settings().get("git_sync", True):
-                return {}
-            cfg = config_manager.load_config_settings(nixos_dir)
-            if not cfg.get("push_after_save"):
-                return {}
-            ok, msg, code = git_manager.git_push(nixos_dir)
-            return {"pushed": ok, "push_error": "" if ok else msg, "push_error_code": "" if ok else code}
-        except Exception:
-            return {}
 
     @app.route("/api/git/pull", methods=["POST"])
     def git_pull():
