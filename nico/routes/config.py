@@ -118,7 +118,7 @@ def register(app, ctx):
         """Merge settings into app settings (~/.config/nico/settings.json)."""
         if err := _check_csrf(): return err
 
-        _APP_KEYS = frozenset({"language", "theme", "code_view_plain", "rebuild_log", "hidden_sections", "section_filter", "show_flake_lock", "default_host", "rebuild_terminal", "rebuild_safe", "prefetch_dry_run"})
+        _APP_KEYS = frozenset({"language", "theme", "code_view_plain", "rebuild_log", "hidden_sections", "section_filter", "show_flake_lock", "default_host", "rebuild_terminal", "rebuild_safe", "prefetch_dry_run", "git_sync", "git_status_only"})
         incoming = request.get_json(silent=True) or {}
         patch    = {k: v for k, v in incoming.items() if k in _APP_KEYS}
         if not patch:
