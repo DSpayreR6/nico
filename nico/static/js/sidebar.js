@@ -1246,6 +1246,19 @@ const Sidebar = (() => {
     } catch (e) { /* ignore */ }
   }
 
+  // Re-render flake.nix if it is the active file, otherwise refresh the preview
+  async function _refreshFlakeView() {
+    if (activeFile?.path === 'flake.nix') {
+      const res  = await csrfFetch('/api/file?path=flake.nix');
+      const data = await res.json();
+      if (!data.error) {
+        await _renderFileIntoView('flake.nix', data, { skipTypeDialog: true });
+        return;
+      }
+    }
+    await _updateFlakePreview();
+  }
+
   function _getFlakeFormData() {
     const v = id => document.getElementById(id);
 
@@ -1800,10 +1813,12 @@ const Sidebar = (() => {
   return {
     init,
     openFileViewer,
+    selectFile,
     flakeSave: _flakeSave,
     setActiveFile,
     closeTreeContextMenu: _closeTreeContextMenu,
     updateFlakePreview: _updateFlakePreview,
+    refreshFlakeView: _refreshFlakeView,
     togglePlainCodeView: _togglePlainCodeViewInSidebar,
     loadTree,
     clearFlkIfActive,

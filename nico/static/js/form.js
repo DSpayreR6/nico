@@ -55,7 +55,8 @@ async function _hmCreateFile() {
     return;
   }
   await loadHmFileList();
-  _openFileInHmPanel(data.path);
+  await Sidebar.loadTree();
+  await Sidebar.selectFile(data.path, data.path.split('/').pop());
 }
 
 // ── Hardware / Virtualisierung / Backup visibility toggles ────────────────

@@ -47,15 +47,7 @@ async function updatePreview() {
 
 async function _refreshPreviewForFile(file = 'configuration.nix') {
   if (file === 'flake.nix') {
-    if (activeFile?.path === 'flake.nix') {
-      const res = await csrfFetch(`/api/file?path=${encodeURIComponent(file)}`);
-      const data = await res.json();
-      if (!data.error) {
-        await _renderFileIntoView(file, data, { skipTypeDialog: true });
-        return;
-      }
-    }
-    await _updateFlakePreview();
+    await Sidebar.refreshFlakeView();
     return;
   }
   if (_brixTargetFtype === 'hm' && file !== 'configuration.nix') {

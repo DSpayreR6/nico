@@ -351,7 +351,7 @@ async function _doZipApply(confirmed) {
   _zipImportResetState();
   await categorizeFiles();
   await loadConfig();
-  loadTree();
+  Sidebar.loadTree();
   showToast(t('import.success'), 'success');
 }
 

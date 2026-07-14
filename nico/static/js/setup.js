@@ -307,7 +307,7 @@ async function applyImport(confirmed = false) {
     if (data.success) {
       await categorizeFiles();
       await loadConfig();
-      loadTree();
+      Sidebar.loadTree();
       showToast(t('import.success'), 'success');
     } else {
       showToast(tErr(data.error), 'error');
@@ -444,7 +444,7 @@ function initImportManual() {
     document.getElementById('import-overlay').classList.add('hidden');
     await categorizeFiles();
     await loadConfig();
-    loadTree();
+    Sidebar.loadTree();
     showToast(t('import.success'), 'success');
   });
 
@@ -467,7 +467,7 @@ function initImportManual() {
     document.getElementById('import-overlay').classList.add('hidden');
     await categorizeFiles();
     await loadConfig();
-    loadTree();
+    Sidebar.loadTree();
     showToast(t('import.success'), 'success');
   });
   on('import-manual-backup-cancel-btn', 'click', () => {
