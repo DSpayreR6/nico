@@ -13,9 +13,11 @@
 - Validation results are shown as numbered cards ("Hinweis N von M") in the same style as the git start guard dialog
 - Validator rule `git_foreign_files` reports one combined message (file list, config.json note, git-history hint) instead of two separate findings; rule `flake_hm_nix_assert` (optional Nix snippet hint) removed
 - Rebuild options dialog: the copyable command now uses the full config path (works from any directory) and wraps instead of scrolling horizontally
+- Internal restructuring: `server.py` routes split into a `nico/routes/` package (10 modules) and the monolithic `app.js` split into 12 scripts under `nico/static/js/` – no functional changes
 
 ### Bug Fixes
 
+- Admin panel: the git sync and "status only" checkboxes are now actually persisted; the settings endpoint silently dropped `git_sync`/`git_status_only`
 - HM panel autosave race fixed: a pending autosave timer survived switching to another HM file and wrote the new file's form values onto the old file's path (corrupted guenther.nix with martin's values on 2026-07-12). Pending saves are now flushed with the old values before the panel is repopulated; the preview only updates if the panel still shows the same file; dead `_saveHmPanelNow` removed
 - Git start guard no longer destroys unpushed local commits: with uncommitted changes only (not behind the remote) it now offers "discard local changes" (keeps commits) instead of a hard reset to the remote; when local commits would be lost, the fetch action is marked red with an explicit warning
 - Switching files no longer silently discards unsaved raw-editor edits; they are auto-saved like form changes
