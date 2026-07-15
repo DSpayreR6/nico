@@ -1041,6 +1041,24 @@
                 </span>
               </label>
               <label class="toggle-row">
+                <span data-i18n="field.btrfsBalance">Btrfs Auto-Balance</span>
+                <span class="toggle-wrap">
+                  <input type="checkbox" id="btrfs_balance" name="btrfs_balance">
+                  <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                </span>
+              </label>
+              <div id="btrfs-balance-options" class="hidden">
+                <label for="btrfs_balance_frequency" data-i18n="field.btrfsBalanceFrequency">Häufigkeit</label>
+                <select id="btrfs_balance_frequency" name="btrfs_balance_frequency">
+                  <option value="weekly"  data-i18n="gc.weekly" selected>Wöchentlich</option>
+                  <option value="monthly" data-i18n="gc.monthly">Monatlich</option>
+                </select>
+                <label for="btrfs_balance_dusage" data-i18n="field.btrfsBalanceDusage">Daten-Schwellwert (dusage, %)</label>
+                <input type="number" id="btrfs_balance_dusage" name="btrfs_balance_dusage" min="0" max="100" value="20" style="width:70px">
+                <label for="btrfs_balance_musage" data-i18n="field.btrfsBalanceMusage">Metadaten-Schwellwert (musage, %)</label>
+                <input type="number" id="btrfs_balance_musage" name="btrfs_balance_musage" min="0" max="100" value="30" style="width:70px">
+              </div>
+              <label class="toggle-row">
                 <span data-i18n="field.snapperEnable">Snapper aktivieren</span>
                 <span class="toggle-wrap">
                   <input type="checkbox" id="snapper_enable" name="snapper_enable">

@@ -354,6 +354,9 @@ function bindUI() {
   // GC sub-options visibility
   on('nix_gc', 'change', e => toggleGcOptions(e.target.checked));
 
+  // Btrfs balance sub-options visibility
+  on('btrfs_balance', 'change', e => toggleBtrfsBalanceOptions(e.target.checked));
+
   // Hardware / Virtualisierung / Backup sub-option visibility
   on('opengl',       'change', e => toggleOpenglOptions(e.target.checked));
   on('boot_loader',      'change', e => { toggleBootEfiOptions(e.target.value !== 'none'); schedulePreviewUpdate(); });

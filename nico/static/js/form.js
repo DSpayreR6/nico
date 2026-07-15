@@ -7,6 +7,12 @@ function toggleGcOptions(show) {
     ?.classList.toggle('hidden', !show);
 }
 
+// ── Btrfs balance options toggle ───────────────────────────────────────────
+function toggleBtrfsBalanceOptions(show) {
+  document.getElementById('btrfs-balance-options')
+    ?.classList.toggle('hidden', !show);
+}
+
 // ── Home Manager CO-Form ──────────────────────────────────────────────────
 
 async function loadHmFileList() {
@@ -476,6 +482,10 @@ function getFormData() {
 
     // Dateisystem & Backup
     btrfs_scrub:     ch('btrfs_scrub'),
+    btrfs_balance:           ch('btrfs_balance'),
+    btrfs_balance_frequency: v('btrfs_balance_frequency'),
+    btrfs_balance_dusage:    v('btrfs_balance_dusage'),
+    btrfs_balance_musage:    v('btrfs_balance_musage'),
     snapper_enable:  ch('snapper_enable'),
     snapper_configs: getAllSnapperConfigs(),
 
@@ -664,6 +674,10 @@ function populateFormFromData(data) {
   if ('libvirtd'           in data) ch('libvirtd',            data.libvirtd);
   if ('virt_manager'       in data) ch('virt_manager',        data.virt_manager);
   if ('btrfs_scrub'     in data) ch('btrfs_scrub',    data.btrfs_scrub);
+  if ('btrfs_balance'   in data) ch('btrfs_balance',  data.btrfs_balance);
+  if ('btrfs_balance_frequency' in data) v('btrfs_balance_frequency', data.btrfs_balance_frequency || 'weekly');
+  if ('btrfs_balance_dusage'    in data) v('btrfs_balance_dusage',    data.btrfs_balance_dusage ?? 20);
+  if ('btrfs_balance_musage'    in data) v('btrfs_balance_musage',    data.btrfs_balance_musage ?? 30);
   if ('snapper_enable'  in data) {
     ch('snapper_enable', data.snapper_enable);
     document.getElementById('snapper-area')?.classList.toggle('hidden', !data.snapper_enable);
@@ -703,6 +717,7 @@ function populateFormFromData(data) {
   toggleBootEfiOptions((document.getElementById('boot_loader')?.value || 'none') !== 'none');
   togglePipewireOptions(!!document.getElementById('pipewire')?.checked);
   toggleGcOptions(!!document.getElementById('nix_gc')?.checked);
+  toggleBtrfsBalanceOptions(!!document.getElementById('btrfs_balance')?.checked);
   toggleOpenglOptions(!!document.getElementById('opengl')?.checked);
   toggleDockerOptions(!!document.getElementById('docker')?.checked);
   togglePodmanOptions(!!document.getElementById('podman')?.checked);
@@ -736,6 +751,9 @@ function clearCoForm() {
   setField('plymouth_theme', '');
   setField('nix_gc_frequency', 'weekly');
   setField('nix_gc_age', '30d');
+  setField('btrfs_balance_frequency', 'weekly');
+  setField('btrfs_balance_dusage', 20);
+  setField('btrfs_balance_musage', 30);
   renderAllSnapperConfigs([]);
   document.getElementById('extra-locale-detail')?.classList.add('hidden');
   document.getElementById('firewall-tcp-detail')?.classList.add('hidden');
@@ -745,6 +763,7 @@ function clearCoForm() {
   togglePlymouthOptions(false);
   togglePipewireOptions(false);
   toggleGcOptions(false);
+  toggleBtrfsBalanceOptions(false);
   toggleOpenglOptions(false);
   toggleDockerOptions(false);
   togglePodmanOptions(false);

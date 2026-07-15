@@ -18,6 +18,7 @@
 - Cleanup dialog for already tracked foreign files: untrack (`git rm --cached` + `.gitignore` entry + commit, file stays on disk) or keep (remembered in `config.json`)
 - New validator rule `flake_untracked_reference` (flake only): warns when a `.nix` file references a file that is not tracked by git – the flake build would fail
 - Help chapter 7.4 "Fremddateien in Git" explains include/exclude, the flake pitfall and the cleanup (German; other languages pending)
+- New "Btrfs auto-balance" toggle (filesystem section): sets up a systemd timer/service running `btrfs balance` with configurable interval (weekly/monthly) and dusage/musage thresholds (0-100, clamped server-side); round-trips through the importer like other options
 
 ### Bug Fixes
 

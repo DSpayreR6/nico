@@ -174,6 +174,10 @@ DEFAULT_NIXOS_CONFIG = {
 
     # ── Dateisystem & Backup
     "btrfs_scrub":      False,
+    "btrfs_balance":           False,
+    "btrfs_balance_frequency": "weekly",
+    "btrfs_balance_dusage":    20,
+    "btrfs_balance_musage":    30,
     "snapper_enable":   False,
     "snapper_configs":  [],
 

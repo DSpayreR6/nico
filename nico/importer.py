@@ -395,6 +395,26 @@ def _extract_fields(kv: 'dict[str, str]', clean: str) -> 'tuple[dict, set[str]]'
     # ── Dateisystem & Backup ──────────────────────────────────────────────────
     b('btrfs_scrub', 'services.btrfs.autoScrub.enable')
 
+    # btrfs-balance timer/service: only consumed when the script matches NiCo's
+    # own generated pattern – foreign variants stay untouched (preserved as brix)
+    bal_vt = _vt('systemd.services.btrfs-balance')
+    if bal_vt:
+        inner = _np.extract_inner_block(bal_vt) or bal_vt
+        m = re.search(r'btrfs balance start\s+-dusage=(\d+)\s+-musage=(\d+)', inner)
+        if m:
+            r['btrfs_balance'] = True
+            r['btrfs_balance_dusage'] = int(m.group(1))
+            r['btrfs_balance_musage'] = int(m.group(2))
+            _mark('systemd.services.btrfs-balance')
+            oc_vt = _vt('systemd.timers.btrfs-balance.timerConfig.OnCalendar')
+            if oc_vt:
+                oc = _np.extract_string(oc_vt)
+                if oc:
+                    r['btrfs_balance_frequency'] = oc
+                _mark('systemd.timers.btrfs-balance.timerConfig.OnCalendar')
+            if _vt('systemd.timers.btrfs-balance.wantedBy') is not None:
+                _mark('systemd.timers.btrfs-balance.wantedBy')
+
     _sn_prefix = 'services.snapper.configs.'
     _sn_cfgs = []
     for key in list(kv.keys()):

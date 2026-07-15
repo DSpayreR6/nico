@@ -655,6 +655,10 @@ _FIELD_SECTION: dict[str, str] = {
     # Dateisystem & Backup
     "btrfs_scrub": "Dateisystem & Backup", "snapper_enable": "Dateisystem & Backup",
     "snapper_configs": "Dateisystem & Backup",
+    "btrfs_balance": "Dateisystem & Backup",
+    "btrfs_balance_frequency": "Dateisystem & Backup",
+    "btrfs_balance_dusage": "Dateisystem & Backup",
+    "btrfs_balance_musage": "Dateisystem & Backup",
     # Home Manager
     "home_manager": "Home Manager",
 }

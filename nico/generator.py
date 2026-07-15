@@ -544,6 +544,20 @@ def _sec_backup(data: dict, brix: dict) -> "list[str]":
     backup_lines = []
     if data.get("btrfs_scrub"):
         backup_lines += ["  services.btrfs.autoScrub.enable = true;"]
+    if data.get("btrfs_balance"):
+        freq = data.get("btrfs_balance_frequency", "weekly")
+        if freq not in ("weekly", "monthly"):
+            freq = "weekly"
+        dusage = min(100, max(0, _int_or(data.get("btrfs_balance_dusage"), 20)))
+        musage = min(100, max(0, _int_or(data.get("btrfs_balance_musage"), 30)))
+        backup_lines += [
+            f'  systemd.timers.btrfs-balance.timerConfig.OnCalendar = "{freq}";',
+            '  systemd.timers.btrfs-balance.wantedBy = [ "timers.target" ];',
+            "  systemd.services.btrfs-balance = {",
+            '    serviceConfig.Type = "oneshot";',
+            f'    script = "${{pkgs.btrfs-progs}}/bin/btrfs balance start -dusage={dusage} -musage={musage} /";',
+            "  };",
+        ]
     if data.get("snapper_enable"):
         for sn_cfg in (data.get("snapper_configs") or []):
             if sn_cfg.get("name") and sn_cfg.get("mountpoint"):

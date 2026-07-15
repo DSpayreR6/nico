@@ -771,6 +771,10 @@
   "field.virtManager":        "virt-manager",
 
   "field.btrfsScrub":          "Btrfs Auto-Scrub",
+  "field.btrfsBalance":        "Btrfs Auto-Balance",
+  "field.btrfsBalanceFrequency": "Häufigkeit",
+  "field.btrfsBalanceDusage":  "Daten-Schwellwert (dusage, %)",
+  "field.btrfsBalanceMusage":  "Metadaten-Schwellwert (musage, %)",
   "field.snapperEnable":       "Snapper aktivieren",
   "field.snapperAddConfig":    "+ Subvolume hinzufügen",
   "field.snapperNewConfig":    "Neues Subvolume",
