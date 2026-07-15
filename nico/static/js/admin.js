@@ -223,6 +223,23 @@ function _loadAdminSettings() {
       }
     }
 
+    // Fremddatei-Guard-Toggle (config.json, auto-save on change)
+    const fgToggle = document.getElementById('foreign-guard-toggle');
+    if (fgToggle) {
+      fgToggle.checked = data.git_foreign_guard !== false;
+      if (!fgToggle.dataset.listenerAttached) {
+        fgToggle.dataset.listenerAttached = '1';
+        fgToggle.addEventListener('change', () => {
+          csrfFetch('/api/config/settings', {
+            method:  'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ git_foreign_guard: fgToggle.checked }),
+          }).then(() => showToast(t('admin.settings.saved'), 'success'))
+            .catch(() => showToast(t('toast.error'), 'error'));
+        });
+      }
+    }
+
     // Push-Toggles + NixOS-Push-Button – nur anzeigen wenn Remote vorhanden
     csrfFetch('/api/git/remote-status').then(r => r.json()).then(rs => {
       const setRemoteRow = document.getElementById('git-set-remote-row');

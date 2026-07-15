@@ -9,11 +9,15 @@
 - New validator rule `host_orphaned`: reports host directories that are not wired into the build (imports/flake.nix) in both flake and non-flake mode
 - Flake panel: new "System architecture" selector (x86_64-linux/aarch64-linux); exotic architectures from imported flakes are preserved as extra options
 - New validator rule `flake_arch_matches`: hints when flake.nix targets a different CPU architecture than this machine
-- All language files are fully translated again (validator strings, HM strings, new keys) – no `__TODO__` placeholders left outside the help page
+- All language files are fully translated again (validator strings, HM strings, new keys) – no `__TODO__` placeholders left, including the help page; 33 keys missing in non-German languages (git guard cards, push errors) added, orphaned `nd.*` keys removed
 - Validation results are shown as numbered cards ("Hinweis N von M") in the same style as the git start guard dialog
 - Validator rule `git_foreign_files` reports one combined message (file list, config.json note, git-history hint) instead of two separate findings; rule `flake_hm_nix_assert` (optional Nix snippet hint) removed
 - Rebuild options dialog: the copyable command now uses the full config path (works from any directory) and wraps instead of scrolling horizontally
 - Internal restructuring: `server.py` routes split into a `nico/routes/` package (10 modules) and the monolithic `app.js` split into 12 scripts under `nico/static/js/` – no functional changes
+- Foreign-file guard: before a checkpoint or rebuild NiCo asks whether new non-config files should be included in git or excluded via `.gitignore`; silent auto-saves leave undecided files untouched (toggle in the time machine tab, default on)
+- Cleanup dialog for already tracked foreign files: untrack (`git rm --cached` + `.gitignore` entry + commit, file stays on disk) or keep (remembered in `config.json`)
+- New validator rule `flake_untracked_reference` (flake only): warns when a `.nix` file references a file that is not tracked by git – the flake build would fail
+- Help chapter 7.4 "Fremddateien in Git" explains include/exclude, the flake pitfall and the cleanup (German; other languages pending)
 
 ### Bug Fixes
 
@@ -28,6 +32,7 @@
 - Raw editor: saving `configuration.nix`/`flake.nix` in raw mode (`#r`) no longer fails with ERR_MANAGED_FILE
 - Custom `hosts_dir` from config.json is now respected everywhere (host save/write, preview, validator, frontend paths)
 - Validator: `flake_host_exists` rule no longer broken by dict-shaped host entries
+- Validator: `flake_host_exists` no longer reports every host as missing when flake.nix uses the attrset form (`nixosConfigurations = { name = …; }`) that NiCo itself generates; previously only the dotted form was recognized
 - Preview with flakes enabled no longer returns a server error before setup is complete
 - Importer regex fallback (used when tree-sitter is unavailable) no longer splits statements at the `;` of `with pkgs;`/`assert …;` and now recognizes the same option set as the tree-sitter path
 - ZIP import and directory import now reject file paths that would escape the config directory (zip-slip)

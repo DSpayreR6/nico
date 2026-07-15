@@ -80,6 +80,7 @@ def register(app, ctx):
             "flake_update_on_rebuild", "validation_rules",
             "push_after_save", "push_after_rebuild",
             "panel_default",
+            "git_foreign_guard", "git_keep_files",
         })
         incoming = request.get_json(silent=True) or {}
         patch    = {k: v for k, v in incoming.items() if k in _CONFIG_KEYS}

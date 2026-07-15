@@ -8,7 +8,7 @@ import shutil
 
 from flask import jsonify, request
 
-from .. import git_manager
+from .. import config_manager, git_manager
 
 
 def register(app, ctx):
@@ -204,6 +204,62 @@ def register(app, ctx):
         else:
             ok, msg = git_manager.create_gitignore(nixos_dir)
         return jsonify({"success": ok, "message": msg})
+
+    # ── Fremddateien (foreign-file guard) ─────────────────────────────────
+
+    @app.route("/api/git/foreign-files")
+    def git_foreign_files():
+        """List foreign files: pending (untracked, need a decision) and tracked
+        (already in git, candidates for the cleanup dialog)."""
+        nixos_dir, err = _require_setup()
+        if err: return err
+        settings = config_manager.load_config_settings(nixos_dir)
+        enabled  = bool(settings.get("git_foreign_guard", True))
+        keep     = settings.get("git_keep_files", []) or []
+        if not git_manager.is_git_repo(nixos_dir):
+            return jsonify({"enabled": enabled, "pending": [], "tracked": []})
+        return jsonify({
+            "enabled": enabled,
+            "pending": git_manager.list_untracked_foreign(nixos_dir) if enabled else [],
+            "tracked": git_manager.list_tracked_foreign(nixos_dir, keep=keep),
+        })
+
+    @app.route("/api/git/foreign-decide", methods=["POST"])
+    def git_foreign_decide():
+        """Apply the user's decision on pending foreign files:
+        include → stage for the next commit, exclude → .gitignore entry."""
+        if err := _check_csrf(): return err
+        nixos_dir, err = _require_setup()
+        if err: return err
+        body    = request.get_json(silent=True) or {}
+        include = [f for f in body.get("include", []) if isinstance(f, str)]
+        exclude = [f for f in body.get("exclude", []) if isinstance(f, str)]
+        ok1, msg1 = git_manager.include_foreign_files(nixos_dir, include)
+        ok2, msg2 = git_manager.exclude_foreign_files(nixos_dir, exclude)
+        if not (ok1 and ok2):
+            return jsonify({"success": False, "error": msg1 or msg2}), 500
+        return jsonify({"success": True})
+
+    @app.route("/api/git/foreign-cleanup", methods=["POST"])
+    def git_foreign_cleanup():
+        """Clean up tracked foreign files: untrack → git rm --cached +
+        .gitignore + commit, keep → remembered in config.json (git_keep_files)."""
+        if err := _check_csrf(): return err
+        nixos_dir, err = _require_setup()
+        if err: return err
+        body    = request.get_json(silent=True) or {}
+        untrack = [f for f in body.get("untrack", []) if isinstance(f, str)]
+        keep    = [f for f in body.get("keep", []) if isinstance(f, str)]
+        if keep:
+            tracked  = set(git_manager.list_tracked_foreign(nixos_dir))
+            settings = config_manager.load_config_settings(nixos_dir)
+            merged   = sorted(set(settings.get("git_keep_files", []) or [])
+                              | {k for k in keep if k in tracked})
+            config_manager.save_config_settings(nixos_dir, {"git_keep_files": merged})
+        ok, msg = git_manager.untrack_foreign_files(nixos_dir, untrack)
+        if not ok:
+            return jsonify({"success": False, "error": msg}), 500
+        return jsonify({"success": True})
 
     @app.route("/api/git/close-check")
     def git_close_check():

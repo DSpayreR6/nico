@@ -75,6 +75,10 @@ DEFAULT_CONFIG_SETTINGS = {
     "push_after_save":    False,
     "push_after_rebuild": False,
     "panel_default":      "p",
+    # Foreign-file guard: ask before committing non-config files
+    "git_foreign_guard": True,
+    # Tracked foreign files the user chose to keep (cleanup dialog "behalten")
+    "git_keep_files":    [],
     # Validation rules: all enabled by default; keys match validator.ALL_RULES ids
     "validation_rules": {
         "user_in_config":    True,

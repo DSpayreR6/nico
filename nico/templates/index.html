@@ -2115,6 +2115,23 @@
           </div>
         </div>
 
+        <!-- Fremddateien (foreign-file guard) -->
+        <div class="admin-section" id="git-foreign-section">
+          <div class="admin-section-title" data-i18n="git.foreign.sectionTitle">Fremddateien</div>
+          <p class="admin-hint" data-i18n="git.foreign.sectionHint">
+            Dateien, die nicht zur Config gehören: NiCo fragt vor dem Sicherungspunkt, ob sie in Git aufgenommen oder ausgenommen werden sollen.
+          </p>
+          <label class="toggle-row">
+            <span data-i18n="git.foreign.toggleLabel">Vor Aufnahme fremder Dateien fragen</span>
+            <span class="toggle-wrap">
+              <input type="checkbox" id="foreign-guard-toggle">
+              <span class="toggle-track"><span class="toggle-thumb"></span></span>
+            </span>
+          </label>
+          <button id="git-foreign-cleanup-btn" class="btn-surface btn-small" style="margin-top:8px"
+                  data-i18n="git.foreign.cleanupBtn">Getrackte Fremddateien aufräumen</button>
+        </div>
+
         <div class="admin-section">
           <div class="admin-section-title" data-i18n="diff.title">Commit-Diff</div>
           <p class="admin-hint" data-i18n="diff.hint">Vergleich zwischen zwei Commits. „Von" ist der ältere Stand, „Bis" der neuere.</p>

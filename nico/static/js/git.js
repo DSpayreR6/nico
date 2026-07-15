@@ -619,6 +619,110 @@ async function loadGitignoreEditor() {
       else showToast(data.message || t('toast.error'), 'error');
     });
   }
+
+  const cleanupBtn = document.getElementById('git-foreign-cleanup-btn');
+  if (cleanupBtn && !cleanupBtn.dataset.bound) {
+    cleanupBtn.dataset.bound = '1';
+    cleanupBtn.addEventListener('click', openForeignCleanup);
+  }
+}
+
+// ── Fremddatei-Guard (foreign-file guard) ──────────────────────────────────
+
+/** Pre-commit hook for interactive actions (Sicherungspunkt, Rebuild):
+ *  if untracked foreign files are pending, ask the user first.
+ *  Resolves true = continue the action, false = user aborted. */
+async function checkForeignFilesBeforeCommit() {
+  let data;
+  try {
+    const res = await csrfFetch('/api/git/foreign-files');
+    data = await res.json();
+  } catch { return true; }  // never block saving/rebuilding on a guard error
+  if (!data.enabled || !data.pending || !data.pending.length) return true;
+  return showForeignFilesDialog(data.pending, 'pending');
+}
+
+/** List dialog for foreign files. mode 'pending': include/exclude untracked
+ *  files; mode 'cleanup': keep/untrack already tracked files. */
+function showForeignFilesDialog(files, mode) {
+  return new Promise(resolve => {
+    const isCleanup = mode === 'cleanup';
+    const inLabel   = t(isCleanup ? 'git.foreign.keep'    : 'git.foreign.include');
+    const outLabel  = t(isCleanup ? 'git.foreign.untrack' : 'git.foreign.exclude');
+    const rows = files.map((f, i) => `
+      <div class="gsi-file-row" style="display:flex;gap:14px;align-items:center">
+        <span style="flex:1;overflow-wrap:anywhere">${escHtml(f)}</span>
+        <label style="white-space:nowrap;cursor:pointer;display:inline-flex;align-items:center;gap:6px;margin:0">
+          <input type="radio" name="ff-${i}" value="in" style="margin:0">${escHtml(inLabel)}</label>
+        <label style="white-space:nowrap;cursor:pointer;display:inline-flex;align-items:center;gap:6px;margin:0">
+          <input type="radio" name="ff-${i}" value="out" style="margin:0" checked>${escHtml(outLabel)}</label>
+      </div>`).join('');
+
+    const overlay = document.createElement('div');
+    overlay.className = 'overlay';
+    overlay.innerHTML = `
+      <div class="modal">
+        <div class="modal-logo">${escHtml(t(isCleanup ? 'git.foreign.cleanupTitle' : 'git.foreign.title'))}</div>
+        <p>${escHtml(t(isCleanup ? 'git.foreign.cleanupBody' : 'git.foreign.body'))}
+          <a href="/help#k7-4" target="_blank"
+             style="font-size:0.85em;color:var(--blue);text-decoration:none;opacity:0.8">${escHtml(t('git.foreign.helpLink'))}</a></p>
+        <div class="gsi"><div class="gsi-block">
+          <div class="gsi-block-body gsi-file-list">${rows}</div>
+        </div></div>
+        <p id="ff-err" style="color:var(--red);display:none;margin-top:8px"></p>
+        <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px">
+          <button type="button" id="ff-cancel" class="btn-surface">${escHtml(t('git.foreign.cancel'))}</button>
+          <button type="button" id="ff-ok" class="btn-primary">${escHtml(t('git.foreign.apply'))}</button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+
+    function _close(result) { overlay.remove(); resolve(result); }
+
+    overlay.querySelector('#ff-cancel').addEventListener('click', () => _close(false));
+    overlay.querySelector('#ff-ok').addEventListener('click', async () => {
+      const ins = [], outs = [];
+      files.forEach((f, i) => {
+        const v = overlay.querySelector(`input[name="ff-${i}"]:checked`)?.value;
+        (v === 'in' ? ins : outs).push(f);
+      });
+      const url  = isCleanup ? '/api/git/foreign-cleanup' : '/api/git/foreign-decide';
+      const body = isCleanup ? { keep: ins, untrack: outs } : { include: ins, exclude: outs };
+      try {
+        const res  = await csrfFetch(url, {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify(body),
+        });
+        const data = await res.json();
+        if (!data.success) throw new Error(data.error || '');
+        _close(true);
+      } catch (e) {
+        const err = overlay.querySelector('#ff-err');
+        err.textContent = e.message || t('toast.error');
+        err.style.display = '';
+      }
+    });
+  });
+}
+
+/** Cleanup dialog for tracked foreign files (Zeitmaschine button). */
+async function openForeignCleanup() {
+  let data;
+  try {
+    const res = await csrfFetch('/api/git/foreign-files');
+    data = await res.json();
+  } catch { showToast(t('toast.error'), 'error'); return; }
+  if (!data.tracked || !data.tracked.length) {
+    showToast(t('git.foreign.cleanupNone'), 'success');
+    return;
+  }
+  const done = await showForeignFilesDialog(data.tracked, 'cleanup');
+  if (done) {
+    showToast(t('git.foreign.cleanupDone'), 'success');
+    loadGitignoreEditor();
+    loadAdminGitLog();
+  }
 }
 
 function _updateGitStatusLabel(data) {

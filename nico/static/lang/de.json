@@ -1015,5 +1015,26 @@
   "validator.f.git_missing_gitignore.none": "Keine .gitignore vorhanden – NiCo-Dateien (Logs, Backups) werden in Git committet.",
   "validator.f.git_missing_gitignore.incomplete": ".gitignore unvollständig – {0} empfohlene Einträge fehlen.",
   "validator.f.git_large_log": "nixos-rebuild.log ist {0} MB groß.",
-  "validator.f.git_foreign_files": "{0} Dateien, die nicht zur Config gehören, werden in Git getrackt und hochgeladen."
+  "validator.f.git_foreign_files": "{0} Dateien, die nicht zur Config gehören, werden in Git getrackt und hochgeladen.",
+
+  "git.foreign.title":      "Fremddateien gefunden",
+  "git.foreign.body":       "Diese Dateien liegen im Config-Verzeichnis, gehören aber nicht zur NixOS-Config. Sollen sie in Git aufgenommen oder davon ausgenommen werden?",
+  "git.foreign.include":    "Aufnehmen",
+  "git.foreign.exclude":    "Ausnehmen",
+  "git.foreign.keep":       "Behalten",
+  "git.foreign.untrack":    "Austragen",
+  "git.foreign.apply":      "Übernehmen",
+  "git.foreign.cancel":     "Abbrechen",
+  "git.foreign.helpLink":   "? Hilfe",
+  "git.foreign.cleanupTitle": "Getrackte Fremddateien aufräumen",
+  "git.foreign.cleanupBody": "Diese Dateien sind in Git erfasst, gehören aber nicht zur Config. Austragen entfernt sie aus Git (die Datei bleibt auf der Platte, die Git-Historie bleibt erhalten) und setzt sie auf die .gitignore. Behalten merkt sich die Datei dauerhaft als gewollt.",
+  "git.foreign.cleanupNone": "Keine getrackten Fremddateien gefunden.",
+  "git.foreign.cleanupDone": "Fremddateien aufgeräumt.",
+  "git.foreign.sectionTitle": "Fremddateien",
+  "git.foreign.sectionHint": "Dateien, die nicht zur Config gehören: NiCo fragt vor dem Sicherungspunkt, ob sie in Git aufgenommen oder ausgenommen werden sollen.",
+  "git.foreign.toggleLabel": "Vor Aufnahme fremder Dateien fragen",
+  "git.foreign.cleanupBtn": "Getrackte Fremddateien aufräumen",
+  "validator.rule.flake_untracked_reference.label": "Referenzierte Datei nicht in Git",
+  "validator.rule.flake_untracked_reference.desc": "Warnt wenn eine .nix-Datei eine Datei referenziert, die nicht in Git erfasst ist – der Flake-Build schlägt dann fehl.",
+  "validator.f.flake_untracked_reference": "{0} referenzierte Dateien sind nicht in Git erfasst – der Flake-Build wird fehlschlagen."
 }

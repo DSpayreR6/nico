@@ -125,6 +125,10 @@ ALL_RULES: list[Rule] = [
          "Fremddateien in Git",
          "Listet Dateien, die nicht zur Config gehören, aber in Git getrackt und hochgeladen werden.",
          "info"),
+    Rule("flake_untracked_reference",
+         "Referenzierte Datei nicht in Git",
+         "Warnt wenn eine .nix-Datei eine Datei referenziert, die nicht in Git erfasst ist – der Flake-Build schlägt dann fehl.",
+         "warning", flake_only=True),
 ]
 
 RULE_MAP: dict[str, Rule] = {r.id: r for r in ALL_RULES}
@@ -280,6 +284,31 @@ def _rule_user_in_config(nixos_dir: str, config: dict, is_flake: bool,
     return []
 
 
+def _flake_defined_hosts(content: str) -> set[str]:
+    """Host names declared under nixosConfigurations in flake.nix.
+
+    Supports both the dotted form (nixosConfigurations.name = …) and the
+    attrset form (nixosConfigurations = { name = …; }) that NiCo generates."""
+    defined = set(re.findall(r'nixosConfigurations\s*\.\s*"?([\w-]+)"?', content))
+    m = re.search(r'nixosConfigurations\s*=\s*{', content)
+    if m:
+        depth, i = 1, m.end()
+        start = i
+        while i < len(content) and depth:
+            if content[i] == "{":
+                depth += 1
+            elif content[i] == "}":
+                depth -= 1
+            i += 1
+        block = content[start:i - 1]
+        # attribute names at the top level of the block (balanced braces before)
+        for am in re.finditer(r'(?m)^\s*"?([A-Za-z0-9_-]+)"?\s*=', block):
+            prefix = block[:am.start()]
+            if prefix.count("{") == prefix.count("}"):
+                defined.add(am.group(1))
+    return defined
+
+
 def _rule_flake_host_exists(nixos_dir: str, config: dict, is_flake: bool,
                             host: str | None = None) -> list[Finding]:
     flake_path = Path(nixos_dir) / "flake.nix"
@@ -299,7 +328,7 @@ def _rule_flake_host_exists(nixos_dir: str, config: dict, is_flake: bool,
     except OSError:
         return []
 
-    defined = set(re.findall(r'nixosConfigurations\s*\.\s*"?([\w-]+)"?', content))
+    defined = _flake_defined_hosts(content)
     findings = []
     for host_name in hosts:
         if host_name not in defined:
@@ -1256,11 +1285,17 @@ def _rule_git_foreign_files(nixos_dir: str, config: dict, is_flake: bool,
     if not _gm.is_git_repo(nixos_dir):
         return []
     tracked = _gm.list_tracked_files(nixos_dir)
+    # Files the user chose to keep tracked (foreign-file cleanup dialog)
+    try:
+        from . import config_manager as _cm
+        keep = set(_cm.load_config_settings(nixos_dir).get("git_keep_files", []) or [])
+    except Exception:
+        keep = set()
     foreign = []
     config_json_tracked = False
     for f in tracked:
         p = Path(f)
-        if p.suffix == ".nix" or f in ("flake.lock", ".gitignore"):
+        if p.suffix == ".nix" or f in ("flake.lock", ".gitignore") or f in keep:
             continue
         if f == "config.json":
             # NiCo's own config settings: meant to travel with the config,
@@ -1290,6 +1325,59 @@ def _rule_git_foreign_files(nixos_dir: str, config: dict, is_flake: bool,
     )]
 
 
+# Relative path references in .nix files (./foo or ../foo). Interpolations and
+# absolute paths are out of scope – this is a cheap name-based heuristic.
+_NIX_REL_PATH_RE = re.compile(r"(?<![A-Za-z0-9_./])\.\.?/[A-Za-z0-9_@+.\-/]+")
+
+
+def _rule_flake_untracked_reference(nixos_dir: str, config: dict, is_flake: bool,
+                                    host: str | None = None) -> list[Finding]:
+    from . import git_manager as _gm
+    if not is_flake or not _gm.is_git_repo(nixos_dir):
+        return []
+    tracked = set(_gm.list_tracked_files(nixos_dir))
+    root = Path(nixos_dir).resolve()
+    # {referenced file: [referencing .nix files]}. Untracked .nix targets are
+    # skipped: NiCo stages new .nix files automatically before every rebuild.
+    missing: dict[str, list[str]] = {}
+    for nix_file in sorted(root.rglob("*.nix")):
+        if ".git" in nix_file.parts:
+            continue
+        try:
+            text = nix_file.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        for m in _NIX_REL_PATH_RE.finditer(text):
+            try:
+                target = (nix_file.parent / m.group(0)).resolve()
+            except OSError:
+                continue
+            if not target.is_file() or target.suffix == ".nix":
+                continue
+            try:
+                rel = str(target.relative_to(root))
+            except ValueError:
+                continue  # reference outside the config dir
+            if rel in tracked:
+                continue
+            missing.setdefault(rel, []).append(str(nix_file.relative_to(root)))
+    if not missing:
+        return []
+    detail_lines = [f"{rel}  ←  {', '.join(sorted(set(refs)))}"
+                    for rel, refs in sorted(missing.items())]
+    detail_lines += ["",
+                     "Flake-Builds sehen nur Dateien, die in Git erfasst sind. "
+                     "Nicht getrackte (oder per .gitignore ausgeschlossene) Dateien "
+                     "fehlen beim Build – er schlägt fehl. Lösung: Datei beim "
+                     "nächsten Sicherungspunkt mit aufnehmen."]
+    return [Finding(
+        rule_id="flake_untracked_reference",
+        severity="warning",
+        message=f"{len(missing)} referenzierte Dateien sind nicht in Git erfasst – der Flake-Build wird fehlschlagen.", message_key="validator.f.flake_untracked_reference", params=[len(missing)],
+        detail="\n".join(detail_lines),
+    )]
+
+
 # ── Rule function registry ─────────────────────────────────────────────────────
 
 _RULE_FNS: dict[str, object] = {
@@ -1313,5 +1401,6 @@ _RULE_FNS: dict[str, object] = {
     "snapper_in_host":        _rule_snapper_in_host,
     "git_missing_gitignore":  _rule_git_missing_gitignore,
     "git_large_log":          _rule_git_large_log,
+    "flake_untracked_reference": _rule_flake_untracked_reference,
     "git_foreign_files":      _rule_git_foreign_files,
 }

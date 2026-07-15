@@ -178,6 +178,9 @@ async function writeFiles() {
   const doDryrun   = document.getElementById('write-dryrun-check')?.checked;
   const dryResultEl = document.getElementById('write-dryrun-result');
 
+  // Foreign-file guard: pending foreign files need a decision before the commit
+  if (!await checkForeignFilesBeforeCommit()) return;
+
   if (doDryrun) {
     if (!await Sidebar.flakeSave()) return;
     if (!await _autoSave()) return;

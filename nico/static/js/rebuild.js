@@ -257,6 +257,10 @@ async function _showRebuildOptions(hostInfo, { hostname = '', mode = 'switch' } 
 }
 
 async function openRebuild(mode = 'switch') {
+  // Foreign-file guard: pending foreign files need a decision before the
+  // rebuild stages/commits anything
+  if (!await checkForeignFilesBeforeCommit()) return;
+
   // Flake mode: pick host first
   const hostInfo = await _fetchFlakeHosts();
   let hostname = null;

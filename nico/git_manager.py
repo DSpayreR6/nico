@@ -32,6 +32,21 @@ GITIGNORE_ENTRIES = [
     ".stfolder",
 ]
 
+# Root-level files that belong to the config besides *.nix. Everything else
+# is a "foreign file": the foreign-file guard asks before committing it.
+CONFIG_FILE_NAMES = frozenset({"flake.lock", "config.json", ".gitignore"})
+
+
+def is_config_file(relpath: str) -> bool:
+    """True if relpath is part of the NixOS config (never treated as foreign)."""
+    return Path(relpath).suffix == ".nix" or relpath in CONFIG_FILE_NAMES
+
+
+def foreign_guard_enabled(nixos_dir: str) -> bool:
+    """Whether the foreign-file guard (ask before committing non-config files) is on."""
+    from . import config_manager
+    return bool(config_manager.load_config_settings(nixos_dir).get("git_foreign_guard", True))
+
 
 def _run(args: list[str], cwd: str, timeout: int = 10, remote: bool = False) -> tuple[int, str]:
     """Run a git command. Returns (returncode, combined stdout+stderr).
@@ -156,13 +171,58 @@ def init_repo(nixos_dir: str) -> tuple[bool, str]:
     return True, "Git-Repository wurde angelegt und initialer Commit erstellt."
 
 
+def list_untracked_foreign(nixos_dir: str) -> list[str]:
+    """Untracked, not-ignored files that are not part of the config
+    (the candidates for the foreign-file dialog)."""
+    if not is_git_repo(nixos_dir):
+        return []
+    rc, out = _run(["status", "--porcelain", "-uall"], cwd=nixos_dir)
+    if rc != 0:
+        return []
+    files = []
+    for line in out.splitlines():
+        if not line.startswith("??"):
+            continue
+        path = line[2:].strip().strip('"')
+        if path and not is_config_file(path):
+            files.append(path)
+    return sorted(files)
+
+
+def list_tracked_foreign(nixos_dir: str, keep: list[str] | None = None) -> list[str]:
+    """Tracked files that are not part of the config, minus the user's keep list."""
+    keep_set = set(keep or [])
+    return sorted(f for f in list_tracked_files(nixos_dir)
+                  if not is_config_file(f) and f not in keep_set)
+
+
+def _stage_for_commit(nixos_dir: str) -> None:
+    """Stage changes for a NiCo commit.
+
+    With the foreign-file guard on, untracked non-config files are left alone –
+    the user decides about them in the foreign-file dialog. Everything tracked
+    plus new config files is staged. Guard off = plain `git add -A`."""
+    if not foreign_guard_enabled(nixos_dir):
+        _run(["add", "-A"], cwd=nixos_dir)
+        return
+    _run(["add", "-u"], cwd=nixos_dir)
+    rc, out = _run(["status", "--porcelain", "-uall"], cwd=nixos_dir)
+    if rc != 0:
+        return
+    for line in out.splitlines():
+        if not line.startswith("??"):
+            continue
+        path = line[2:].strip().strip('"')
+        if path and is_config_file(path):
+            _run(["add", "--", path], cwd=nixos_dir)
+
+
 def stage_all(nixos_dir: str) -> tuple[bool, str]:
-    """Stage all current files in nixos_dir. Best-effort helper for rebuild flows."""
+    """Stage current files in nixos_dir for rebuild flows.
+    Respects the foreign-file guard (see _stage_for_commit)."""
     if not is_git_repo(nixos_dir):
         return False, "Kein Git-Repository."
-    rc, out = _run(["add", "-A"], cwd=nixos_dir)
-    if rc != 0:
-        return False, out or "git add -A fehlgeschlagen"
+    _stage_for_commit(nixos_dir)
     return True, ""
 
 
@@ -176,10 +236,11 @@ def auto_commit(nixos_dir: str, label: str = "") -> tuple[bool, str]:
         return False, "Kein Git-Repository."
 
     _ensure_identity(nixos_dir)
-    _run(["add", "-A"], cwd=nixos_dir)
+    _stage_for_commit(nixos_dir)
 
-    # Check if there's actually something to commit
-    rc, status = _run(["status", "--porcelain"], cwd=nixos_dir)
+    # Check if there's actually something to commit. -uno: undecided foreign
+    # files are untracked by design and must not trigger (or fail) a commit.
+    rc, status = _run(["status", "--porcelain", "-uno"], cwd=nixos_dir)
     if not status:
         return True, ""  # Nothing changed – silent success
 
@@ -194,6 +255,65 @@ def auto_commit(nixos_dir: str, label: str = "") -> tuple[bool, str]:
         return False, f"Commit fehlgeschlagen: {out}"
 
     return True, msg
+
+
+def _append_gitignore_entries(nixos_dir: str, entries: list[str]) -> None:
+    """Append entries to .gitignore (created if missing), skipping duplicates."""
+    path = Path(nixos_dir) / ".gitignore"
+    existing_lines = path.read_text(encoding="utf-8").splitlines() if path.exists() else []
+    existing = {l.strip() for l in existing_lines if l.strip() and not l.startswith("#")}
+    add = [e for e in entries if e not in existing]
+    if not add:
+        return
+    content = "\n".join(existing_lines)
+    if content and not content.endswith("\n"):
+        content += "\n"
+    content += "\n".join(add) + "\n"
+    path.write_text(content, encoding="utf-8")
+
+
+def include_foreign_files(nixos_dir: str, files: list[str]) -> tuple[bool, str]:
+    """Stage the given untracked foreign files so the next commit includes them."""
+    if not is_git_repo(nixos_dir):
+        return False, "Kein Git-Repository."
+    allowed = set(list_untracked_foreign(nixos_dir))
+    for f in files:
+        if f in allowed:
+            _run(["add", "--", f], cwd=nixos_dir)
+    return True, ""
+
+
+def exclude_foreign_files(nixos_dir: str, files: list[str]) -> tuple[bool, str]:
+    """Put the given untracked foreign files on .gitignore (created if missing)."""
+    if not is_git_repo(nixos_dir):
+        return False, "Kein Git-Repository."
+    allowed = set(list_untracked_foreign(nixos_dir))
+    chosen  = [f for f in files if f in allowed]
+    if chosen:
+        _append_gitignore_entries(nixos_dir, chosen)
+    return True, ""
+
+
+def untrack_foreign_files(nixos_dir: str, files: list[str]) -> tuple[bool, str]:
+    """Remove tracked foreign files from git (files stay on disk), put them on
+    .gitignore and commit. Note: the files remain in the git history."""
+    if not is_git_repo(nixos_dir):
+        return False, "Kein Git-Repository."
+    allowed = set(list_tracked_foreign(nixos_dir))
+    chosen  = [f for f in files if f in allowed]
+    if not chosen:
+        return True, ""
+    _ensure_identity(nixos_dir)
+    rc, out = _run(["rm", "--cached", "--"] + chosen, cwd=nixos_dir)
+    if rc != 0:
+        return False, out or "git rm --cached fehlgeschlagen"
+    _append_gitignore_entries(nixos_dir, chosen)
+    _run(["add", "--", ".gitignore"], cwd=nixos_dir)
+    ts = datetime.now().strftime("%Y-%m-%d %H:%M")
+    rc, out = _run(["commit", "-m", f"NiCo: Fremddateien aus Git entfernt ({ts})"], cwd=nixos_dir)
+    if rc != 0:
+        return False, f"Commit fehlgeschlagen: {out}"
+    return True, ""
 
 
 def git_pull(nixos_dir: str) -> tuple[bool, str]:
@@ -485,8 +605,18 @@ def check_start_guard(nixos_dir: str) -> dict:
             "detail": "",
         }
 
+    # Undecided foreign files (untracked, guard on) are not "dirty" – they get
+    # their own dialog at the next interactive commit, the guard ignores them.
+    _guard_on = foreign_guard_enabled(nixos_dir)
+
+    def _relevant_status_lines(lines: list[str]) -> list[str]:
+        if not _guard_on:
+            return lines
+        return [l for l in lines
+                if not (l.startswith("??") and not is_config_file(l[2:].strip().strip('"')))]
+
     rc, status_out = _run(["status", "--porcelain"], cwd=nixos_dir)
-    dirty = bool(status_out.strip()) if rc == 0 else False
+    dirty = bool(_relevant_status_lines(status_out.splitlines())) if rc == 0 else False
 
     rc, upstream = _run(["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"], cwd=nixos_dir)
     if rc != 0 or not upstream:
@@ -563,7 +693,7 @@ def check_start_guard(nixos_dir: str) -> dict:
                 ["git", "status", "--porcelain"],
                 cwd=nixos_dir, capture_output=True, text=True, timeout=10,
             )
-            for line in _proc.stdout.splitlines()[:15]:
+            for line in _relevant_status_lines(_proc.stdout.splitlines())[:15]:
                 if len(line) >= 4:
                     dirty_files.append({"status": line[:2].strip(), "path": line[3:]})
         except Exception:
