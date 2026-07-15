@@ -297,12 +297,6 @@ def create_app() -> Flask:
             except OSError:
                 pass  # permission denied or other OS error – silently skip
 
-        # Set hardware_config flag if hardware-configuration.nix is present
-        if hw_dst.exists():
-            cfg = config_manager.load_config(str(path)) or {}
-            cfg["hardware_config"] = True
-            config_manager.save_config(str(path), cfg)
-
         # Ensure git repo exists – init if missing (best-effort, silently skip if git unavailable)
         try:
             if not git_manager.is_git_repo(str(path)):

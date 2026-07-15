@@ -38,6 +38,7 @@
 - ZIP import and directory import now reject file paths that would escape the config directory (zip-slip)
 - All user-entered string values (hostname, descriptions, time zone, snapper names, flatpak remotes, home-manager fields, …) are now escaped when written into `.nix` files; quotes or `${` no longer produce broken or injectable Nix
 - "/etc/nixos kopieren" during symlink setup now creates a ZIP backup and auto-commit before replacing existing `.nix` files in the config directory
+- Setup no longer rewrites an existing `configuration.nix` (data loss for unparsed content, before git init) and no longer plants a default config into an empty directory, which suppressed the import offer
 - Non-numeric boot menu limit no longer causes a server error; falls back to 5
 - Zeitmaschine rollback now also removes files that were added after the target commit
 - Config diff no longer swallows real changes when identical lines appear multiple times
