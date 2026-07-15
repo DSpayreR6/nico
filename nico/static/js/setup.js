@@ -75,6 +75,12 @@ async function checkStatus() {
     const data = await res.json();
     if (data.setup_complete) {
       if (data.needs_import) {
+        _gitSync       = data.git_sync !== false;
+        _gitStatusOnly = !!data.git_status_only;
+        if (_gitSync) {
+          const ok = await ensureGitStartGuard(data.nixos_config_dir);
+          if (!ok) return;
+        }
         showApp(data.nixos_config_dir);
         // Verzeichnis vorhanden, aber kein configuration.nix / flake.nix
         await showImportOverlay(false);
@@ -145,8 +151,9 @@ async function handleSetup(createIfMissing = false) {
   const isEtcNixos = dir.replace(/\/+$/, '') === '/etc/nixos';
   if (data.dir_created && !isEtcNixos) {
     _pendingSetupData = data;
-    // Import anbieten (auch ohne /etc/nixos) – Symlink-Schritt im Hintergrund
+    // Import anbieten (auch ohne /etc/nixos); Symlink-Frage erst nach Schließen des Dialogs
     await showImportOverlay(false);
+    await _waitForOverlayHidden('import-overlay');
     showSymlinkStep();
     return;
   }
@@ -192,9 +199,15 @@ async function doSetupSymlink(createSymlink) {
 }
 
 async function _finishSetup(data, skipImport = false) {
-  // First-run import offer (only when /etc/nixos/configuration.nix exists)
-  // skipImport=true wenn der Import bereits vor dem Symlink-Schritt angeboten wurde
-  if (!skipImport) await maybeOfferImport();
+  // First-run import offer – only when the directory has no configuration.nix/flake.nix
+  // yet (same needs_import rule as on restart); skipImport=true when the import was
+  // already offered before the symlink step
+  if (!skipImport) {
+    try {
+      const st = await (await csrfFetch('/api/status')).json();
+      if (st.needs_import) await showImportOverlay(false);
+    } catch (e) { console.warn('status check for import offer failed:', e); }
+  }
 
   // Kategorisiere alle vorhandenen .nix-Dateien (no-op für leere Verzeichnisse)
   await categorizeFiles();
@@ -221,7 +234,7 @@ let _importPreview = null;
 
 /**
  * Zeigt den Import-Dialog.
- * requireEtcNixos=true  → alter Pfad: Dialog nur wenn /etc/nixos/configuration.nix da ist
+ * requireEtcNixos=true  → Dialog nur wenn /etc/nixos/configuration.nix da ist (derzeit ungenutzt)
  * requireEtcNixos=false → immer zeigen; Apply-Button wird ausgeblendet wenn /etc/nixos fehlt
  */
 async function showImportOverlay(requireEtcNixos = false) {
@@ -283,8 +296,16 @@ async function showImportOverlay(requireEtcNixos = false) {
   document.getElementById('import-overlay').classList.remove('hidden');
 }
 
-async function maybeOfferImport() {
-  await showImportOverlay(true);
+/** Resolves once the overlay has the 'hidden' class (immediately if already hidden). */
+function _waitForOverlayHidden(id) {
+  return new Promise(resolve => {
+    const el = document.getElementById(id);
+    if (!el || el.classList.contains('hidden')) { resolve(); return; }
+    const obs = new MutationObserver(() => {
+      if (el.classList.contains('hidden')) { obs.disconnect(); resolve(); }
+    });
+    obs.observe(el, { attributes: true, attributeFilter: ['class'] });
+  });
 }
 
 async function applyImport(confirmed = false) {
