@@ -1,38 +1,45 @@
 # NiCo – NixOS Configurator
 
-> ⚠️ NiCo should now work. I use it myself for managing my machines.
-> Despite this, I recommand to make a backup of your config or let nico work with a copy in a separate directory.
-> So you can tryout if your config is processed correct an if a dry-run works.
+> ⚠️ NiCo works — I use it myself to manage my machines.
+> Still, I recommend making a backup of your config first, or letting NiCo work on a copy in a separate directory.
+> That way you can verify that your config is processed correctly and a dry-run passes.
 
-NiCo is a browser-based GUI editor for NixOS configurations. It reads and writes directly to your `.nix` files — no database, no intermediate format, no hidden state.
+NiCo is a local, browser-based GUI editor for NixOS configurations. It reads and writes your real `.nix` files directly — no database, no intermediate format, no hidden state. Everything it generates stays a normal Nix file that works without NiCo.
 
 Built by a non-developer using Claude Code and OpenAI Codex as an experiment in AI-assisted development.
 
-You can also write here: https://discourse.nixos.org/t/nico-nixos-configurator/77117
+Feedback and discussion: https://discourse.nixos.org/t/nico-nixos-configurator/77117
+
+---
+
+## The core idea: Nix-Brix
+
+Most GUI config tools only allow what their forms cover. NiCo takes a different approach: anything it doesn't have a form field for, you write as a **Nix brick** — a free Nix section wrapped in marker comments that NiCo **never touches**. Form fields and hand-written Nix coexist in the same file. When importing an existing config, unrecognized sections are preserved as bricks automatically — nothing is ever discarded.
 
 ---
 
 ## Features
 
-- **Import existing configs** – import your current NixOS configuration with extras like Git integration and symlink setup
-- **Split-panel editor** – edit options on the left, see the resulting config file live on the right
-- **Nix-Brix** – insert free-text blocks at the end of any section for anything the editor doesn't cover
-- **Clean view** – toggle a comment-free view of the config for better readability
-- **Dry-run** – run a NixOS dry-run directly from NiCo
-- **Git integration** – commit changes and run `nixos-rebuild switch` from within the editor
-- **Time machine** – restore previous Git states via the menu
-- **Flake & Home Manager support** – rudimentary but functional
-- **Import / Export** – save and load your NiCo configuration
-- **Subdirectory support** – works with split config structures
-- **Help system** – tooltips, help texts, and wiki links built in
-- **Multi-language** – UI available in EN, DE, ES, FR, JA, RU, ZH (translations partially complete)
+- **Import existing configs** – from a directory or ZIP; recognized options become form fields, everything else is preserved as Nix bricks, with automatic backups
+- **Split-panel editor** – edit options on the left, see the resulting `.nix` file live on the right
+- **Nix-Brix** – free Nix sections NiCo never modifies: create, rename, move, split them across hosts and modules
+- **Dry-run & rebuild** – run `nixos-rebuild dry-build` / `switch` directly from NiCo with live streaming output
+- **Validator** – configurable rule set that checks your config for common pitfalls (orphaned hosts, architecture mismatch, untracked flake references, Snapper mountpoints, …)
+- **Git integration** – auto-commits, safety commit before every rebuild, rollback ("time machine"), remote push, and a guard that detects external changes before NiCo writes
+- **Foreign-file guard** – files that don't belong to the config are detected; decide per file whether git tracks or ignores them
+- **Flake & Home Manager support** – multi-host flakes with channel and architecture selection; per-user Home Manager files
+- **Btrfs maintenance** – generate systemd timers for auto-scrub and auto-balance from the UI
+- **Detach anytime** – one click removes all NiCo markers and leaves a plain Nix config (with a ZIP backup)
+- **Help system** – built-in help (German/English), tooltips, and wiki links
+- **Multi-language** – UI in EN, DE, ES, FR, JA, RU, ZH
+- **Local only** – binds to `127.0.0.1`, no telemetry; the only network access is an optional read-only fetch of the public nixpkgs channel list
 
 ---
 
 ## Requirements
 
-- NixOS (Flake-based config recommended)
-- Python 3
+- NixOS
+- Python 3 (via `shell.nix` / flake)
 - A browser
 
 ---
@@ -45,15 +52,21 @@ cd nico
 ./start.sh
 ```
 
-Then open your browser at `http://localhost:5000`.
+Or with flakes:
+
+```bash
+nix run github:DSpayreR6/nico
+```
+
+NiCo picks a free port (default `8421`) and opens your browser automatically.
 
 ---
 
 ## Status
 
-NiCo is a proof of concept that has grown into something more — but it is still early. Expect rough edges. Contributions, bug reports, and feedback are welcome.
+NiCo started as a proof of concept and has grown into a working tool — but it is still early. Expect rough edges. Contributions, bug reports, and feedback are welcome.
 
-Please keep in mind, im only one person and response may take some time.
+Please keep in mind I'm only one person, so responses may take some time.
 
 ---
 
