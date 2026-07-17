@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### New Features
+
+- Help page: untranslated languages (es, fr, ja, ru, zh) now fall back to English instead of German
+
 ---
 
 ## 0.10.0 (2026-07-17)

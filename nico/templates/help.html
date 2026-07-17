@@ -15,7 +15,9 @@
       document.querySelectorAll('.lang-btn').forEach(b =>
         b.classList.toggle('active', b.dataset.lang === lang));
       document.querySelectorAll('[data-de]').forEach(el => {
-        el.innerHTML = el.dataset[lang] ?? el.dataset.de;
+        // Untranslated languages fall back to English first (same convention
+        // as section_links.json), German only as last resort.
+        el.innerHTML = el.dataset[lang] ?? el.dataset.en ?? el.dataset.de;
       });
     }
 
