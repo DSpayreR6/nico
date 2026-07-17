@@ -2,7 +2,13 @@
 
 ## Unreleased
 
+---
+
+## 0.10.0 (2026-07-17)
+
 ### New Features
+
+- Help page rewritten: task-oriented structure with Nix-Brix as the leading chapter, corrected against the current code base (setup order, brick markers, foreign-file dialogs, detach), reduced from 11 to 7 chapters; German and English, other languages fall back to German
 
 - Validation results and the rule list are now translatable (all 7 languages; non-German strings pending as placeholders)
 - Package search links point to the configured nixpkgs channel instead of a hardcoded one
