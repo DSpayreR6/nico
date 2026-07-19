@@ -666,17 +666,18 @@ def parse_home_config(nix_content: str) -> dict:
 
     r: dict = dict(HM_DEFAULTS)
     r["enabled"] = True
-    core_args = {"config", "pkgs", "lib"}
 
+    # Header args are kept verbatim (incl. config/pkgs/lib) so the roundtrip
+    # via generate_home_nix reproduces exactly what the user wrote – deleted
+    # core args must stay deleted.
     m_args = re.search(r'^\s*\{([^}]*)\}\s*:', nix_content, re.MULTILINE)
     if m_args:
         r["args"] = [
             arg.strip()
             for arg in m_args.group(1).split(',')
-            if arg.strip()
-            and arg.strip() != '...'
-            and arg.strip() not in core_args
+            if arg.strip() and arg.strip() != '...'
         ]
+        r["args_explicit"] = True
 
     def _s(pat: str) -> str | None:
         m = re.search(pat, nix_content, re.DOTALL | re.MULTILINE)

@@ -209,7 +209,18 @@ def hm_patch_bool(content: str, key: str, value: bool) -> str:
 
 
 def hm_patch_args(content: str, args: list) -> str:
-    all_args = [a for a in args if a] + ["..."]
+    # Dedup by base name (first occurrence wins) – duplicate formal args
+    # are a Nix syntax error ("duplicate formal function argument").
+    cleaned: list[str] = []
+    seen: set[str] = set()
+    for a in args:
+        a = (a or "").strip()
+        base = hm_generator._hm_arg_base(a)
+        if not a or not base or base in seen:
+            continue
+        seen.add(base)
+        cleaned.append(a)
+    all_args = cleaned + ["..."]
     new_header = "{ " + ", ".join(all_args) + " }:"
     return re.sub(r'^\s*\{[^}]*\}\s*:', new_header, content, count=1,
                   flags=re.MULTILINE | re.DOTALL)

@@ -5,6 +5,12 @@
 ### New Features
 
 - Help page: untranslated languages (es, fr, ja, ru, zh) now fall back to English instead of German
+- New validator rule `hm_duplicate_args` (error): reports duplicate arguments in the function head of Home Manager files – a Nix syntax error ("duplicate formal function argument")
+
+### Bug Fixes
+
+- HM files: deleted header arguments (e.g. `lib`) stay deleted – the read/save normalization no longer forces `config, pkgs, lib` back into an existing function head; core args are only added when a file is freshly generated
+- HM panel: saving arguments now deduplicates by base name, so a duplicate entry can no longer produce an invalid function head
 
 ---
 

@@ -105,6 +105,10 @@ ALL_RULES: list[Rule] = [
          "HM stateVersion konsistent",
          "Prüft ob home.stateVersion in HM-Configs mit system.stateVersion übereinstimmt.",
          "warning"),
+    Rule("hm_duplicate_args",
+         "Doppelte HM-Argumente",
+         "Meldet doppelte Argumente im Funktionskopf von Home-Manager-Dateien (Nix-Syntaxfehler).",
+         "error"),
     Rule("snapper_btrfs",
          "Snapper-Mountpoints prüfen",
          "Prüft ob die konfigurierten Snapper-Mountpoints existieren und btrfs sind.",
@@ -997,6 +1001,57 @@ def _rule_hm_state_version_match(nixos_dir: str, config: dict, is_flake: bool,
     return findings
 
 
+def _rule_hm_duplicate_args(nixos_dir: str, config: dict, is_flake: bool,
+                            host: str | None = None) -> list[Finding]:
+    from . import config_manager as _cm
+    from .hm_generator import _hm_arg_base
+    cfg_settings = _cm.load_config_settings(nixos_dir)
+    hm_dir_name = cfg_settings.get("hm_dir") or "home"
+    base = Path(nixos_dir)
+    hm_dir = base / hm_dir_name
+    if not hm_dir.exists():
+        return []
+
+    findings: list[Finding] = []
+    for nix_file in sorted(hm_dir.rglob("*.nix")):
+        if ".git" in nix_file.parts:
+            continue
+        try:
+            content = nix_file.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        m = re.search(r'^\s*\{([^}]*)\}\s*:', content, re.MULTILINE)
+        if not m:
+            continue
+        try:
+            rel = str(nix_file.relative_to(base))
+        except ValueError:
+            rel = nix_file.name
+
+        seen: set[str] = set()
+        dups: list[str] = []
+        for arg in m.group(1).split(','):
+            name = _hm_arg_base(arg)
+            if not name:
+                continue
+            if name in seen and name not in dups:
+                dups.append(name)
+            seen.add(name)
+
+        if dups:
+            findings.append(Finding(
+                rule_id="hm_duplicate_args",
+                severity="error",
+                message=f"{rel}: Argument(e) {', '.join(dups)} mehrfach im Funktionskopf.", message_key="validator.f.hm_duplicate_args", params=[rel, ", ".join(dups)],
+                detail=(
+                    f"Funktionskopf: {m.group(0).strip()}\n"
+                    "Nix bricht mit 'duplicate formal function argument' ab.\n"
+                    "Doppelte Einträge im HM-Panel unter 'Argumente' entfernen."
+                ),
+            ))
+    return findings
+
+
 def _rule_brix_redundant(nixos_dir: str, config: dict, is_flake: bool,
                          host: str | None = None) -> list[Finding]:
     from . import importer as _imp
@@ -1401,6 +1456,7 @@ _RULE_FNS: dict[str, object] = {
     "flake_hm_branch":       _rule_flake_hm_branch,
     "state_version_match":   _rule_state_version_match,
     "hm_state_version_match": _rule_hm_state_version_match,
+    "hm_duplicate_args":      _rule_hm_duplicate_args,
     "snapper_btrfs":          _rule_snapper_btrfs,
     "snapper_in_host":        _rule_snapper_in_host,
     "git_missing_gitignore":  _rule_git_missing_gitignore,

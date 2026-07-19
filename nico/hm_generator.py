@@ -117,10 +117,13 @@ def _hm_render_args(data: dict, blocks: dict[str, dict]) -> str:
         seen.add(base)
         args.append(cleaned)
 
-    for core in _HM_CORE_ARGS:
-        if core not in seen:
-            seen.add(core)
-            args.append(core)
+    # Core args only for freshly generated files; a parsed header
+    # (args_explicit) is authoritative – deleted core args stay deleted.
+    if not data.get("args_explicit"):
+        for core in _HM_CORE_ARGS:
+            if core not in seen:
+                seen.add(core)
+                args.append(core)
 
     for inferred in _infer_hm_brick_args(blocks, args):
         base = _hm_arg_base(inferred)
