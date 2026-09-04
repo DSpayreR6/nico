@@ -301,6 +301,7 @@
   "rebuild.failed": "重建失败",
   "rebuild.error": "错误",
   "rebuild.connectionError": "❌ 与服务器的连接已断开",
+  "rebuild.alreadyRunning": "已有重建正在进行 – 显示正在运行的任务",
   "rebuild.close": "关闭",
   "rebuild.openLog": "打开日志",
   "rebuild.commitPush": "提交 & 推送",

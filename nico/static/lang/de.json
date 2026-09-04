@@ -318,6 +318,7 @@
   "rebuild.failed":           "Rebuild fehlgeschlagen",
   "rebuild.error":            "Fehler",
   "rebuild.connectionError":  "❌ Verbindung zum Server unterbrochen",
+  "rebuild.alreadyRunning":   "Es läuft bereits ein Rebuild – der laufende Vorgang wird angezeigt",
   "rebuild.close":            "Schließen",
   "rebuild.openLog":          "Log öffnen",
   "rebuild.commitPush":       "Commit & Push",

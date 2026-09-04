@@ -229,5 +229,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   updateSectionVisibility();
   bindUI();
   checkStatus();
+  restoreRebuildMonitor();
 });
 

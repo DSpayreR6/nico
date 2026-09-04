@@ -58,6 +58,7 @@ async function acquireSudoNonce() {
 // can offer a mode selector later without touching server.py.
 // EventSource requires GET → CSRF token passed as query param.
 let _rebuildES = null;  // active EventSource, closed on modal close
+let _rebuildVisHandler = null;  // visibilitychange listener of the active monitor
 
 // ── Flake host picker ────────────────────────────────────────────────────────
 
@@ -320,6 +321,39 @@ async function openRebuild(mode = 'switch') {
   const sudoNonce = await acquireSudoNonce();
   if (sudoNonce === null) return;  // abgebrochen
 
+  const startRes = await csrfFetch('/api/rebuild/start', {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify({
+      mode,
+      hostname,
+      sudo_nonce:   sudoNonce,
+      update_flake: !!opts.updateFlake,
+      safe_mode:    !!opts.safeMode,
+    }),
+  }).catch(() => null);
+  const startData = startRes ? await startRes.json().catch(() => null) : null;
+  if (!startData?.success) {
+    // A rebuild is already running (e.g. started in another tab) – show it
+    // instead of starting a second one.
+    if (startData?.error === 'ERR_REBUILD_RUNNING') {
+      showToast(t('rebuild.alreadyRunning'), 'error');
+      attachRebuildMonitor();
+      return;
+    }
+    showToast(tErr(startData?.error) || t('toast.error'), 'error');
+    return;
+  }
+
+  attachRebuildMonitor();
+}
+
+/**
+ * Opens the rebuild monitor and attaches to the current job's event stream.
+ * Attaching never starts a rebuild, so this is also the path used after a tab
+ * switch, a reload or a browser restart.
+ */
+function attachRebuildMonitor(fromIndex = 0) {
   const overlay      = document.getElementById('rebuild-overlay');
   const logEl        = document.getElementById('rebuild-log');
   const monitorEl    = document.getElementById('rebuild-monitor');
@@ -366,10 +400,7 @@ async function openRebuild(mode = 'switch') {
   // Close any previous stream
   if (_rebuildES) { _rebuildES.close(); _rebuildES = null; }
 
-  const updateFlake = opts.updateFlake ? '1' : '0';
-  const hostParam   = hostname  ? `&hostname=${encodeURIComponent(hostname)}`   : '';
-  const nonceParam  = sudoNonce ? `&sudo_nonce=${encodeURIComponent(sudoNonce)}` : '';
-  const url = `/api/rebuild/stream?mode=${encodeURIComponent(mode)}&token=${encodeURIComponent(CSRF_TOKEN)}&update_flake=${updateFlake}&safe_mode=${opts.safeMode ? 1 : 0}${hostParam}${nonceParam}`;
+  const url = `/api/rebuild/stream?token=${encodeURIComponent(CSRF_TOKEN)}&from=${fromIndex}`;
   const es  = new EventSource(url);
   _rebuildES = es;
 
@@ -585,21 +616,56 @@ async function openRebuild(mode = 'switch') {
       _finishMonitor(false, niIcon('x-circle') + ' ' + errText);
       es.close();
       _rebuildES = null;
+
+    } else if (msg.type === 'eof') {
+      // Server has nothing left to send. Closing here is what stops the
+      // browser from reconnecting in a loop.
+      _flushLog();
+      if (isRunning) {
+        // No 'done' seen – the job is gone (e.g. NiCo was restarted mid-build)
+        _finishMonitor(false, niIcon('x-circle') + ' ' + t('rebuild.connectionError'));
+      }
+      es.close();
+      _rebuildES = null;
     }
   };
 
+  // A dropped connection is no longer fatal: the job lives in the server, so we
+  // let EventSource reconnect (it resends Last-Event-ID and resumes where it
+  // stopped). Only a definitively closed stream ends the monitor.
   es.onerror = () => {
-    if (isRunning) {
-      _finishMonitor(false, niIcon('x-circle') + ' ' + t('rebuild.connectionError'));
+    if (es.readyState === EventSource.CLOSED) {
+      if (isRunning) {
+        _finishMonitor(false, niIcon('x-circle') + ' ' + t('rebuild.connectionError'));
+      }
+      _rebuildES = null;
     }
-    es.close();
-    _rebuildES = null;
   };
+
+  // Log rendering runs on requestAnimationFrame, which browsers pause in
+  // background tabs. Flush what arrived meanwhile when the tab is shown again.
+  if (_rebuildVisHandler) document.removeEventListener('visibilitychange', _rebuildVisHandler);
+  _rebuildVisHandler = () => { if (!document.hidden) _flushLog(); };
+  document.addEventListener('visibilitychange', _rebuildVisHandler);
 }
 
 function closeRebuild() {
   if (_rebuildES) { _rebuildES.close(); _rebuildES = null; }
   document.getElementById('rebuild-overlay').classList.add('hidden');
+  // Tell the server the result was seen, so a reload stops reopening it
+  csrfFetch('/api/rebuild/ack', { method: 'POST' }).catch(() => {});
+}
+
+/**
+ * On page load: if a rebuild is running – or finished without the result having
+ * been seen – reopen the monitor and replay its output from the beginning.
+ */
+async function restoreRebuildMonitor() {
+  try {
+    const { job } = await fetch('/api/rebuild/status').then(r => r.json());
+    if (!job) return;
+    if (job.running || !job.acked) attachRebuildMonitor(0);
+  } catch { /* no job / server not ready */ }
 }
 
 // ── Shared output helpers ─────────────────────────────────────────────────────

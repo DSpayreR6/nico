@@ -140,8 +140,9 @@ THEME_CSS
     .logo { font-size: 2rem; font-weight: 700; color: var(--accent); margin-bottom: 0.25rem; }
     h2 { font-size: 1rem; font-weight: 400; color: var(--text2, var(--subtext1)); margin-bottom: 1.25rem; }
     p { color: var(--text2, var(--subtext1)); line-height: 1.6; margin-bottom: 1.75rem; }
+    .buttons { display: flex; gap: 0.75rem; justify-content: center; flex-wrap: wrap; }
     button {
-      padding: 0.55rem 1.8rem;
+      padding: 0.55rem 1.5rem;
       background: var(--accent);
       border: none;
       border-radius: 5px;
@@ -151,6 +152,9 @@ THEME_CSS
       cursor: pointer;
       transition: opacity .15s;
     }
+    /* Opening the running instance is the harmless default, restarting kills it */
+    #btn-open    { background: var(--green); }
+    #btn-restart { background: var(--red); }
     button:hover { opacity: 0.85; }
     button:disabled { opacity: 0.45; cursor: default; }
     #msg { margin-top: 1rem; font-size: 0.82rem; color: var(--text-muted, var(--overlay0)); min-height: 1.2em; }
@@ -160,15 +164,23 @@ THEME_CSS
   <div class="card">
     <div class="logo">NiCo</div>
     <h2>NixOS Configurator</h2>
-    <p>L&auml;uft bereits in einem anderen Fenster.<br>
-       Dieses Tab schlie&szlig;en &ndash; oder neu starten:</p>
-    <button id="btn" onclick="doRestart()">Neu starten</button>
+    <p>NiCo l&auml;uft bereits in einem anderen Fenster &ndash;
+       oder das Tab wurde nur geschlossen.<br>
+       Die laufende Instanz &ouml;ffnen, oder NiCo neu starten:</p>
+    <div class="buttons">
+      <button id="btn-open" onclick="openRunning()">Laufende Instanz &ouml;ffnen</button>
+      <button id="btn-restart" onclick="doRestart()">Neu starten</button>
+    </div>
     <div id="msg"></div>
   </div>
   <script>
+    function openRunning() {
+      window.location.href = 'http://127.0.0.1:PREF_PORT/';
+    }
     async function doRestart() {
-      const btn = document.getElementById('btn');
+      const btn = document.getElementById('btn-restart');
       const msg = document.getElementById('msg');
+      document.getElementById('btn-open').disabled = true;
       btn.disabled = true;
       btn.textContent = 'Wird neu gestartet\u2026';
       msg.textContent = 'Alte Instanz wird beendet\u2026';

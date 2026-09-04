@@ -301,6 +301,7 @@
   "rebuild.failed": "Rebuild завершился с ошибкой",
   "rebuild.error": "Ошибка",
   "rebuild.connectionError": "❌ Соединение с сервером потеряно",
+  "rebuild.alreadyRunning": "Пересборка уже выполняется – показан текущий процесс",
   "rebuild.close": "Закрыть",
   "rebuild.openLog": "Открыть журнал",
   "rebuild.commitPush": "Коммит & Push",

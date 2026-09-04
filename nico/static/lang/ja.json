@@ -301,6 +301,7 @@
   "rebuild.failed": "Rebuild失敗",
   "rebuild.error": "エラー",
   "rebuild.connectionError": "❌ サーバーへの接続が切断されました",
+  "rebuild.alreadyRunning": "リビルドはすでに実行中です – 実行中の処理を表示します",
   "rebuild.close": "閉じる",
   "rebuild.openLog": "ログを開く",
   "rebuild.commitPush": "コミット & プッシュ",

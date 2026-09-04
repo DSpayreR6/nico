@@ -301,6 +301,7 @@
   "rebuild.failed": "Rebuild fallido",
   "rebuild.error": "Error",
   "rebuild.connectionError": "❌ Conexión con el servidor perdida",
+  "rebuild.alreadyRunning": "Ya hay una reconstrucción en curso – se muestra el proceso activo",
   "rebuild.close": "Cerrar",
   "rebuild.openLog": "Abrir registro",
   "rebuild.commitPush": "Commit & Push",

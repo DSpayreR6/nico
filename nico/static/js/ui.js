@@ -604,9 +604,10 @@ function bindUI() {
   initSettingsPanel();
   initAdminImportCollapse();
 
-  // Rebuild output modal
+  // Rebuild output modal – closes only via its button. A background click must
+  // not tear down the running rebuild stream: the user would lose the output
+  // without knowing why, and the rebuild itself keeps running unattended.
   on('rebuild-close-btn', 'click', closeRebuild);
-  on('rebuild-overlay',   'click', e => { if (e.target.id === 'rebuild-overlay') closeRebuild(); });
 
   // Sudo-Passwort-Modal: Hintergrundklick schließt (= Abbruch, handled in promptSudoPassword)
   document.getElementById('sudo-overlay')?.addEventListener('click', e => {

@@ -7,15 +7,77 @@ from create_app() are passed in via the ctx dict.
 import os
 import re
 import secrets
+import threading
+import time
+import uuid
 from pathlib import Path
 
-from flask import Response, jsonify, request, stream_with_context
+from flask import Response, jsonify, request
 
 from .. import config_manager, git_manager
 from ..core import (
     clean_nix_error as _clean_nix_error,
     get_flake_hosts as _get_flake_hosts,
 )
+
+
+# ── Rebuild job state ────────────────────────────────────────────────────────
+# A rebuild used to live inside its own SSE response: the process was started by
+# the streaming endpoint, so losing that connection (tab switch, reload, closed
+# window) took the whole view with it and left nixos-rebuild running unattended
+# with nobody reading its output. The job now runs in a background thread and
+# buffers its ready-to-send SSE events here, so clients can attach and re-attach
+# at any time. Only one job at a time; the finished job stays available until a
+# new one starts, so a reload can still show the result.
+_JOB_MAX_EVENTS = 20000  # ring buffer; the UI keeps far fewer log lines anyway
+
+_job_cv = threading.Condition()
+_job = None
+
+
+def _job_public(job):
+    """Serializable job summary (caller must hold _job_cv)."""
+    return {
+        "id":       job["id"],
+        "running":  job["running"],
+        "success":  job["success"],
+        "acked":    job["acked"],
+        "mode":     job["mode"],
+        "hostname": job["hostname"],
+        "started":  job["started"],
+        "finished": job["finished"],
+        "events":   job["dropped"] + len(job["events"]),
+    }
+
+
+def _job_append(job_id, event):
+    """Append one SSE event block to the job buffer and wake up all readers."""
+    with _job_cv:
+        if _job is None or _job["id"] != job_id:
+            return
+        _job["events"].append(event)
+        overflow = len(_job["events"]) - _JOB_MAX_EVENTS
+        if overflow > 0:
+            del _job["events"][:overflow]
+            _job["dropped"] += overflow
+        # The generator reports the outcome as its final event; parse it here so
+        # /status knows whether the rebuild succeeded without replaying the log.
+        if event.startswith('data: {"type": "done"'):
+            _job["success"] = '"success": true' in event
+        elif event.startswith('data: {"type": "error"'):
+            _job["success"] = False
+        _job_cv.notify_all()
+
+
+def _job_finish(job_id):
+    with _job_cv:
+        if _job is None or _job["id"] != job_id:
+            return
+        _job["running"]  = False
+        _job["finished"] = time.time()
+        if _job["success"] is None:
+            _job["success"] = False
+        _job_cv.notify_all()
 
 
 def register(app, ctx):
@@ -181,19 +243,22 @@ def register(app, ctx):
             pass
         return jsonify({"error": "ERR_NO_TERMINAL"}), 500
 
-    @app.route("/api/rebuild/stream")
-    def rebuild_stream():
+    @app.route("/api/rebuild/start", methods=["POST"])
+    def rebuild_start():
         """
-        SSE endpoint: runs nixos-rebuild and streams output line-by-line.
+        Start a rebuild in a background thread and buffer its SSE events.
 
-        Uses a query-param token for CSRF because EventSource (browser API)
-        only supports GET and cannot add custom headers.
+        The response only confirms the start; the output is read via
+        /api/rebuild/stream, which can be (re-)attached at any time.
 
-        Query params:
-          token  – CSRF token (required)
-          mode   – "switch" | "boot" | "test"  (default: "switch")
+        JSON body:
+          mode         – "switch" | "boot" | "test"  (default: "switch")
+          hostname     – flake host to build (optional)
+          sudo_nonce   – nonce for the cached sudo password (optional)
+          update_flake – run `nix flake update` first (flake mode only)
+          safe_mode    – limit jobs/cores
 
-        SSE event types:
+        SSE event types produced by the job:
           {"type": "output",   "line": "..."}
           {"type": "phase",    "phase": "evaluating|fetching|building|activating", "active": true|false, "pkg": "..."}
           {"type": "progress", "done": N, "total": M, "pkg": "..."}
@@ -203,16 +268,17 @@ def register(app, ctx):
         Architecture note: mode is already a parameter so switch/boot/test
         can be added to the UI later without touching this endpoint.
         """
+        global _job
+
         import json as _json
         import subprocess as _sp
         import re as _re
 
-        # CSRF via query param (EventSource cannot set headers)
-        token = request.args.get('token', '')
-        if not secrets.compare_digest(token, _csrf_token):
-            return jsonify({"error": "ERR_CSRF"}), 403
+        if err := _check_csrf(): return err
 
-        mode = request.args.get('mode', 'switch')
+        payload = request.get_json(silent=True) or {}
+
+        mode = payload.get('mode') or 'switch'
         if mode not in ('switch', 'boot', 'test'):
             return jsonify({"error": "ERR_INVALID_MODE"}), 400
 
@@ -220,27 +286,31 @@ def register(app, ctx):
         if err:
             return err
 
+        with _job_cv:
+            if _job is not None and _job["running"]:
+                return jsonify({"error": "ERR_REBUILD_RUNNING"}), 409
+
         data      = config_manager.load_config(nixos_dir) or {}
         conf_path = Path(nixos_dir) / "configuration.nix"
         use_flake = data.get("flakes", False)
 
-        # hostname: query-param takes precedence; fall back to nico.json
-        hostname_param = request.args.get('hostname', '').strip()
+        # hostname: request value takes precedence; fall back to nico.json
+        hostname_param = str(payload.get('hostname') or '').strip()
         if hostname_param and re.fullmatch(r'[\w.-]+', hostname_param):
             hostname = hostname_param
         else:
             hostname = (data.get("hostname") or "nixos").strip() or "nixos"
 
         # Sudo-Passwort via Nonce holen
-        sudo_nonce = request.args.get('sudo_nonce', '')
+        sudo_nonce = str(payload.get('sudo_nonce') or '')
         sudo_password = ''
         if sudo_nonce and sudo_nonce in _sudo_nonces:
             pw, expiry = _sudo_nonces.pop(sudo_nonce)
             if expiry > _time_mod.time():
                 sudo_password = pw
 
-        update_flake = request.args.get('update_flake', '0') == '1' and use_flake
-        safe_mode    = request.args.get('safe_mode', '0') == '1'
+        update_flake = bool(payload.get('update_flake')) and use_flake
+        safe_mode    = bool(payload.get('safe_mode'))
 
         if use_flake:
             # Without git nix would try to copy via the git index and fail.
@@ -615,8 +685,116 @@ def register(app, ctx):
             except Exception as exc:
                 yield f"data: {_json.dumps({'type': 'error', 'message': str(exc)})}\n\n"
 
+        job_id = uuid.uuid4().hex
+        with _job_cv:
+            _job = {
+                "id":       job_id,
+                "running":  True,
+                "events":   [],
+                "dropped":  0,
+                "success":  None,
+                "acked":    False,
+                "mode":     mode,
+                "hostname": hostname if use_flake else "",
+                "started":  time.time(),
+                "finished": None,
+            }
+            _job_cv.notify_all()
+
+        def _run_job():
+            try:
+                for event in _generate():
+                    _job_append(job_id, event)
+            except Exception as exc:  # never let the thread die silently
+                _job_append(job_id,
+                            f"data: {_json.dumps({'type': 'error', 'message': str(exc)})}\n\n")
+            finally:
+                _job_finish(job_id)
+
+        threading.Thread(target=_run_job, name=f"rebuild-{job_id[:8]}",
+                         daemon=True).start()
+        return jsonify({"success": True, "job_id": job_id})
+
+    @app.route("/api/rebuild/status")
+    def rebuild_status():
+        """Report the current (or last finished) rebuild job, if any."""
+        with _job_cv:
+            if _job is None:
+                return jsonify({"job": None})
+            return jsonify({"job": _job_public(_job)})
+
+    @app.route("/api/rebuild/ack", methods=["POST"])
+    def rebuild_ack():
+        """Mark the finished job as seen so a reload stops reopening the monitor."""
+        if err := _check_csrf(): return err
+        with _job_cv:
+            if _job is not None and not _job["running"]:
+                _job["acked"] = True
+        return jsonify({"success": True})
+
+    @app.route("/api/rebuild/stream")
+    def rebuild_stream():
+        """
+        SSE endpoint: replays the buffered output of the current job and then
+        follows it live. Attaching does not start anything, so reconnecting
+        after a lost connection is safe.
+
+        Uses a query-param token for CSRF because EventSource (browser API)
+        only supports GET and cannot add custom headers.
+
+        Query params:
+          token – CSRF token (required)
+          from  – first event index to send (default: 0). The browser's own
+                  reconnect sends Last-Event-ID instead, which wins.
+
+        Each event carries its index as SSE id, so a reconnect resumes exactly
+        where the previous connection stopped. A final {"type": "eof"} event
+        tells the client to close instead of reconnecting forever.
+        """
+        import json as _json
+
+        # CSRF via query param (EventSource cannot set headers)
+        token = request.args.get('token', '')
+        if not secrets.compare_digest(token, _csrf_token):
+            return jsonify({"error": "ERR_CSRF"}), 403
+
+        last_id = request.headers.get('Last-Event-ID', '')
+        if last_id.isdigit():
+            start = int(last_id) + 1
+        else:
+            try:
+                start = max(0, int(request.args.get('from', '0')))
+            except ValueError:
+                start = 0
+
+        def _sse():
+            idx = start
+            with _job_cv:
+                job_id = _job["id"] if _job else None
+            if job_id is None:
+                yield f"data: {_json.dumps({'type': 'eof'})}\n\n"
+                return
+            while True:
+                with _job_cv:
+                    if _job is None or _job["id"] != job_id:
+                        break  # job replaced by a newer one – indices no longer match
+                    if idx < _job["dropped"]:
+                        idx = _job["dropped"]
+                    pending = _job["events"][idx - _job["dropped"]:]
+                    if not pending:
+                        if not _job["running"]:
+                            break
+                        _job_cv.wait(timeout=15)
+                        pending = []
+                if pending:
+                    yield ''.join(f"id: {idx + i}\n{ev}" for i, ev in enumerate(pending))
+                    idx += len(pending)
+                else:
+                    yield ": keep-alive\n\n"
+            yield f"data: {_json.dumps({'type': 'eof'})}\n\n"
+
         return Response(
-            stream_with_context(_generate()),
+            _sse(),
             mimetype='text/event-stream',
             headers={
                 'Cache-Control':    'no-cache',

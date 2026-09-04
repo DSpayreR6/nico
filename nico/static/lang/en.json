@@ -301,6 +301,7 @@
   "rebuild.failed": "Rebuild failed",
   "rebuild.error": "Error",
   "rebuild.connectionError": "❌ Connection to server lost",
+  "rebuild.alreadyRunning": "A rebuild is already running – showing the running job",
   "rebuild.close": "Close",
   "rebuild.openLog": "Open log",
   "rebuild.commitPush": "Commit & Push",

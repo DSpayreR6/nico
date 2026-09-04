@@ -7,9 +7,14 @@
 - Help page: untranslated languages (es, fr, ja, ru, zh) now fall back to English instead of German
 - Documentation (README, help chapters 1.1, 3.2 and 7): form-managed files are regenerated completely on every write – comments and formatting outside of Nix bricks are not preserved, only brick content is safe
 - New validator rule `hm_duplicate_args` (error): reports duplicate arguments in the function head of Home Manager files – a Nix syntax error ("duplicate formal function argument")
+- "NiCo is already running" page: new green "Open running instance" button next to the now red "Restart" button – a closed tab can be reopened without restarting the server
+- Rebuild monitor survives tab switches, reloads and closed tabs: the rebuild runs as a background job on the server and buffers its output, so the monitor reopens with the full log on the next page load and shows the result even if the tab was gone while it finished
 
 ### Bug Fixes
 
+- Rebuild monitor: a click on the overlay background no longer closes the monitor and tears down the running rebuild stream; closing is only possible via the close button
+- Rebuild monitor: a dropped connection no longer ends the view with "connection lost" – the stream reconnects and resumes at the last received line
+- Rebuild log: output that arrives while the tab is in the background is now rendered when the tab becomes visible again
 - HM files: deleted header arguments (e.g. `lib`) stay deleted – the read/save normalization no longer forces `config, pkgs, lib` back into an existing function head; core args are only added when a file is freshly generated
 - HM panel: saving arguments now deduplicates by base name, so a duplicate entry can no longer produce an invalid function head
 
