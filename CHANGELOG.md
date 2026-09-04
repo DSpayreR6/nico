@@ -5,6 +5,7 @@
 ### New Features
 
 - Help page: untranslated languages (es, fr, ja, ru, zh) now fall back to English instead of German
+- Documentation (README, help chapters 1.1, 3.2 and 7): form-managed files are regenerated completely on every write – comments and formatting outside of Nix bricks are not preserved, only brick content is safe
 - New validator rule `hm_duplicate_args` (error): reports duplicate arguments in the function head of Home Manager files – a Nix syntax error ("duplicate formal function argument")
 
 ### Bug Fixes

@@ -11,7 +11,6 @@
 - Sensible Dateien (.env, *.key, credentials, secrets) niemals lesen, schreiben oder in Prompts einbeziehen.
 
 **Kernregeln (streng befolgen):**
-- Jede Antwort beginnt mit /statusline
 - User-Anweisungen sofort auf Fehler, Widersprüche oder Unklarheiten prüfen und direkt darauf hinweisen
 - Widersprüche zwischen `AGENTS.md`, `CLAUDE.md`, `vorgaben.txt`, `hinweisliste.txt`, Projektdateien und User-Anweisungen immer sofort benennen und vor weiterer Arbeit klären
 - Keine Annahmen treffen. Bei Unklarheit immer nachfragen

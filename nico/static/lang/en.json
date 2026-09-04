@@ -243,6 +243,7 @@
   "brix.editSaved": "Nix-Brix saved.",
   "write.title": "Write configuration",
   "write.info": "NiCo writes the current configuration to your NixOS directory and creates a <strong>checkpoint</strong> – like a time machine for your config.<br><br>You can return to any earlier checkpoint in the admin panel if something goes wrong.",
+  "write.regenNote": "The form-managed file is regenerated completely in the process. Your own comments and formatting outside of Nix bricks are not preserved – only content inside a Nix brick is safe.",
   "write.labelLabel": "Checkpoint name",
   "write.labelHint": "(optional – helps you find it later)",
   "write.labelPlaceholder": "e.g. \"Before KDE switch\" or \"First working config\"",

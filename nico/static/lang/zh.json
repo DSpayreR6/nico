@@ -243,6 +243,7 @@
   "brix.editSaved": "Nix 砖块已保存。",
   "write.title": "写入配置",
   "write.info": "NiCo 将当前配置写入您的 NixOS 目录并创建一个<strong>检查点</strong> – 就像配置的时间机器。<br><br>如果出现问题，您可以在管理面板中返回到任何早期检查点。",
+  "write.regenNote": "在此过程中，由表单管理的文件会被完全重新生成。Nix-Brix 之外的自定义注释和格式不会被保留 – 只有 Nix-Brick 内部的内容是安全的。",
   "write.labelLabel": "检查点名称",
   "write.labelHint": "（可选 – 帮助您日后查找）",
   "write.labelPlaceholder": "如\"切换 KDE 之前\"或\"第一个正常运行的配置\"",

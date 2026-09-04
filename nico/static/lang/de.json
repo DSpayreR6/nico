@@ -258,6 +258,7 @@
 
   "write.title":          "Konfiguration schreiben",
   "write.info":           "NiCo schreibt die aktuelle Konfiguration in dein NixOS-Verzeichnis und legt dabei einen <strong>Sicherungspunkt</strong> an – wie eine Zeitmaschine für deine Config.<br><br>Im Admin-Bereich kannst du jederzeit zu einem früheren Sicherungspunkt zurückkehren, falls etwas nicht stimmt.",
+  "write.regenNote":      "Die formular-verwaltete Datei wird dabei komplett neu erzeugt. Eigene Kommentare und Formatierungen außerhalb von Nix-Brix bleiben nicht erhalten – nur Inhalt innerhalb eines Nix-Bricks ist sicher.",
   "write.labelLabel":     "Bezeichnung des Sicherungspunkts",
   "write.labelHint":      "(optional – hilft dir später beim Wiederfinden)",
   "write.labelPlaceholder": "z.B. Vor KDE-Wechsel oder Erste funktionierende Config",

@@ -243,6 +243,7 @@
   "brix.editSaved": "Bloque Nix guardado.",
   "write.title": "Escribir configuración",
   "write.info": "NiCo escribe la configuración actual en tu directorio NixOS y crea un <strong>punto de control</strong> – como una máquina del tiempo para tu config.<br><br>Puedes volver a cualquier punto de control anterior en el panel admin si algo sale mal.",
+  "write.regenNote": "Al hacerlo, el archivo gestionado por el formulario se regenera por completo. Tus propios comentarios y formato fuera de los Nix-Brix no se conservan – solo el contenido dentro de un Nix-Brick está a salvo.",
   "write.labelLabel": "Nombre del punto de control",
   "write.labelHint": "(opcional – te ayuda a encontrarlo después)",
   "write.labelPlaceholder": "ej. «Antes del cambio a KDE» o «Primera config funcional»",
