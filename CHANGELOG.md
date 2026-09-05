@@ -9,6 +9,8 @@
 - New validator rule `hm_duplicate_args` (error): reports duplicate arguments in the function head of Home Manager files – a Nix syntax error ("duplicate formal function argument")
 - "NiCo is already running" page: new green "Open running instance" button next to the now red "Restart" button – a closed tab can be reopened without restarting the server
 - Rebuild monitor survives tab switches, reloads and closed tabs: the rebuild runs as a background job on the server and buffers its output, so the monitor reopens with the full log on the next page load and shows the result even if the tab was gone while it finished
+- New validator rule `swap_in_snapshot` (warning): detects a btrfs swapfile sitting in a subvolume that snapper snapshots – btrfs then refuses to snapshot that subvolume permanently, which the config itself never reveals because it builds and boots fine
+- New validator rule `host_checks_pending` (info): multi-host configs now list which hosts have never been checked by the machine-dependent rules, or were checked against an older config state; the per-host result is stored in `config.json` and therefore travels with the config to the other machines
 
 ### Bug Fixes
 

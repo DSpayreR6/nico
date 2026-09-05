@@ -7,6 +7,7 @@ Can be imported independently of Flask (e.g. for testing or future frontends).
 from __future__ import annotations
 
 import re
+from datetime import datetime
 from pathlib import Path
 
 from . import config_manager, generator, git_manager, hm_generator, importer
@@ -812,4 +813,55 @@ def run_enabled_validation(
     from . import validator as _val
     cfg_settings  = config_manager.load_config_settings(nixos_dir)
     enabled_rules = cfg_settings.get("validation_rules") or _val.default_validation_rules()
-    return _val.run_validation(nixos_dir, enabled_rules, config or {}, host=host)
+    findings = _val.run_validation(nixos_dir, enabled_rules, config or {}, host=host)
+    _record_host_check(nixos_dir, host, findings)
+    return findings
+
+
+def _record_host_check(
+    nixos_dir: str,
+    host: str | None,
+    findings: list[dict],
+) -> None:
+    """
+    Remember that the host-local rules ran on this machine for this config state.
+
+    Only the host NiCo currently runs on can be recorded – the host-local rules
+    read the running system, so a result for any other host would be wrong.
+    The entry is written to config.json (it travels with the config, which is
+    the whole point: other machines get to see what is still unchecked), but
+    only when fingerprint or result actually changed, so routine validation
+    runs do not produce git noise.
+    """
+    from . import validator as _val
+
+    this_host = _val.running_host()
+    if not this_host:
+        return
+    known = config_manager.scan_hosts(nixos_dir)
+    if len(known) < 2:
+        return                      # single-host configs never report pending hosts
+    if this_host not in known:
+        return                      # running machine is not part of this config
+    if host and host != this_host:
+        return                      # a different host was inspected
+
+    local_ids = {r.id for r in _val.ALL_RULES if r.host_local}
+    severities = [f.get("severity") for f in findings if f.get("rule_id") in local_ids]
+    result = "error" if "error" in severities else \
+             "warn" if "warning" in severities else "ok"
+
+    entry = {
+        "at": datetime.now().replace(microsecond=0).isoformat(),
+        "fp": _val.host_fingerprint(nixos_dir, this_host),
+        "result": result,
+    }
+    try:
+        stored   = config_manager.load_config_settings(nixos_dir).get("host_checks") or {}
+        previous = stored.get(this_host) or {}
+        if previous.get("fp") == entry["fp"] and previous.get("result") == entry["result"]:
+            return                  # nothing changed – leave config.json alone
+        stored[this_host] = entry
+        config_manager.save_config_settings(nixos_dir, {"host_checks": stored})
+    except Exception:
+        pass                        # a failed bookkeeping write must not break validation

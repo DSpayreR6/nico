@@ -9,8 +9,10 @@ rules check the host's own files; otherwise the root config files are used.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
+import platform
 import re
 import subprocess
 from dataclasses import dataclass
@@ -35,6 +37,9 @@ class Rule:
     description: str
     severity: str    # default severity shown in UI
     flake_only: bool = False
+    # host_local rules inspect the *running* machine (findmnt, /proc, disk UUIDs)
+    # instead of the config text, so they can only speak for the host NiCo runs on.
+    host_local: bool = False
 
 
 # ── Rule catalogue ─────────────────────────────────────────────────────────────
@@ -55,7 +60,7 @@ ALL_RULES: list[Rule] = [
     Rule("flake_arch_matches",
          "Architektur passt zum Rechner",
          "Vergleicht die system-Architekturen in flake.nix mit der Architektur dieses Rechners.",
-         "info", flake_only=True),
+         "info", flake_only=True, host_local=True),
     Rule("hardware_imported",
          "Hardware-Config eingebunden",
          "Prüft ob hardware-configuration.nix in imports eingebunden ist.",
@@ -63,7 +68,7 @@ ALL_RULES: list[Rule] = [
     Rule("hardware_matches",
          "Hardware passt zum System",
          "Warnt wenn die Hardware-Config Disk-UUIDs enthält die auf diesem System nicht existieren.",
-         "warning"),
+         "warning", host_local=True),
     Rule("duplicate_attrs",
          "Doppelte Attribute",
          "Meldet doppelte Top-Level-Attribute die Nix nicht akzeptiert.",
@@ -112,7 +117,15 @@ ALL_RULES: list[Rule] = [
     Rule("snapper_btrfs",
          "Snapper-Mountpoints prüfen",
          "Prüft ob die konfigurierten Snapper-Mountpoints existieren und btrfs sind.",
-         "error"),
+         "error", host_local=True),
+    Rule("swap_in_snapshot",
+         "Swapfile in Snapshot-Subvolume",
+         "Warnt wenn ein Btrfs-Swapfile im selben Subvolume liegt wie eine Snapper-Config – Btrfs kann dieses Subvolume dann nicht mehr snapshotten.",
+         "warning", host_local=True),
+    Rule("host_checks_pending",
+         "Ungeprüfte Hosts",
+         "Meldet Hosts, deren rechnerabhängige Prüfungen noch nie oder nur mit einem älteren Config-Stand gelaufen sind.",
+         "info"),
     Rule("snapper_in_host",
          "Snapper in Host-Config",
          "Warnt wenn Snapper in einer Flake-Config mit mehreren Hosts in der Basis-Config steht.",
@@ -147,7 +160,8 @@ def rules_as_dicts() -> list[dict]:
     """Serialise ALL_RULES for the frontend (/api/validate/rules)."""
     return [
         {"id": r.id, "label": r.label, "description": r.description,
-         "severity": r.severity, "flake_only": r.flake_only}
+         "severity": r.severity, "flake_only": r.flake_only,
+         "host_local": r.host_local}
         for r in ALL_RULES
     ]
 
@@ -1437,6 +1451,228 @@ def _rule_flake_untracked_reference(nixos_dir: str, config: dict, is_flake: bool
     )]
 
 
+# ── Host-local helpers (running machine, not config text) ─────────────────────
+
+def _findmnt_of(path: str) -> tuple[str, str, str] | None:
+    """
+    Return (target, fstype, options) of the mount that contains `path`.
+
+    findmnt --target walks up until it finds a mount point, so this works for
+    plain files too.  When several lines come back (bind mounts, stacked
+    entries) the deepest target wins – that is the one actually holding it.
+    """
+    try:
+        result = subprocess.run(
+            ["findmnt", "-n", "-o", "TARGET,FSTYPE,OPTIONS", "--target", path],
+            capture_output=True, text=True, timeout=5,
+        )
+    except Exception:
+        return None
+    rows = []
+    for line in (result.stdout or "").splitlines():
+        parts = line.split(None, 2)
+        if len(parts) == 3:
+            rows.append((parts[0], parts[1], parts[2]))
+    if not rows:
+        return None
+    return max(rows, key=lambda r: len(r[0]))
+
+
+def _subvol_of(options: str) -> str | None:
+    """Extract the btrfs subvolume from a mount option string, normalised to /name."""
+    for opt in options.split(","):
+        opt = opt.strip()
+        if opt.startswith("subvol="):
+            return "/" + opt[len("subvol="):].strip().strip("/")
+    return None
+
+
+def _swap_files() -> list[str]:
+    """
+    File-backed swap entries of the running system, read from /proc/swaps.
+
+    Partition swap (including zram) is skipped – only files live inside a
+    btrfs subvolume and can block snapshots.  Paths are escaped octal-style
+    by the kernel, so \\040 and friends are decoded back.
+    """
+    try:
+        raw = Path("/proc/swaps").read_text()
+    except Exception:
+        return []
+    files = []
+    for line in raw.splitlines()[1:]:          # first line is the header
+        parts = line.split()
+        if len(parts) < 2 or parts[1] != "file":
+            continue
+        name = re.sub(r"\\(\d{3})", lambda m: chr(int(m.group(1), 8)), parts[0])
+        files.append(name)
+    return files
+
+
+def running_host() -> str:
+    """Hostname of the machine NiCo runs on (matches networking.hostName)."""
+    return (platform.node() or "").split(".")[0]
+
+
+def host_fingerprint(nixos_dir: str, host: str | None) -> str:
+    """
+    Short hash over the .nix files that make up `host`.
+
+    Used to detect whether a stored host check still describes the current
+    config.  Covers the host directory plus the root-level files every host
+    inherits; content changes anywhere in there invalidate the check.
+    """
+    from . import config_manager
+
+    base = Path(nixos_dir)
+    files: list[Path] = []
+    for name in ("configuration.nix", "flake.nix", "hardware-configuration.nix"):
+        f = base / name
+        if f.is_file():
+            files.append(f)
+    if host:
+        settings  = config_manager.load_config_settings(nixos_dir)
+        hosts_dir = settings.get("hosts_dir") or "hosts"
+        host_root = base / hosts_dir / host
+        if host_root.is_dir():
+            files.extend(sorted(p for p in host_root.rglob("*.nix") if p.is_file()))
+    digest = hashlib.sha256()
+    for f in sorted(set(files)):
+        try:
+            digest.update(str(f.relative_to(base)).encode())
+            digest.update(f.read_bytes())
+        except Exception:
+            continue
+    return digest.hexdigest()[:16]
+
+
+# ── Rules: host-local swap / snapshot conflict ────────────────────────────────
+
+def _rule_swap_in_snapshot(nixos_dir: str, config: dict, is_flake: bool,
+                           host: str | None = None) -> list[Finding]:
+    if not config.get("snapper_enable"):
+        return []
+    snapper_configs = [e for e in (config.get("snapper_configs") or [])
+                       if (e.get("mountpoint") or "").strip()]
+    if not snapper_configs:
+        return []
+
+    # findmnt reads the running machine.  Checking a host other than this one
+    # would compare that host's snapper settings against these mounts.
+    this_host = running_host()
+    if host and this_host and host != this_host:
+        return [Finding(
+            rule_id="swap_in_snapshot",
+            severity="info",
+            message=f'Host "{host}" kann hier nicht auf Swap/Snapshot geprüft werden – '
+                    f'dieser Rechner ist "{this_host}".',
+            message_key="validator.f.swap_in_snapshot.other_host",
+            params=[host, this_host],
+            detail="Die Prüfung liest die Mountpoints des laufenden Systems. "
+                   "Führe den Validator auf dem betroffenen Rechner erneut aus.",
+        )]
+
+    swaps = _swap_files()
+    if not swaps:
+        return []
+
+    findings: list[Finding] = []
+    for swap_path in swaps:
+        swap_mount = _findmnt_of(swap_path)
+        if not swap_mount or swap_mount[1] != "btrfs":
+            continue
+        swap_subvol = _subvol_of(swap_mount[2])
+        if swap_subvol is None:
+            continue
+        for entry in snapper_configs:
+            mount = (entry.get("mountpoint") or "").strip()
+            name  = (entry.get("name") or "").strip() or mount
+            snap_mount = _findmnt_of(mount)
+            if not snap_mount or snap_mount[1] != "btrfs":
+                continue
+            snap_subvol = _subvol_of(snap_mount[2])
+            if snap_subvol is None:
+                continue
+            # Same subvolume, or the swap sits below the snapshotted one.
+            below = swap_subvol.startswith(snap_subvol.rstrip("/") + "/")
+            if swap_subvol != snap_subvol and not below:
+                continue
+            findings.append(Finding(
+                rule_id="swap_in_snapshot",
+                severity="warning",
+                message=f'Swapfile "{swap_path}" liegt im Subvolume "{swap_subvol}", '
+                        f'das Snapper-Config "{name}" snapshottet.',
+                message_key="validator.f.swap_in_snapshot.hit",
+                params=[swap_path, swap_subvol, name],
+                detail=(
+                    "Btrfs verweigert Snapshots eines Subvolumes mit aktivem Swapfile "
+                    "dauerhaft. Die Config baut und bootet trotzdem – der Fehler zeigt "
+                    "sich erst beim nächsten Timeline-Snapshot, danach können "
+                    "btrfs-cleaner/btrfs-transaction dauerhaft CPU-Last erzeugen.\n"
+                    "\n"
+                    "Geprüft wurde der Ist-Zustand des laufenden Systems "
+                    "(/proc/swaps und findmnt), nicht der Stand der Config-Dateien. "
+                    "Nach einer Änderung gilt das Ergebnis erst nach dem nächsten "
+                    "Rebuild und Neustart.\n"
+                    "\n"
+                    "Lösung: eigenes Subvolume für den Swap anlegen (außerhalb der "
+                    "gesnapshotteten Hierarchie), fileSystems.\"/swap\" mit "
+                    "subvol=swap ergänzen, swapDevices auf /swap/swapfile umbiegen "
+                    "und das Swapfile mit chattr +C (NoCOW) neu anlegen statt es zu "
+                    "verschieben."
+                ),
+            ))
+    return findings
+
+
+# ── Rules: pending host checks ────────────────────────────────────────────────
+
+def _rule_host_checks_pending(nixos_dir: str, config: dict, is_flake: bool,
+                              host: str | None = None) -> list[Finding]:
+    from . import config_manager
+
+    hosts = config_manager.scan_hosts(nixos_dir)
+    if len(hosts) < 2:
+        return []          # single-host configs have nothing to defer
+
+    cfg_settings = config_manager.load_config_settings(nixos_dir)
+    stored       = cfg_settings.get("host_checks") or {}
+    this_host    = running_host()
+
+    never, stale = [], []
+    for name in hosts:
+        entry = stored.get(name)
+        if not entry:
+            never.append(name)
+            continue
+        if entry.get("fp") != host_fingerprint(nixos_dir, name):
+            stale.append(f'{name} (zuletzt {entry.get("at", "?")[:10]})')
+
+    if not never and not stale:
+        return []
+
+    parts = []
+    if never:
+        parts.append("noch nie geprüft: " + ", ".join(never))
+    if stale:
+        parts.append("Config seither geändert: " + ", ".join(stale))
+
+    return [Finding(
+        rule_id="host_checks_pending",
+        severity="info",
+        message="Rechnerabhängige Prüfungen offen – " + "; ".join(parts) + ".",
+        message_key="validator.f.host_checks_pending",
+        params=["; ".join(parts)],
+        detail=(
+            "Einige Regeln lesen das laufende System (Mountpoints, Datenträger, "
+            f'Architektur) und gelten daher nur für "{this_host}". '
+            "Für die genannten Hosts muss der Validator auf dem jeweiligen Rechner "
+            "laufen. NiCo merkt sich das Ergebnis in config.json und zeigt es hier "
+            "auf jedem Rechner an, sobald die Config synchronisiert ist."
+        ),
+    )]
+
+
 # ── Rule function registry ─────────────────────────────────────────────────────
 
 _RULE_FNS: dict[str, object] = {
@@ -1458,6 +1694,8 @@ _RULE_FNS: dict[str, object] = {
     "hm_state_version_match": _rule_hm_state_version_match,
     "hm_duplicate_args":      _rule_hm_duplicate_args,
     "snapper_btrfs":          _rule_snapper_btrfs,
+    "swap_in_snapshot":       _rule_swap_in_snapshot,
+    "host_checks_pending":    _rule_host_checks_pending,
     "snapper_in_host":        _rule_snapper_in_host,
     "git_missing_gitignore":  _rule_git_missing_gitignore,
     "git_large_log":          _rule_git_large_log,

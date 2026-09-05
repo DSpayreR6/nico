@@ -89,6 +89,9 @@ DEFAULT_CONFIG_SETTINGS = {
         "imports_exist":     True,
         "brix_redundant":    True,
     },
+    # Per-host record of when the host-local validator rules last ran, written
+    # by core._record_host_check:  {"<host>": {"at": iso, "fp": hash, "result": …}}
+    "host_checks": {},
 }
 
 # In-memory defaults – never persisted to JSON
