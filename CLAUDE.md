@@ -51,7 +51,7 @@
 **Datei-Limit:**
 - Diese Datei ≤ 500 Zeilen. Bei >400 Zeilen sofort warnen
 
-beim starten einer sitzung prüfen ob eine datei vorgaben.txt existiert. wenn ja nachfragen, ob diese angewendet werden muss.
+`vorgaben.txt` im Projektroot gilt immer und wird ohne Rückfrage angewendet (Entscheidung 2026-09-06). Bei Sitzungsbeginn lesen, nicht nachfragen.
 
 
 bei neuen texten deutsch immer schon einfügen, alle anderen sprachen nur platzhalter
