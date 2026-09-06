@@ -1,6 +1,6 @@
 # NiCo – Changelog
 
-## Unreleased
+## 0.11.0 (2026-09-06)
 
 ### New Features
 
@@ -11,6 +11,8 @@
 - Rebuild monitor survives tab switches, reloads and closed tabs: the rebuild runs as a background job on the server and buffers its output, so the monitor reopens with the full log on the next page load and shows the result even if the tab was gone while it finished
 - New validator rule `swap_in_snapshot` (warning): detects a btrfs swapfile sitting in a subvolume that snapper snapshots – btrfs then refuses to snapshot that subvolume permanently, which the config itself never reveals because it builds and boots fine
 - New validator rule `host_checks_pending` (info): multi-host configs now list which hosts have never been checked by the machine-dependent rules, or were checked against an older config state; the per-host result is stored in `config.json` and therefore travels with the config to the other machines
+- All language files are fully translated again (es, fr, ja, ru, zh, en): btrfs balance fields and the three new validator rules – no `__TODO__` placeholders left
+- Validator rule `host_checks_pending` is now translatable end to end: three case-specific message keys (`.never`, `.stale`, `.both`) instead of one key fed with a pre-built German sentence, so the message no longer stays German inside the other six languages
 
 ### Bug Fixes
 
@@ -19,6 +21,8 @@
 - Rebuild log: output that arrives while the tab is in the background is now rendered when the tab becomes visible again
 - HM files: deleted header arguments (e.g. `lib`) stay deleted – the read/save normalization no longer forces `config, pkgs, lib` back into an existing function head; core args are only added when a file is freshly generated
 - HM panel: saving arguments now deduplicates by base name, so a duplicate entry can no longer produce an invalid function head
+- Git start guard no longer reports a deviation when a page load reattaches to a running rebuild: the working tree is dirty on purpose there (flake.lock, written .nix files are committed once the build finishes), and the guard offered to discard exactly those changes; it stays out of the way until the rebuild result has been acknowledged
+- German language file: six duplicate keys removed (`admin.gitTitle`, `admin.settings.hmDir/hmDirHint/save/saved`, `errors.ERR_IMPORT_PERMISSION`) – the dead first entries silently lost to the later ones
 
 ---
 
