@@ -1646,23 +1646,37 @@ def _rule_host_checks_pending(nixos_dir: str, config: dict, is_flake: bool,
             never.append(name)
             continue
         if entry.get("fp") != host_fingerprint(nixos_dir, name):
-            stale.append(f'{name} (zuletzt {entry.get("at", "?")[:10]})')
+            # Date in parentheses instead of "zuletzt <date>": the params of a
+            # message_key end up in the UI verbatim, so they must not carry
+            # German words into the other six languages.
+            stale.append(f'{name} ({entry.get("at", "?")[:10]})')
 
     if not never and not stale:
         return []
 
-    parts = []
-    if never:
-        parts.append("noch nie geprüft: " + ", ".join(never))
-    if stale:
-        parts.append("Config seither geändert: " + ", ".join(stale))
+    # One key per case instead of a pre-joined string, otherwise the translated
+    # sentence would still contain a German list built here.
+    never_str, stale_str = ", ".join(never), ", ".join(stale)
+    if never and stale:
+        message_key = "validator.f.host_checks_pending.both"
+        params      = [never_str, stale_str]
+        message     = (f"Rechnerabhängige Prüfungen offen – noch nie geprüft: {never_str}; "
+                       f"Config seit der Prüfung geändert: {stale_str}.")
+    elif never:
+        message_key = "validator.f.host_checks_pending.never"
+        params      = [never_str]
+        message     = f"Rechnerabhängige Prüfungen offen – noch nie geprüft: {never_str}."
+    else:
+        message_key = "validator.f.host_checks_pending.stale"
+        params      = [stale_str]
+        message     = f"Rechnerabhängige Prüfungen offen – Config seit der Prüfung geändert: {stale_str}."
 
     return [Finding(
         rule_id="host_checks_pending",
         severity="info",
-        message="Rechnerabhängige Prüfungen offen – " + "; ".join(parts) + ".",
-        message_key="validator.f.host_checks_pending",
-        params=["; ".join(parts)],
+        message=message,
+        message_key=message_key,
+        params=params,
         detail=(
             "Einige Regeln lesen das laufende System (Mountpoints, Datenträger, "
             f'Architektur) und gelten daher nur für "{this_host}". '
