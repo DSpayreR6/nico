@@ -657,15 +657,38 @@ function closeRebuild() {
 }
 
 /**
+ * Job state of this page load. Several callers need it while the page starts up
+ * (monitor restore, git start guard), so the request is made once and shared.
+ */
+let _rebuildJobPromise = null;
+
+function getRebuildJob() {
+  if (!_rebuildJobPromise) {
+    _rebuildJobPromise = fetch('/api/rebuild/status')
+      .then(r => r.json())
+      .then(d => d.job || null)
+      .catch(() => null);  // no job / server not ready
+  }
+  return _rebuildJobPromise;
+}
+
+/**
+ * True while a rebuild is running, and also while a finished rebuild has not
+ * been acknowledged yet – in both cases the monitor still owns the working tree
+ * (its 'done' handler is what commits and pushes), so start-up dialogs that
+ * offer to discard changes must stay out of the way.
+ */
+async function rebuildJobOwnsWorktree() {
+  const job = await getRebuildJob();
+  return !!job && (job.running || !job.acked);
+}
+
+/**
  * On page load: if a rebuild is running – or finished without the result having
  * been seen – reopen the monitor and replay its output from the beginning.
  */
 async function restoreRebuildMonitor() {
-  try {
-    const { job } = await fetch('/api/rebuild/status').then(r => r.json());
-    if (!job) return;
-    if (job.running || !job.acked) attachRebuildMonitor(0);
-  } catch { /* no job / server not ready */ }
+  if (await rebuildJobOwnsWorktree()) attachRebuildMonitor(0);
 }
 
 // ── Shared output helpers ─────────────────────────────────────────────────────

@@ -74,10 +74,17 @@ async function checkStatus() {
     const res  = await csrfFetch('/api/status');
     const data = await res.json();
     if (data.setup_complete) {
+      // A rebuild that is still running (or whose result has not been seen yet)
+      // leaves the working tree dirty on purpose – flake.lock and written .nix
+      // files are committed by the monitor once the build is done. The start
+      // guard would report that as an unexpected deviation and offer to discard
+      // exactly those changes, so it is skipped until the job is acknowledged.
+      const rebuildOwnsWorktree = await rebuildJobOwnsWorktree();
+
       if (data.needs_import) {
         _gitSync       = data.git_sync !== false;
         _gitStatusOnly = !!data.git_status_only;
-        if (_gitSync) {
+        if (_gitSync && !rebuildOwnsWorktree) {
           const ok = await ensureGitStartGuard(data.nixos_config_dir);
           if (!ok) return;
         }
@@ -87,7 +94,7 @@ async function checkStatus() {
       } else {
         _gitSync       = data.git_sync !== false;
         _gitStatusOnly = !!data.git_status_only;
-        if (_gitSync) {
+        if (_gitSync && !rebuildOwnsWorktree) {
           const ok = await ensureGitStartGuard(data.nixos_config_dir);
           if (!ok) return;
         }
