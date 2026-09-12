@@ -300,6 +300,17 @@ def register(app, ctx):
         if foreign:
             items.append({"id": "foreign", "files": foreign})
 
+        # Oversized files are the one item that can get the repo into a state
+        # that is no longer fully repairable, so they are reported here too.
+        report = git_manager.large_file_report(nixos_dir)
+        if report["worktree"] or report["local"] or report["published"]:
+            items.append({
+                "id":        "large",
+                "worktree":  len(report["worktree"]),
+                "local":     len(report["local"]),
+                "published": len(report["published"]),
+            })
+
         return jsonify({"items": items})
 
     @app.route("/api/git/hygiene/fix", methods=["POST"])
@@ -334,6 +345,47 @@ def register(app, ctx):
                 failed.append(f"old_log: {exc}")
 
         return jsonify({"success": not failed, "done": done, "failed": failed})
+
+    # ── Zu große Dateien (cleanup) ────────────────────────────────────────
+
+    @app.route("/api/git/large-files")
+    def git_large_files():
+        """Where oversized files sit: working tree, local commits, or already
+        published (see git_manager.large_file_report)."""
+        nixos_dir, err = _require_setup()
+        if err:
+            return jsonify({"worktree": [], "local": [], "published": [], "base": "", "commits": 0})
+        report = git_manager.large_file_report(nixos_dir)
+        report["limit_mb"] = git_manager.MAX_STAGE_BYTES // (1024 * 1024)
+        return jsonify(report)
+
+    @app.route("/api/git/large-files/clean", methods=["POST"])
+    def git_large_files_clean():
+        """Remove the chosen oversized files from the working tree and from
+        local (unpublished) commits. Published history is refused."""
+        if err := _check_csrf(): return err
+        nixos_dir, err = _require_setup()
+        if err:
+            return err
+        body   = request.get_json(silent=True) or {}
+        paths  = [p for p in body.get("paths", []) if isinstance(p, str)]
+        delete = bool(body.get("delete", True))
+        if not paths:
+            return jsonify({"success": False, "message": "Keine Datei angegeben."}), 400
+        ok, msg, result = git_manager.clean_large_files(nixos_dir, paths, delete_from_disk=delete)
+        return jsonify({"success": ok, "message": msg, **result})
+
+    @app.route("/api/git/backup-branch/drop", methods=["POST"])
+    def git_drop_backup_branch():
+        """Delete the backup branch left by a cleanup and run gc, which is what
+        actually frees the disk space the removed files were holding."""
+        if err := _check_csrf(): return err
+        nixos_dir, err = _require_setup()
+        if err:
+            return err
+        branch = ((request.get_json(silent=True) or {}).get("branch") or "").strip()
+        ok, msg = git_manager.drop_backup_branch(nixos_dir, branch)
+        return jsonify({"success": ok, "message": msg})
 
     @app.route("/api/git/close-check")
     def git_close_check():

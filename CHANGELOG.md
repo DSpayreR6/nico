@@ -12,6 +12,8 @@
 - New push error reasons: file too large for the remote, and timeout – a timeout now says that an aborted transfer is not necessarily a defect
 - Git hygiene check on every start: missing `.gitignore` entries, a leftover rebuild log in the config directory and tracked foreign files are reported in one dialog, which fixes the harmless ones directly and hands tracked foreign files to the existing cleanup dialog
 - Files the size guard kept out of a commit are reported in a dialog after saving, instead of being left out without a word
+- Cleanup for oversized files (Zeitmaschine, start check, or straight from the push error): shows per file whether it only sits on disk, in unpushed commits, or already on the server, and removes the first two – unpushed commits are folded into one new commit without the file, with a backup branch left behind until the user drops it
+- Files already pushed are reported but never rewritten: that would need a force push and would break the clones on the user's other machines
 
 ### Bug Fixes
 

@@ -625,6 +625,12 @@ async function loadGitignoreEditor() {
     cleanupBtn.dataset.bound = '1';
     cleanupBtn.addEventListener('click', openForeignCleanup);
   }
+
+  const largeBtn = document.getElementById('git-large-cleanup-btn');
+  if (largeBtn && !largeBtn.dataset.bound) {
+    largeBtn.dataset.bound = '1';
+    largeBtn.addEventListener('click', openLargeFileCleanup);
+  }
 }
 
 // ── Fremddatei-Guard (foreign-file guard) ──────────────────────────────────
@@ -706,6 +712,149 @@ function showForeignFilesDialog(files, mode) {
   });
 }
 
+// ── Zu große Dateien bereinigen ────────────────────────────────────────────
+
+function _mb(bytes) { return (bytes / (1024 * 1024)).toFixed(0); }
+
+/**
+ * Cleanup for files too large for git. What can be done depends entirely on
+ * where the file sits, so the dialog shows that per file: on disk only (just
+ * remove it), in local commits (rewritable, nothing published breaks), or
+ * already on the server (refused – a rewrite there breaks other machines).
+ */
+async function openLargeFileCleanup() {
+  let rep;
+  try {
+    const res = await csrfFetch('/api/git/large-files');
+    rep = await res.json();
+  } catch { showToast(t('toast.error'), 'error'); return; }
+
+  const fixable = [
+    ...rep.worktree.map(([p, s]) => ({ path: p, size: s, where: 'worktree' })),
+    ...rep.local.map(([p, s])    => ({ path: p, size: s, where: 'local' })),
+  ];
+  if (!fixable.length && !rep.published.length) {
+    showToast(t('git.large.none'), 'success');
+    return;
+  }
+
+  const row = (f, i) => `
+    <div style="display:flex;gap:10px;align-items:center;margin:3px 0">
+      <input type="checkbox" id="lf-${i}" checked style="margin:0">
+      <label for="lf-${i}" style="flex:1;margin:0;cursor:pointer;overflow-wrap:anywhere">
+        ${escHtml(f.path)} <span style="color:var(--fg-muted)">· ${_mb(f.size)} MB · ${escHtml(t(
+          f.where === 'worktree' ? 'git.large.whereDisk' : 'git.large.whereLocal'))}</span>
+      </label>
+    </div>`;
+  const publishedRows = rep.published.map(([p, s]) => `
+    <div style="margin:3px 0;color:var(--fg-muted);overflow-wrap:anywhere">
+      ${escHtml(p)} · ${_mb(s)} MB · ${escHtml(t('git.large.wherePublished'))}
+    </div>`).join('');
+
+  const overlay = document.createElement('div');
+  overlay.className = 'overlay';
+  overlay.innerHTML = `
+    <div class="modal">
+      <div class="modal-logo">${escHtml(t('git.large.title'))}</div>
+      <p>${escHtml(t('git.large.body', rep.limit_mb))}</p>
+      ${fixable.length ? `<div class="gsi"><div class="gsi-block">
+        <div class="gsi-block-body">${fixable.map(row).join('')}</div>
+      </div></div>
+      <label style="display:flex;gap:8px;align-items:center;margin-top:10px;cursor:pointer">
+        <input type="checkbox" id="lf-delete" checked style="margin:0">
+        <span>${escHtml(t('git.large.deleteFromDisk'))}</span>
+      </label>` : ''}
+      ${rep.published.length ? `<p style="margin-top:12px">${escHtml(t('git.large.publishedNote'))}</p>
+      <div class="gsi"><div class="gsi-block">
+        <div class="gsi-block-body">${publishedRows}</div>
+      </div></div>` : ''}
+      <p id="lf-err" style="color:var(--red);display:none;margin-top:8px"></p>
+      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px">
+        <button type="button" id="lf-cancel" class="btn-surface">${escHtml(t('git.large.cancel'))}</button>
+        ${fixable.length ? `<button type="button" id="lf-ok" class="btn-primary">${escHtml(t('git.large.apply'))}</button>` : ''}
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+
+  await new Promise(resolve => {
+    overlay.querySelector('#lf-cancel').addEventListener('click', () => { overlay.remove(); resolve(); });
+    overlay.querySelector('#lf-ok')?.addEventListener('click', async () => {
+      const btn   = overlay.querySelector('#lf-ok');
+      const paths = fixable.filter((_, i) => overlay.querySelector(`#lf-${i}`).checked).map(f => f.path);
+      if (!paths.length) { overlay.remove(); resolve(); return; }
+      btn.disabled = true;
+      try {
+        const res = await csrfFetch('/api/git/large-files/clean', {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ paths, delete: overlay.querySelector('#lf-delete').checked }),
+        });
+        const data = await res.json();
+        if (!data.success) throw new Error(data.message || '');
+        overlay.remove();
+        await _showCleanupResult(data);
+        loadGitignoreEditor();
+        loadAdminGitLog();
+        resolve();
+      } catch (e) {
+        const err = overlay.querySelector('#lf-err');
+        err.textContent = e.message || t('toast.error');
+        err.style.display = '';
+        btn.disabled = false;
+      }
+    });
+  });
+}
+
+/**
+ * Result of a cleanup. The backup branch is the point of this screen: until it
+ * is gone the old commits still exist, so nothing is lost – but the disk space
+ * is only reclaimed once the user drops it.
+ */
+function _showCleanupResult(data) {
+  return new Promise(resolve => {
+    const lines = [];
+    if (data.removed?.length) lines.push(t('git.large.resultRemoved', data.removed.join(', ')));
+    if (data.deleted?.length) lines.push(t('git.large.resultDeleted', data.deleted.join(', ')));
+    if (data.commit)          lines.push(t('git.large.resultCommit', data.commit));
+
+    const overlay = document.createElement('div');
+    overlay.className = 'overlay';
+    overlay.innerHTML = `
+      <div class="modal">
+        <div class="modal-logo">${escHtml(t('git.large.resultTitle'))}</div>
+        ${lines.map(l => `<p style="margin:4px 0">${escHtml(l)}</p>`).join('')}
+        ${data.backup_branch ? `<p style="margin-top:10px">${escHtml(
+          t('git.large.backupNote', data.backup_branch))}</p>` : ''}
+        <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px">
+          <button type="button" id="lfr-keep" class="btn-surface">${escHtml(
+            data.backup_branch ? t('git.large.keepBackup') : 'OK')}</button>
+          ${data.backup_branch ? `<button type="button" id="lfr-drop" class="btn-primary">${escHtml(
+            t('git.large.dropBackup'))}</button>` : ''}
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+
+    overlay.querySelector('#lfr-keep').addEventListener('click', () => { overlay.remove(); resolve(); });
+    overlay.querySelector('#lfr-drop')?.addEventListener('click', async () => {
+      const btn = overlay.querySelector('#lfr-drop');
+      btn.disabled = true;
+      try {
+        const res  = await csrfFetch('/api/git/backup-branch/drop', {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ branch: data.backup_branch }),
+        });
+        const d = await res.json();
+        showToast(d.success ? t('git.large.dropped') : (d.message || t('toast.error')),
+                  d.success ? 'success' : 'error');
+      } catch { showToast(t('toast.error'), 'error'); }
+      overlay.remove();
+      resolve();
+    });
+  });
+}
+
 // ── Git-Hygiene (start check) ──────────────────────────────────────────────
 
 /** One line per problem, plus which fixes the dialog may apply directly. */
@@ -721,6 +870,11 @@ function _hygieneLine(item) {
       : t('git.hygiene.oldLog', item.size_mb);
   }
   if (item.id === 'foreign') return t('git.hygiene.foreign', item.files.length);
+  if (item.id === 'large') {
+    return item.published
+      ? t('git.hygiene.largePublished', item.published)
+      : t('git.hygiene.large', item.worktree + item.local);
+  }
   return '';
 }
 
@@ -738,7 +892,8 @@ async function checkGitHygiene() {
   if (!items.length) return;
 
   const hasForeign = items.some(i => i.id === 'foreign');
-  const autoFix    = items.filter(i => i.id !== 'foreign').map(i => i.id);
+  const hasLarge   = items.some(i => i.id === 'large');
+  const autoFix    = items.filter(i => i.id === 'gitignore' || i.id === 'old_log').map(i => i.id);
   const rows = items.map(i =>
     `<div style="margin:4px 0;overflow-wrap:anywhere">• ${escHtml(_hygieneLine(i))}</div>`).join('');
 
@@ -777,8 +932,10 @@ async function checkGitHygiene() {
         overlay.remove();
         showToast(t('git.hygiene.done'), 'success');
         loadGitignoreEditor();
-        // Tracked foreign files need a decision per file – hand over to the
-        // existing cleanup dialog instead of guessing on the user's behalf.
+        // Both of these need a decision per file, so they get their own dialog
+        // instead of NiCo guessing on the user's behalf. One after the other,
+        // never stacked.
+        if (hasLarge)   await openLargeFileCleanup();
         if (hasForeign) await openForeignCleanup();
         resolve();
       } catch (e) {

@@ -320,6 +320,9 @@ function _showGitPushErrorModal(msg, errorCode) {
         <pre style="white-space:pre-wrap;font-size:0.78em;color:var(--red);margin-top:6px;overflow-x:auto">${escHtml(msg)}</pre>
       </details>
       <div class="confirm-buttons">
+        ${errorCode === 'FILE_TOO_LARGE'
+          ? `<button type="button" id="_push-err-clean" class="action-btn btn-yellow">${escHtml(t('git.large.btn'))}</button>`
+          : ''}
         <button type="button" id="_push-err-ok" class="action-btn btn-red">OK</button>
       </div>
     </div>`;
@@ -327,6 +330,12 @@ function _showGitPushErrorModal(msg, errorCode) {
   // Closes via its button only – a stray background click must not wipe the
   // one message that explains why the push failed.
   overlay.querySelector('#_push-err-ok').addEventListener('click', () => overlay.remove());
+  // Straight from the diagnosis to the fix: this error cannot be resolved by
+  // retrying, the file has to leave the history first.
+  overlay.querySelector('#_push-err-clean')?.addEventListener('click', () => {
+    overlay.remove();
+    openLargeFileCleanup();
+  });
 }
 
 /**

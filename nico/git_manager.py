@@ -522,6 +522,171 @@ def oversized_blobs_to_push(nixos_dir: str) -> list[tuple[str, int]]:
     return sorted(found.items(), key=lambda kv: -kv[1])
 
 
+def _published_base(nixos_dir: str) -> str:
+    """Newest commit the remote already has (empty if nothing was ever pushed).
+
+    Everything after it is local-only and may be rewritten; everything up to
+    and including it is published and must not be touched.
+    """
+    rc, upstream = _run(["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"], cwd=nixos_dir)
+    if rc != 0 or not upstream.strip():
+        return ""
+    rc, base = _run(["merge-base", "HEAD", upstream.strip()], cwd=nixos_dir)
+    return base.strip() if rc == 0 else ""
+
+
+def _blobs_in_commit(nixos_dir: str, commit: str, limit: int) -> list[tuple[str, int]]:
+    """Files above limit in that commit's tree, as [(path, size)]."""
+    rc, out = _run(["ls-tree", "-r", "-l", commit], cwd=nixos_dir, timeout=20)
+    if rc != 0:
+        return []
+    found = []
+    for line in out.splitlines():
+        # <mode> blob <sha> <size>\t<path>
+        meta, _, path = line.partition("\t")
+        parts = meta.split()
+        if len(parts) < 4 or parts[1] != "blob" or not parts[3].isdigit():
+            continue
+        if int(parts[3]) > limit:
+            found.append((path.strip(), int(parts[3])))
+    return found
+
+
+def large_file_report(nixos_dir: str, limit: int | None = None) -> dict:
+    """Where oversized files sit, which decides what can safely be done.
+
+    worktree  – on disk but in no commit: deleting is enough
+    local     – in commits the remote does not have: rewritable without harm
+    published – already on the remote: only a history rewrite would help, and
+                that breaks every other clone, so NiCo does not offer it
+    """
+    limit = MAX_STAGE_BYTES if limit is None else limit
+    empty = {"worktree": [], "local": [], "published": [], "base": "", "commits": 0}
+    if not is_git_repo(nixos_dir):
+        return empty
+
+    root = Path(nixos_dir)
+    tracked = set(list_tracked_files(nixos_dir))
+    worktree = []
+    for path in root.rglob("*"):
+        if ".git" in path.parts or path.is_symlink() or not path.is_file():
+            continue
+        try:
+            size = path.stat().st_size
+        except OSError:
+            continue
+        if size > limit:
+            rel = path.relative_to(root).as_posix()
+            if rel not in tracked:
+                worktree.append((rel, size))
+
+    base = _published_base(nixos_dir)
+    rc, out = _run(["rev-list", "--reverse", f"{base}..HEAD" if base else "HEAD"], cwd=nixos_dir, timeout=20)
+    local_commits = [c.strip() for c in out.splitlines() if c.strip()] if rc == 0 else []
+
+    local, seen = [], set()
+    for commit in local_commits:
+        for path, size in _blobs_in_commit(nixos_dir, commit, limit):
+            if path not in seen:
+                seen.add(path)
+                local.append((path, size))
+
+    published = []
+    if base:
+        for path, size in _blobs_in_commit(nixos_dir, base, limit):
+            published.append((path, size))
+
+    return {
+        "worktree":  sorted(worktree, key=lambda kv: -kv[1]),
+        "local":     sorted(local, key=lambda kv: -kv[1]),
+        "published": sorted(published, key=lambda kv: -kv[1]),
+        "base":      base,
+        "commits":   len(local_commits),
+    }
+
+
+def clean_large_files(nixos_dir: str, paths: list[str], delete_from_disk: bool = True) -> tuple[bool, str, dict]:
+    """Get oversized files out of the working tree and out of local commits.
+
+    Local commits back to the last published one are folded into a single new
+    commit without the files. Published history is never touched – a rewrite
+    there would need a force push and would break the clones on the user's
+    other machines. A backup branch is left behind, so nothing is lost until
+    the user says so.
+    """
+    if not is_git_repo(nixos_dir):
+        return False, "Kein Git-Repository.", {}
+    report = large_file_report(nixos_dir)
+    if any(p in [x[0] for x in report["published"]] for p in paths):
+        return False, ("Die Datei liegt bereits auf dem Server. Das ließe sich nur durch "
+                       "Umschreiben der veröffentlichten Historie beheben – das macht die "
+                       "Kopien auf anderen Rechnern unbrauchbar und wird hier nicht "
+                       "angeboten."), {}
+
+    _ensure_identity(nixos_dir)
+    result = {"backup_branch": "", "commit": "", "removed": [], "deleted": []}
+
+    in_commits = [p for p, _ in report["local"] if p in paths]
+    if in_commits:
+        ts = datetime.now().strftime("%Y%m%d-%H%M%S")
+        backup = f"nico-backup-{ts}"
+        rc, out = _run(["branch", backup, "HEAD"], cwd=nixos_dir)
+        if rc != 0:
+            return False, f"Sicherungszweig fehlgeschlagen: {out}", {}
+        result["backup_branch"] = backup
+
+        target = report["base"] or ""
+        if target:
+            rc, out = _run(["reset", "--soft", target], cwd=nixos_dir)
+        else:
+            # Never pushed: fold everything into one commit, there is no
+            # published history that could break.
+            rc, out = _run(["update-ref", "-d", "HEAD"], cwd=nixos_dir)
+        if rc != 0:
+            return False, f"Zurücksetzen fehlgeschlagen: {out}", {}
+
+        for rel in in_commits:
+            _run(["rm", "--cached", "--force", "--quiet", "--", rel], cwd=nixos_dir)
+        result["removed"] = in_commits
+
+    _append_gitignore_entries(nixos_dir, paths)
+    _run(["add", "--", ".gitignore"], cwd=nixos_dir)
+
+    if delete_from_disk:
+        for rel in paths:
+            try:
+                (Path(nixos_dir) / rel).unlink(missing_ok=True)
+                result["deleted"].append(rel)
+            except OSError:
+                pass
+
+    _stage_for_commit(nixos_dir)
+    rc, status = _run(["status", "--porcelain", "-uno"], cwd=nixos_dir)
+    if status.strip():
+        ts_msg = datetime.now().strftime("%Y-%m-%d %H:%M")
+        msg = f"NiCo: Zu große Dateien aus der Versionierung entfernt ({ts_msg})"
+        rc, out = _run(["commit", "-m", msg], cwd=nixos_dir)
+        if rc != 0:
+            return False, f"Commit fehlgeschlagen: {out}", result
+        rc, head = _run(["rev-parse", "--short", "HEAD"], cwd=nixos_dir)
+        result["commit"] = head.strip() if rc == 0 else ""
+
+    return True, "", result
+
+
+def drop_backup_branch(nixos_dir: str, branch: str) -> tuple[bool, str]:
+    """Delete a nico-backup-* branch and reclaim the space its objects held."""
+    if not branch.startswith("nico-backup-"):
+        return False, "Kein NiCo-Sicherungszweig."
+    rc, out = _run(["branch", "-D", branch], cwd=nixos_dir)
+    if rc != 0:
+        return False, out or "Zweig konnte nicht gelöscht werden."
+    _run(["reflog", "expire", "--expire=now", "--expire-unreachable=now", "--all"],
+         cwd=nixos_dir, timeout=60)
+    _run(["gc", "--prune=now", "--quiet"], cwd=nixos_dir, timeout=300)
+    return True, ""
+
+
 def _oversized_push_message(blobs: list[tuple[str, int]]) -> str:
     limit_mb = REMOTE_BLOB_LIMIT // (1024 * 1024)
     listed = ", ".join(f"{p} ({s / (1024 * 1024):.0f} MB)" for p, s in blobs)
