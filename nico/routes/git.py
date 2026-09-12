@@ -261,6 +261,80 @@ def register(app, ctx):
             return jsonify({"success": False, "error": msg}), 500
         return jsonify({"success": True})
 
+    # ── Git-Hygiene (start check) ─────────────────────────────────────────
+    # These three problems used to be reported by validator rules only, which
+    # run when the user clicks "Prüfen" – so nobody ever saw them. They are
+    # cheap enough to check on every start.
+
+    @app.route("/api/git/hygiene")
+    def git_hygiene():
+        """Report repo problems that let NiCo artefacts end up in git."""
+        nixos_dir, err = _require_setup()
+        if err:
+            return jsonify({"items": []})
+        if not git_manager.is_git_repo(nixos_dir):
+            return jsonify({"items": []})
+
+        from pathlib import Path
+        items = []
+
+        exists, content = git_manager.read_gitignore(nixos_dir)
+        present = {l.strip() for l in content.splitlines() if l.strip() and not l.startswith("#")}
+        missing = [e for e in git_manager.GITIGNORE_ENTRIES if e not in present]
+        if missing:
+            items.append({"id": "gitignore", "exists": exists, "missing": missing})
+
+        old_log = Path(nixos_dir) / "nixos-rebuild.log"
+        if old_log.exists():
+            # NiCo writes to the cache dir since 2026-09-12; anything here is a
+            # leftover that git can still pick up.
+            items.append({
+                "id":      "old_log",
+                "size_mb": round(old_log.stat().st_size / (1024 * 1024), 1),
+                "tracked": "nixos-rebuild.log" in git_manager.list_tracked_files(nixos_dir),
+            })
+
+        settings = config_manager.load_config_settings(nixos_dir)
+        keep     = settings.get("git_keep_files", []) or []
+        foreign  = git_manager.list_tracked_foreign(nixos_dir, keep=keep)
+        if foreign:
+            items.append({"id": "foreign", "files": foreign})
+
+        return jsonify({"items": items})
+
+    @app.route("/api/git/hygiene/fix", methods=["POST"])
+    def git_hygiene_fix():
+        """Apply the fixes the user accepted in the hygiene dialog.
+
+        Only the two harmless ones live here: completing .gitignore and
+        deleting the leftover log. Tracked foreign files stay with the existing
+        cleanup dialog, because untracking them is a commit and needs the
+        per-file decision.
+        """
+        if err := _check_csrf(): return err
+        nixos_dir, err = _require_setup()
+        if err:
+            return err
+        from pathlib import Path
+        actions = (request.get_json(silent=True) or {}).get("actions", [])
+        done, failed = [], []
+
+        if "gitignore" in actions:
+            ok, msg = git_manager.create_gitignore(nixos_dir)
+            (done if ok else failed).append("gitignore" if ok else f"gitignore: {msg}")
+
+        if "old_log" in actions:
+            try:
+                log_path = Path(nixos_dir) / "nixos-rebuild.log"
+                if "nixos-rebuild.log" in git_manager.list_tracked_files(nixos_dir):
+                    git_manager.untrack_foreign_files(nixos_dir, ["nixos-rebuild.log"])
+                log_path.unlink(missing_ok=True)
+                done.append("old_log")
+            except Exception as exc:
+                failed.append(f"old_log: {exc}")
+
+        return jsonify({"success": not failed, "done": done, "failed": failed})
+
     @app.route("/api/git/close-check")
     def git_close_check():
         nixos_dir, err = _require_setup()

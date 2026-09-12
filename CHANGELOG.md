@@ -10,6 +10,8 @@
 - Deliberately adding an oversized file through the foreign-file dialog is now refused with a reason instead of quietly doing nothing
 - Push is checked against the remote's 100 MB file limit before any upload starts, so an oversized file in the history is reported immediately instead of after a long, doomed transfer
 - New push error reasons: file too large for the remote, and timeout – a timeout now says that an aborted transfer is not necessarily a defect
+- Git hygiene check on every start: missing `.gitignore` entries, a leftover rebuild log in the config directory and tracked foreign files are reported in one dialog, which fixes the harmless ones directly and hands tracked foreign files to the existing cleanup dialog
+- Files the size guard kept out of a commit are reported in a dialog after saving, instead of being left out without a word
 
 ### Bug Fixes
 

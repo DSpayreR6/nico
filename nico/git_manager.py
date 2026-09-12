@@ -290,23 +290,25 @@ def stage_all(nixos_dir: str) -> tuple[bool, str]:
     return True, ""
 
 
-def auto_commit(nixos_dir: str, label: str = "") -> tuple[bool, str]:
+def auto_commit(nixos_dir: str, label: str = "") -> tuple[bool, str, list[str]]:
     """
     Stage all changes and create a commit.
     label: optional user-provided name shown in the git log (the "Sicherungspunkt" label).
-    Returns (success, message).
+    Returns (success, message, skipped) – skipped lists files left out for
+    being oversized, so callers can tell the user instead of silently
+    committing less than they asked for.
     """
     if not is_git_repo(nixos_dir):
-        return False, "Kein Git-Repository."
+        return False, "Kein Git-Repository.", []
 
     _ensure_identity(nixos_dir)
-    _stage_for_commit(nixos_dir)
+    skipped = _stage_for_commit(nixos_dir)
 
     # Check if there's actually something to commit. -uno: undecided foreign
     # files are untracked by design and must not trigger (or fail) a commit.
     rc, status = _run(["status", "--porcelain", "-uno"], cwd=nixos_dir)
     if not status:
-        return True, ""  # Nothing changed – silent success
+        return True, "", skipped  # Nothing changed – silent success
 
     ts = datetime.now().strftime("%Y-%m-%d %H:%M")
     if label and label.strip():
@@ -316,9 +318,9 @@ def auto_commit(nixos_dir: str, label: str = "") -> tuple[bool, str]:
 
     rc, out = _run(["commit", "-m", msg], cwd=nixos_dir)
     if rc != 0:
-        return False, f"Commit fehlgeschlagen: {out}"
+        return False, f"Commit fehlgeschlagen: {out}", skipped
 
-    return True, msg
+    return True, msg, skipped
 
 
 def _append_gitignore_entries(nixos_dir: str, entries: list[str]) -> None:
@@ -600,7 +602,7 @@ def git_commit_push(nixos_dir: str, label: str = "") -> tuple[bool, str, str]:
     if not is_git_repo(nixos_dir):
         return False, "Kein Git-Repository.", "UNKNOWN"
     _ensure_identity(nixos_dir)
-    ok_commit, msg_commit = auto_commit(nixos_dir, label=label or "NiCo: Lokale Änderungen")
+    ok_commit, msg_commit, _skipped = auto_commit(nixos_dir, label=label or "NiCo: Lokale Änderungen")
     if not ok_commit and "nothing to commit" not in msg_commit:
         return False, msg_commit, ""   # commit failed, not a push error
     ok_push, msg_push, code = git_push(nixos_dir)
@@ -874,7 +876,7 @@ def git_commit_push_force(nixos_dir: str) -> tuple[bool, str, str]:
     if not is_git_repo(nixos_dir):
         return False, "Kein Git-Repository.", "UNKNOWN"
     _ensure_identity(nixos_dir)
-    ok_commit, msg_commit = auto_commit(nixos_dir, label="NiCo: Lokale Änderungen")
+    ok_commit, msg_commit, _skipped = auto_commit(nixos_dir, label="NiCo: Lokale Änderungen")
     if not ok_commit and "nothing to commit" not in msg_commit:
         return False, msg_commit, ""   # commit failed, not a push error
     ok_push, msg_push, code = git_push_force(nixos_dir)

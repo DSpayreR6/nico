@@ -101,6 +101,9 @@ async function checkStatus() {
         showApp(data.nixos_config_dir);
         await loadConfig().catch(e => console.error('loadConfig:', e));
         Sidebar.setActiveFile('configuration.nix', 'configuration.nix');
+        // After the start guard, never next to it: two stacked overlays leave
+        // the user unable to tell which one they are answering.
+        if (!rebuildOwnsWorktree) await checkGitHygiene();
         if (_gitSync || _gitStatusOnly) checkGitStatus();
         if (_gitSync) checkGitRemoteStatus();
         if (_gitSync) csrfFetch('/api/git/log').then(r => r.json()).then(d => {

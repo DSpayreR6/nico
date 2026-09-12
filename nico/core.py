@@ -638,13 +638,18 @@ def write_raw_config_file(
 
     target.write_text(content, encoding="utf-8")
 
+    skipped_large: list[str] = []
     if commit:
         try:
-            git_manager.auto_commit(nixos_dir, label=label)
+            _, _, skipped_large = git_manager.auto_commit(nixos_dir, label=label)
         except Exception:
             pass
 
     result = {"success": True, "written": [rel]}
+    if skipped_large:
+        # Left out of the commit for being oversized – never let that pass
+        # unmentioned, the user would believe everything was saved to git.
+        result["skipped_large"] = skipped_large
     try:
         if not config_manager.get_app_settings().get("git_sync", True):
             return result
@@ -783,13 +788,18 @@ def write_config_files(
     # Root home.nix is legacy (pre HM-refactor) and never written anymore;
     # HM files are managed separately in hm_dir/<username>.nix.
 
+    skipped_large: list[str] = []
     if commit:
         try:
-            git_manager.auto_commit(nixos_dir, label=label)
+            _, _, skipped_large = git_manager.auto_commit(nixos_dir, label=label)
         except Exception:
             pass
 
     result: dict = {"success": True, "written": written}
+    if skipped_large:
+        # See write_raw_config_file: an oversized file that silently stays out
+        # of the commit is exactly how the 2.1 GB log incident stayed unnoticed.
+        result["skipped_large"] = skipped_large
     try:
         cfg = config_manager.load_config_settings(nixos_dir)
         if cfg.get("push_after_save"):

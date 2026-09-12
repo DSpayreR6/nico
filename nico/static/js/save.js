@@ -226,6 +226,7 @@ async function writeFiles() {
       showToast(t('write.success', data.written.join(', ')));
       if (data.push_error) _showGitPushErrorModal(data.push_error, data.push_error_code);
     }
+    if (data.skipped_large?.length) _showSkippedLargeModal(data.skipped_large);
   } else {
     showToast(tErr(data.error) || t('toast.error'), 'error');
   }

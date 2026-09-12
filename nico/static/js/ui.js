@@ -329,6 +329,31 @@ function _showGitPushErrorModal(msg, errorCode) {
   overlay.querySelector('#_push-err-ok').addEventListener('click', () => overlay.remove());
 }
 
+/**
+ * Files the size guard kept out of a commit. Shown as a dialog rather than a
+ * toast: the user just saved and would otherwise assume everything went into
+ * git, which is how a 2.1 GB log went unnoticed until it blocked every push.
+ */
+function _showSkippedLargeModal(files) {
+  const rows = files.map(f =>
+    `<div style="overflow-wrap:anywhere;margin:2px 0">${escHtml(f)}</div>`).join('');
+  const overlay = document.createElement('div');
+  overlay.className = 'overlay';
+  overlay.innerHTML = `
+    <div class="modal">
+      <div class="modal-logo">${escHtml(t('git.skippedLarge.title'))}</div>
+      <p>${escHtml(t('git.skippedLarge.body'))}</p>
+      <div class="gsi"><div class="gsi-block">
+        <div class="gsi-block-body">${rows}</div>
+      </div></div>
+      <div class="confirm-buttons">
+        <button type="button" id="_skipped-large-ok" class="action-btn btn-yellow">OK</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  overlay.querySelector('#_skipped-large-ok').addEventListener('click', () => overlay.remove());
+}
+
 // ── Event bindings ─────────────────────────────────────────────────────────
 function on(id, event, handler) {
   document.getElementById(id)?.addEventListener(event, handler);

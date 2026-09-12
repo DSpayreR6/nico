@@ -706,6 +706,91 @@ function showForeignFilesDialog(files, mode) {
   });
 }
 
+// ── Git-Hygiene (start check) ──────────────────────────────────────────────
+
+/** One line per problem, plus which fixes the dialog may apply directly. */
+function _hygieneLine(item) {
+  if (item.id === 'gitignore') {
+    return item.exists
+      ? t('git.hygiene.gitignoreIncomplete', item.missing.length)
+      : t('git.hygiene.gitignoreMissing');
+  }
+  if (item.id === 'old_log') {
+    return item.tracked
+      ? t('git.hygiene.oldLogTracked', item.size_mb)
+      : t('git.hygiene.oldLog', item.size_mb);
+  }
+  if (item.id === 'foreign') return t('git.hygiene.foreign', item.files.length);
+  return '';
+}
+
+/**
+ * Checked on every start: the validator rules covering this only ran when the
+ * user opened "Prüfen" by hand, so a config could collect NiCo artefacts for
+ * months without anyone noticing – until a 2.1 GB log blocked every push.
+ */
+async function checkGitHygiene() {
+  let items;
+  try {
+    const res = await csrfFetch('/api/git/hygiene');
+    items = (await res.json()).items || [];
+  } catch { return; }
+  if (!items.length) return;
+
+  const hasForeign = items.some(i => i.id === 'foreign');
+  const autoFix    = items.filter(i => i.id !== 'foreign').map(i => i.id);
+  const rows = items.map(i =>
+    `<div style="margin:4px 0;overflow-wrap:anywhere">• ${escHtml(_hygieneLine(i))}</div>`).join('');
+
+  const overlay = document.createElement('div');
+  overlay.className = 'overlay';
+  overlay.innerHTML = `
+    <div class="modal">
+      <div class="modal-logo">${escHtml(t('git.hygiene.title'))}</div>
+      <p>${escHtml(t('git.hygiene.body'))}</p>
+      <div class="gsi"><div class="gsi-block">
+        <div class="gsi-block-body">${rows}</div>
+      </div></div>
+      <p id="hyg-err" style="color:var(--red);display:none;margin-top:8px"></p>
+      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px">
+        <button type="button" id="hyg-later" class="btn-surface">${escHtml(t('git.hygiene.later'))}</button>
+        <button type="button" id="hyg-fix" class="btn-primary">${escHtml(t('git.hygiene.fix'))}</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+
+  await new Promise(resolve => {
+    overlay.querySelector('#hyg-later').addEventListener('click', () => { overlay.remove(); resolve(); });
+    overlay.querySelector('#hyg-fix').addEventListener('click', async () => {
+      const btn = overlay.querySelector('#hyg-fix');
+      btn.disabled = true;
+      try {
+        if (autoFix.length) {
+          const res  = await csrfFetch('/api/git/hygiene/fix', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ actions: autoFix }),
+          });
+          const data = await res.json();
+          if (!data.success) throw new Error((data.failed || []).join(', '));
+        }
+        overlay.remove();
+        showToast(t('git.hygiene.done'), 'success');
+        loadGitignoreEditor();
+        // Tracked foreign files need a decision per file – hand over to the
+        // existing cleanup dialog instead of guessing on the user's behalf.
+        if (hasForeign) await openForeignCleanup();
+        resolve();
+      } catch (e) {
+        const err = overlay.querySelector('#hyg-err');
+        err.textContent = e.message || t('toast.error');
+        err.style.display = '';
+        btn.disabled = false;
+      }
+    });
+  });
+}
+
 /** Cleanup dialog for tracked foreign files (Zeitmaschine button). */
 async function openForeignCleanup() {
   let data;
