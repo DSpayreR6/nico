@@ -288,6 +288,45 @@ function closeViewer() {
   document.getElementById('viewer-content').innerHTML = '';
 }
 
+// ── Git push error modal ───────────────────────────────────────────────────
+// Top level on purpose: rebuild.js, save.js and admin.js report push failures
+// through this modal. While it lived inside bindUI() those calls raised a
+// ReferenceError and the failure was never shown to the user.
+
+const _PUSH_ERR_MSGS = {
+  NO_KEY:           'git.pushErr.NO_KEY',
+  NO_WRITE:         'git.pushErr.NO_WRITE',
+  NOT_FOUND:        'git.pushErr.NOT_FOUND',
+  NO_NETWORK:       'git.pushErr.NO_NETWORK',
+  NOT_FAST_FORWARD: 'git.pushErr.NOT_FAST_FORWARD',
+  AUTH_FAILED:      'git.pushErr.AUTH_FAILED',
+  UNKNOWN:          'git.pushErr.UNKNOWN',
+};
+
+function _showGitPushErrorModal(msg, errorCode) {
+  const friendly = errorCode && _PUSH_ERR_MSGS[errorCode]
+    ? t(_PUSH_ERR_MSGS[errorCode])
+    : '';
+  const overlay = document.createElement('div');
+  overlay.className = 'overlay';
+  overlay.innerHTML = `
+    <div class="modal">
+      <div class="modal-logo">${escHtml(t('git.pushFailedTitle'))}</div>
+      ${friendly ? `<p style="margin-bottom:8px">${escHtml(friendly)}</p>` : ''}
+      <details style="margin-bottom:12px">
+        <summary style="font-size:0.8em;color:var(--fg-muted);cursor:pointer">${escHtml(t('git.pushErrDetail'))}</summary>
+        <pre style="white-space:pre-wrap;font-size:0.78em;color:var(--red);margin-top:6px;overflow-x:auto">${escHtml(msg)}</pre>
+      </details>
+      <div class="confirm-buttons">
+        <button type="button" id="_push-err-ok" class="action-btn btn-red">OK</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  // Closes via its button only – a stray background click must not wipe the
+  // one message that explains why the push failed.
+  overlay.querySelector('#_push-err-ok').addEventListener('click', () => overlay.remove());
+}
+
 // ── Event bindings ─────────────────────────────────────────────────────────
 function on(id, event, handler) {
   document.getElementById(id)?.addEventListener(event, handler);
@@ -541,38 +580,6 @@ function bindUI() {
     } catch (e) {
       _showGitPushErrorModal(String(e));
     }
-  }
-
-  const _PUSH_ERR_MSGS = {
-    NO_KEY:           'git.pushErr.NO_KEY',
-    NO_WRITE:         'git.pushErr.NO_WRITE',
-    NOT_FOUND:        'git.pushErr.NOT_FOUND',
-    NO_NETWORK:       'git.pushErr.NO_NETWORK',
-    NOT_FAST_FORWARD: 'git.pushErr.NOT_FAST_FORWARD',
-    AUTH_FAILED:      'git.pushErr.AUTH_FAILED',
-    UNKNOWN:          'git.pushErr.UNKNOWN',
-  };
-  function _showGitPushErrorModal(msg, errorCode) {
-    const friendly = errorCode && _PUSH_ERR_MSGS[errorCode]
-      ? t(_PUSH_ERR_MSGS[errorCode])
-      : '';
-    const overlay = document.createElement('div');
-    overlay.className = 'overlay';
-    overlay.innerHTML = `
-      <div class="modal">
-        <div class="modal-logo">${escHtml(t('git.pushFailedTitle'))}</div>
-        ${friendly ? `<p style="margin-bottom:8px">${escHtml(friendly)}</p>` : ''}
-        <details style="margin-bottom:12px">
-          <summary style="font-size:0.8em;color:var(--fg-muted);cursor:pointer">${escHtml(t('git.pushErrDetail'))}</summary>
-          <pre style="white-space:pre-wrap;font-size:0.78em;color:var(--red);margin-top:6px;overflow-x:auto">${escHtml(msg)}</pre>
-        </details>
-        <div class="confirm-buttons">
-          <button type="button" id="_push-err-ok" class="action-btn btn-red">OK</button>
-        </div>
-      </div>`;
-    document.body.appendChild(overlay);
-    overlay.querySelector('#_push-err-ok').addEventListener('click', () => overlay.remove());
-    overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
   }
 
   // Admin-Bereich

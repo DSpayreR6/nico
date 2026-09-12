@@ -1,5 +1,16 @@
 # NiCo – Changelog
 
+## Unreleased
+
+### Bug Fixes
+
+- Failed git pushes were swallowed without a word: the push error dialog was defined inside another function, so every call from the rebuild monitor, the write dialog and the settings raised a reference error – the user saw nothing and only noticed at shutdown that nothing had been pushed
+- Push error dialog now names the actual reason for combined commit-and-push actions (no key, no write access, non-fast-forward, …); the error code was dropped between `git_commit_push` and the UI
+- Rebuild monitor: the push button no longer stays stuck on "…" after a failed push, and a failed automatic push now offers a retry instead of vanishing without a trace
+- Push error dialog closes via its button only – a background click no longer discards the one message that explains the failure
+
+---
+
 ## 0.11.0 (2026-09-06)
 
 ### New Features

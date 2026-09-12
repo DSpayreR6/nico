@@ -464,18 +464,20 @@ def git_discard_changes(nixos_dir: str) -> tuple[bool, str]:
     return True, out
 
 
-def git_commit_push(nixos_dir: str, label: str = "") -> tuple[bool, str]:
-    """Commit all local changes and push to remote."""
+def git_commit_push(nixos_dir: str, label: str = "") -> tuple[bool, str, str]:
+    """Commit all local changes and push to remote.
+    Returns (success, message, error_code) – the code classifies the push
+    failure so the UI can show a readable reason instead of raw git output."""
     if not is_git_repo(nixos_dir):
-        return False, "Kein Git-Repository."
+        return False, "Kein Git-Repository.", "UNKNOWN"
     _ensure_identity(nixos_dir)
     ok_commit, msg_commit = auto_commit(nixos_dir, label=label or "NiCo: Lokale Änderungen")
     if not ok_commit and "nothing to commit" not in msg_commit:
-        return False, msg_commit
-    ok_push, msg_push, _ = git_push(nixos_dir)
+        return False, msg_commit, ""   # commit failed, not a push error
+    ok_push, msg_push, code = git_push(nixos_dir)
     if not ok_push:
-        return False, msg_push
-    return True, ""
+        return False, msg_push, code
+    return True, "", ""
 
 
 def _get_commit_info(nixos_dir: str, ref: str) -> dict:
@@ -724,28 +726,30 @@ def check_start_guard(nixos_dir: str) -> dict:
     }
 
 
-def git_push_force(nixos_dir: str) -> tuple[bool, str]:
-    """Run git push --force on the current branch."""
+def git_push_force(nixos_dir: str) -> tuple[bool, str, str]:
+    """Run git push --force on the current branch.
+    Returns (success, raw_output, error_code) – same contract as git_push."""
     if not is_git_repo(nixos_dir):
-        return False, "Kein Git-Repository."
+        return False, "Kein Git-Repository.", "UNKNOWN"
     rc, out = _run(["push", "--force"], cwd=nixos_dir, timeout=30, remote=True)
     if rc != 0:
-        return False, out or "git push --force fehlgeschlagen"
-    return True, out
+        return False, out or "git push --force fehlgeschlagen", classify_push_error(out)
+    return True, out, ""
 
 
-def git_commit_push_force(nixos_dir: str) -> tuple[bool, str]:
-    """Commit all local changes (if any) and force-push to remote."""
+def git_commit_push_force(nixos_dir: str) -> tuple[bool, str, str]:
+    """Commit all local changes (if any) and force-push to remote.
+    Returns (success, message, error_code) – see git_commit_push."""
     if not is_git_repo(nixos_dir):
-        return False, "Kein Git-Repository."
+        return False, "Kein Git-Repository.", "UNKNOWN"
     _ensure_identity(nixos_dir)
     ok_commit, msg_commit = auto_commit(nixos_dir, label="NiCo: Lokale Änderungen")
     if not ok_commit and "nothing to commit" not in msg_commit:
-        return False, msg_commit
-    ok_push, msg_push = git_push_force(nixos_dir)
+        return False, msg_commit, ""   # commit failed, not a push error
+    ok_push, msg_push, code = git_push_force(nixos_dir)
     if not ok_push:
-        return False, msg_push
-    return True, ""
+        return False, msg_push, code
+    return True, "", ""
 
 
 def check_close_state(nixos_dir: str) -> dict:

@@ -572,38 +572,45 @@ function attachRebuildMonitor(fromIndex = 0) {
                 pushInfoEl.textContent = t('rebuild.pushDone');
                 pushInfoEl.classList.remove('hidden');
               } else {
+                // Offer a retry: the commit exists, only the push is missing.
                 _showGitPushErrorModal(d.message || t('toast.error'), d.error_code);
+                pushBtn.classList.remove('hidden');
               }
-            }).catch(() => {});
+            }).catch(e => {
+              _showGitPushErrorModal(String(e));
+              pushBtn.classList.remove('hidden');
+            });
           } else {
             pushBtn.classList.remove('hidden');
-            pushBtn.onclick = async () => {
-              pushBtn.disabled = true;
-              const origText = pushBtn.textContent;
-              pushBtn.textContent = '…';
-              try {
-                const res  = await csrfFetch('/api/git/commit-push', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ label: 'NiCo: Rebuild erfolgreich' }),
-                });
-                const data = await res.json();
-                if (data.success) {
-                  pushBtn.classList.add('hidden');
-                  pushInfoEl.textContent = t('rebuild.pushDone');
-                  pushInfoEl.classList.remove('hidden');
-                } else {
-                  _showGitPushErrorModal(data.message || t('toast.error'), data.error_code);
-                  pushBtn.disabled = false;
-                  pushBtn.textContent = origText;
-                }
-              } catch (e) {
-                _showGitPushErrorModal(String(e));
-                pushBtn.disabled = false;
-                pushBtn.textContent = origText;
-              }
-            };
           }
+          // Manual push button – also the retry path after a failed auto-push.
+          pushBtn.onclick = async () => {
+            const origText = pushBtn.textContent;
+            pushBtn.disabled = true;
+            pushBtn.textContent = '…';
+            try {
+              const res  = await csrfFetch('/api/git/commit-push', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ label: 'NiCo: Rebuild erfolgreich' }),
+              });
+              const data = await res.json();
+              if (data.success) {
+                pushBtn.classList.add('hidden');
+                pushInfoEl.textContent = t('rebuild.pushDone');
+                pushInfoEl.classList.remove('hidden');
+              } else {
+                _showGitPushErrorModal(data.message || t('toast.error'), data.error_code);
+              }
+            } catch (e) {
+              _showGitPushErrorModal(String(e));
+            } finally {
+              // Never leave the button stuck on '…': a failed push must stay
+              // retryable without reloading the page.
+              pushBtn.disabled    = false;
+              pushBtn.textContent = origText;
+            }
+          };
         }).catch(() => {});
       }
     } else if (msg.type === 'error') {

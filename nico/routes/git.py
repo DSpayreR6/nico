@@ -166,24 +166,24 @@ def register(app, ctx):
         if err:
             return err
         label = (request.get_json(silent=True) or {}).get("label", "")
-        ok, msg = git_manager.git_commit_push(nixos_dir, label=label)
-        return jsonify({"success": ok, "message": msg})
+        ok, msg, code = git_manager.git_commit_push(nixos_dir, label=label)
+        return jsonify({"success": ok, "message": msg, "error_code": code})
 
     @app.route("/api/git/push-force", methods=["POST"])
     def git_push_force():
         if err := _check_csrf(): return err
         nixos_dir, err = _require_setup()
         if err: return err
-        ok, msg = git_manager.git_push_force(nixos_dir)
-        return jsonify({"success": ok, "message": msg})
+        ok, msg, code = git_manager.git_push_force(nixos_dir)
+        return jsonify({"success": ok, "message": msg, "error_code": code})
 
     @app.route("/api/git/commit-push-force", methods=["POST"])
     def git_commit_push_force():
         if err := _check_csrf(): return err
         nixos_dir, err = _require_setup()
         if err: return err
-        ok, msg = git_manager.git_commit_push_force(nixos_dir)
-        return jsonify({"success": ok, "message": msg})
+        ok, msg, code = git_manager.git_commit_push_force(nixos_dir)
+        return jsonify({"success": ok, "message": msg, "error_code": code})
 
     @app.route("/api/git/gitignore", methods=["GET"])
     def get_gitignore():
