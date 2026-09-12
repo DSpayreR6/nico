@@ -1337,6 +1337,10 @@ def _rule_git_missing_gitignore(nixos_dir: str, config: dict, is_flake: bool,
 
 def _rule_git_large_log(nixos_dir: str, config: dict, is_flake: bool,
                         host: str | None = None) -> list[Finding]:
+    # Only the old location inside the config directory is checked. Since
+    # 2026-09-12 NiCo writes the log to the cache dir and caps it, so anything
+    # found here is a leftover that git can still pick up.
+    from . import config_manager as _cm
     log_path = Path(nixos_dir) / "nixos-rebuild.log"
     if not log_path.exists():
         return []
@@ -1348,7 +1352,10 @@ def _rule_git_large_log(nixos_dir: str, config: dict, is_flake: bool,
         rule_id="git_large_log",
         severity="warning",
         message=f"nixos-rebuild.log ist {size_mb:.0f} MB groß.", message_key="validator.f.git_large_log", params=[f"{size_mb:.0f}"],
-        detail=f"Pfad: {log_path}\nDie Datei enthält nur Rebuild-Ausgabe und kann bedenkenlos gelöscht werden.",
+        detail=(f"Pfad: {log_path}\nDie Datei enthält nur Rebuild-Ausgabe und kann bedenkenlos "
+                f"gelöscht werden. NiCo schreibt das Log inzwischen nach "
+                f"{_cm.REBUILD_LOG_FILE} – diese Datei hier stammt aus einer "
+                f"früheren Version."),
     )]
 
 

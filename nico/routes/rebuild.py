@@ -34,6 +34,39 @@ _JOB_MAX_EVENTS = 20000  # ring buffer; the UI keeps far fewer log lines anyway
 _job_cv = threading.Condition()
 _job = None
 
+# Upper bound for the written rebuild log. nixos-rebuild runs with
+# `--log-format internal-json -v`, which emits one JSON line per evaluated
+# file: a single failed run produced 2.1 GB here. Only the tail is of any use
+# when looking for the error, so everything above this is dropped.
+_LOG_MAX_BYTES = 5 * 1024 * 1024
+
+
+def _write_rebuild_log(log_path: Path, lines: list[str]) -> bool:
+    """Write the rebuild output, keeping at most _LOG_MAX_BYTES from the end.
+
+    Returns True if the file was written.
+    """
+    kept, size = [], 0
+    for line in reversed(lines):
+        size += len(line.encode("utf-8", "replace")) + 1
+        if size > _LOG_MAX_BYTES:
+            break
+        kept.append(line)
+    kept.reverse()
+    dropped = len(lines) - len(kept)
+    try:
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(log_path, "w", encoding="utf-8") as fh:
+            if dropped:
+                fh.write(
+                    f"── Gekürzt: {dropped} ältere Zeilen entfernt, "
+                    f"die letzten {_LOG_MAX_BYTES // (1024 * 1024)} MB stehen unten ──\n"
+                )
+            fh.write("\n".join(kept))
+        return True
+    except Exception:
+        return False
+
 
 def _job_public(job):
     """Serializable job summary (caller must hold _job_cv)."""
@@ -331,7 +364,7 @@ def register(app, ctx):
         app_settings        = config_manager.get_app_settings()
         rebuild_log_on      = bool(app_settings.get("rebuild_log", False))
         prefetch_dry_run_on = bool(app_settings.get("prefetch_dry_run", True))
-        log_path       = Path(nixos_dir) / "nixos-rebuild.log"
+        log_path       = config_manager.REBUILD_LOG_FILE
 
         def _generate():
             # Tracks active nix activities: {id: {'phase', 'pkg', 'nix_type', 'dl_done', 'dl_expected'}}
@@ -670,12 +703,7 @@ def register(app, ctx):
                 success = proc.returncode == 0
                 log_written = False
                 if not success or rebuild_log_on:
-                    try:
-                        with open(log_path, 'w', encoding='utf-8') as _lf:
-                            _lf.write('\n'.join(log_lines))
-                        log_written = True
-                    except Exception:
-                        pass
+                    log_written = _write_rebuild_log(log_path, log_lines)
                 if not success:
                     yield f"data: {_json.dumps({'type': 'output', 'line': f'── Log gespeichert: {log_path} ──'})}\n\n"
                 yield f"data: {_json.dumps({'type': 'done', 'success': success, 'exit_code': proc.returncode, 'log_written': log_written})}\n\n"
@@ -808,7 +836,11 @@ def register(app, ctx):
         nixos_dir, err = _require_setup()
         if err:
             return err
-        log_path = Path(nixos_dir) / "nixos-rebuild.log"
+        log_path = config_manager.REBUILD_LOG_FILE
+        if not log_path.exists():
+            # Fall back to the pre-2026-09-12 location inside the config dir,
+            # so an existing log stays readable after the move.
+            log_path = Path(nixos_dir) / "nixos-rebuild.log"
         if not log_path.exists():
             return jsonify({"error": "ERR_NO_LOG"}), 404
         try:

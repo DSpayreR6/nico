@@ -974,6 +974,8 @@
   "git.pushFailedTitle":    "Push failed",
   "git.pushErrDetail":      "Show technical output",
   "git.pushErr.AUTH_FAILED": "Authentication failed. Wrong username or password (token).",
+  "git.pushErr.FILE_TOO_LARGE":   "__TODO__",
+  "git.pushErr.TIMEOUT":          "__TODO__",
   "git.pushErr.NOT_FAST_FORWARD": "Push rejected – pull first, resolve conflicts, then try again.",
   "git.pushErr.NOT_FOUND":  "Repository not found. Check the URL or access rights may be missing.",
   "git.pushErr.NO_KEY":     "SSH key missing or not authorized. No SSH key is set up for this repository on this machine.",

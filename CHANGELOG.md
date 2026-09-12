@@ -2,7 +2,18 @@
 
 ## Unreleased
 
+### New Features
+
+- The rebuild log is written to `~/.cache/nico/nixos-rebuild.log` instead of into the config directory – it is a NiCo artefact, not part of the NixOS config, and can no longer end up in git
+- The rebuild log is capped at 5 MB, keeping the end where the error is, with a header stating how many lines were dropped – a single failed rebuild used to produce a 2.1 GB file
+- Staging refuses files above 50 MB in every path (write, rebuild, quit): git history is effectively permanent, and one oversized file blocks all further pushes
+- Deliberately adding an oversized file through the foreign-file dialog is now refused with a reason instead of quietly doing nothing
+- Push is checked against the remote's 100 MB file limit before any upload starts, so an oversized file in the history is reported immediately instead of after a long, doomed transfer
+- New push error reasons: file too large for the remote, and timeout – a timeout now says that an aborted transfer is not necessarily a defect
+
 ### Bug Fixes
+
+- Push and pull no longer abort after 30 seconds (now 600): a push with a lot of data ran into the timeout, which was then reported as "network error" and sent the search in the wrong direction
 
 - Failed git pushes were swallowed without a word: the push error dialog was defined inside another function, so every call from the rebuild monitor, the write dialog and the settings raised a reference error – the user saw nothing and only noticed at shutdown that nothing had been pushed
 - Push error dialog now names the actual reason for combined commit-and-push actions (no key, no write access, non-fast-forward, …); the error code was dropped between `git_commit_push` and the UI

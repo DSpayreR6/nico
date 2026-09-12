@@ -970,6 +970,8 @@
   "git.pushFailedTitle":    "Push не удался",
   "git.pushErrDetail":      "Показать техническую информацию",
   "git.pushErr.AUTH_FAILED": "Ошибка аутентификации. Неверное имя пользователя или пароль (токен).",
+  "git.pushErr.FILE_TOO_LARGE":   "__TODO__",
+  "git.pushErr.TIMEOUT":          "__TODO__",
   "git.pushErr.NOT_FAST_FORWARD": "Push отклонён – сначала выполните pull, разрешите конфликты и повторите попытку.",
   "git.pushErr.NOT_FOUND":  "Репозиторий не найден. Проверьте URL или отсутствуют права доступа.",
   "git.pushErr.NO_KEY":     "SSH-ключ отсутствует или не авторизован. На этой машине не настроен SSH-ключ для этого репозитория.",

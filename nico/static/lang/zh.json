@@ -970,6 +970,8 @@
   "git.pushFailedTitle":    "推送失败",
   "git.pushErrDetail":      "显示技术输出",
   "git.pushErr.AUTH_FAILED": "认证失败。用户名或密码(令牌)错误。",
+  "git.pushErr.FILE_TOO_LARGE":   "__TODO__",
+  "git.pushErr.TIMEOUT":          "__TODO__",
   "git.pushErr.NOT_FAST_FORWARD": "推送被拒绝 – 请先执行 pull 并解决冲突,然后重试。",
   "git.pushErr.NOT_FOUND":  "未找到仓库。请检查 URL 或缺少访问权限。",
   "git.pushErr.NO_KEY":     "缺少 SSH 密钥或未授权。此机器上没有为该仓库配置 SSH 密钥。",

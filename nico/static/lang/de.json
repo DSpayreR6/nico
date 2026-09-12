@@ -464,6 +464,8 @@
   "git.pushErr.NO_NETWORK":       "Netzwerkfehler. Die Verbindung zum Server konnte nicht aufgebaut werden.",
   "git.pushErr.NOT_FAST_FORWARD": "Push abgelehnt – erst pull ausführen und Konflikte lösen, dann erneut versuchen.",
   "git.pushErr.AUTH_FAILED":      "Anmeldung fehlgeschlagen. Benutzername oder Passwort (Token) falsch.",
+  "git.pushErr.FILE_TOO_LARGE":   "Eine zu große Datei steckt in der Git-Historie. Der Server nimmt sie nicht an, ein erneuter Push ändert daran nichts – die Datei muss aus der Historie entfernt werden.",
+  "git.pushErr.TIMEOUT":          "Zeitüberschreitung – der Vorgang wurde abgebrochen, bevor er fertig war. Das heißt nicht zwingend, dass etwas kaputt ist: bei viel zu übertragenden Daten oder langsamer Leitung kann er schlicht zu lange dauern.",
   "git.pushErr.UNKNOWN":          "Unbekannter Fehler beim Push.",
   "git.setRemoteTitle":        "Remote-Repository einrichten",
   "git.setRemoteHint":         "Noch kein Remote konfiguriert. Plattform und Repository wählen:",

@@ -30,9 +30,20 @@ def _xdg_config_home() -> Path:
     return Path(env) if env else Path.home() / ".config"
 
 
+def _xdg_cache_home() -> Path:
+    env = os.environ.get("XDG_CACHE_HOME", "").strip()
+    return Path(env) if env else Path.home() / ".cache"
+
+
 # App settings live in the XDG config dir: the package dir is read-only when
 # NiCo is installed from the Nix store (decision 2026-07-02, see vorgaben.txt).
 APP_SETTINGS_FILE = _xdg_config_home() / "nico" / "settings.json"
+
+# The rebuild log is a NiCo artefact, not part of the NixOS config, so it lives
+# in the cache dir (decision 2026-09-12). It used to be written next to the
+# .nix files, where it kept ending up in git: one failed rebuild produced a
+# 2.1 GB log that was committed and blocked every further push.
+REBUILD_LOG_FILE = _xdg_cache_home() / "nico" / "nixos-rebuild.log"
 
 # Pre-XDG location next to the package – migrated once, then never written again.
 _LEGACY_APP_SETTINGS_FILE = Path(__file__).parent.parent / "nico-settings.json"

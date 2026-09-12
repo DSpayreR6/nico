@@ -48,7 +48,8 @@ def foreign_guard_enabled(nixos_dir: str) -> bool:
     return bool(config_manager.load_config_settings(nixos_dir).get("git_foreign_guard", True))
 
 
-def _run(args: list[str], cwd: str, timeout: int = 10, remote: bool = False) -> tuple[int, str]:
+def _run(args: list[str], cwd: str, timeout: int = 10, remote: bool = False,
+         input: str | None = None) -> tuple[int, str]:
     """Run a git command. Returns (returncode, combined stdout+stderr).
     Returns (127, 'git not found') if git is not installed.
     Pass remote=True for commands that involve network access."""
@@ -60,10 +61,15 @@ def _run(args: list[str], cwd: str, timeout: int = 10, remote: bool = False) -> 
             text=True,
             timeout=timeout,
             env=_SSH_ENV if remote else None,
+            input=input,
         )
         return result.returncode, (result.stdout + result.stderr).strip()
     except FileNotFoundError:
         return 127, "git not found"
+    except subprocess.TimeoutExpired:
+        # Marked so callers can tell a timeout from a real git error: the two
+        # need different advice ("wait / check the upload" vs. "fix the repo").
+        return 1, f"__TIMEOUT__ git {args[0]} nach {timeout}s abgebrochen"
     except Exception as e:
         return 1, str(e)
 
@@ -196,25 +202,83 @@ def list_tracked_foreign(nixos_dir: str, keep: list[str] | None = None) -> list[
                   if not is_config_file(f) and f not in keep_set)
 
 
-def _stage_for_commit(nixos_dir: str) -> None:
+# Nothing in a NixOS config legitimately reaches this size, while git history is
+# effectively permanent: a committed blob can only be removed by rewriting every
+# commit that references it. GitHub rejects anything above 100 MB outright, so a
+# single oversized file can block every further push (incident 2026-09-12: a
+# 2.1 GB nixos-rebuild.log). Staging therefore refuses such files everywhere.
+MAX_STAGE_BYTES = 50 * 1024 * 1024
+
+# Hosters refuse single files above this size (GitHub: 100 MB, hard limit in the
+# pre-receive hook). Checked before pushing so the user is not left waiting for
+# an upload that is certain to be rejected.
+REMOTE_BLOB_LIMIT = 100 * 1024 * 1024
+
+# Push and pull can move a lot of data over a slow uplink. The old 30 s aborted
+# such transfers midway and the timeout was then reported as a network problem,
+# which sent the user looking in the wrong place (incident 2026-09-12).
+REMOTE_TRANSFER_TIMEOUT = 600
+
+
+def oversized_files(nixos_dir: str, paths: list[str]) -> list[str]:
+    """Of the given repo-relative paths, those above MAX_STAGE_BYTES."""
+    out = []
+    for rel in paths:
+        p = Path(nixos_dir) / rel
+        try:
+            if p.is_file() and not p.is_symlink() and p.stat().st_size > MAX_STAGE_BYTES:
+                out.append(rel)
+        except OSError:
+            continue
+    return out
+
+
+def _unstage_oversized(nixos_dir: str) -> list[str]:
+    """Drop files above the size limit from the index again.
+
+    Runs after staging so it catches every path, no matter which of the staging
+    branches added it. A tracked file keeps its previous committed version, a
+    new one simply stays untracked. Returns what was skipped.
+    """
+    rc, out = _run(["diff", "--cached", "--name-only", "--diff-filter=ACMR"], cwd=nixos_dir)
+    if rc != 0:
+        return []
+    skipped = oversized_files(nixos_dir, [l.strip() for l in out.splitlines() if l.strip()])
+    for rel in skipped:
+        # Already committed once: restore the index entry to the last committed
+        # version, so the file stays tracked and only the new content is left
+        # out. Otherwise (new file, or a repo without any commit yet) drop the
+        # entry entirely – it goes back to being untracked.
+        rc, _ = _run(["cat-file", "-e", f"HEAD:{rel}"], cwd=nixos_dir)
+        if rc == 0:
+            _run(["restore", "--staged", "--", rel], cwd=nixos_dir)
+        else:
+            _run(["rm", "--cached", "--force", "--quiet", "--", rel], cwd=nixos_dir)
+    return skipped
+
+
+def _stage_for_commit(nixos_dir: str) -> list[str]:
     """Stage changes for a NiCo commit.
 
     With the foreign-file guard on, untracked non-config files are left alone –
     the user decides about them in the foreign-file dialog. Everything tracked
-    plus new config files is staged. Guard off = plain `git add -A`."""
+    plus new config files is staged. Guard off = plain `git add -A`.
+
+    Returns the files that were left out for being oversized."""
     if not foreign_guard_enabled(nixos_dir):
         _run(["add", "-A"], cwd=nixos_dir)
-        return
+        return _unstage_oversized(nixos_dir)
     _run(["add", "-u"], cwd=nixos_dir)
     rc, out = _run(["status", "--porcelain", "-uall"], cwd=nixos_dir)
     if rc != 0:
-        return
+        return _unstage_oversized(nixos_dir)
     for line in out.splitlines():
         if not line.startswith("??"):
             continue
         path = line[2:].strip().strip('"')
         if path and is_config_file(path):
             _run(["add", "--", path], cwd=nixos_dir)
+    return _unstage_oversized(nixos_dir)
 
 
 def stage_all(nixos_dir: str) -> tuple[bool, str]:
@@ -276,6 +340,17 @@ def include_foreign_files(nixos_dir: str, files: list[str]) -> tuple[bool, str]:
     """Stage the given untracked foreign files so the next commit includes them."""
     if not is_git_repo(nixos_dir):
         return False, "Kein Git-Repository."
+    # Refuse oversized files here rather than dropping them silently in
+    # _stage_for_commit: this is the one place where the user actively asked
+    # for the file to go into git, so they get a reason instead of nothing.
+    too_big = oversized_files(nixos_dir, files)
+    if too_big:
+        limit_mb = MAX_STAGE_BYTES // (1024 * 1024)
+        return False, (
+            f"Zu groß für Git (über {limit_mb} MB): {', '.join(too_big)}. "
+            "Solche Dateien blockieren dauerhaft jeden Push und lassen sich "
+            "später nur durch Umschreiben der History wieder entfernen."
+        )
     allowed = set(list_untracked_foreign(nixos_dir))
     for f in files:
         if f in allowed:
@@ -323,7 +398,7 @@ def git_pull(nixos_dir: str) -> tuple[bool, str]:
     """
     if not is_git_repo(nixos_dir):
         return False, "Kein Git-Repository."
-    rc, out = _run(["pull"], cwd=nixos_dir, timeout=30, remote=True)
+    rc, out = _run(["pull"], cwd=nixos_dir, timeout=REMOTE_TRANSFER_TIMEOUT, remote=True)
     if rc != 0:
         return False, out or "git pull fehlgeschlagen"
     return True, out
@@ -389,6 +464,12 @@ def set_upstream_branch(nixos_dir: str, remote_branch: str) -> tuple[bool, str]:
 def classify_push_error(output: str) -> str:
     """Map raw git error output to a short error code."""
     o = output.lower()
+    if '__timeout__' in o:
+        return 'TIMEOUT'
+    # GitHub's 100 MB limit, refused by the pre-receive hook. Worth its own code:
+    # the fix is to get the file out of the history, not to retry the push.
+    if 'gh001' in o or "exceeds github's file size limit" in o or 'large files detected' in o:
+        return 'FILE_TOO_LARGE'
     if 'permission denied (publickey)' in o or 'could not read from remote repository' in o:
         return 'NO_KEY'
     if ('permission to' in o and 'denied' in o) or 'access denied' in o:
@@ -404,11 +485,59 @@ def classify_push_error(output: str) -> str:
     return 'UNKNOWN'
 
 
+def oversized_blobs_to_push(nixos_dir: str) -> list[tuple[str, int]]:
+    """Files above REMOTE_BLOB_LIMIT in commits the remote does not have yet.
+
+    Looks at the objects themselves, not the working tree: the file causing the
+    trouble is usually long deleted while the blob lives on in the history.
+    Returns [(path, size_in_bytes)]; empty when the check could not run.
+    """
+    rc, upstream = _run(["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"], cwd=nixos_dir)
+    rev_range = f"{upstream.strip()}..HEAD" if rc == 0 and upstream.strip() else "HEAD"
+    rc, out = _run(["rev-list", "--objects", rev_range], cwd=nixos_dir, timeout=20)
+    if rc != 0 or not out.strip():
+        return []
+    entries = {}
+    for line in out.splitlines():
+        sha, _, path = line.partition(" ")
+        if path.strip():
+            entries[sha] = path.strip()
+    if not entries:
+        return []
+    rc, sizes = _run(["cat-file", "--batch-check=%(objecttype) %(objectsize) %(objectname)"],
+                     cwd=nixos_dir, timeout=20, input="\n".join(entries) + "\n")
+    if rc != 0:
+        return []
+    found = {}
+    for line in sizes.splitlines():
+        parts = line.split()
+        if len(parts) != 3 or parts[0] != "blob":
+            continue
+        size = int(parts[1])
+        if size > REMOTE_BLOB_LIMIT:
+            path = entries.get(parts[2], parts[2])
+            found[path] = max(found.get(path, 0), size)
+    return sorted(found.items(), key=lambda kv: -kv[1])
+
+
+def _oversized_push_message(blobs: list[tuple[str, int]]) -> str:
+    limit_mb = REMOTE_BLOB_LIMIT // (1024 * 1024)
+    listed = ", ".join(f"{p} ({s / (1024 * 1024):.0f} MB)" for p, s in blobs)
+    return (
+        f"Zu große Datei in einem noch nicht hochgeladenen Commit: {listed}. "
+        f"Der Server nimmt Dateien über {limit_mb} MB nicht an. Die Datei steckt "
+        "in der Git-Historie und muss dort entfernt werden – ein erneuter Push "
+        "ändert nichts."
+    )
+
+
 def git_push(nixos_dir: str) -> tuple[bool, str, str]:
     """Run git push. Returns (success, raw_output, error_code)."""
     if not is_git_repo(nixos_dir):
         return False, "Kein Git-Repository.", "UNKNOWN"
-    rc, out = _run(["push"], cwd=nixos_dir, timeout=30, remote=True)
+    if blobs := oversized_blobs_to_push(nixos_dir):
+        return False, _oversized_push_message(blobs), "FILE_TOO_LARGE"
+    rc, out = _run(["push"], cwd=nixos_dir, timeout=REMOTE_TRANSFER_TIMEOUT, remote=True)
     if rc != 0:
         return False, out or "git push fehlgeschlagen", classify_push_error(out)
     return True, out, ""
@@ -418,7 +547,7 @@ def check_write_access(nixos_dir: str) -> tuple[bool, str, str]:
     """Test push write access via dry run. Returns (ok, error_code, raw_output)."""
     if not is_git_repo(nixos_dir):
         return False, 'UNKNOWN', 'Kein Git-Repository.'
-    rc, out = _run(["push", "--dry-run"], cwd=nixos_dir, timeout=30, remote=True)
+    rc, out = _run(["push", "--dry-run"], cwd=nixos_dir, timeout=60, remote=True)
     if rc != 0:
         return False, classify_push_error(out), out
     return True, '', out
@@ -731,7 +860,9 @@ def git_push_force(nixos_dir: str) -> tuple[bool, str, str]:
     Returns (success, raw_output, error_code) – same contract as git_push."""
     if not is_git_repo(nixos_dir):
         return False, "Kein Git-Repository.", "UNKNOWN"
-    rc, out = _run(["push", "--force"], cwd=nixos_dir, timeout=30, remote=True)
+    if blobs := oversized_blobs_to_push(nixos_dir):
+        return False, _oversized_push_message(blobs), "FILE_TOO_LARGE"
+    rc, out = _run(["push", "--force"], cwd=nixos_dir, timeout=REMOTE_TRANSFER_TIMEOUT, remote=True)
     if rc != 0:
         return False, out or "git push --force fehlgeschlagen", classify_push_error(out)
     return True, out, ""

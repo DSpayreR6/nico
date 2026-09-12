@@ -970,6 +970,8 @@
   "git.pushFailedTitle":    "Push fallido",
   "git.pushErrDetail":      "Mostrar salida técnica",
   "git.pushErr.AUTH_FAILED": "Autenticación fallida. Usuario o contraseña (token) incorrectos.",
+  "git.pushErr.FILE_TOO_LARGE":   "__TODO__",
+  "git.pushErr.TIMEOUT":          "__TODO__",
   "git.pushErr.NOT_FAST_FORWARD": "Push rechazado – primero haz pull, resuelve los conflictos y vuelve a intentarlo.",
   "git.pushErr.NOT_FOUND":  "Repositorio no encontrado. Comprueba la URL o faltan permisos de acceso.",
   "git.pushErr.NO_KEY":     "Falta la clave SSH o no está autorizada. En esta máquina no hay una clave SSH configurada para este repositorio.",

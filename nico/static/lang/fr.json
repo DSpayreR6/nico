@@ -970,6 +970,8 @@
   "git.pushFailedTitle":    "Échec du push",
   "git.pushErrDetail":      "Afficher la sortie technique",
   "git.pushErr.AUTH_FAILED": "Échec de l'authentification. Nom d'utilisateur ou mot de passe (token) incorrect.",
+  "git.pushErr.FILE_TOO_LARGE":   "__TODO__",
+  "git.pushErr.TIMEOUT":          "__TODO__",
   "git.pushErr.NOT_FAST_FORWARD": "Push refusé – faites d'abord un pull, résolvez les conflits, puis réessayez.",
   "git.pushErr.NOT_FOUND":  "Dépôt introuvable. Vérifiez l'URL ou les droits d'accès manquent.",
   "git.pushErr.NO_KEY":     "Clé SSH manquante ou non autorisée. Aucune clé SSH n'est configurée pour ce dépôt sur cette machine.",

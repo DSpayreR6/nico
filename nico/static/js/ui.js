@@ -300,6 +300,8 @@ const _PUSH_ERR_MSGS = {
   NO_NETWORK:       'git.pushErr.NO_NETWORK',
   NOT_FAST_FORWARD: 'git.pushErr.NOT_FAST_FORWARD',
   AUTH_FAILED:      'git.pushErr.AUTH_FAILED',
+  FILE_TOO_LARGE:   'git.pushErr.FILE_TOO_LARGE',
+  TIMEOUT:          'git.pushErr.TIMEOUT',
   UNKNOWN:          'git.pushErr.UNKNOWN',
 };
 

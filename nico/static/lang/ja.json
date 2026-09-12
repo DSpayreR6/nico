@@ -970,6 +970,8 @@
   "git.pushFailedTitle":    "プッシュ失敗",
   "git.pushErrDetail":      "技術的な出力を表示",
   "git.pushErr.AUTH_FAILED": "認証に失敗しました。ユーザー名またはパスワード(トークン)が正しくありません。",
+  "git.pushErr.FILE_TOO_LARGE":   "__TODO__",
+  "git.pushErr.TIMEOUT":          "__TODO__",
   "git.pushErr.NOT_FAST_FORWARD": "プッシュが拒否されました – まず pull を実行して競合を解決し、再試行してください。",
   "git.pushErr.NOT_FOUND":  "リポジトリが見つかりません。URL を確認するか、アクセス権が不足しています。",
   "git.pushErr.NO_KEY":     "SSH キーがないか、承認されていません。このマシンにはこのリポジトリ用の SSH キーが設定されていません。",
