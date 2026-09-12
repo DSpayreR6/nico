@@ -364,6 +364,13 @@ function _showSkippedLargeModal(files) {
 }
 
 // ── Event bindings ─────────────────────────────────────────────────────────
+//
+// Project rule: a click on the overlay background never closes a dialog –
+// anywhere. Someone who clicks next to a window and sees it vanish cannot tell
+// what just happened, or whether it did something. Dialogs close through their
+// own buttons (Escape on a focused input is fine). A dialog with no way to
+// close it is a bug in that dialog, not a reason to bring the background click
+// back.
 function on(id, event, handler) {
   document.getElementById(id)?.addEventListener(event, handler);
 }
@@ -548,9 +555,6 @@ function bindUI() {
   // Section settings overlay
   on('sections-settings-btn',   'click', openSectionsSettings);
   on('sections-settings-close', 'click', closeSectionsSettings);
-  on('sections-settings-overlay','click', e => {
-    if (e.target === document.getElementById('sections-settings-overlay')) closeSectionsSettings();
-  });
   on('sections-settings-save',  'click', saveSectionsSettings);
 
   // Admin settings sub-tabs
@@ -621,21 +625,14 @@ function bindUI() {
   // Admin-Bereich
   on('admin-btn',       'click', openAdmin);
   on('admin-close-btn', 'click', closeAdmin);
-  on('admin-overlay',   'click', e => { if (e.target.id === 'admin-overlay') closeAdmin(); });
   on('admin-export-btn',   'click', exportZip);
   on('admin-symlink-btn',  'click', doAdminSymlink);
 
   // Validierungseinstellungen
   on('validation-settings-btn',   'click', openValidationSettings);
   on('validation-settings-close', 'click', closeValidationSettings);
-  on('validation-settings-overlay','click', e => {
-    if (e.target.id === 'validation-settings-overlay') closeValidationSettings();
-  });
   on('validation-settings-save',  'click', saveValidationSettings);
   on('validation-results-close',  'click', closeValidationResults);
-  on('validation-results-overlay','click', e => {
-    if (e.target.id === 'validation-results-overlay') closeValidationResults();
-  });
 
   on('admin-import-btn', 'click', runAdminImport);
   initImportBrowse();
@@ -652,15 +649,9 @@ function bindUI() {
   // without knowing why, and the rebuild itself keeps running unattended.
   on('rebuild-close-btn', 'click', closeRebuild);
 
-  // Sudo-Passwort-Modal: Hintergrundklick schließt (= Abbruch, handled in promptSudoPassword)
-  document.getElementById('sudo-overlay')?.addEventListener('click', e => {
-    if (e.target.id === 'sudo-overlay') document.getElementById('sudo-cancel-btn')?.click();
-  });
-
   // Write-Confirm-Dialog (Sicherungspunkt)
   on('write-confirm-btn', 'click', writeFiles);
   on('write-cancel-btn',  'click', closeWriteConfirm);
-  on('write-overlay',     'click', e => { if (e.target.id === 'write-overlay') closeWriteConfirm(); });
   on('write-label-input', 'keydown', e => {
     if (e.key === 'Enter')  writeFiles();
     if (e.key === 'Escape') closeWriteConfirm();
@@ -668,7 +659,6 @@ function bindUI() {
 
   // Dry-run modal (used by admin)
   on('dryrun-close-btn', 'click', () => document.getElementById('dryrun-overlay').classList.add('hidden'));
-  on('dryrun-overlay',   'click', e => { if (e.target.id === 'dryrun-overlay') document.getElementById('dryrun-overlay').classList.add('hidden'); });
 
   // Help dropdown
   on('help-btn', 'click', (e) => {
@@ -687,9 +677,7 @@ function bindUI() {
     window.open('/help', '_blank');
   });
   on('about-close-btn', 'click', () => document.getElementById('about-overlay').classList.add('hidden'));
-  on('about-overlay', 'click', e => { if (e.target.id === 'about-overlay') document.getElementById('about-overlay').classList.add('hidden'); });
   on('viewer-close-btn', 'click', closeViewer);
-  on('viewer-overlay', 'click', e => { if (e.target.id === 'viewer-overlay') closeViewer(); });
 
   on('diff-show-btn', 'click', () => {
     const from = document.getElementById('diff-from-select')?.value;
@@ -735,7 +723,6 @@ function bindUI() {
   // Package modal
   on('add-package-btn',  'click',   openPkgModal);
   on('pkg-close-btn',    'click',   closePkgModal);
-  on('pkg-overlay',      'click',   e => { if (e.target.id === 'pkg-overlay') closePkgModal(); });
   on('pkg-manual-add-btn', 'click', addManualPackage);
   document.getElementById('pkg-manual-input')?.addEventListener('keydown', e => {
     if (e.key === 'Enter') addManualPackage();
@@ -776,22 +763,18 @@ function bindUI() {
   on('brix-insert-btn',         'click', openBrixInsert);
   on('brix-insert-confirm-btn', 'click', insertBrix);
   on('brix-insert-cancel-btn',  'click', closeBrixInsert);
-  on('brix-insert-overlay',     'click', e => { if (e.target.id === 'brix-insert-overlay') closeBrixInsert(); });
   on('brix-name-input',         'keydown', e => { if (e.key === 'Enter') insertBrix(); if (e.key === 'Escape') closeBrixInsert(); });
 
   on('brix-move-btn',           'click', openBrixMove);
   on('brix-move-confirm-btn',   'click', moveBrix);
   on('brix-move-cancel-btn',    'click', closeBrixMove);
-  on('brix-move-overlay',       'click', e => { if (e.target.id === 'brix-move-overlay') closeBrixMove(); });
 
   on('brix-rename-confirm-btn', 'click', renameBrix);
   on('brix-rename-cancel-btn',  'click', closeBrixRename);
-  on('brix-rename-overlay',     'click', e => { if (e.target.id === 'brix-rename-overlay') closeBrixRename(); });
   on('brix-rename-new',         'keydown', e => { if (e.key === 'Enter') renameBrix(); if (e.key === 'Escape') closeBrixRename(); });
 
   on('brix-split-confirm-btn',  'click', splitBrix);
   on('brix-split-cancel-btn',   'click', closeBrixSplit);
-  on('brix-split-overlay',      'click', e => { if (e.target.id === 'brix-split-overlay') closeBrixSplit(); });
   on('brix-split-line',         'keydown', e => { if (e.key === 'Enter') splitBrix(); if (e.key === 'Escape') closeBrixSplit(); });
 
   Sidebar.init();

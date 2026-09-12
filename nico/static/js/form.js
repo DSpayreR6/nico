@@ -574,9 +574,6 @@ async function confirmClosePushPrompt() {
 
     overlay.querySelector('#close-push-confirm')?.addEventListener('click', () => cleanup(true));
     overlay.querySelector('#close-push-skip')?.addEventListener('click', () => cleanup(false));
-    overlay.addEventListener('click', e => {
-      if (e.target === overlay) cleanup(false);
-    });
   });
 }
 
