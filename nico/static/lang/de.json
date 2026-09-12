@@ -455,6 +455,13 @@
   "git.closePrompt.error": "Push fehlgeschlagen: {0}",
 
   "git.pushSuccess": "Erfolgreich gepusht.",
+  "git.pushNothing": "Nichts zu übertragen – der Server ist auf dem gleichen Stand.",
+  "git.pullNothing": "Nichts Neues – dein Stand ist bereits aktuell.",
+  "git.transfer.pushTitle": "Hochgeladen",
+  "git.transfer.pullTitle": "Geholt",
+  "git.transfer.pushBody": "{0} Sicherungspunkt(e) an {1} übertragen.",
+  "git.transfer.pullBody": "{0} Sicherungspunkt(e) von {1} geholt.",
+  "git.transfer.files": "Geänderte Dateien: {0}",
   "git.pushAutoSuccess": "Gespeichert und gepusht.",
   "git.hygiene.title": "Git-Hygiene",
   "git.hygiene.body": "An dieser Config gibt es Punkte, durch die Dateien in die Versionierung geraten, die dort nicht hingehören. Einmal aufgenommen, lassen sie sich später kaum noch entfernen.",
@@ -516,6 +523,7 @@
   "git.setRemoteError":        "Fehler beim Setzen des Remotes.",
 
   "header.nixosGitPush": "Git Push",
+  "header.nixosGitPull": "Git Pull",
 
   "admin.settings.pushSection": "Git-Synchronisation",
   "admin.settings.pushAfterSave": "Nach dem Speichern automatisch pushen",

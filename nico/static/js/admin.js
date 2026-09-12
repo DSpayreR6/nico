@@ -333,13 +333,15 @@ function _loadAdminSettings() {
             statusEl.style.color = 'var(--green)';
             showToast(t('git.setRemoteSavedRestart'), 'success');
             document.getElementById('nixos-git-push-btn')?.classList.remove('hidden');
+            document.getElementById('nixos-git-pull-btn')?.classList.remove('hidden');
             document.getElementById('git-push-settings-row')?.classList.remove('hidden');
           });
         }
       }
       if (!rs.has_git || !rs.has_remote) return;
-      // NixOS-Menü Push-Button einblenden
+      // NixOS-Menü Push- und Pull-Eintrag einblenden
       document.getElementById('nixos-git-push-btn')?.classList.remove('hidden');
+      document.getElementById('nixos-git-pull-btn')?.classList.remove('hidden');
       // Push-Settings-Sektion einblenden
       const pushRow = document.getElementById('git-push-settings-row');
       if (pushRow) pushRow.classList.remove('hidden');

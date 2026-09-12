@@ -393,17 +393,52 @@ def untrack_foreign_files(nixos_dir: str, files: list[str]) -> tuple[bool, str]:
     return True, ""
 
 
-def git_pull(nixos_dir: str) -> tuple[bool, str]:
+def _remote_label(nixos_dir: str) -> tuple[str, str]:
+    """(upstream branch, remote url) for display, empty strings if unknown."""
+    rc, upstream = _run(["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"], cwd=nixos_dir)
+    branch = upstream.strip() if rc == 0 else ""
+    name   = _get_primary_remote_name(nixos_dir)
+    rc, url = _run(["remote", "get-url", name], cwd=nixos_dir) if name else (1, "")
+    return branch, (url.strip() if rc == 0 else "")
+
+
+def push_info(nixos_dir: str) -> dict:
+    """What a push would transfer right now – must be called before pushing.
+
+    Afterwards the commits are no longer "ahead" and there would be nothing
+    left to report, which is why a push used to say nothing but "done".
+    """
+    branch, url = _remote_label(nixos_dir)
+    commits = _get_commit_list(nixos_dir, "@{u}..HEAD", limit=20) if branch else []
+    return {"remote": branch, "url": url, "commits": commits}
+
+
+def pull_info(nixos_dir: str, before: str) -> dict:
+    """What a pull brought in, compared to the commit we were on before."""
+    branch, url = _remote_label(nixos_dir)
+    rc, head = _run(["rev-parse", "HEAD"], cwd=nixos_dir)
+    after = head.strip() if rc == 0 else ""
+    if not before or not after or before == after:
+        return {"remote": branch, "url": url, "commits": [], "files": []}
+    commits = _get_commit_list(nixos_dir, f"{before}..{after}", limit=20)
+    rc, out = _run(["diff", "--name-only", before, after], cwd=nixos_dir)
+    files = [f.strip() for f in out.splitlines() if f.strip()] if rc == 0 else []
+    return {"remote": branch, "url": url, "commits": commits, "files": files}
+
+
+def git_pull(nixos_dir: str) -> tuple[bool, str, dict]:
     """
     Run git pull on the current branch.
-    Returns (success, output_message).
+    Returns (success, output_message, info) – info describes what came in.
     """
     if not is_git_repo(nixos_dir):
-        return False, "Kein Git-Repository."
+        return False, "Kein Git-Repository.", {}
+    rc, before = _run(["rev-parse", "HEAD"], cwd=nixos_dir)
+    before = before.strip() if rc == 0 else ""
     rc, out = _run(["pull"], cwd=nixos_dir, timeout=REMOTE_TRANSFER_TIMEOUT, remote=True)
     if rc != 0:
-        return False, out or "git pull fehlgeschlagen"
-    return True, out
+        return False, out or "git pull fehlgeschlagen", {}
+    return True, out, pull_info(nixos_dir, before)
 
 
 def git_fetch_remote(nixos_dir: str) -> tuple[bool, str]:
@@ -760,20 +795,22 @@ def git_discard_changes(nixos_dir: str) -> tuple[bool, str]:
     return True, out
 
 
-def git_commit_push(nixos_dir: str, label: str = "") -> tuple[bool, str, str]:
+def git_commit_push(nixos_dir: str, label: str = "") -> tuple[bool, str, str, dict]:
     """Commit all local changes and push to remote.
-    Returns (success, message, error_code) – the code classifies the push
-    failure so the UI can show a readable reason instead of raw git output."""
+    Returns (success, message, error_code, info) – the code classifies the push
+    failure so the UI can show a readable reason instead of raw git output,
+    info lists what was transferred (collected before the push, see push_info)."""
     if not is_git_repo(nixos_dir):
-        return False, "Kein Git-Repository.", "UNKNOWN"
+        return False, "Kein Git-Repository.", "UNKNOWN", {}
     _ensure_identity(nixos_dir)
     ok_commit, msg_commit, _skipped = auto_commit(nixos_dir, label=label or "NiCo: Lokale Änderungen")
     if not ok_commit and "nothing to commit" not in msg_commit:
-        return False, msg_commit, ""   # commit failed, not a push error
+        return False, msg_commit, "", {}   # commit failed, not a push error
+    info = push_info(nixos_dir)
     ok_push, msg_push, code = git_push(nixos_dir)
     if not ok_push:
-        return False, msg_push, code
-    return True, "", ""
+        return False, msg_push, code, {}
+    return True, "", "", info
 
 
 def _get_commit_info(nixos_dir: str, ref: str) -> dict:
@@ -1035,19 +1072,20 @@ def git_push_force(nixos_dir: str) -> tuple[bool, str, str]:
     return True, out, ""
 
 
-def git_commit_push_force(nixos_dir: str) -> tuple[bool, str, str]:
+def git_commit_push_force(nixos_dir: str) -> tuple[bool, str, str, dict]:
     """Commit all local changes (if any) and force-push to remote.
-    Returns (success, message, error_code) – see git_commit_push."""
+    Returns (success, message, error_code, info) – see git_commit_push."""
     if not is_git_repo(nixos_dir):
-        return False, "Kein Git-Repository.", "UNKNOWN"
+        return False, "Kein Git-Repository.", "UNKNOWN", {}
     _ensure_identity(nixos_dir)
     ok_commit, msg_commit, _skipped = auto_commit(nixos_dir, label="NiCo: Lokale Änderungen")
     if not ok_commit and "nothing to commit" not in msg_commit:
-        return False, msg_commit, ""   # commit failed, not a push error
+        return False, msg_commit, "", {}   # commit failed, not a push error
+    info = push_info(nixos_dir)
     ok_push, msg_push, code = git_push_force(nixos_dir)
     if not ok_push:
-        return False, msg_push, code
-    return True, "", ""
+        return False, msg_push, code, {}
+    return True, "", "", info
 
 
 def check_close_state(nixos_dir: str) -> dict:

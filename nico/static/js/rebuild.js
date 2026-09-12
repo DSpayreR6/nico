@@ -567,10 +567,11 @@ function attachRebuildMonitor(fromIndex = 0) {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ label: 'NiCo: Rebuild erfolgreich' }),
-            }).then(r => r.json()).then(d => {
+            }).then(r => r.json()).then(async d => {
               if (d.success) {
                 pushInfoEl.textContent = t('rebuild.pushDone');
                 pushInfoEl.classList.remove('hidden');
+                await _finishAfterPush(d.info);
               } else {
                 // Offer a retry: the commit exists, only the push is missing.
                 _showGitPushErrorModal(d.message || t('toast.error'), d.error_code);
@@ -599,6 +600,7 @@ function attachRebuildMonitor(fromIndex = 0) {
                 pushBtn.classList.add('hidden');
                 pushInfoEl.textContent = t('rebuild.pushDone');
                 pushInfoEl.classList.remove('hidden');
+                await _finishAfterPush(data.info);
               } else {
                 _showGitPushErrorModal(data.message || t('toast.error'), data.error_code);
               }
@@ -654,6 +656,18 @@ function attachRebuildMonitor(fromIndex = 0) {
   if (_rebuildVisHandler) document.removeEventListener('visibilitychange', _rebuildVisHandler);
   _rebuildVisHandler = () => { if (!document.hidden) _flushLog(); };
   document.addEventListener('visibilitychange', _rebuildVisHandler);
+}
+
+/**
+ * After a successful commit+push there is nothing left to decide in the
+ * monitor, so it closes itself instead of making the user confirm a finished
+ * job twice. The transfer window shows what went out; closing waits until it
+ * has been read.
+ */
+async function _finishAfterPush(info) {
+  const shown = await _showTransferModal('push', info);
+  if (!shown) showToast(t('rebuild.pushDone'), 'success');
+  closeRebuild();
 }
 
 function closeRebuild() {

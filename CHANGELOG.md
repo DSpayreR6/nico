@@ -14,6 +14,9 @@
 - Files the size guard kept out of a commit are reported in a dialog after saving, instead of being left out without a word
 - Cleanup for oversized files (Zeitmaschine, start check, or straight from the push error): shows per file whether it only sits on disk, in unpushed commits, or already on the server, and removes the first two – unpushed commits are folded into one new commit without the file, with a backup branch left behind until the user drops it
 - Files already pushed are reported but never rewritten: that would need a force push and would break the clones on the user's other machines
+- Push and pull now report what they moved – snapshot, description, date and machine, plus the changed files after a pull. Previously both only said "done", so there was no way to tell what had been transferred or what had just changed on disk
+- "Git Pull" as its own entry in the NixOS menu: pulling was only reachable through the start guard, which reloaded the page without a word about what it had fetched
+- The rebuild monitor closes itself after a successful commit and push instead of asking for a second confirmation of a finished job
 
 ### Bug Fixes
 

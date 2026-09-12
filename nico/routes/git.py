@@ -75,8 +75,8 @@ def register(app, ctx):
         nixos_dir, err = _require_setup()
         if err:
             return err
-        ok, msg = git_manager.git_pull(nixos_dir)
-        return jsonify({"success": ok, "message": msg})
+        ok, msg, info = git_manager.git_pull(nixos_dir)
+        return jsonify({"success": ok, "message": msg, "info": info})
 
     @app.route("/api/git/fetch-remote", methods=["POST"])
     def git_fetch_remote():
@@ -114,8 +114,12 @@ def register(app, ctx):
         nixos_dir, err = _require_setup()
         if err:
             return err
+        # Collected before pushing: afterwards nothing is "ahead" any more and
+        # there would be nothing left to report.
+        info = git_manager.push_info(nixos_dir)
         ok, msg, code = git_manager.git_push(nixos_dir)
-        return jsonify({"success": ok, "message": msg, "error_code": code})
+        return jsonify({"success": ok, "message": msg, "error_code": code,
+                        "info": info if ok else {}})
 
     @app.route("/api/git/set-remote", methods=["POST"])
     def git_set_remote():
@@ -166,24 +170,26 @@ def register(app, ctx):
         if err:
             return err
         label = (request.get_json(silent=True) or {}).get("label", "")
-        ok, msg, code = git_manager.git_commit_push(nixos_dir, label=label)
-        return jsonify({"success": ok, "message": msg, "error_code": code})
+        ok, msg, code, info = git_manager.git_commit_push(nixos_dir, label=label)
+        return jsonify({"success": ok, "message": msg, "error_code": code, "info": info})
 
     @app.route("/api/git/push-force", methods=["POST"])
     def git_push_force():
         if err := _check_csrf(): return err
         nixos_dir, err = _require_setup()
         if err: return err
+        info = git_manager.push_info(nixos_dir)
         ok, msg, code = git_manager.git_push_force(nixos_dir)
-        return jsonify({"success": ok, "message": msg, "error_code": code})
+        return jsonify({"success": ok, "message": msg, "error_code": code,
+                        "info": info if ok else {}})
 
     @app.route("/api/git/commit-push-force", methods=["POST"])
     def git_commit_push_force():
         if err := _check_csrf(): return err
         nixos_dir, err = _require_setup()
         if err: return err
-        ok, msg, code = git_manager.git_commit_push_force(nixos_dir)
-        return jsonify({"success": ok, "message": msg, "error_code": code})
+        ok, msg, code, info = git_manager.git_commit_push_force(nixos_dir)
+        return jsonify({"success": ok, "message": msg, "error_code": code, "info": info})
 
     @app.route("/api/git/gitignore", methods=["GET"])
     def get_gitignore():

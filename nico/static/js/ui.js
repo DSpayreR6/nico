@@ -339,6 +339,59 @@ function _showGitPushErrorModal(msg, errorCode) {
 }
 
 /**
+ * What a push or pull actually moved. Both used to report nothing but "done",
+ * so there was no way to tell what had been transferred – or, after a pull,
+ * what had just changed underneath you.
+ *
+ * Only shown when something happened: confirming empty windows away teaches
+ * people to click them away unread.
+ *
+ * Resolves false when there was nothing to show, and true once the user has
+ * closed the window – callers that need to act afterwards (a pull changes the
+ * files under the open form) must wait for it to be read, not race it.
+ */
+async function _showTransferModal(kind, info) {
+  const commits = info?.commits || [];
+  if (!commits.length) return false;
+
+  const rows = commits.map(c => `
+    <div style="margin:6px 0">
+      <div style="overflow-wrap:anywhere"><code>${escHtml(c.hash)}</code> ${escHtml(c.message)}</div>
+      <div style="font-size:0.82em;color:var(--fg-muted)">${escHtml(c.date)} · ${escHtml(c.author)}</div>
+    </div>`).join('');
+  const files = info.files?.length
+    ? `<p style="margin-top:10px">${escHtml(t('git.transfer.files', info.files.length))}</p>
+       <div style="font-size:0.85em;color:var(--fg-muted);overflow-wrap:anywhere">
+         ${info.files.map(f => escHtml(f)).join('<br>')}</div>`
+    : '';
+
+  const overlay = document.createElement('div');
+  overlay.className = 'overlay';
+  overlay.innerHTML = `
+    <div class="modal">
+      <div class="modal-logo">${escHtml(t(kind === 'push' ? 'git.transfer.pushTitle' : 'git.transfer.pullTitle'))}</div>
+      <p>${escHtml(t(kind === 'push' ? 'git.transfer.pushBody' : 'git.transfer.pullBody',
+                     commits.length, info.remote || '?'))}</p>
+      ${info.url ? `<p style="font-size:0.82em;color:var(--fg-muted);overflow-wrap:anywhere">${escHtml(info.url)}</p>` : ''}
+      <div class="gsi"><div class="gsi-block">
+        <div class="gsi-block-body">${rows}</div>
+      </div></div>
+      ${files}
+      <div class="confirm-buttons">
+        <button type="button" id="_transfer-ok" class="action-btn btn-green">OK</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  await new Promise(resolve => {
+    overlay.querySelector('#_transfer-ok').addEventListener('click', () => {
+      overlay.remove();
+      resolve();
+    });
+  });
+  return true;
+}
+
+/**
  * Files the size guard kept out of a commit. Shown as a dialog rather than a
  * toast: the user just saved and would otherwise assume everything went into
  * git, which is how a 2.1 GB log went unnoticed until it blocked every push.
@@ -605,6 +658,7 @@ function bindUI() {
     on('nixos-dryrun-btn',   'click', () => { close(); runSaveAndDryRun(); });
     on('nixos-rebuild-btn',  'click', () => { close(); openRebuild('switch'); });
     on('nixos-git-push-btn', 'click', () => { close(); gitPushManual(); });
+    on('nixos-git-pull-btn', 'click', () => { close(); gitPullManual(); });
     on('nixos-diff-btn',     'click', () => { close(); openDiff('HEAD~1', 'HEAD', t('diff.lastCommitTitle')); });
   })();
 
@@ -613,9 +667,31 @@ function bindUI() {
       const res  = await csrfFetch('/api/git/push', { method: 'POST' });
       const data = await res.json();
       if (data.success) {
-        showToast(t('git.pushSuccess'), 'success');
+        // Window only when something moved, otherwise the short note.
+        if (!await _showTransferModal('push', data.info)) showToast(t('git.pushNothing'), 'success');
       } else {
         _showGitPushErrorModal(data.message || t('toast.error'), data.error_code);
+      }
+    } catch (e) {
+      _showGitPushErrorModal(String(e));
+    }
+  }
+
+  async function gitPullManual() {
+    try {
+      const res  = await csrfFetch('/api/git/pull', { method: 'POST' });
+      const data = await res.json();
+      if (!data.success) {
+        _showGitPushErrorModal(data.message || t('toast.error'), data.error_code);
+        return;
+      }
+      if (await _showTransferModal('pull', data.info)) {
+        // Files on disk changed underneath the open form. Reload only after the
+        // window has been read, otherwise the reload eats the very information
+        // the user needs.
+        location.reload();
+      } else {
+        showToast(t('git.pullNothing'), 'success');
       }
     } catch (e) {
       _showGitPushErrorModal(String(e));
