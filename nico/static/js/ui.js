@@ -416,6 +416,62 @@ function _showSkippedLargeModal(files) {
   overlay.querySelector('#_skipped-large-ok').addEventListener('click', () => overlay.remove());
 }
 
+/**
+ * Bricks sitting inside another brick. Never a toast: the symptom – a brick
+ * missing from the list – says nothing about the cause, and the inner brick
+ * dies unannounced when the outer one is moved or deleted.
+ *
+ * mode 'refused'  – the write was rejected, nothing changed on disk
+ *      'existing' – written, but the file already contained the nesting
+ *      'confirm'  – raw editor: ask first, resolves true when saved anyway
+ */
+function _showNestedBricksModal(nested, mode = 'existing') {
+  const rows = (nested || []).map(n => {
+    const where = n.file ? `${n.file}:${n.line}` : `Zeile ${n.line}`;
+    return `<div style="overflow-wrap:anywhere;margin:2px 0">${
+      escHtml(t('brix.nested.row', where, n.outer, n.inner))}</div>`;
+  }).join('');
+
+  return new Promise(resolve => {
+    const overlay = document.createElement('div');
+    overlay.className = 'overlay';
+    const buttons = mode === 'confirm'
+      ? `<button type="button" id="_nested-save" class="action-btn btn-yellow">${
+           escHtml(t('brix.nested.saveAnyway'))}</button>
+         <button type="button" id="_nested-back" class="action-btn btn-secondary">${
+           escHtml(t('brix.nested.back'))}</button>`
+      : `<button type="button" id="_nested-ok" class="action-btn btn-yellow">OK</button>`;
+    overlay.innerHTML = `
+      <div class="modal">
+        <div class="modal-logo">${escHtml(t(`brix.nested.title.${mode}`))}</div>
+        <p>${escHtml(t(`brix.nested.body.${mode}`))}</p>
+        <div class="gsi"><div class="gsi-block">
+          <div class="gsi-block-body">${rows}</div>
+        </div></div>
+        <p>${escHtml(t('brix.nested.fix'))}</p>
+        <div class="confirm-buttons">${buttons}</div>
+      </div>`;
+    document.body.appendChild(overlay);
+    const done = val => { overlay.remove(); resolve(val); };
+    overlay.querySelector('#_nested-ok')?.addEventListener('click', () => done(false));
+    overlay.querySelector('#_nested-save')?.addEventListener('click', () => done(true));
+    overlay.querySelector('#_nested-back')?.addEventListener('click', () => done(false));
+  });
+}
+
+// Files already reported this page load – a pre-existing nesting would
+// otherwise pop up again on every single brick action in that file.
+const _nestedReported = new Set();
+
+/** Handle the `nested` field of a successful write. Returns nothing. */
+function reportNestedBricks(nested) {
+  if (!nested?.length) return;
+  const key = nested.map(n => `${n.file}|${n.outer}|${n.inner}`).join(',');
+  if (_nestedReported.has(key)) return;
+  _nestedReported.add(key);
+  _showNestedBricksModal(nested, 'existing');
+}
+
 // ── Event bindings ─────────────────────────────────────────────────────────
 //
 // Project rule: a click on the overlay background never closes a dialog –

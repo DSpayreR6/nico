@@ -12,6 +12,7 @@ from flask import jsonify, request
 from .. import config_manager, generator, git_manager, importer
 from ..brix import extract_brick_blocks, brix_content_to_bricks
 from ..core import (
+    NestedBricksError as _NestedBricksError,
     get_nico_type as _get_nico_type,
     read_config_file as _read_config_file,
     write_raw_config_file as _write_raw_config_file,
@@ -477,7 +478,11 @@ def register(app, ctx):
         try:
             result = _write_raw_config_file(nixos_dir, rel_path,
                                             body.get("content", ""),
-                                            label=body.get("label", ""))
+                                            label=body.get("label", ""),
+                                            force=bool(body.get("force")))
+        except _NestedBricksError as exc:
+            # 409: the write is possible, it just needs a decision first.
+            return jsonify({"error": "ERR_BRICK_NESTED", "nested": exc.nested}), 409
         except ValueError as exc:
             return _core_file_error(exc, suffix_code="ERR_FILE_TYPE",
                                     outside_code="ERR_PATH_OUTSIDE")

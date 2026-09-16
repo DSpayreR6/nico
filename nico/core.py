@@ -14,9 +14,24 @@ from . import config_manager, generator, git_manager, hm_generator, importer
 from .brix import (
     brix_content_to_bricks,
     extract_brick_blocks,
+    find_nested_bricks,
     inject_brick_blocks,
+    new_nested_bricks,
     strip_brick_blocks,
 )
+
+
+class NestedBricksError(Exception):
+    """A write would introduce a brick nested inside another brick.
+
+    Carries the offending nestings so the caller can name them; raised only
+    where the user can still decide (raw editor), never where it would lock
+    them out of a file that already contains a nesting.
+    """
+
+    def __init__(self, nested: list[dict]):
+        super().__init__("ERR_BRICK_NESTED")
+        self.nested = nested
 
 # ── File type classification ───────────────────────────────────────────────────
 
@@ -151,23 +166,27 @@ def modify_brick_in_file(
     nixos_dir: str,
     fname: str,
     modifier,  # callable: dict[str, dict] -> dict[str, dict]
-) -> tuple[bool, str]:
+) -> tuple[bool, str, list[dict]]:
     """Read fname, apply modifier(blocks) → new_blocks, rewrite with updated hash.
 
-    Returns (success, error_key_or_empty).
+    Returns (success, error_key_or_empty, nested).  A write that *introduces* a
+    nested brick is refused with ERR_BRICK_NESTED; a nesting that was already in
+    the file is written through and returned as a hint instead.  Blocking on it
+    would lock the user out of every brick action in that file – including the
+    one they need to repair it.
     """
     root  = Path(nixos_dir).resolve()
     fpath = (root / fname).resolve()
     try:
         fpath.relative_to(root)
     except ValueError:
-        return False, "ERR_SYSTEM_PATH"
+        return False, "ERR_SYSTEM_PATH", []
     if not fpath.exists():
-        return False, "ERR_FILE_NOT_FOUND"
+        return False, "ERR_FILE_NOT_FOUND", []
     try:
         content = fpath.read_text(encoding="utf-8")
     except OSError:
-        return False, "ERR_READ"
+        return False, "ERR_READ", []
 
     ftype = get_nico_type(content)
     if ftype is None or ftype == "":
@@ -185,12 +204,16 @@ def modify_brick_in_file(
     with_brick = inject_brick_blocks(clean, new_blocks)
     final      = set_type_in_content(with_brick, ftype)
 
+    introduced = new_nested_bricks(content, final)
+    if introduced:
+        return False, "ERR_BRICK_NESTED", introduced
+
     try:
         fpath.write_text(final, encoding="utf-8")
     except OSError:
-        return False, "ERR_WRITE"
+        return False, "ERR_WRITE", []
 
-    return True, ""
+    return True, "", find_nested_bricks(final)
 
 
 # ── Home Manager patching ──────────────────────────────────────────────────────
@@ -617,8 +640,15 @@ def write_raw_config_file(
     *,
     label: str = "",
     commit: bool = True,
+    force: bool = False,
 ) -> dict:
-    """Write a raw .nix file inside the config directory."""
+    """Write a raw .nix file inside the config directory.
+
+    Raises NestedBricksError when the new content introduces a nested brick and
+    force is not set.  Unlike the brick routes this is a question, not a
+    refusal: in the raw editor the markers are visible and keeping them can be
+    deliberate, and vorgaben.txt forbids discarding foreign Nix content.
+    """
     rel = (rel_path or "").strip()
     if not rel:
         raise ValueError("ERR_NO_PATH")
@@ -636,6 +666,17 @@ def write_raw_config_file(
     if is_hm_path or classify_filename(target.name) == "hm":
         content, _ = normalize_hm_content(content)
 
+    previous = ""
+    if target.exists():
+        try:
+            previous = target.read_text(encoding="utf-8")
+        except OSError:
+            previous = ""
+    if not force:
+        introduced = new_nested_bricks(previous, content)
+        if introduced:
+            raise NestedBricksError(introduced)
+
     target.write_text(content, encoding="utf-8")
 
     skipped_large: list[str] = []
@@ -645,7 +686,12 @@ def write_raw_config_file(
         except Exception:
             pass
 
-    result = {"success": True, "written": [rel]}
+    result: dict = {"success": True, "written": [rel]}
+    nested = [{**f, "file": rel} for f in find_nested_bricks(content)]
+    if nested:
+        # Already on disk before this write – not refused, but the inner brick
+        # is invisible to NiCo, so it must not stay unmentioned either.
+        result["nested"] = nested
     if skipped_large:
         # Left out of the commit for being oversized – never let that pass
         # unmentioned, the user would believe everything was saved to git.
@@ -796,6 +842,18 @@ def write_config_files(
             pass
 
     result: dict = {"success": True, "written": written}
+    # Never blocking here: the form write carries existing bricks along and the
+    # user has no way to fix a nesting from a form – it would just refuse to save.
+    nested: list[dict] = []
+    for fname in written:
+        try:
+            text = (nixos_path / fname).read_text(encoding="utf-8")
+        except OSError:
+            continue
+        for f in find_nested_bricks(text):
+            nested.append({**f, "file": fname})
+    if nested:
+        result["nested"] = nested
     if skipped_large:
         # See write_raw_config_file: an oversized file that silently stays out
         # of the commit is exactly how the 2.1 GB log incident stayed unnoticed.

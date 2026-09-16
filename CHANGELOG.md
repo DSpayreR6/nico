@@ -17,6 +17,10 @@
 - Push and pull now report what they moved – snapshot, description, date and machine, plus the changed files after a pull. Previously both only said "done", so there was no way to tell what had been transferred or what had just changed on disk
 - "Git Pull" as its own entry in the NixOS menu: pulling was only reachable through the start guard, which reloaded the page without a word about what it had fetched
 - The rebuild monitor closes itself after a successful commit and push instead of asking for a second confirmation of a finished job
+- Nix bricks are checked for nesting before every write: a brick pasted into another brick is refused, because the parser cannot see the inner one – it disappears from the brick list and is deleted together with the outer brick without a word
+- A nesting that was already on disk never blocks a write, it is only reported: refusing would lock the user out of every brick action in that file, including the one needed to repair it
+- The raw editor asks instead of refusing – the markers are visible there and keeping them can be deliberate
+- New validator rule `brix_nested` (warning): reports nested bricks in every `.nix` file of the config, not just in `configuration.nix`
 
 ### Bug Fixes
 

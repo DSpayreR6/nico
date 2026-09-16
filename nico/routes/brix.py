@@ -16,6 +16,14 @@ from ..core import (
 )
 
 
+def _nested_reply(err_str: str, nested: list[dict], fname: str):
+    """Response for a brick write refused because it would nest bricks."""
+    return jsonify({
+        "error":  err_str,
+        "nested": [{**f, "file": fname} for f in nested],
+    }), 400
+
+
 def register(app, ctx):
     _check_csrf    = ctx["check_csrf"]
     _require_setup = ctx["require_setup"]
@@ -52,12 +60,15 @@ def register(app, ctx):
             }
             return blocks
 
-        ok, err_str = _modify_brick_in_file(nixos_dir, fname, _add)
+        ok, err_str, nested = _modify_brick_in_file(nixos_dir, fname, _add)
         if name_collision[0]:
             return jsonify({"error": "ERR_BRICK_NAME_EXISTS"}), 409
+        if err_str == "ERR_BRICK_NESTED":
+            return _nested_reply(err_str, nested, fname)
         if not ok:
             return jsonify({"error": err_str}), 500
-        return jsonify({"success": True, "brick_name": name})
+        return jsonify({"success": True, "brick_name": name,
+                        "nested": [{**f, "file": fname} for f in nested]})
 
     @app.route("/api/brick/<path:name>", methods=["DELETE"])
     def brick_delete(name):
@@ -72,10 +83,13 @@ def register(app, ctx):
             blocks.pop(name, None)
             return blocks
 
-        ok, err_str = _modify_brick_in_file(nixos_dir, fname, _del)
+        ok, err_str, nested = _modify_brick_in_file(nixos_dir, fname, _del)
+        if err_str == "ERR_BRICK_NESTED":
+            return _nested_reply(err_str, nested, fname)
         if not ok:
             return jsonify({"error": err_str}), 500
-        return jsonify({"success": True})
+        return jsonify({"success": True,
+                        "nested": [{**f, "file": fname} for f in nested]})
 
     @app.route("/api/brick/<path:name>", methods=["PATCH"])
     def brick_update(name):
@@ -106,12 +120,15 @@ def register(app, ctx):
             }
             return blocks
 
-        ok, err_str = _modify_brick_in_file(nixos_dir, fname, _update)
+        ok, err_str, nested = _modify_brick_in_file(nixos_dir, fname, _update)
         if not_found[0]:
             return jsonify({"error": "ERR_BRICK_NOT_FOUND"}), 404
+        if err_str == "ERR_BRICK_NESTED":
+            return _nested_reply(err_str, nested, fname)
         if not ok:
             return jsonify({"error": err_str}), 500
-        return jsonify({"success": True})
+        return jsonify({"success": True,
+                        "nested": [{**f, "file": fname} for f in nested]})
 
     @app.route("/api/brick/rename", methods=["POST"])
     def brick_rename():
@@ -151,10 +168,13 @@ def register(app, ctx):
             return {(new_name if k == old_name else k): (new_block if k == old_name else v)
                     for k, v in blocks.items()}
 
-        ok, err_str = _modify_brick_in_file(nixos_dir, fname, _rename)
+        ok, err_str, nested = _modify_brick_in_file(nixos_dir, fname, _rename)
+        if err_str == "ERR_BRICK_NESTED":
+            return _nested_reply(err_str, nested, fname)
         if not ok:
             return jsonify({"error": err_str}), 500
-        return jsonify({"success": True, "new_name": new_name})
+        return jsonify({"success": True, "new_name": new_name,
+                        "nested": [{**f, "file": fname} for f in nested]})
 
     @app.route("/api/brick/split", methods=["POST"])
     def brick_split():
@@ -197,12 +217,15 @@ def register(app, ctx):
             items.insert(idx + 1, (new_name, block2))
             return dict(items)
 
-        ok, err_str = _modify_brick_in_file(nixos_dir, fname, _split)
+        ok, err_str, nested = _modify_brick_in_file(nixos_dir, fname, _split)
         if errors[0]:
             return jsonify({"error": errors[0][0]}), errors[0][1]
+        if err_str == "ERR_BRICK_NESTED":
+            return _nested_reply(err_str, nested, fname)
         if not ok:
             return jsonify({"error": err_str}), 500
-        return jsonify({"success": True, "new_name": new_name})
+        return jsonify({"success": True, "new_name": new_name,
+                        "nested": [{**f, "file": fname} for f in nested]})
 
     @app.route("/api/brick/move", methods=["POST"])
     def brick_move():
@@ -236,10 +259,13 @@ def register(app, ctx):
             }
             return blocks
 
-        ok, err_str = _modify_brick_in_file(nixos_dir, fname, _move)
+        ok, err_str, nested = _modify_brick_in_file(nixos_dir, fname, _move)
         if not_found[0]:
             return jsonify({"error": "ERR_BRICK_NOT_FOUND"}), 404
+        if err_str == "ERR_BRICK_NESTED":
+            return _nested_reply(err_str, nested, fname)
         if not ok:
             return jsonify({"error": err_str}), 500
-        return jsonify({"success": True})
+        return jsonify({"success": True,
+                        "nested": [{**f, "file": fname} for f in nested]})
 

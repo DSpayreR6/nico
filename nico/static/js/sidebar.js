@@ -1776,13 +1776,23 @@ const Sidebar = (() => {
       document.getElementById('file-viewer-overlay').classList.add('hidden');
 
     document.getElementById('file-viewer-save').onclick = async () => {
-      const r = await csrfFetch(`/api/file/${encoded}`, {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ content: textarea.value }),
-      });
-      const d = await r.json();
+      const _save = async (force = false) => {
+        const r = await csrfFetch(`/api/file/${encoded}`, {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ content: textarea.value, force }),
+        });
+        return r.json();
+      };
+      let d = await _save();
+      if (d.error === 'ERR_BRICK_NESTED') {
+        // Not a refusal: the markers are visible in the editor right here, and
+        // keeping them can be deliberate. The user decides.
+        if (!await _showNestedBricksModal(d.nested, 'confirm')) return;
+        d = await _save(true);
+      }
       if (d.error) { showToast(tErr(d.error), 'error'); return; }
+      reportNestedBricks(d.nested);
       document.getElementById('file-viewer-overlay').classList.add('hidden');
       showToast(t('file.saved'));
     };

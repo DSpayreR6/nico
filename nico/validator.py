@@ -81,6 +81,10 @@ ALL_RULES: list[Rule] = [
          "Brix-Blöcke mit Panel-Optionen",
          "Erkennt Brix-Blöcke deren Inhalt vermutlich vollständig über das NiCo-Panel konfigurierbar wäre.",
          "info"),
+    Rule("brix_nested",
+         "Verschachtelte Nix-Brix",
+         "Erkennt Nix-Brix die in einem anderen Brick stecken – der innere Brick ist für NiCo unsichtbar.",
+         "warning"),
     Rule("hm_user_defined",
          "HM-Referenz in Flake",
          "Prüft ob home-manager.users.* in einer .nix-Datei referenziert wird wenn HM-Dateien vorhanden sind.",
@@ -1066,6 +1070,49 @@ def _rule_hm_duplicate_args(nixos_dir: str, config: dict, is_flake: bool,
     return findings
 
 
+def _rule_brix_nested(nixos_dir: str, config: dict, is_flake: bool,
+                      host: str | None = None) -> list[Finding]:
+    """Nested bricks anywhere in the config, not just configuration.nix –
+    the case this rule exists for sat in home/<user>.nix."""
+    from .brix import find_nested_bricks
+
+    base = Path(nixos_dir)
+    findings: list[Finding] = []
+    for nix_file in sorted(base.rglob("*.nix")):
+        if ".git" in nix_file.parts:
+            continue
+        try:
+            content = nix_file.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        nested = find_nested_bricks(content)
+        if not nested:
+            continue
+        try:
+            rel = str(nix_file.relative_to(base))
+        except ValueError:
+            rel = nix_file.name
+        for f in nested:
+            findings.append(Finding(
+                rule_id="brix_nested",
+                severity="warning",
+                message=(f'{rel}: Brick "{f["outer"]}" enthält einen zweiten Brick '
+                         f'"{f["inner"]}" (Zeile {f["line"]}) – verschachtelte '
+                         "Nix-Brix werden nicht unterstützt."),
+                message_key="validator.f.brix_nested",
+                params=[rel, f["outer"], f["inner"], f["line"]],
+                detail=(
+                    "NiCo verwaltet nur den äußeren Brick. Der innere taucht in der "
+                    "Brick-Liste nicht auf und wird mitgelöscht, wenn der äußere "
+                    "gelöscht oder verschoben wird.\n"
+                    "Nix selbst stört das nicht – die Marker sind Kommentare.\n"
+                    "Beheben: im Raw-Editor entweder die beiden äußeren oder die "
+                    "beiden inneren Markerzeilen entfernen, nicht beide Paare."
+                ),
+            ))
+    return findings
+
+
 def _rule_brix_redundant(nixos_dir: str, config: dict, is_flake: bool,
                          host: str | None = None) -> list[Finding]:
     from . import importer as _imp
@@ -1706,6 +1753,7 @@ _RULE_FNS: dict[str, object] = {
     "duplicate_attrs":       _rule_duplicate_attrs,
     "imports_exist":         _rule_imports_exist,
     "brix_redundant":        _rule_brix_redundant,
+    "brix_nested":           _rule_brix_nested,
     "hm_user_defined":       _rule_hm_user_defined,
     "hm_missing_file":       _rule_hm_missing_file,
     "hm_orphan_root":        _rule_hm_orphan_root,

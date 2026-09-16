@@ -114,6 +114,71 @@ def expand_nested_legacy(blocks: dict[str, dict]) -> dict[str, dict]:
     return result
 
 
+def find_nested_bricks(nix_content: str) -> list[dict]:
+    """
+    Report new-format start markers that sit inside an already open brick.
+
+    While inside a block the parser below looks for end markers only, so such a
+    marker is swallowed as plain body text: the inner brick vanishes from NiCo
+    and dies together with the outer one when that is moved or deleted.  Nix
+    itself is unaffected – the markers are comments.
+
+    Legacy `# <brix: name>` markers inside a new-format brick are *not*
+    reported: expand_nested_legacy() resolves those on purpose.
+
+    Returns [{"outer": str, "inner": str, "line": int}, ...], lines 1-based.
+    """
+    findings: list[dict] = []
+    current_name: str | None = None
+
+    for lineno, line in enumerate(nix_content.splitlines(), start=1):
+        if current_name is None:
+            m = _START.search(line)
+            if m:
+                current_name = m.group(3)
+                continue
+            m_old = _START_OLD.search(line)
+            if m_old:
+                current_name = m_old.group(1)
+            continue
+
+        m_inner = _START.search(line)
+        if m_inner:
+            findings.append({
+                "outer": current_name,
+                "inner": m_inner.group(3),
+                "line":  lineno,
+            })
+            continue
+
+        # Same closing condition as extract_brick_blocks: only the matching
+        # name ends the block, regardless of marker format.
+        m_end     = _END.search(line)
+        m_end_old = _END_OLD.search(line)
+        end_name  = (m_end and m_end.group(1)) or (m_end_old and m_end_old.group(1))
+        if end_name == current_name:
+            current_name = None
+
+    return findings
+
+
+def new_nested_bricks(before: str, after: str) -> list[dict]:
+    """Nestings in `after` that were not already present in `before`.
+
+    Identified by the *inner* brick name alone – neither by line (a pre-existing
+    nesting shifts lines on every write) nor by the outer name: renaming or
+    moving the outer brick would otherwise make a long-standing nesting look
+    newly introduced and get the write refused, which is exactly the lock-out
+    this distinction exists to prevent.  Brick names are unique per file, so the
+    inner name is a stable identity.
+
+    Used by the write paths to tell "the user just pasted this in" (refuse)
+    apart from "it was already on disk" (write, but say so).
+    """
+    known = {f["inner"] for f in find_nested_bricks(before)}
+    return [f for f in find_nested_bricks(after) if f["inner"] not in known]
+
+
 def extract_brick_blocks(nix_content: str) -> dict[str, dict]:
     """
     Parse nix_content and return all Brick blocks as:

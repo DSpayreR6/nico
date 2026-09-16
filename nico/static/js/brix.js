@@ -56,6 +56,7 @@ async function insertBrix() {
     body:    JSON.stringify({ name, section, file: _brixTargetFile }),
   });
   const data = await res.json();
+  if (_handleNestedResponse(data)) return;
   if (data.error) {
     errorEl.textContent = tErr(data.error);
     errorEl.classList.remove('hidden');
@@ -76,7 +77,13 @@ async function confirmDeleteBrix(name, file = 'configuration.nix') {
   if (!confirm(t('brix.confirmDelete', name))) {
     return;
   }
-  await csrfFetch(`/api/brick/${encodeURIComponent(name)}?file=${encodeURIComponent(file)}`, { method: 'DELETE' });
+  const res  = await csrfFetch(`/api/brick/${encodeURIComponent(name)}?file=${encodeURIComponent(file)}`, { method: 'DELETE' });
+  const data = await res.json().catch(() => ({}));
+  if (_handleNestedResponse(data)) return;
+  if (data.error) {
+    showToast(tErr(data.error), 'error');
+    return;
+  }
   showToast(t('brix.deleted', name));
   await _refreshPreviewForFile(file);
 }
@@ -212,6 +219,7 @@ async function moveBrix() {
     body:    JSON.stringify({ name, section, order, file: _brixContextFile }),
   });
   const data = await res.json();
+  if (_handleNestedResponse(data)) return;
   if (data.error) {
     showToast(tErr(data.error), 'error');
     return;
@@ -271,6 +279,7 @@ async function renameBrix() {
     body:    JSON.stringify({ old_name: _brixRenameTarget, new_name: newName, file: _brixContextFile }),
   });
   const data = await res.json();
+  if (_handleNestedResponse(data)) { closeBrixRename(); return; }
   if (data.error) {
     errorEl.textContent = tErr(data.error);
     errorEl.classList.remove('hidden');
@@ -315,6 +324,7 @@ async function splitBrix() {
     body:    JSON.stringify({ name: _brixSplitTarget, split_line: splitLine, new_name: newName, file: _brixContextFile }),
   });
   const data = await res.json();
+  if (_handleNestedResponse(data)) { closeBrixSplit(); return; }
   if (data.error) {
     errorEl.textContent = tErr(data.error);
     errorEl.classList.remove('hidden');
@@ -379,6 +389,7 @@ async function saveBrixInline(name, content, file = 'configuration.nix') {
     body:    JSON.stringify({ content, file }),
   });
   const data = await res.json();
+  if (_handleNestedResponse(data)) return false;
   if (data.error) {
     let msg = tErr(data.error);
     if (data.details?.length) msg += ': ' + data.details.join(', ');
@@ -387,4 +398,19 @@ async function saveBrixInline(name, content, file = 'configuration.nix') {
   }
   showToast(t('brix.editSaved'));
   return true;
+}
+
+/**
+ * Shared handling for every brick write. Returns true when the write was
+ * refused for nesting – the caller must then stop, nothing was written.
+ * A nesting that was already in the file is only reported, never blocking:
+ * otherwise a single bad file would lock the user out of all its bricks.
+ */
+function _handleNestedResponse(data) {
+  if (data?.error === 'ERR_BRICK_NESTED') {
+    _showNestedBricksModal(data.nested, 'refused');
+    return true;
+  }
+  reportNestedBricks(data?.nested);
+  return false;
 }
