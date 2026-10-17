@@ -1,7 +1,8 @@
 # Nico – Claude Rules
 
 **Immer zuerst ausführen:**
-
+- `vorgaben.txt` im Projektroot lesen. Sie gilt immer und wird ohne Rückfrage
+  angewendet (Entscheidung 2026-09-06). Nicht nachfragen, nur lesen.
 
 **Zugriffs- und Recherche-Rechte:**
 - Darf alle Dateien innerhalb des Projektverzeichnisses lesen, analysieren, bearbeiten und schreiben.
@@ -47,11 +48,22 @@
 - Flag-Emoji-Map in `nico/static/js/core.js` (`LANG_FLAGS`) bei neuer Sprache ergänzen
 - `section_links.json`: de → de-Links, alle anderen → en-Fallback (später sprachspezifisch erweiterbar)
 - Übersetzungsstrings während Entwicklung als `__TODO__` – keine ausformulierten Strings
+- Bei neuen Texten Deutsch immer schon einfügen, alle anderen Sprachen nur Platzhalter
+
+**Regelhierarchie (CLAUDE.md ist Master):**
+- `CLAUDE.md` ist die verbindliche Quelle aller Projekt- und Arbeitsregeln.
+  `AGENTS.md` ist nur ihr Spiegel für andere Werkzeuge (Codex) und hat keinen
+  eigenen Regelstand.
+- Bei Abweichung gilt immer `CLAUDE.md`, unabhängig vom Datum der Änderung.
+- Claude Code vergleicht bei Sitzungsbeginn und nach jeder Änderung an
+  `CLAUDE.md` beide Dateien. Fehlt in `AGENTS.md` etwas oder widerspricht es,
+  wird `AGENTS.md` angeglichen – dokumentierte Ausnahme zur Freigabepflicht:
+  ohne Rückfrage, aber die Änderung wird im Chat genannt.
+- Abweichen darf `AGENTS.md` nur in Überschrift und Werkzeugnamen, nie im
+  Regelinhalt. Werkzeugspezifische Regeln gehören als eigener, klar benannter
+  Abschnitt nach `CLAUDE.md`, nicht exklusiv in `AGENTS.md`.
+- Enthält `AGENTS.md` eine Regel, die in `CLAUDE.md` fehlt: nicht löschen,
+  sondern nachfragen, ob sie nach `CLAUDE.md` übernommen werden soll.
 
 **Datei-Limit:**
 - Diese Datei ≤ 500 Zeilen. Bei >400 Zeilen sofort warnen
-
-`vorgaben.txt` im Projektroot gilt immer und wird ohne Rückfrage angewendet (Entscheidung 2026-09-06). Bei Sitzungsbeginn lesen, nicht nachfragen.
-
-
-bei neuen texten deutsch immer schon einfügen, alle anderen sprachen nur platzhalter
