@@ -805,8 +805,11 @@ function _showValidationResults(findings) {
       const counter = tOr('admin.validation.findingCounter',
                           `Hinweis ${idx + 1} von ${findings.length}`,
                           idx + 1, findings.length);
-      const detail = f.detail
-        ? `<div class="git-guard-card-desc" style="margin-top:4px;white-space:pre-line">${_esc(f.detail)}</div>`
+      // detail_key is absent where the detail is pure data (paths, file lists,
+      // error texts) – tOr then falls back to that data unchanged
+      const detailText = tOr(f.detail_key, f.detail, ...(f.detail_params || []));
+      const detail = detailText
+        ? `<div class="git-guard-card-desc" style="margin-top:4px;white-space:pre-line">${_esc(detailText)}</div>`
         : '';
       const action = f.rule_id === 'git_missing_gitignore'
         ? `<button class="btn-surface btn-small" style="margin-top:6px;font-size:11px"

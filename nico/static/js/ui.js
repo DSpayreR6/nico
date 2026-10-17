@@ -466,7 +466,10 @@ const _nestedReported = new Set();
 /** Handle the `nested` field of a successful write. Returns nothing. */
 function reportNestedBricks(nested) {
   if (!nested?.length) return;
-  const key = nested.map(n => `${n.file}|${n.outer}|${n.inner}`).join(',');
+  // Identity is the file plus the INNER brick name, never the outer one:
+  // renaming the outer brick would otherwise make a long-known nesting look
+  // new and pop the dialog up again. Same decision as in brix.new_nested_bricks().
+  const key = nested.map(n => `${n.file}|${n.inner}`).join(',');
   if (_nestedReported.has(key)) return;
   _nestedReported.add(key);
   _showNestedBricksModal(nested, 'existing');

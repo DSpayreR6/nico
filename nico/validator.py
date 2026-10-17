@@ -25,9 +25,13 @@ class Finding:
     rule_id: str
     severity: str    # "error" | "warning" | "info"
     message: str          # German fallback text
-    detail: str = ""
+    detail: str = ""                 # German fallback text
     message_key: str = ""            # i18n key (validator.f.*) for the frontend
     params: "tuple | list" = ()      # positional params for {0},{1},… in the key
+    detail_key: str = ""             # i18n key (validator.d.*) for `detail`
+    detail_params: "tuple | list" = ()
+    # Findings whose detail is pure data (a path, an exception, a list of file
+    # names) carry no detail_key – there is nothing to translate in them.
 
 
 @dataclass
@@ -208,7 +212,9 @@ def run_validation(
     return [
         {"rule_id": f.rule_id, "severity": f.severity,
          "message": f.message, "detail": f.detail,
-         "message_key": f.message_key, "params": [str(p) for p in f.params]}
+         "message_key": f.message_key, "params": [str(p) for p in f.params],
+         "detail_key": f.detail_key,
+         "detail_params": [str(p) for p in f.detail_params]}
         for f in findings
     ]
 
@@ -302,6 +308,7 @@ def _rule_user_in_config(nixos_dir: str, config: dict, is_flake: bool,
             message=f'Benutzer "{current}" ist in keiner Config-Datei angelegt.', message_key="validator.f.user_in_config", params=[current],
             detail="Nach einem Rebuild wäre kein Login möglich. "
                    f"Benutzer unter users.users.{current} eintragen.",
+            detail_key="validator.d.user_in_config", detail_params=[current],
         )]
     return []
 
@@ -359,6 +366,7 @@ def _rule_flake_host_exists(nixos_dir: str, config: dict, is_flake: bool,
                 severity="error",
                 message=f'Host "{host_name}" fehlt unter nixosConfigurations in flake.nix.', message_key="validator.f.flake_host_exists", params=[host_name],
                 detail="Host ist konfiguriert, aber nicht als Flake-Output deklariert.",
+                detail_key="validator.d.flake_host_exists",
             ))
     return findings
 
@@ -439,6 +447,7 @@ def _rule_host_orphaned(nixos_dir: str, config: dict, is_flake: bool,
             message=f'Host "{n}" ist nirgends eingebunden und wird beim Rebuild ignoriert.',
             message_key="validator.f.host_orphaned", params=[n],
             detail="Kann Absicht sein – das Verzeichnis bleibt unangetastet.",
+            detail_key="validator.d.host_orphaned",
         )
         for n in orphans
     ]
@@ -470,6 +479,7 @@ def _rule_flake_arch_matches(nixos_dir: str, config: dict, is_flake: bool,
             message=f'flake.nix: Architektur "{arch}" ≠ dieser Rechner ("{local}").',
             message_key="validator.f.flake_arch_matches", params=[arch, local],
             detail="Beabsichtigt, wenn die Config für ein anderes Gerät gepflegt wird.",
+            detail_key="validator.d.flake_arch_matches",
         )
         for arch in sorted(archs)
         if arch != local
@@ -498,6 +508,7 @@ def _rule_hardware_imported(nixos_dir: str, config: dict, is_flake: bool,
             severity="warning",
             message=f"hardware-configuration.nix existiert, ist aber nicht in {co_name} eingebunden.", message_key="validator.f.hardware_imported", params=[co_name],
             detail="In imports = [ ./hardware-configuration.nix ] aufnehmen.",
+            detail_key="validator.d.hardware_imported",
         )]
     return []
 
@@ -539,6 +550,8 @@ def _rule_hardware_matches(nixos_dir: str, config: dict, is_flake: bool,
             severity="warning",
             message="Hardware-Config enthält Disk-UUIDs die auf diesem System nicht existieren.", message_key="validator.f.hardware_matches", params=[],
             detail="Unbekannte UUIDs: " + ", ".join(sample) + extra,
+            detail_key="validator.d.hardware_matches",
+            detail_params=[", ".join(sample) + extra],
         )]
     return []
 
@@ -821,6 +834,8 @@ def _rule_flake_hm_branch(nixos_dir: str, config: dict, is_flake: bool,
                     f"nixpkgs nutzt Version {nixpkgs_version}, aber home-manager hat keinen Branch "
                     f"(zieht 'master'). Korrekt: github:nix-community/home-manager/{expected_ref}"
                 ),
+                detail_key="validator.d.flake_hm_branch.nobranch",
+                detail_params=[np_loc, hm_loc, nixpkgs_version, expected_ref],
             ))
         elif hm_ref != expected_ref:
             findings.append(Finding(
@@ -832,6 +847,8 @@ def _rule_flake_hm_branch(nixos_dir: str, config: dict, is_flake: bool,
                     f"{hm_loc}\n"
                     f"Erwartet: github:nix-community/home-manager/{expected_ref}"
                 ),
+                detail_key="validator.d.flake_hm_branch.wrongbranch",
+                detail_params=[np_loc, hm_loc, expected_ref],
             ))
     elif nixpkgs_version == 'unstable':
         expected_ref = _expected_hm_ref_for_nixpkgs_version(nixpkgs_version)
@@ -845,6 +862,8 @@ def _rule_flake_hm_branch(nixos_dir: str, config: dict, is_flake: bool,
                     f"flake.nix Zeile {hm_line}: home-manager → {hm_url}\n"
                     "Für nixpkgs-unstable sollte home-manager auf 'master' zeigen."
                 ),
+                detail_key="validator.d.flake_hm_branch.unstable",
+                detail_params=[nixpkgs_line, nixpkgs_url, hm_line, hm_url],
             ))
     elif nixpkgs_url is None and hm_ref is None:
         findings.append(Finding(
@@ -877,6 +896,8 @@ def _rule_flake_hm_branch(nixos_dir: str, config: dict, is_flake: bool,
                     f"Erwartet: home-manager ref = {expected_lock_hm_ref}\n"
                     "Lockfile aktualisieren: nix flake update"
                 ),
+                detail_key="validator.d.flake_hm_branch.lock_hm",
+                detail_params=[lock_np_ref or "<unbekannt>", lock_hm_ref, expected_lock_hm_ref],
             ))
 
         expected_flake_hm_ref = _expected_hm_ref_for_nixpkgs_version(nixpkgs_version)
@@ -892,6 +913,8 @@ def _rule_flake_hm_branch(nixos_dir: str, config: dict, is_flake: bool,
                     f"Erwartet nach flake.nix: {expected_flake_hm_ref}\n"
                     "Lockfile aktualisieren: nix flake update"
                 ),
+                detail_key="validator.d.flake_hm_branch.lock_stale_hm",
+                detail_params=[hm_line, hm_url, lock_hm_ref, expected_flake_hm_ref],
             ))
 
         flake_np_ref = _parse_github_ref(nixpkgs_url) if nixpkgs_url else None
@@ -906,6 +929,8 @@ def _rule_flake_hm_branch(nixos_dir: str, config: dict, is_flake: bool,
                     f"Erwartet nach flake.nix: {flake_np_ref}\n"
                     "Lockfile aktualisieren: nix flake update"
                 ),
+                detail_key="validator.d.flake_hm_branch.lock_stale_np",
+                detail_params=[nixpkgs_line, nixpkgs_url, lock_np_ref, flake_np_ref],
             ))
 
     return findings
@@ -958,6 +983,8 @@ def _rule_state_version_match(nixos_dir: str, config: dict, is_flake: bool,
                             f"{rel} Zeile {i}: system.stateVersion = \"{state_ver}\"\n"
                             f"Erwartet: system.stateVersion = \"{nixpkgs_version}\""
                         ),
+                        detail_key="validator.d.state_version_match",
+                        detail_params=[nixpkgs_line, nixpkgs_url, rel, i, state_ver, nixpkgs_version],
                     ))
 
     return findings
@@ -1014,6 +1041,8 @@ def _rule_hm_state_version_match(nixos_dir: str, config: dict, is_flake: bool,
                     f"{hm_rel} Zeile {hm_line}: home.stateVersion = \"{hm_ver}\"\n"
                     "Beide Werte müssen identisch sein."
                 ),
+                detail_key="validator.d.hm_state_version_match",
+                detail_params=[sys_rel, sys_line, sys_ver, hm_rel, hm_line, hm_ver],
             ))
 
     return findings
@@ -1066,6 +1095,8 @@ def _rule_hm_duplicate_args(nixos_dir: str, config: dict, is_flake: bool,
                     "Nix bricht mit 'duplicate formal function argument' ab.\n"
                     "Doppelte Einträge im HM-Panel unter 'Argumente' entfernen."
                 ),
+                detail_key="validator.d.hm_duplicate_args",
+                detail_params=[m.group(0).strip()],
             ))
     return findings
 
@@ -1109,6 +1140,7 @@ def _rule_brix_nested(nixos_dir: str, config: dict, is_flake: bool,
                     "Beheben: im Raw-Editor entweder die beiden äußeren oder die "
                     "beiden inneren Markerzeilen entfernen, nicht beide Paare."
                 ),
+                detail_key="validator.d.brix_nested",
             ))
     return findings
 
@@ -1153,6 +1185,7 @@ def _rule_brix_redundant(nixos_dir: str, config: dict, is_flake: bool,
                     message=f'Brix "{name}": Inhalt kann vermutlich im NiCo-Panel eingegeben werden – bitte prüfen.', message_key="validator.f.brix_redundant", params=[name],
                     detail=f"Erkannte Optionen in Sektion {hint}. "
                            "Nach einem Import prüfen ob alle Einstellungen korrekt übernommen wurden.",
+                    detail_key="validator.d.brix_redundant", detail_params=[hint],
                 ))
         except Exception:
             continue
@@ -1189,6 +1222,7 @@ def _rule_hm_user_defined(nixos_dir: str, config: dict, is_flake: bool,
         detail=f"Die Dateien in {hm_dir_name}/ sind nicht im Flake referenziert. "
                "In flake.nix oder einem eingebundenen Modul "
                "home-manager.users.<username> = import ./<datei>.nix eintragen.",
+        detail_key="validator.d.hm_user_defined", detail_params=[hm_dir_name],
     )]
 
 
@@ -1244,6 +1278,7 @@ def _rule_hm_orphan_root(nixos_dir: str, config: dict, is_flake: bool,
         message="home.nix im Config-Root ist in keiner anderen Datei referenziert.", message_key="validator.f.hm_orphan_root", params=[],
         detail="Die Datei wird nirgendwo importiert und hat vermutlich keinen Effekt. "
                "Sie kann gelöscht werden.",
+        detail_key="validator.d.hm_orphan_root",
     )]
 
 
@@ -1280,6 +1315,7 @@ def _rule_hm_allowunfree(nixos_dir: str, config: dict, is_flake: bool,
         detail=f"allowUnfree ist in NiCo aktiviert, aber in {hm_hint} "
                "ist nixpkgs.config.allowUnfree = true nicht gesetzt. "
                "Unfree-Pakete in Home Manager werden sonst abgelehnt.",
+        detail_key="validator.d.hm_allowunfree", detail_params=[hm_hint],
     )]
 
 
@@ -1307,6 +1343,7 @@ def _rule_snapper_btrfs(nixos_dir: str, config: dict, is_flake: bool,
                 severity="error",
                 message=f'{target}: Mountpoint "{mount}" existiert nicht.', message_key="validator.f.snapper_btrfs.missing", params=[target, mount],
                 detail="Der eingetragene Pfad muss auf diesem System vorhanden sein.",
+                detail_key="validator.d.snapper_btrfs.missing",
             ))
             continue
         if not os.path.ismount(mount):
@@ -1315,6 +1352,7 @@ def _rule_snapper_btrfs(nixos_dir: str, config: dict, is_flake: bool,
                 severity="error",
                 message=f'{target}: Mountpoint "{mount}" ist nicht gemountet.', message_key="validator.f.snapper_btrfs.not_mounted", params=[target, mount],
                 detail="Snapper kann nur auf gemountete Dateisysteme angewendet werden.",
+                detail_key="validator.d.snapper_btrfs.unmounted",
             ))
             continue
         try:
@@ -1331,6 +1369,7 @@ def _rule_snapper_btrfs(nixos_dir: str, config: dict, is_flake: bool,
                 severity="error",
                 message=f'{target}: "{mount}" ist kein btrfs-Dateisystem (erkannt: "{fstype}").', message_key="validator.f.snapper_btrfs.not_btrfs", params=[target, mount, fstype],
                 detail="Snapper unterstützt nur btrfs. Der Mountpoint muss ein btrfs-Subvolume sein.",
+                detail_key="validator.d.snapper_btrfs.notbtrfs",
             ))
     return findings
 
@@ -1348,6 +1387,7 @@ def _rule_snapper_in_host(nixos_dir: str, config: dict, is_flake: bool,
         message="Snapper ist in der Basis-Config konfiguriert, nicht pro Host.", message_key="validator.f.snapper_in_host", params=[],
         detail="Bei mehreren Flake-Hosts haben Hosts unterschiedliche Subvolumes. "
                "Die Snapper-Config sollte in der jeweiligen Host-Config stehen.",
+        detail_key="validator.d.snapper_in_host",
     )]
 
 
@@ -1368,6 +1408,7 @@ def _rule_git_missing_gitignore(nixos_dir: str, config: dict, is_flake: bool,
             severity="warning",
             message="Keine .gitignore vorhanden – NiCo-Dateien (Logs, Backups) werden in Git committet.", message_key="validator.f.git_missing_gitignore.none", params=[],
             detail="In den Einstellungen → Zeitmaschine kann die .gitignore angelegt werden.",
+            detail_key="validator.d.git_missing_gitignore.none",
         )]
     existing = {l.strip() for l in path.read_text(encoding="utf-8").splitlines()
                 if l.strip() and not l.startswith("#")}
@@ -1378,6 +1419,8 @@ def _rule_git_missing_gitignore(nixos_dir: str, config: dict, is_flake: bool,
             severity="warning",
             message=f".gitignore unvollständig – {len(missing)} empfohlene Einträge fehlen.", message_key="validator.f.git_missing_gitignore.incomplete", params=[len(missing)],
             detail="Fehlend: " + ", ".join(missing) + "\nIn den Einstellungen → Zeitmaschine ergänzen.",
+            detail_key="validator.d.git_missing_gitignore.some",
+            detail_params=[", ".join(missing)],
         )]
     return []
 
@@ -1403,6 +1446,8 @@ def _rule_git_large_log(nixos_dir: str, config: dict, is_flake: bool,
                 f"gelöscht werden. NiCo schreibt das Log inzwischen nach "
                 f"{_cm.REBUILD_LOG_FILE} – diese Datei hier stammt aus einer "
                 f"früheren Version."),
+        detail_key="validator.d.git_large_log",
+        detail_params=[str(log_path), str(_cm.REBUILD_LOG_FILE)],
     )]
 
 
@@ -1624,6 +1669,7 @@ def _rule_swap_in_snapshot(nixos_dir: str, config: dict, is_flake: bool,
             params=[host, this_host],
             detail="Die Prüfung liest die Mountpoints des laufenden Systems. "
                    "Führe den Validator auf dem betroffenen Rechner erneut aus.",
+            detail_key="validator.d.swap_in_snapshot.other_host",
         )]
 
     swaps = _swap_files()
@@ -1675,6 +1721,7 @@ def _rule_swap_in_snapshot(nixos_dir: str, config: dict, is_flake: bool,
                     "und das Swapfile mit chattr +C (NoCOW) neu anlegen statt es zu "
                     "verschieben."
                 ),
+                detail_key="validator.d.swap_in_snapshot",
             ))
     return findings
 
@@ -1738,6 +1785,7 @@ def _rule_host_checks_pending(nixos_dir: str, config: dict, is_flake: bool,
             "laufen. NiCo merkt sich das Ergebnis in config.json und zeigt es hier "
             "auf jedem Rechner an, sobald die Config synchronisiert ist."
         ),
+        detail_key="validator.d.host_checks_pending", detail_params=[this_host],
     )]
 
 

@@ -49,6 +49,10 @@
               mkdir -p $out/lib/nico
               cp -r nico $out/lib/nico/
 
+              # flake.nix is not part of the package, so stamp the version in:
+              # it stays maintained in exactly one place (see nico/version.py)
+              printf '%s' "$version" > $out/lib/nico/nico/VERSION
+
               mkdir -p $out/bin
               makeWrapper ${pythonEnv}/bin/python $out/bin/nico \
                 --add-flags "-m nico.main" \

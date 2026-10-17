@@ -7,6 +7,7 @@ from create_app() are passed in via the ctx dict.
 import os
 import re
 import secrets
+import subprocess
 import threading
 import time
 import uuid
@@ -30,6 +31,14 @@ from ..core import (
 # at any time. Only one job at a time; the finished job stays available until a
 # new one starts, so a reload can still show the result.
 _JOB_MAX_EVENTS = 20000  # ring buffer; the UI keeps far fewer log lines anyway
+
+# nixos-rebuild-ng activates the system through a transient systemd unit. While
+# that unit runs, a second rebuild cannot create it again: systemd-run fails
+# with "unit was already loaded" and nixos-rebuild-ng shows the user a Python
+# traceback. The job guard below only knows jobs of this process, so it misses
+# a switch that survived a NiCo restart – ask systemd instead.
+_SWITCH_UNIT = "nixos-rebuild-switch-to-configuration.service"
+_SWITCH_BUSY_STATES = {"active", "activating", "reloading", "deactivating"}
 
 _job_cv = threading.Condition()
 _job = None
@@ -66,6 +75,22 @@ def _write_rebuild_log(log_path: Path, lines: list[str]) -> bool:
         return True
     except Exception:
         return False
+
+
+def switch_unit_busy() -> bool:
+    """True while nixos-rebuild's activation unit is still running.
+
+    Not reachable or no systemd: return False – a check that cannot run must
+    not block a rebuild.
+    """
+    try:
+        res = subprocess.run(
+            ["systemctl", "is-active", _SWITCH_UNIT],
+            capture_output=True, text=True, timeout=5,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return res.stdout.strip() in _SWITCH_BUSY_STATES
 
 
 def _job_public(job):
@@ -157,6 +182,12 @@ def register(app, ctx):
         nixos_dir, err = _require_setup()
         if err:
             return err
+
+        # Same collision as in rebuild_start: the terminal would run into
+        # "unit was already loaded" and the user would have to read a traceback
+        # in a window NiCo cannot explain.
+        if switch_unit_busy():
+            return jsonify({"error": "ERR_SWITCH_RUNNING"}), 409
 
         import shlex as _shlex
         import stat as _stat
@@ -322,6 +353,11 @@ def register(app, ctx):
         with _job_cv:
             if _job is not None and _job["running"]:
                 return jsonify({"error": "ERR_REBUILD_RUNNING"}), 409
+
+        # A switch from an earlier NiCo run can still be active – the job state
+        # above lives in this process only and is gone after a restart.
+        if switch_unit_busy():
+            return jsonify({"error": "ERR_SWITCH_RUNNING"}), 409
 
         data      = config_manager.load_config(nixos_dir) or {}
         conf_path = Path(nixos_dir) / "configuration.nix"

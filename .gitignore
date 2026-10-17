@@ -20,6 +20,7 @@ manifest.md
 *.png
 !nico/static/*.png
 !assets/icons/*.png
+!assets/icons-dev/*.png
 featureplan.txt
 vorgaben.txt
 hinweisliste.txt

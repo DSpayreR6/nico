@@ -73,6 +73,10 @@ async function checkStatus() {
   try {
     const res  = await csrfFetch('/api/status');
     const data = await res.json();
+    // Version comes from the server (flake.nix / stamped VERSION), never from
+    // the language files – it is a number, not a translation
+    const verEl = document.getElementById('about-version');
+    if (verEl) verEl.textContent = data.version || '';
     if (data.setup_complete) {
       // A rebuild that is still running (or whose result has not been seen yet)
       // leaves the working tree dirty on purpose – flake.lock and written .nix

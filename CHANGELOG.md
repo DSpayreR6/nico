@@ -24,6 +24,10 @@
 - NiCo installs a desktop entry and icon, so it appears in the application menu instead of being a terminal-only command
 - The browser tab shows the NiCo icon instead of a blank page
 - All seven languages are complete again: 57 strings per language were still placeholders, among them the git hygiene dialog that runs on every start and the permanent "Git Pull" menu entry, which read `__TODO__` in every language but German
+- Validator findings are now fully translated: the explanation below each finding was hardcoded German in every language, 30 of them
+- A second rebuild is refused while the previous activation is still running, with a plain message instead of a Python traceback from nixos-rebuild — the old guard only knew about rebuilds started in the same NiCo session and missed one that survived a restart
+- The About dialog shows which version is actually running: it read a number kept in the language files, which had been stuck at 0.9.10 while two releases went past it
+- The About dialog is no longer dated: the "last updated" line had been wrong since June
 
 ### Bug Fixes
 
@@ -33,6 +37,8 @@
 - "Collapse all" now collapses the Nix bricks as well – it only ever collapsed the sections, while "expand all" did include the bricks
 - Clicking a brick inside a collapsed section opens that brick instead of only the section: the brick body stays hidden while the section is collapsed, so the click appeared to do nothing
 - The collapsed marker in the preview is translated instead of being German in all seven languages
+- A nesting of Nix bricks that was already known is no longer reported again after renaming the outer brick: it was remembered under both brick names, so a rename made an old finding look new
+- `start.sh` always runs the source tree it sits in: once NiCo was installed as a package, it silently started the frozen build from the Nix store instead, and no restart would pick up any change
 - A click on the background no longer closes any dialog: 15 places still did, and a window vanishing after a click next to it leaves no way to tell what happened or whether it did anything. Every dialog closes through its own button
 - Push and pull no longer abort after 30 seconds (now 600): a push with a lot of data ran into the timeout, which was then reported as "network error" and sent the search in the wrong direction
 

@@ -18,6 +18,7 @@ from flask import Flask, jsonify, render_template, request
 from . import config_manager, generator, git_manager, importer, routes
 from .brix import brix_content_to_bricks
 from .core import validate_user_path as _validate_user_path
+from .version import get_version
 
 
 _THEMES_DIR = Path(__file__).parent / "static" / "themes"
@@ -248,8 +249,9 @@ def create_app() -> Flask:
                 "nixos_config_dir":  nixos_dir,
                 "git_sync":          app_s.get("git_sync", True),
                 "git_status_only":   app_s.get("git_status_only", False),
+                "version":           get_version(),
             })
-        return jsonify({"setup_complete": False})
+        return jsonify({"setup_complete": False, "version": get_version()})
 
     @app.route("/api/settings/dir")
     def settings_dir():
