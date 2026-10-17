@@ -1,6 +1,6 @@
 # NiCo – Changelog
 
-## Unreleased
+## 0.12.0 (2026-10-17)
 
 ### New Features
 
@@ -41,7 +41,6 @@
 - `start.sh` always runs the source tree it sits in: once NiCo was installed as a package, it silently started the frozen build from the Nix store instead, and no restart would pick up any change
 - A click on the background no longer closes any dialog: 15 places still did, and a window vanishing after a click next to it leaves no way to tell what happened or whether it did anything. Every dialog closes through its own button
 - Push and pull no longer abort after 30 seconds (now 600): a push with a lot of data ran into the timeout, which was then reported as "network error" and sent the search in the wrong direction
-
 - Failed git pushes were swallowed without a word: the push error dialog was defined inside another function, so every call from the rebuild monitor, the write dialog and the settings raised a reference error – the user saw nothing and only noticed at shutdown that nothing had been pushed
 - Push error dialog now names the actual reason for combined commit-and-push actions (no key, no write access, non-fast-forward, …); the error code was dropped between `git_commit_push` and the UI
 - Rebuild monitor: the push button no longer stays stuck on "…" after a failed push, and a failed automatic push now offers a retry instead of vanishing without a trace
