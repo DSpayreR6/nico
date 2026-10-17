@@ -11,6 +11,6 @@ elif [ -f "$SCRIPT_DIR/shell.nix" ]; then
     --run "cd '$SCRIPT_DIR' && python3 -m nico.main"
 else
   exec nix-shell \
-    -p python312 python312Packages.flask \
+    -p python3 python3Packages.flask \
     --run "cd '$SCRIPT_DIR' && python3 -m nico.main"
 fi

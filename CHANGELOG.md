@@ -21,9 +21,12 @@
 - A nesting that was already on disk never blocks a write, it is only reported: refusing would lock the user out of every brick action in that file, including the one needed to repair it
 - The raw editor asks instead of refusing – the markers are visible there and keeping them can be deliberate
 - New validator rule `brix_nested` (warning): reports nested bricks in every `.nix` file of the config, not just in `configuration.nix`
+- NiCo installs a desktop entry and icon, so it appears in the application menu instead of being a terminal-only command
+- The browser tab shows the NiCo icon instead of a blank page
 
 ### Bug Fixes
 
+- The first start no longer compiles six packages on the user's machine: the package asked for a pinned Python minor version, which is not part of the binary cache
 - A click on the background no longer closes any dialog: 15 places still did, and a window vanishing after a click next to it leaves no way to tell what happened or whether it did anything. Every dialog closes through its own button
 - Push and pull no longer abort after 30 seconds (now 600): a push with a lot of data ran into the timeout, which was then reported as "network error" and sent the search in the wrong direction
 

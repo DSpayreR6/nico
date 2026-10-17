@@ -11,7 +11,9 @@
       packages = forAllSystems (system:
         let
           pkgs = nixpkgs.legacyPackages.${system};
-          pythonEnv = pkgs.python312.withPackages (ps: [
+          # Default python, not a pinned minor version: only the default is
+          # fully built by Hydra, everything else compiles on the user's machine
+          pythonEnv = pkgs.python3.withPackages (ps: [
             ps.flask
             ps.tree-sitter
           ]);
@@ -82,9 +84,9 @@
         in {
           default = pkgs.mkShell {
             buildInputs = [
-              pkgs.python312
-              pkgs.python312Packages.flask
-              pkgs.python312Packages.tree-sitter
+              pkgs.python3
+              pkgs.python3Packages.flask
+              pkgs.python3Packages.tree-sitter
               grammar
             ];
             shellHook = ''

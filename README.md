@@ -41,26 +41,69 @@ This has one important consequence: every time you write, NiCo regenerates the f
 ## Requirements
 
 - NixOS
-- Python 3 (via `shell.nix` / flake)
 - A browser
+
+Nothing else — Nix fetches what NiCo needs. Only the from-source route uses
+`shell.nix` directly.
 
 ---
 
 ## Getting Started
+
+Just try it — this installs nothing and leaves nothing behind:
+
+```bash
+nix run github:DSpayreR6/nico
+```
+
+On a fresh NixOS installation flakes are still disabled. Then use:
+
+```bash
+nix --extra-experimental-features 'nix-command flakes' run github:DSpayreR6/nico
+```
+
+NiCo picks a free port (default `8421`) and opens your browser automatically.
+
+### Keep it installed
+
+```bash
+nix profile install github:DSpayreR6/nico
+```
+
+This gives you the `nico` command and an entry in your application menu.
+Update it later with `nix profile upgrade nico`.
+
+Or declare it in your own flake, so it travels with your config to your other
+machines:
+
+```nix
+{
+  inputs.nico.url = "github:DSpayreR6/nico";
+
+  outputs = { self, nixpkgs, nico, ... }: {
+    nixosConfigurations.myhost = nixpkgs.lib.nixosSystem {
+      system = "x86_64-linux";
+      modules = [
+        ./configuration.nix
+        { environment.systemPackages = [ nico.packages.x86_64-linux.default ]; }
+      ];
+    };
+  };
+}
+```
+
+Update it with `nix flake update nico` and a rebuild — NiCo can do that rebuild
+for you.
+
+### From source
+
+For development, or to read the code before running it:
 
 ```bash
 git clone https://github.com/DSpayreR6/nico.git
 cd nico
 ./start.sh
 ```
-
-Or with flakes:
-
-```bash
-nix run github:DSpayreR6/nico
-```
-
-NiCo picks a free port (default `8421`) and opens your browser automatically.
 
 ---
 
