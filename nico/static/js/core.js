@@ -137,6 +137,9 @@ function applyTranslations() {
   document.querySelectorAll('[data-i18n-label]').forEach(el => {
     el.label = t(el.dataset.i18nLabel);
   });
+  // CSS pseudo-elements cannot call t(), so hand the label over as a variable
+  document.documentElement.style.setProperty(
+    '--ni-collapsed-label', JSON.stringify('  ' + t('preview.collapsedHint')));
   document.querySelector('html').lang = currentLang;
   document.querySelectorAll('.lang-btn').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.lang === currentLang);

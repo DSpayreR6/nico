@@ -1355,7 +1355,7 @@ mark.search-match-active {
 
 /* Collapsed indicator on section header */
 .code-section.collapsed .code-section-head::after {
-  content: "  ← eingeklappt";
+  content: var(--ni-collapsed-label, "  ← eingeklappt");
   color: var(--overlay0);
   font-style: italic;
 }
@@ -1388,7 +1388,7 @@ mark.search-match-active {
 
 /* Collapsed brick indicator on the header label */
 .code-brix.collapsed .code-brix-label::after {
-  content: "  ← eingeklappt";
+  content: var(--ni-collapsed-label, "  ← eingeklappt");
   color: var(--overlay0);
   font-style: italic;
 }

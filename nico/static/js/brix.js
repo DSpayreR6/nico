@@ -88,10 +88,27 @@ async function confirmDeleteBrix(name, file = 'configuration.nix') {
   await _refreshPreviewForFile(file);
 }
 
+/**
+ * Bricks of one file, read fresh from disk. Single source for every dialog –
+ * the lists in /api/config only cover configuration.nix, flake.nix and a
+ * legacy root home.nix, so host, module and HM files got the wrong bricks.
+ */
+async function loadBrixFor(file) {
+  const res  = await csrfFetch(`/api/brix/blocks?file=${encodeURIComponent(file)}`);
+  const data = await res.json().catch(() => ({}));
+  if (data.error) {
+    showToast(tErr(data.error), 'error');
+    return null;
+  }
+  return data.blocks || {};
+}
+
 // ── Nix-Brick löschen (Dialog) ───────────────────────────────────────────────
 async function openBrixDelete() {
-  const cfg   = await csrfFetch('/api/config').then(r => r.json());
-  const names = Object.keys(cfg.brick_blocks || {});
+  const file   = _brixContextFile || 'configuration.nix';
+  const blocks = await loadBrixFor(file);
+  if (blocks === null) return;
+  const names  = Object.keys(blocks);
   if (names.length === 0) {
     showToast(t('brix.noBlocks'), 'error');
     return;
@@ -121,7 +138,7 @@ async function openBrixDelete() {
       resolve(null);
     });
   });
-  if (selected) confirmDeleteBrix(selected);
+  if (selected) confirmDeleteBrix(selected, file);
 }
 
 // ── Brix verschieben ────────────────────────────────────────────────────────
@@ -144,21 +161,26 @@ function _getFlakeBrickSections(cfg = null) {
 }
 
 async function openBrixMove(targetName = null) {
-  const cfg    = await csrfFetch('/api/config').then(r => r.json());
-  // Bricks from the target file: flake.nix or configuration.nix
-  const isFlake = _brixContextFile === 'flake.nix';
-  const isHm    = _brixContextFtype === 'hm';
-  const blocks  = isFlake ? (cfg.flake_brick_blocks || {})
-                : isHm    ? (cfg.hm_brick_blocks || {})
-                : (cfg.brick_blocks || {});
+  const file    = _brixContextFile || 'configuration.nix';
+  const isFlake = file === 'flake.nix';
+  // Bricks always come from the open file; only the selectable target
+  // sections still depend on the file type.
+  const blocks  = await loadBrixFor(file);
+  if (blocks === null) return;
   const names   = Object.keys(blocks);
+  const cfg     = isFlake
+    ? await csrfFetch('/api/config').then(r => r.json()).catch(() => ({}))
+    : {};
 
   if (names.length === 0) {
     showToast(t('brix.noBlocks'), 'error');
     return;
   }
 
-  _brixMoveTarget = (targetName && blocks[targetName]) ? targetName : (names[0] || null);
+  // Guard against being wired straight to an event handler: a click event as
+  // targetName would silently preselect the first brick instead of the meant one
+  const wanted = typeof targetName === 'string' ? targetName : null;
+  _brixMoveTarget = (wanted && blocks[wanted]) ? wanted : (names[0] || null);
   const block = _brixMoveTarget ? blocks[_brixMoveTarget] : null;
   const sourceName = document.getElementById('brix-move-source-name');
   const cancelBtn = document.getElementById('brix-move-cancel-btn');

@@ -897,7 +897,7 @@ function bindUI() {
   on('brix-insert-cancel-btn',  'click', closeBrixInsert);
   on('brix-name-input',         'keydown', e => { if (e.key === 'Enter') insertBrix(); if (e.key === 'Escape') closeBrixInsert(); });
 
-  on('brix-move-btn',           'click', openBrixMove);
+  on('brix-move-btn',           'click', () => openBrixMove());
   on('brix-move-confirm-btn',   'click', moveBrix);
   on('brix-move-cancel-btn',    'click', closeBrixMove);
 

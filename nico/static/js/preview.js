@@ -322,8 +322,11 @@ function renderAnnotatedPreview(code, containerId = 'preview-configuration', fil
         if (e.target.closest('.brix-actions')) return;
         const parentSection = wrap.closest('.code-section');
         if (parentSection?.classList.contains('collapsed')) {
-          // Expand the parent section so the brick becomes visible
+          // A brick body stays hidden while its section is collapsed, so open
+          // the section and show exactly this brick – other bricks keep their
+          // state. Expanding only the brick would look like a dead click.
           toggleSection(parentSection.dataset.section);
+          if (collapsedBrix.has(seg.name)) toggleBrix(seg.name, wrap);
         } else {
           toggleBrix(seg.name, wrap);
         }
@@ -430,7 +433,8 @@ function toggleSection(name) {
     else                              collapsedSections.delete(syncName);
   }
 
-  localStorage.setItem('nico-collapsed', JSON.stringify([...collapsedSections]));
+  // Sections deliberately start collapsed on every load (see core.js), so the
+  // state is not persisted – it was written here but never read back.
   applySectionCollapse();
 
   // Scroll the code section into view when expanding

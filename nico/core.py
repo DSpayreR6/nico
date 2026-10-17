@@ -569,6 +569,28 @@ def list_config_tree(nixos_dir: str) -> dict:
     return {"tree": _build_tree(root), "root": str(root)}
 
 
+def brick_blocks_for_file(nixos_dir: str, rel_path: str) -> dict[str, dict]:
+    """Return the Nix bricks of one config file, read from disk.
+
+    One source for every file. The brick lists in /api/config only ever cover
+    configuration.nix, flake.nix and a legacy root home.nix, so dialogs that
+    picked one of those showed the wrong bricks for host, module and HM files.
+    """
+    rel = (rel_path or "").strip()
+    if not rel:
+        raise ValueError("ERR_NO_PATH")
+
+    root = Path(nixos_dir).resolve()
+    target = _resolve_config_rel(root, rel)
+
+    if target.suffix not in _WRITABLE_SUFFIXES:
+        raise ValueError("ERR_FILE_TYPE")
+    if not target.exists():
+        raise FileNotFoundError("ERR_FILE_NOT_FOUND")
+
+    return extract_brick_blocks(target.read_text(encoding="utf-8"))
+
+
 def read_config_file(nixos_dir: str, rel_path: str, *, persist_stamp: bool = True) -> dict:
     """Read a config-relative file with the same normalization rules as the web UI.
     persist_stamp: write type stamps back to disk (endpoints pass False for

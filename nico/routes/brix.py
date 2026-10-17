@@ -12,6 +12,7 @@ from flask import jsonify, request
 from ..brix import extract_brick_blocks, format_brick, next_order_for_section, check_bracket_balance
 from ..core import (
     brick_body as _brick_body,
+    brick_blocks_for_file as _brick_blocks_for_file,
     modify_brick_in_file as _modify_brick_in_file,
 )
 
@@ -29,6 +30,27 @@ def register(app, ctx):
     _require_setup = ctx["require_setup"]
 
     # ------------------------------------------------------------------- brix
+
+    @app.route("/api/brix/blocks", methods=["GET"])
+    def brix_blocks():
+        """Bricks of one file, read from disk – the single source for every
+        file. Read-only, no side effects."""
+        nixos_dir, err = _require_setup()
+        if err:
+            return err
+        rel = request.args.get("file", "configuration.nix")
+        try:
+            blocks = _brick_blocks_for_file(nixos_dir, rel)
+        except FileNotFoundError:
+            return jsonify({"error": "ERR_NOT_FOUND"}), 404
+        except ValueError as exc:
+            code = str(exc)
+            if code.startswith("ERR_"):
+                return jsonify({"error": code}), 400
+            return jsonify({"error": "ERR_PATH_OUTSIDE"}), 403
+        except OSError:
+            return jsonify({"error": "ERR_READ_FAILED"}), 500
+        return jsonify({"file": rel, "blocks": blocks})
 
     @app.route("/api/brick", methods=["POST"])
     def brick_add():

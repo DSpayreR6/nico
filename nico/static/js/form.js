@@ -321,6 +321,12 @@ function collapseAll() {
   BRICK_SECTIONS.forEach(s => collapsedSections.add(s));
   collapsedSections.add('__header__');
   applySectionCollapse();
+  // Auch individuelle Brix einklappen – Gegenstück zu expandAll()
+  document.querySelectorAll('.code-brix[data-brick-name]').forEach(el => {
+    collapsedBrix.add(el.dataset.brickName);
+    el.classList.add('collapsed');
+  });
+  localStorage.setItem('nico-collapsed-brix', JSON.stringify([...collapsedBrix]));
 }
 
 function expandAll() {

@@ -771,6 +771,7 @@
   "hm.xdgTemplates":         "Vorlagen",
   "hm.xdgPublicShare":       "Öffentlich",
 
+  "preview.collapsedHint": "← eingeklappt",
   "preview.modePanel":      "Bearbeitung nur über Panel möglich",
   "preview.modeRaw":        "Simpler Editor – noch kein Panel verfügbar",
   "preview.plainInactive":  "Annotierte Ansicht aktiv – klicken für Plain (ohne Brix-Marker)",

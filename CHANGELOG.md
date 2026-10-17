@@ -23,10 +23,16 @@
 - New validator rule `brix_nested` (warning): reports nested bricks in every `.nix` file of the config, not just in `configuration.nix`
 - NiCo installs a desktop entry and icon, so it appears in the application menu instead of being a terminal-only command
 - The browser tab shows the NiCo icon instead of a blank page
+- All seven languages are complete again: 57 strings per language were still placeholders, among them the git hygiene dialog that runs on every start and the permanent "Git Pull" menu entry, which read `__TODO__` in every language but German
 
 ### Bug Fixes
 
 - The first start no longer compiles six packages on the user's machine: the package asked for a pinned Python minor version, which is not part of the binary cache
+- Moving a brick now offers the bricks of the file that is open: for host, module and HM files the dialog listed the bricks of the root `configuration.nix` instead, so it either preselected a foreign brick or claimed there were none
+- Deleting a brick through the button now acts on the file that is open: it always listed and deleted in the root `configuration.nix`, no matter which file was in front of the user
+- "Collapse all" now collapses the Nix bricks as well – it only ever collapsed the sections, while "expand all" did include the bricks
+- Clicking a brick inside a collapsed section opens that brick instead of only the section: the brick body stays hidden while the section is collapsed, so the click appeared to do nothing
+- The collapsed marker in the preview is translated instead of being German in all seven languages
 - A click on the background no longer closes any dialog: 15 places still did, and a window vanishing after a click next to it leaves no way to tell what happened or whether it did anything. Every dialog closes through its own button
 - Push and pull no longer abort after 30 seconds (now 600): a push with a lot of data ran into the timeout, which was then reported as "network error" and sent the search in the wrong direction
 
