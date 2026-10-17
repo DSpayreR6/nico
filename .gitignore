@@ -19,6 +19,7 @@ manifest.md
 .codex
 *.png
 !nico/static/*.png
+!assets/icons/*.png
 featureplan.txt
 vorgaben.txt
 hinweisliste.txt

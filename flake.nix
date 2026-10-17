@@ -16,6 +16,22 @@
             ps.tree-sitter
           ]);
           grammar = pkgs.tree-sitter-grammars.tree-sitter-nix;
+          desktopItem = pkgs.makeDesktopItem {
+            name = "nico";
+            exec = "nico";
+            icon = "nico";
+            desktopName = "NiCo";
+            genericName = "NixOS Configurator";
+            comment = "Local browser-based configurator for NixOS";
+            categories = [ "System" ];
+            keywords = [ "nixos" "nix" "config" "configurator" ];
+            terminal = false;
+            # German menu text; other locales fall back to the entries above
+            extraConfig = {
+              "GenericName[de]" = "NixOS-Konfigurator";
+              "Comment[de]" = "Lokaler browserbasierter Konfigurator für NixOS";
+            };
+          };
         in {
           default = pkgs.stdenv.mkDerivation {
             pname = "nico";
@@ -36,6 +52,15 @@
                 --add-flags "-m nico.main" \
                 --set PYTHONPATH "$out/lib/nico" \
                 --set TREE_SITTER_NIX_GRAMMAR "${grammar}/parser"
+
+              # Desktop entry and icons (freedesktop layout, picked up by any DE)
+              mkdir -p $out/share/applications
+              cp ${desktopItem}/share/applications/* $out/share/applications/
+
+              for size in 16 24 32 48 64 128 256 512; do
+                install -Dm644 assets/icons/nico-$size.png \
+                  "$out/share/icons/hicolor/''${size}x''${size}/apps/nico.png"
+              done
 
               runHook postInstall
             '';
