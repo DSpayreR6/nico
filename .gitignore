@@ -8,7 +8,15 @@ build/
 venv/
 *.log
 .pytest_cache/
-testing/
+# Testcode gehört ins Repo, Testdaten nicht. Ein ausgeschlossenes
+# Verzeichnis lässt sich von innen nicht wieder einschließen, deshalb
+# wird hier gezielt ignoriert statt testing/ als Ganzes:
+# testing/configs/ sind Schnappschüsse fremder Configs – 70 MB,
+# darunter zwei 3-MB-Rebuild-Logs.
+testing/configs/
+testing/*.tar.gz
+testing/report-*.json
+testing/**/__pycache__/
 
 
 AGENTS.md
