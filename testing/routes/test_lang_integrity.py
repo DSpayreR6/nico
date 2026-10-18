@@ -73,5 +73,17 @@ for node in ast.walk(tree):
             check(f"Zeile {node.lineno}: {key} – Text {want}, Code {have}", False)
 print(f"  {sites} Schlüssel-Verwendungen geprüft")
 
+print("\n3. Jeder im Validator genannte Schlüssel existiert")
+# Fängt auch zusammengesetzte Schlüssel (f"...{case}"), die Abschnitt 2 nicht
+# als Konstante sieht – dort fiele ein Tippfehler erst in der Oberfläche auf.
+src = (ROOT / "nico" / "validator.py").read_text(encoding="utf-8")
+prefixes = set(re.findall(r'f"(validator\.[fdr]\.[A-Za-z0-9_.]+)\{', src))
+plain = set(re.findall(r'"(validator\.[fdr]\.[A-Za-z0-9_.]+)"', src)) - prefixes
+for key in sorted(plain):
+    check(f"{key} existiert", key in de, "fehlt in de.json")
+for prefix in sorted(prefixes):
+    matches = [k for k in de if k.startswith(prefix)]
+    check(f"{prefix}* hat Varianten in de.json", bool(matches), "keine gefunden")
+
 print("\n" + ("ALLE PRÜFUNGEN BESTANDEN" if not fails else f"FEHLGESCHLAGEN: {len(fails)}"))
 sys.exit(1 if fails else 0)

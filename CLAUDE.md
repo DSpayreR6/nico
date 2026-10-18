@@ -47,8 +47,14 @@
 - Neue Sprache = neue `.json` in `nico/static/lang/` → erscheint automatisch (`/api/langs` scannt das Verzeichnis)
 - Flag-Emoji-Map in `nico/static/js/core.js` (`LANG_FLAGS`) bei neuer Sprache ergänzen
 - `section_links.json`: de → de-Links, alle anderen → en-Fallback (später sprachspezifisch erweiterbar)
-- Übersetzungsstrings während Entwicklung als `__TODO__` – keine ausformulierten Strings
-- Bei neuen Texten Deutsch immer schon einfügen, alle anderen Sprachen nur Platzhalter
+- Übersetzungen werden immer sofort nachgezogen (Entscheidung 2026-10-18): neuer
+  oder geänderter Text heißt alle sieben Sprachen im selben Zug ausformulieren,
+  kein `__TODO__` mehr. Grund: ein `__TODO__` fällt beim Arbeiten in einer Sprache
+  nicht auf und steht dann wörtlich in der Oberfläche
+- Ausnahme: `templates/help.html` – dort bleiben de und en, weitere Sprachen nur
+  auf ausdrückliche Anweisung
+- `testing/routes/test_lang_integrity.py` muss dadurch immer grün sein; ein
+  `__TODO__`-Fund ist ab jetzt ein Fehler, keine Zwischenstufe
 
 **Regelhierarchie (CLAUDE.md ist Master):**
 - `CLAUDE.md` ist die verbindliche Quelle aller Projekt- und Arbeitsregeln.
