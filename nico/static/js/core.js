@@ -38,6 +38,98 @@ const LANG_FLAGS = { de:'🇩🇪', en:'🇬🇧', es:'🇪🇸', fr:'🇫🇷',
 // ── Section documentation links ────────────────────────────────────────────────
 let _sectionLinks = {};
 
+// ── Sections ───────────────────────────────────────────────────────────────────
+// Code -> i18n key, loaded once from /api/sections. The table lives in brix.py;
+// copying it here would create a second truth that drifts.
+let _sections       = {};
+let _sectionsLegacy = {};
+let SECTION_HOST_PREFIX = 'HOST:';
+let SECTION_HDR_SEP     = '·';
+
+async function loadSections() {
+  try {
+    const data = await fetch('/api/sections').then(r => r.json());
+    _sections = {};
+    (data.sections || []).forEach(s => { _sections[s.code] = s.i18n; });
+    _sectionsLegacy     = data.legacy || {};
+    SECTION_HOST_PREFIX = data.host_prefix || SECTION_HOST_PREFIX;
+    SECTION_HDR_SEP     = data.header_sep  || SECTION_HDR_SEP;
+  } catch (_) { /* labels fall back to the code itself */ }
+}
+
+// ── Files from a newer NiCo version ────────────────────────────────────────────
+// Nothing can be destroyed – unknown content is kept as a brick – but blocks
+// may get reordered. So this warns and lets the user decide instead of locking
+// them out, and makes a safety commit before the first write.
+async function checkFileFormat() {
+  let data;
+  try {
+    data = await fetch('/api/format/check').then(r => r.json());
+  } catch (_) { return; }
+  const tooNew = data.too_new || [];
+  if (!tooNew.length) return;
+
+  const list = document.getElementById('format-files');
+  if (list) {
+    list.textContent = tooNew
+      .map(f => t('format.fileLine', f.file, f.format, data.known))
+      .join('\n');
+  }
+  document.getElementById('format-overlay')?.classList.remove('hidden');
+}
+
+function _closeFormatDialog() {
+  document.getElementById('format-overlay')?.classList.add('hidden');
+}
+
+async function formatProceed() {
+  const res  = await csrfFetch('/api/format/safety-commit', { method: 'POST' });
+  const data = await res.json().catch(() => ({}));
+  if (!data.success && data.message) showToast(t('format.commitFailed', data.message), 'error');
+  await csrfFetch('/api/format/proceed', { method: 'POST' }).catch(() => {});
+  _closeFormatDialog();
+  showToast(t('format.proceeding'), 'success');
+}
+
+const _SECTION_CODE_RE = /^[A-Z0-9]{4}(:[A-Za-z0-9_.-]+)?$/;
+
+/** Section code for any spelling – mirrors brix.normalize_section(). */
+function normalizeSection(name) {
+  name = String(name || '').trim();
+  if (_SECTION_CODE_RE.test(name)) return name;
+  const host = name.match(/^Host:\s*(\S+)$/);
+  if (host) return SECTION_HOST_PREFIX + host[1];
+  return _sectionsLegacy[name] || name;
+}
+
+/** Section code from the text captured out of a `# ── … ──` header line. */
+function sectionOfHeader(text) {
+  const head = String(text || '');
+  const cut  = head.includes(SECTION_HDR_SEP) ? head.split(SECTION_HDR_SEP)[0] : head;
+  return normalizeSection(cut);
+}
+
+/** Section name in the user's language; the code itself when unknown. */
+function secLabel(code) {
+  code = String(code || '').trim();
+  if (code.startsWith(SECTION_HOST_PREFIX)) {
+    return t('sec.host', code.slice(SECTION_HOST_PREFIX.length));
+  }
+  const key = _sections[code];
+  if (!key) return code;
+  const text = _lang[key];
+  return (!text || text === '__TODO__') ? code : text;
+}
+
+/** Replace section codes inside a validator parameter with their names. */
+function secParams(params) {
+  return (params || []).map(p => {
+    const parts = String(p).split(', ');
+    if (!parts.every(x => x in _sections || x.startsWith(SECTION_HOST_PREFIX))) return p;
+    return parts.map(x => `"${secLabel(x)}"`).join(', ');
+  });
+}
+
 function t(key, ...args) {
   let str = _lang[key] ?? key;
   args.forEach((a, i) => { str = str.replaceAll(`{${i}}`, String(a)); });
@@ -208,6 +300,7 @@ const collapsedBrix = (() => { try { return new Set(JSON.parse(localStorage.getI
 // ── Init ───────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async () => {
   await loadLang(localStorage.getItem('nico_lang') || 'de');
+  await loadSections();
   // Load available languages and build lang switchers dynamically
   fetch('/api/langs')
     .then(r => r.json())
@@ -232,6 +325,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   updateSectionVisibility();
   bindUI();
   checkStatus();
+  checkFileFormat();
+  updateFsHint();
   restoreRebuildMonitor();
 });
 

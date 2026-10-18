@@ -7,22 +7,29 @@ HM files live in hm_dir/<username>.nix (default: home/<username>.nix).
 
 import re
 
-from .brix import inject_brick_blocks
+from .brix import SECTION_HDR_SEP, inject_brick_blocks, section_file_label
 from .generator import _add_version_hash, nix_esc
 
 _MARKER_WIDTH = 78
 
 
-def _hm_section_top(name: str) -> str:
-    """Top-level section marker (no indent): # ── Name ─────────────"""
-    dashes = "─" * max(1, _MARKER_WIDTH - len(name) - 6)
-    return f"# ── {name} {dashes}"
+def _hm_header_text(code: str) -> str:
+    """Section header text: the code NiCo parses plus its English name."""
+    return f"{code} {SECTION_HDR_SEP} {section_file_label(code)}"
 
 
-def _hm_section(name: str) -> str:
-    """Indented section marker for inside {}: # ── Name ─────────────"""
-    dashes = "─" * max(1, _MARKER_WIDTH - len(name) - 6)
-    return f"  # ── {name} {dashes}"
+def _hm_section_top(code: str) -> str:
+    """Top-level section marker (no indent): # ── CODE · Name ────────"""
+    text = _hm_header_text(code)
+    dashes = "─" * max(1, _MARKER_WIDTH - len(text) - 6)
+    return f"# ── {text} {dashes}"
+
+
+def _hm_section(code: str) -> str:
+    """Indented section marker for inside {}: # ── CODE · Name ───────"""
+    text = _hm_header_text(code)
+    dashes = "─" * max(1, _MARKER_WIDTH - len(text) - 6)
+    return f"  # ── {text} {dashes}"
 
 
 def _add_hm_version_hash(content: str, ftype: str = "hm") -> str:
@@ -61,9 +68,9 @@ HM_DEFAULTS: dict = {
 }
 
 
-HM_SECTION_START = "Start"
-HM_SECTION_MAIN = "Home Manager"
-HM_SECTION_END = "End"
+HM_SECTION_START = "HEAD"
+HM_SECTION_MAIN = "HOME"
+HM_SECTION_END = "TAIL"
 
 
 def _g(data: dict, key: str):

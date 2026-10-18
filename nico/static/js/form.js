@@ -13,6 +13,39 @@ function toggleBtrfsBalanceOptions(show) {
     ?.classList.toggle('hidden', !show);
 }
 
+// ── /tmp options ───────────────────────────────────────────────────────────
+// A tmpfs is empty after every boot, so cleanOnBoot has nothing left to do.
+// The row stays greyed out but keeps its stored value – switching tmpfs off
+// brings the old setting back instead of silently dropping it.
+function syncTmpfsRows() {
+  const onTmpfs = !!document.getElementById('tmp_use_tmpfs')?.checked;
+  document.getElementById('tmp-tmpfs-options')?.classList.toggle('hidden', !onTmpfs);
+  document.getElementById('tmp-clean-row')?.classList.toggle('row-inactive', onTmpfs);
+  document.getElementById('tmp-clean-tmpfs-hint')?.classList.toggle('hidden', !onTmpfs);
+  const clean = document.getElementById('tmp_clean_on_boot');
+  if (clean) clean.disabled = onTmpfs;
+}
+
+// ── Filesystem hint for the btrfs group ────────────────────────────────────
+// Reads the running machine, so it only speaks for the host NiCo runs on.
+async function updateFsHint() {
+  const hint = document.getElementById('fs-nonbtrfs-hint');
+  if (!hint) return;
+  try {
+    const data = await fetch('/api/status').then(r => r.json());
+    const fstype = data.root_fstype || '';
+    const other  = _activeHost && data.running_host && _activeHost !== data.running_host;
+    if (!fstype || fstype === 'btrfs' || other) {
+      hint.classList.add('hidden');
+      return;
+    }
+    hint.textContent = t('field.fsNonBtrfsHint', fstype);
+    hint.classList.remove('hidden');
+  } catch (_) {
+    hint.classList.add('hidden');
+  }
+}
+
 // ── Home Manager CO-Form ──────────────────────────────────────────────────
 
 async function loadHmFileList() {
@@ -486,7 +519,13 @@ function getFormData() {
     libvirtd:             ch('libvirtd'),
     virt_manager:         ch('virt_manager'),
 
-    // Dateisystem & Backup
+    // Dateisystem & Backup – gilt für alle Dateisysteme
+    smartd:            ch('smartd'),
+    tmp_use_tmpfs:     ch('tmp_use_tmpfs'),
+    tmp_tmpfs_size:    v('tmp_tmpfs_size'),
+    tmp_clean_on_boot: ch('tmp_clean_on_boot'),
+
+    // Dateisystem & Backup – btrfs
     btrfs_scrub:     ch('btrfs_scrub'),
     btrfs_balance:           ch('btrfs_balance'),
     btrfs_balance_frequency: v('btrfs_balance_frequency'),
@@ -524,6 +563,7 @@ async function switchHost(hostName) {
   } else {
     await loadHostConfig(hostName);
   }
+  updateFsHint();
 }
 
 async function confirmHostSwitch() {
@@ -676,6 +716,11 @@ function populateFormFromData(data) {
   if ('virtualbox_guest_drag_drop' in data) ch('virtualbox_guest_drag_drop', data.virtualbox_guest_drag_drop);
   if ('libvirtd'           in data) ch('libvirtd',            data.libvirtd);
   if ('virt_manager'       in data) ch('virt_manager',        data.virt_manager);
+  if ('smartd'            in data) ch('smartd',            data.smartd);
+  if ('tmp_use_tmpfs'     in data) ch('tmp_use_tmpfs',     data.tmp_use_tmpfs);
+  if ('tmp_tmpfs_size'    in data) v('tmp_tmpfs_size',     data.tmp_tmpfs_size || '50%');
+  if ('tmp_clean_on_boot' in data) ch('tmp_clean_on_boot', data.tmp_clean_on_boot);
+  if ('tmp_use_tmpfs'     in data) syncTmpfsRows();
   if ('btrfs_scrub'     in data) ch('btrfs_scrub',    data.btrfs_scrub);
   if ('btrfs_balance'   in data) ch('btrfs_balance',  data.btrfs_balance);
   if ('btrfs_balance_frequency' in data) v('btrfs_balance_frequency', data.btrfs_balance_frequency || 'weekly');
@@ -754,6 +799,7 @@ function clearCoForm() {
   setField('plymouth_theme', '');
   setField('nix_gc_frequency', 'weekly');
   setField('nix_gc_age', '30d');
+  setField('tmp_tmpfs_size', '50%');
   setField('btrfs_balance_frequency', 'weekly');
   setField('btrfs_balance_dusage', 20);
   setField('btrfs_balance_musage', 30);
@@ -767,6 +813,7 @@ function clearCoForm() {
   togglePipewireOptions(false);
   toggleGcOptions(false);
   toggleBtrfsBalanceOptions(false);
+  syncTmpfsRows();
   toggleOpenglOptions(false);
   toggleDockerOptions(false);
   togglePodmanOptions(false);

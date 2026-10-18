@@ -22,8 +22,37 @@ Starten (ENV = der ausgegebene Pfad, CFG = Verzeichnis mit Wegwerf-Config):
 $CFG/xdg/nico/settings.json muss auf das Config-Verzeichnis zeigen.
 Exit-Code 0 = alles grün.
 
+## Wegwerf-Config, die alle Tests erfüllt
+
+Mehrere Tests prüfen Brick-Listen und brechen ohne passende Dateien ab oder
+melden Fehler, die keine sind. Diese Struktur deckt alle ab:
+
+    configuration.nix              Brick "basis-brick", **kein** imports-Attribut
+                                   (ein imports = [ … ] wird zu einem Brick
+                                   namens "imports" und verfälscht die Listen)
+    hosts/testhost/default.nix     Bricks "host-brick-eins", "host-brick-zwei"
+    home/martin.nix                Brick "hm-brick"
+    bestand.nix                    Brick "huelle" mit einem Brick "innen" darin
+                                   (vorhandene Verschachtelung)
+
+Deutsche Abschnittsnamen in den Markern sind dabei nützlich: dann läuft der
+Test gleich über den Weg, auf dem NiCo Dateien älterer Versionen einliest.
+
 ## test_collapse.py
 
 Auf- und Zuklappen von Sektionen und Nix-Brix, 14 Prüfungen. Deckt beide
 Fehler von 2026-10-17 ab: "Alles einklappen" ließ die Brix offen, und ein
 Klick auf einen Brick in einer zugeklappten Sektion öffnete nur die Sektion.
+
+## test_sections.py (ohne Browser, in testing/routes/)
+
+Abschnitts-Kürzel, alte deutsche Namen und der Formatmarker, 38 Prüfungen.
+Läuft mit `nix-shell shell.nix --run "python testing/routes/test_sections.py"`.
+
+## test_fs_section.py
+
+Abschnitt "Wartung & Snapshots" und das Zahnrad, 21 Prüfungen: die zwei
+Gruppen mit ihren Feldern, die /tmp-Größe nur bei aktivem tmpfs, das
+Ausgrauen von "/tmp beim Booten leeren" ohne Wertverlust, und das Zahnrad
+als Umschalter – inklusive der Regel, dass ein offener Unterdialog Vorrang
+hat.

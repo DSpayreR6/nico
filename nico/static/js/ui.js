@@ -568,6 +568,7 @@ function bindUI() {
   on('docker',       'change', e => toggleDockerOptions(e.target.checked));
   on('podman',       'change', e => togglePodmanOptions(e.target.checked));
   on('libvirtd',     'change', e => toggleLibvirtdOptions(e.target.checked));
+  on('tmp_use_tmpfs', 'change', () => { syncTmpfsRows(); schedulePreviewUpdate(); });
   on('snapper_enable', 'change', e => {
     document.getElementById('snapper-area')?.classList.toggle('hidden', !e.target.checked);
     schedulePreviewUpdate();
@@ -757,8 +758,19 @@ function bindUI() {
     }
   }
 
-  // Admin-Bereich
-  on('admin-btn',       'click', openAdmin);
+  on('format-readonly-btn', 'click', _closeFormatDialog);
+  on('format-proceed-btn',  'click', formatProceed);
+
+  // Admin-Bereich: das Zahnrad öffnet und schließt – aber nie am Autosave
+  // vorbei (openAdmin speichert, closeAdmin nicht) und nie unter einem
+  // offenen Unterdialog hinweg.
+  on('admin-btn', 'click', () => {
+    const overlay = document.getElementById('admin-overlay');
+    if (!overlay) return;
+    if (overlay.classList.contains('hidden')) { openAdmin(); return; }
+    if (_adminSubdialogOpen()) return;
+    closeAdmin();
+  });
   on('admin-close-btn', 'click', closeAdmin);
   on('admin-export-btn',   'click', exportZip);
   on('admin-symlink-btn',  'click', doAdminSymlink);

@@ -15,7 +15,7 @@ from pathlib import Path
 
 from flask import Flask, jsonify, render_template, request
 
-from . import config_manager, generator, git_manager, importer, routes
+from . import config_manager, generator, git_manager, importer, routes, validator
 from .brix import brix_content_to_bricks
 from .core import validate_user_path as _validate_user_path
 from .version import get_version
@@ -78,6 +78,12 @@ def _load_theme_css(theme_name: str) -> str:
         return f":root {{\n{css_vars}\n}}"
     except Exception:
         return ""
+
+
+def _root_fstype() -> str:
+    """Filesystem type of / on this machine ("" when it cannot be determined)."""
+    mount = validator._findmnt_of("/")
+    return mount[1] if mount else ""
 
 
 def create_app() -> Flask:
@@ -249,9 +255,109 @@ def create_app() -> Flask:
                 "nixos_config_dir":  nixos_dir,
                 "git_sync":          app_s.get("git_sync", True),
                 "git_status_only":   app_s.get("git_status_only", False),
+                "root_fstype":       _root_fstype(),
+                "running_host":      validator.running_host(),
                 "version":           get_version(),
             })
         return jsonify({"setup_complete": False, "version": get_version()})
+
+    # Write guard for configs from a newer NiCo: the user may override, but not
+    # by accident.  Cached because it reads every .nix file in the config.
+    _format_state: dict = {"dir": None, "at": 0.0, "too_new": [], "override": False}
+
+    def _format_too_new() -> list:
+        import time
+        nixos_dir = _nixos_dir()
+        if nixos_dir != _format_state["dir"]:
+            _format_state.update(dir=nixos_dir, at=0.0, too_new=[], override=False)
+        if time.monotonic() - _format_state["at"] < 10.0:
+            return _format_state["too_new"]
+        from .brix import FILE_FORMAT, SUPPORTED_FORMATS
+        from .core import get_file_format
+
+        found = []
+        if nixos_dir and Path(nixos_dir).is_dir():
+            for path in sorted(Path(nixos_dir).rglob("*.nix")):
+                try:
+                    fmt = get_file_format(path.read_text(encoding="utf-8"))
+                except Exception:
+                    continue
+                if fmt not in SUPPORTED_FORMATS and fmt > FILE_FORMAT:
+                    found.append({"file": str(path.relative_to(nixos_dir)), "format": fmt})
+        _format_state.update(at=time.monotonic(), too_new=found)
+        return found
+
+    _FORMAT_GUARD_EXEMPT = {
+        "/api/format/check", "/api/format/proceed", "/api/format/safety-commit",
+        "/api/shutdown", "/api/status", "/api/sections", "/api/app/settings",
+    }
+
+    @app.before_request
+    def _format_guard():
+        if request.method not in ("POST", "PUT", "DELETE"):
+            return None
+        if request.path in _FORMAT_GUARD_EXEMPT or _format_state["override"]:
+            return None
+        if not request.path.startswith("/api/"):
+            return None
+        too_new = _format_too_new()
+        if not too_new:
+            return None
+        return jsonify({"success": False, "error": "ERR_FORMAT_TOO_NEW",
+                        "too_new": too_new}), 409
+
+    @app.route("/api/format/proceed", methods=["POST"])
+    def format_proceed():
+        """User decided to edit anyway – unlock writes for this NiCo run."""
+        if err := _check_csrf(): return err
+        _format_state["override"] = True
+        return jsonify({"ok": True})
+
+    @app.route("/api/format/check")
+    def format_check():
+        """
+        Highest file format found in the config, and whether this NiCo knows it.
+
+        A file written by a newer NiCo can only be reordered by this one, never
+        destroyed – unrecognised content is preserved as a brick.  So the answer
+        is a warning the user may override, not a lock.
+        """
+        from .brix import FILE_FORMAT, SUPPORTED_FORMATS
+        from .core import get_file_format
+
+        nixos_dir = _nixos_dir()
+        newest, files = FILE_FORMAT, []
+        if nixos_dir and Path(nixos_dir).is_dir():
+            for path in sorted(Path(nixos_dir).rglob("*.nix")):
+                try:
+                    fmt = get_file_format(path.read_text(encoding="utf-8"))
+                except Exception:
+                    continue
+                if fmt not in SUPPORTED_FORMATS and fmt > FILE_FORMAT:
+                    files.append({"file": str(path.relative_to(nixos_dir)), "format": fmt})
+                    newest = max(newest, fmt)
+        return jsonify({
+            "known":   FILE_FORMAT,
+            "newest":  newest,
+            "too_new": files,
+        })
+
+    @app.route("/api/format/safety-commit", methods=["POST"])
+    def format_safety_commit():
+        """Safety commit before editing a config written by a newer NiCo."""
+        if err := _check_csrf(): return err
+        nixos_dir = _nixos_dir()
+        if not nixos_dir:
+            return jsonify({"success": False, "message": "ERR_NO_DIR"}), 400
+        ok, message, skipped = git_manager.auto_commit(
+            nixos_dir, "Vor Bearbeitung mit älterer NiCo-Version")
+        return jsonify({"success": ok, "message": message, "skipped": skipped})
+
+    @app.route("/api/sections")
+    def sections():
+        """Section table (code, English file label, i18n key) – single source."""
+        from .brix import sections_for_frontend
+        return jsonify(sections_for_frontend())
 
     @app.route("/api/settings/dir")
     def settings_dir():

@@ -248,7 +248,7 @@
           </div>
 
           <!-- 1. System -->
-          <section class="collapsible" data-section="System">
+          <section class="collapsible" data-section="SYST">
             <h3 class="sec-toggle"><span data-i18n="sec.system">System</span></h3>
             <div class="sec-body">
               <label for="hostname" data-i18n="field.hostname">Hostname</label>
@@ -263,7 +263,7 @@
           </section>
 
           <!-- 1b. Boot -->
-          <section class="collapsible" data-section="Boot">
+          <section class="collapsible" data-section="BOOT">
             <h3 class="sec-toggle"><span data-i18n="sec.boot">Boot</span></h3>
             <div class="sec-body">
               <label for="boot_loader" data-i18n="field.bootLoader">Bootloader</label>
@@ -321,7 +321,7 @@
           </section>
 
           <!-- 2. Lokalisierung -->
-          <section class="collapsible" data-section="Lokalisierung">
+          <section class="collapsible" data-section="I18N">
             <h3 class="sec-toggle"><span data-i18n="sec.localization">Lokalisierung</span></h3>
             <div class="sec-body">
               <label for="timezone" data-i18n="field.timezone">Zeitzone</label>
@@ -498,7 +498,7 @@
           </section>
 
           <!-- 3. Netzwerk -->
-          <section class="collapsible" data-section="Netzwerk">
+          <section class="collapsible" data-section="NETW">
             <h3 class="sec-toggle"><span data-i18n="sec.network">Netzwerk</span></h3>
             <div class="sec-body">
               <label class="toggle-row">
@@ -555,7 +555,7 @@
           </section>
 
           <!-- 4. Services -->
-          <section class="collapsible" data-section="Services">
+          <section class="collapsible" data-section="SERV">
             <h3 class="sec-toggle"><span data-i18n="sec.services">Services</span></h3>
             <div class="sec-body">
               <label class="toggle-row">
@@ -624,7 +624,7 @@
           </section>
 
           <!-- 5. Desktop -->
-          <section class="collapsible" data-section="Desktop">
+          <section class="collapsible" data-section="DESK">
             <h3 class="sec-toggle"><span data-i18n="sec.desktop">Desktop</span></h3>
             <div class="sec-body">
               <label for="desktop_environment" data-i18n="field.desktopEnv">Desktop-Umgebung</label>
@@ -647,7 +647,7 @@
           </section>
 
           <!-- 6. Audio -->
-          <section class="collapsible" data-section="Audio">
+          <section class="collapsible" data-section="AUDI">
             <h3 class="sec-toggle"><span data-i18n="sec.audio">Audio</span></h3>
             <div class="sec-body">
               <label class="toggle-row">
@@ -670,7 +670,7 @@
           </section>
 
           <!-- 7. Benutzer -->
-          <section class="collapsible" data-section="Benutzer">
+          <section class="collapsible" data-section="USER">
             <h3 class="sec-toggle"><span data-i18n="sec.user">Benutzer</span></h3>
             <div class="sec-body">
 
@@ -695,7 +695,7 @@
           </section>
 
           <!-- 8. Programme -->
-          <section class="collapsible" data-section="Programme">
+          <section class="collapsible" data-section="PROG">
             <h3 class="sec-toggle"><span data-i18n="sec.packages">Programme</span></h3>
             <div class="sec-body">
               <label class="toggle-row">
@@ -759,7 +759,7 @@
           </section>
 
           <!-- 9. Schriftarten -->
-          <section class="collapsible" data-section="Schriftarten">
+          <section class="collapsible" data-section="FONT">
             <h3 class="sec-toggle"><span data-i18n="sec.fonts">Schriftarten</span></h3>
             <div class="sec-body">
               <div class="font-grid">
@@ -806,7 +806,7 @@
           </section>
 
           <!-- 10. Nix & System -->
-          <section class="collapsible" data-section="Nix & System">
+          <section class="collapsible" data-section="NIXS">
             <h3 class="sec-toggle"><span data-i18n="sec.nixSystem">Nix &amp; System</span></h3>
             <div class="sec-body">
               <label class="toggle-row">
@@ -850,7 +850,7 @@
           </section>
 
           <!-- 11. Home Manager -->
-          <section class="collapsible" data-section="Home Manager">
+          <section class="collapsible" data-section="HOME">
             <h3 class="sec-toggle"><span data-i18n="sec.homeManager">Home Manager</span></h3>
             <div class="sec-body">
 
@@ -889,7 +889,7 @@
           </section>
 
           <!-- 12. Hardware -->
-          <section class="collapsible" data-section="Hardware">
+          <section class="collapsible" data-section="HDWR">
             <h3 class="sec-toggle"><span data-i18n="sec.hardware">Hardware</span></h3>
             <div class="sec-body">
               <label class="toggle-row">
@@ -956,7 +956,7 @@
           </section>
 
           <!-- 13. Virtualisierung -->
-          <section class="collapsible" data-section="Virtualisierung">
+          <section class="collapsible" data-section="VIRT">
             <h3 class="sec-toggle"><span data-i18n="sec.virtualization">Virtualisierung</span></h3>
             <div class="sec-body">
               <label class="toggle-row">
@@ -1033,10 +1033,47 @@
             </div>
           </section>
 
-          <!-- 14. Dateisystem & Backup -->
-          <section class="collapsible" data-section="Dateisystem & Backup">
-            <h3 class="sec-toggle"><span data-i18n="sec.filesystem">Dateisystem &amp; Backup</span></h3>
+          <!-- 14. Wartung & Snapshots -->
+          <section class="collapsible" data-section="FSYS">
+            <h3 class="sec-toggle"><span data-i18n="sec.filesystem">Wartung &amp; Snapshots</span></h3>
             <div class="sec-body">
+
+              <div class="field-rubrik" data-i18n="sec.fsUniversal">Gilt für alle Dateisysteme</div>
+              <label class="toggle-row">
+                <span data-i18n="field.smartd">Festplatten-Überwachung</span>
+                <span class="hint" data-i18n="field.smartdHint">(services.smartd.enable)</span>
+                <span class="toggle-wrap">
+                  <input type="checkbox" id="smartd" name="smartd">
+                  <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                </span>
+              </label>
+              <label class="toggle-row">
+                <span data-i18n="field.tmpUseTmpfs">/tmp im Arbeitsspeicher</span>
+                <span class="hint" data-i18n="field.tmpUseTmpfsHint">(boot.tmp.useTmpfs)</span>
+                <span class="toggle-wrap">
+                  <input type="checkbox" id="tmp_use_tmpfs" name="tmp_use_tmpfs">
+                  <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                </span>
+              </label>
+              <div id="tmp-tmpfs-options" class="hidden">
+                <label for="tmp_tmpfs_size" data-i18n="field.tmpTmpfsSize">Größe</label>
+                <input type="text" id="tmp_tmpfs_size" name="tmp_tmpfs_size" value="50%" style="width:90px">
+                <span class="hint" data-i18n="field.tmpTmpfsSizeHint">(z.B. 50% – große Nix-Builds brauchen Platz)</span>
+              </div>
+              <label class="toggle-row" id="tmp-clean-row">
+                <span data-i18n="field.tmpCleanOnBoot">/tmp beim Booten leeren</span>
+                <span class="hint" data-i18n="field.tmpCleanOnBootHint">(boot.tmp.cleanOnBoot)</span>
+                <span class="hint hidden" id="tmp-clean-tmpfs-hint"
+                      data-i18n="field.tmpCleanOnBootTmpfs">(bei /tmp im Arbeitsspeicher nicht nötig)</span>
+                <span class="toggle-wrap">
+                  <input type="checkbox" id="tmp_clean_on_boot" name="tmp_clean_on_boot">
+                  <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                </span>
+              </label>
+
+              <div class="field-rubrik" data-i18n="sec.fsBtrfs">Btrfs</div>
+              <p id="fs-nonbtrfs-hint" class="raw-panel-hint hidden"
+                 style="margin-top:0;margin-bottom:10px"></p>
               <label class="toggle-row">
                 <span data-i18n="field.btrfsScrub">Btrfs Auto-Scrub</span>
                 <span class="toggle-wrap">
@@ -1093,7 +1130,7 @@
           </div>
 
           <!-- Allgemein -->
-          <section class="collapsible" data-section="Start">
+          <section class="collapsible" data-section="HEAD">
             <h3 class="sec-toggle"><span data-i18n="fl.sec.general">Allgemein</span></h3>
             <div class="sec-body">
               <label for="flake_description" data-i18n="fl.field.description">Beschreibung</label>
@@ -1112,7 +1149,7 @@
           </section>
 
           <!-- Eingabe (inputs) -->
-          <section class="collapsible" data-section="Inputs">
+          <section class="collapsible" data-section="INPU">
             <h3 class="sec-toggle"><span data-i18n="fl.sec.inputs">Eingabe</span></h3>
             <div class="sec-body">
 
@@ -1176,7 +1213,7 @@
           </section>
 
           <!-- Ausgabe (outputs) -->
-          <section class="collapsible" data-section="Outputs">
+          <section class="collapsible" data-section="OUTP">
             <h3 class="sec-toggle"><span data-i18n="fl.sec.outputs">Ausgabe</span></h3>
             <div class="sec-body">
 
@@ -1198,7 +1235,7 @@
           </section>
 
           <!-- nixosConfigurations (Hosts) -->
-          <section class="collapsible" data-section="Hosts">
+          <section class="collapsible" data-section="OUTH">
             <h3 class="sec-toggle"><span data-i18n="fl.sec.hosts">Hosts</span></h3>
             <div class="sec-body">
               <div id="flake-hosts-list" class="flake-hosts-list"></div>
@@ -1641,6 +1678,24 @@
   </div>
 
   <!-- ── Sicherungspunkt-Dialog (beim Schreiben der Config) ──────────────── -->
+  <div id="format-overlay" class="overlay hidden">
+    <div class="modal">
+      <div class="modal-logo" data-i18n="format.title">Config von einer neueren NiCo-Version</div>
+      <p data-i18n="format.info">Diese Config enthält Dateien, die mit einer neueren NiCo-Version
+        geschrieben wurden. Diese Version kennt deren Aufbau nicht vollständig.</p>
+      <p class="raw-panel-hint" id="format-files" style="white-space:pre-line"></p>
+      <p data-i18n="format.risk">Verloren geht dabei nichts – unbekannter Inhalt bleibt als Nix-Brick
+        erhalten. Es kann aber zu Umsortierungen kommen. Vor dem Bearbeiten legt NiCo einen
+        Sicherungspunkt an, mit dem du jede Änderung zurückdrehen kannst.</p>
+      <div class="dialog-actions">
+        <button type="button" id="format-readonly-btn" class="btn-primary"
+                data-i18n="format.readonlyBtn">Nur ansehen</button>
+        <button type="button" id="format-proceed-btn" class="action-btn btn-red"
+                data-i18n="format.proceedBtn">Trotzdem bearbeiten</button>
+      </div>
+    </div>
+  </div>
+
   <div id="write-overlay" class="overlay hidden">
     <div class="modal">
       <div class="modal-logo" data-i18n="write.title">Konfiguration schreiben</div>

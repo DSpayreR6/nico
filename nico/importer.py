@@ -393,6 +393,23 @@ def _extract_fields(kv: 'dict[str, str]', clean: str) -> 'tuple[dict, set[str]]'
     b('virt_manager',         'programs.virt-manager.enable')
 
     # ── Dateisystem & Backup ──────────────────────────────────────────────────
+    b('smartd',            'services.smartd.enable')
+    b('tmp_use_tmpfs',     'boot.tmp.useTmpfs',    'boot.tmpOnTmpfs')
+    b('tmp_clean_on_boot', 'boot.tmp.cleanOnBoot', 'boot.cleanTmpDir')
+
+    # tmpfsSize is either a string ("50%") or a bare integer (bytes)
+    for _tmp_key in ('boot.tmp.tmpfsSize', 'boot.tmpOnTmpfsSize'):
+        _tmp_vt = _vt(_tmp_key)
+        if _tmp_vt is None:
+            continue
+        _tmp_size = _np.extract_string(_tmp_vt)
+        if _tmp_size is None and re.fullmatch(r'\d+', _tmp_vt.strip()):
+            _tmp_size = _tmp_vt.strip()
+        if _tmp_size is not None:
+            r['tmp_tmpfs_size'] = _tmp_size
+            _mark(_tmp_key)
+            break
+
     b('btrfs_scrub', 'services.btrfs.autoScrub.enable')
 
     # btrfs-balance timer/service: only consumed when the script matches NiCo's
@@ -1073,7 +1090,8 @@ def _flake_attr_name(assignment: str) -> str:
 
 
 def flake_host_section(host_name: str) -> str:
-    return f"Host: {host_name}"
+    """Section code of a per-host zone: the code plus the host name as payload."""
+    return f"HOST:{host_name}"
 
 
 def flake_host_brick_name(host_name: str) -> str:

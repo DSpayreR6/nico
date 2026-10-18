@@ -479,11 +479,11 @@ def register(app, ctx):
         if rest_brix.strip():
             blocks     = data.get("brick_blocks", {})
             brick_name = f"imported-{target.stem}"
-            order      = next_order_for_section(blocks, "Start")
+            order      = next_order_for_section(blocks, "HEAD")
             blocks[brick_name] = {
-                "section": "Start",
+                "section": "HEAD",
                 "order":   order,
-                "text":    format_brick("Start", order, brick_name, rest_brix.strip()),
+                "text":    format_brick("HEAD", order, brick_name, rest_brix.strip()),
             }
             data["brick_blocks"] = blocks
         config_manager.save_config(nixos_dir, data)

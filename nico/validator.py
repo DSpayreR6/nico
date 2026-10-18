@@ -126,6 +126,11 @@ ALL_RULES: list[Rule] = [
          "Snapper-Mountpoints prüfen",
          "Prüft ob die konfigurierten Snapper-Mountpoints existieren und btrfs sind.",
          "error", host_local=True),
+    Rule("btrfs_without_btrfs",
+         "Btrfs-Wartung ohne btrfs",
+         "Warnt wenn Btrfs-Scrub oder Auto-Balance aktiv sind, auf diesem Rechner aber kein "
+         "btrfs eingebunden ist bzw. / kein btrfs ist.",
+         "warning", host_local=True),
     Rule("swap_in_snapshot",
          "Swapfile in Snapshot-Subvolume",
          "Warnt wenn ein Btrfs-Swapfile im selben Subvolume liegt wie eine Snapper-Config – Btrfs kann dieses Subvolume dann nicht mehr snapshotten.",
@@ -643,67 +648,77 @@ def _rule_imports_exist(nixos_dir: str, config: dict, is_flake: bool,
 
 _FIELD_SECTION: dict[str, str] = {
     # Boot
-    "boot_loader": "Boot", "secure_boot": "Boot", "lanzaboote": "Boot",
-    "kernel": "Boot", "boot_efi_can_touch": "Boot", "boot_config_limit": "Boot",
+    "boot_loader": "BOOT", "secure_boot": "BOOT", "lanzaboote": "BOOT",
+    "kernel": "BOOT", "boot_efi_can_touch": "BOOT", "boot_config_limit": "BOOT",
     # System
-    "hostname": "System", "state_version": "System", "allowUnfree": "System",
-    "nix_args": "System",
+    "hostname": "SYST", "state_version": "SYST", "allowUnfree": "SYST",
+    "nix_args": "SYST",
     # Lokalisierung
-    "timezone": "Lokalisierung", "locale": "Lokalisierung",
-    "keyboard_layout": "Lokalisierung", "keyboard_variant": "Lokalisierung",
-    "keyboard_console": "Lokalisierung", "extra_locale": "Lokalisierung",
+    "timezone": "I18N", "locale": "I18N",
+    "keyboard_layout": "I18N", "keyboard_variant": "I18N",
+    "keyboard_console": "I18N", "extra_locale": "I18N",
     # Netzwerk
-    "networkmanager": "Netzwerk", "ssh": "Netzwerk",
-    "firewall_disable": "Netzwerk", "firewall_tcp_enable": "Netzwerk",
-    "firewall_tcp_ports": "Netzwerk", "firewall_udp_enable": "Netzwerk",
-    "firewall_udp_ports": "Netzwerk",
+    "networkmanager": "NETW", "ssh": "NETW",
+    "firewall_disable": "NETW", "firewall_tcp_enable": "NETW",
+    "firewall_tcp_ports": "NETW", "firewall_udp_enable": "NETW",
+    "firewall_udp_ports": "NETW",
     # Services
-    "printing": "Services", "avahi": "Services", "bluetooth": "Services",
-    "blueman": "Services", "libinput": "Services", "fprintd": "Services",
-    "pcscd": "Services", "sunshine": "Services",
+    "printing": "SERV", "avahi": "SERV", "bluetooth": "SERV",
+    "blueman": "SERV", "libinput": "SERV", "fprintd": "SERV",
+    "pcscd": "SERV", "sunshine": "SERV",
     # Desktop
-    "desktop_environment": "Desktop", "autologin_user": "Desktop",
+    "desktop_environment": "DESK", "autologin_user": "DESK",
     # Audio
-    "pipewire": "Audio", "pipewire_32bit": "Audio",
+    "pipewire": "AUDI", "pipewire_32bit": "AUDI",
     # Benutzer
-    "username": "Benutzer", "user_description": "Benutzer",
-    "user_initial_password": "Benutzer", "user_uid": "Benutzer",
-    "user_groups": "Benutzer", "user_groups_extra": "Benutzer",
-    "user_shell": "Benutzer", "user_extra_nix": "Benutzer",
+    "username": "USER", "user_description": "USER",
+    "user_initial_password": "USER", "user_uid": "USER",
+    "user_groups": "USER", "user_groups_extra": "USER",
+    "user_shell": "USER", "user_extra_nix": "USER",
     # Programme
-    "packages": "Programme", "steam": "Programme",
+    "packages": "PROG", "steam": "PROG",
     # Schriftarten
-    "fonts": "Schriftarten", "fonts_extra": "Schriftarten",
+    "fonts": "FONT", "fonts_extra": "FONT",
     # Nix & System
-    "flakes": "Nix & System", "nix_optimize_store": "Nix & System",
-    "nix_gc": "Nix & System", "nix_gc_frequency": "Nix & System",
-    "nix_gc_age": "Nix & System",
+    "flakes": "NIXS", "nix_optimize_store": "NIXS",
+    "nix_gc": "NIXS", "nix_gc_frequency": "NIXS",
+    "nix_gc_age": "NIXS",
     # Hardware
-    "opengl": "Hardware", "cpu_microcode": "Hardware",
-    "enable_all_firmware": "Hardware", "hardware_config": "Hardware",
-    "zram_swap": "Hardware",
+    "opengl": "HDWR", "cpu_microcode": "HDWR",
+    "enable_all_firmware": "HDWR", "hardware_config": "HDWR",
+    "zram_swap": "HDWR",
     # Virtualisierung
-    "docker": "Virtualisierung", "docker_rootless": "Virtualisierung",
-    "podman": "Virtualisierung", "podman_docker_compat": "Virtualisierung",
-    "virtualbox_host": "Virtualisierung", "libvirtd": "Virtualisierung",
-    "virt_manager": "Virtualisierung",
+    "docker": "VIRT", "docker_rootless": "VIRT",
+    "podman": "VIRT", "podman_docker_compat": "VIRT",
+    "virtualbox_host": "VIRT", "libvirtd": "VIRT",
+    "virt_manager": "VIRT",
     # Dateisystem & Backup
-    "btrfs_scrub": "Dateisystem & Backup", "snapper_enable": "Dateisystem & Backup",
-    "snapper_configs": "Dateisystem & Backup",
-    "btrfs_balance": "Dateisystem & Backup",
-    "btrfs_balance_frequency": "Dateisystem & Backup",
-    "btrfs_balance_dusage": "Dateisystem & Backup",
-    "btrfs_balance_musage": "Dateisystem & Backup",
+    "smartd": "FSYS",
+    "tmp_use_tmpfs": "FSYS",
+    "tmp_tmpfs_size": "FSYS",
+    "tmp_clean_on_boot": "FSYS",
+    "btrfs_scrub": "FSYS", "snapper_enable": "FSYS",
+    "snapper_configs": "FSYS",
+    "btrfs_balance": "FSYS",
+    "btrfs_balance_frequency": "FSYS",
+    "btrfs_balance_dusage": "FSYS",
+    "btrfs_balance_musage": "FSYS",
     # Home Manager
-    "home_manager": "Home Manager",
+    "home_manager": "HOME",
 }
 
 
 def _section_hint(recognized: dict) -> str:
+    """
+    Section codes of the recognised fields, comma separated.
+
+    Codes, not names: the frontend replaces each one with the section name in
+    the user's language before showing the finding.
+    """
     sections = sorted({_FIELD_SECTION[k] for k in recognized if k in _FIELD_SECTION})
     if not sections:
         return "NiCo-Panel"
-    return ", ".join(f'"{s}"' for s in sections)
+    return ", ".join(sections)
 
 
 def _extract_flake_input_url(content: str, input_name: str) -> tuple[str | None, int | None]:
@@ -1645,6 +1660,82 @@ def host_fingerprint(nixos_dir: str, host: str | None) -> str:
     return digest.hexdigest()[:16]
 
 
+# ── Rules: btrfs maintenance without btrfs ────────────────────────────────────
+
+def _mounted_fstypes() -> set[str]:
+    """Filesystem types currently mounted on this machine."""
+    types: set[str] = set()
+    try:
+        raw = Path("/proc/self/mounts").read_text()
+    except Exception:
+        return types
+    for line in raw.splitlines():
+        parts = line.split()
+        if len(parts) >= 3:
+            types.add(parts[2])
+    return types
+
+
+def _rule_btrfs_without_btrfs(nixos_dir: str, config: dict, is_flake: bool,
+                              host: str | None = None) -> list[Finding]:
+    scrub   = bool(config.get("btrfs_scrub"))
+    balance = bool(config.get("btrfs_balance"))
+    if not (scrub or balance):
+        return []
+
+    # /proc and findmnt read the running machine, so this can only speak for it.
+    this_host = running_host()
+    if host and this_host and host != this_host:
+        return [Finding(
+            rule_id="btrfs_without_btrfs",
+            severity="info",
+            message=f'Host "{host}" kann hier nicht auf btrfs geprüft werden – '
+                    f'dieser Rechner ist "{this_host}".',
+            message_key="validator.f.btrfs_without_btrfs.other_host",
+            params=[host, this_host],
+            detail="Die Prüfung liest die Mountpoints des laufenden Systems. "
+                   "Führe den Validator auf dem betroffenen Rechner erneut aus.",
+            detail_key="validator.d.btrfs_without_btrfs.other_host",
+        )]
+
+    findings: list[Finding] = []
+    if "btrfs" not in _mounted_fstypes():
+        # One key per case – a job list built here would put German words into
+        # every translated message
+        jobs, key = (("Auto-Scrub und Auto-Balance", "both") if scrub and balance else
+                     ("Auto-Scrub", "scrub") if scrub else
+                     ("Auto-Balance", "balance"))
+        findings.append(Finding(
+            rule_id="btrfs_without_btrfs",
+            severity="warning",
+            message=f"{jobs} aktiv, aber auf diesem Rechner ist kein btrfs eingebunden.",
+            message_key=f"validator.f.btrfs_without_btrfs.no_btrfs_{key}",
+            detail="Die Config baut und bootet, die Wartungsjobs laufen aber ins Leere: "
+                   "Scrub und Balance gibt es nur für btrfs. Bei ext4 oder einem anderen "
+                   "Dateisystem beide Schalter ausschalten.",
+            detail_key="validator.d.btrfs_without_btrfs.no_btrfs",
+        ))
+        return findings
+
+    # btrfs exists somewhere, but NiCo's balance job runs on / specifically
+    if balance:
+        root_mount = _findmnt_of("/")
+        if root_mount and root_mount[1] != "btrfs":
+            findings.append(Finding(
+                rule_id="btrfs_without_btrfs",
+                severity="warning",
+                message=f'Auto-Balance läuft auf "/", das ist hier kein btrfs '
+                        f'(erkannt: "{root_mount[1]}").',
+                message_key="validator.f.btrfs_without_btrfs.root_not_btrfs",
+                params=[root_mount[1]],
+                detail="Der von NiCo erzeugte Balance-Job arbeitet fest auf /. "
+                       "Liegt das btrfs-Dateisystem woanders, bleibt der Job wirkungslos "
+                       "und schlägt bei jedem Lauf fehl.",
+                detail_key="validator.d.btrfs_without_btrfs.root_not_btrfs",
+            ))
+    return findings
+
+
 # ── Rules: host-local swap / snapshot conflict ────────────────────────────────
 
 def _rule_swap_in_snapshot(nixos_dir: str, config: dict, is_flake: bool,
@@ -1811,6 +1902,7 @@ _RULE_FNS: dict[str, object] = {
     "hm_state_version_match": _rule_hm_state_version_match,
     "hm_duplicate_args":      _rule_hm_duplicate_args,
     "snapper_btrfs":          _rule_snapper_btrfs,
+    "btrfs_without_btrfs":    _rule_btrfs_without_btrfs,
     "swap_in_snapshot":       _rule_swap_in_snapshot,
     "host_checks_pending":    _rule_host_checks_pending,
     "snapper_in_host":        _rule_snapper_in_host,

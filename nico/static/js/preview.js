@@ -109,15 +109,15 @@ const BRICK_END_RE   = /^\s*# <\/brick:\s*([\w\-]+)\s*>/;
 
 // Canonical list of NiCo sections (mirrors brix.py SECTION_ORDER)
 const BRICK_SECTIONS = [
-  'Start',
-  'Boot', 'System', 'Lokalisierung', 'Netzwerk', 'Services',
-  'Desktop', 'Audio', 'Benutzer', 'Programme',
-  'Schriftarten', 'Nix & System', 'Hardware', 'Virtualisierung',
-  'Dateisystem & Backup', 'Home Manager',
-  'End',
+  'HEAD',
+  'BOOT', 'SYST', 'I18N', 'NETW', 'SERV',
+  'DESK', 'AUDI', 'USER', 'PROG',
+  'FONT', 'NIXS', 'HDWR', 'VIRT',
+  'FSYS', 'HOME',
+  'TAIL',
 ];
 
-const HM_PREVIEW_SECTIONS = ['__header__', 'Start', 'Home Manager', 'Shell', 'Pakete', 'End'];
+const HM_PREVIEW_SECTIONS = ['__header__', 'HEAD', 'HOME', 'SHEL', 'HPKG', 'TAIL'];
 
 /**
  * Split raw code into typed segments:
@@ -148,13 +148,14 @@ function parseCodeSections(code) {
 
     if (sectionMatch) {
       segments.push(current);
-      current = { type: 'section', name: sectionMatch[1], header: rawLine, lines: [], startLine: lineNum };
+      current = { type: 'section', name: sectionOfHeader(sectionMatch[1]),
+                  header: rawLine, lines: [], startLine: lineNum };
     } else if (brickMatch) {
       segments.push(current);
       inBrick  = brickMatch[3];
       current  = {
         type: 'brick', name: brickMatch[3],
-        section: brickMatch[1].trim(), order: parseInt(brickMatch[2], 10),
+        section: normalizeSection(brickMatch[1]), order: parseInt(brickMatch[2], 10),
         lines: [rawLine], startLine: lineNum,
       };
     } else {
@@ -334,7 +335,7 @@ function renderAnnotatedPreview(code, containerId = 'preview-configuration', fil
 
       const label = document.createElement('span');
       label.className   = 'code-brix-label';
-      label.textContent = `# Brick: ${seg.section} / #${seg.order} · ${seg.name}`;
+      label.textContent = `# Brick: ${secLabel(seg.section)} / #${seg.order} · ${seg.name}`;
 
       const actions = document.createElement('div');
       actions.className = 'brix-actions';
@@ -417,10 +418,10 @@ function renderCodePreview(code, containerId = 'preview-configuration', file = '
 }
 
 // ── Section collapse (left ↔ right sync) ───────────────────────────────────
-const _SECTION_SYNC_MAP = {
-  'Hosts': 'Outputs-Hosts',
-  'Outputs-Hosts': 'Hosts',
-};
+// Was needed while the flake panel section ("Hosts") and the generated marker
+// ("Outputs-Hosts") had different names. Both are OUTH now, so the map is empty
+// – kept as the hook for any future pair that differs again.
+const _SECTION_SYNC_MAP = {};
 
 function toggleSection(name) {
   const wasCollapsed = collapsedSections.has(name);
@@ -469,7 +470,7 @@ function applySectionCollapse() {
 /** Returns true if a left-panel section has no user-configured values. */
 function isSectionEmpty(sec) {
   // System is always considered non-empty (fundamental settings)
-  if (sec.dataset.section === 'System') return false;
+  if (sec.dataset.section === 'SYST') return false;
 
   const body = sec.querySelector('.sec-body');
   if (!body) return false;
@@ -722,20 +723,20 @@ function initLvl2Sections() {
 
 // ── NixOS-Direktlinks pro Sektion ─────────────────────────────────────────────
 const _SECTION_NIXOS_KEYS = {
-  'System':               'networking.hostName',
-  'Lokalisierung':        'time.timeZone',
-  'Netzwerk':             'networking.networkmanager',
-  'Services':             'services.printing',
-  'Desktop':              'services.xserver',
-  'Audio':                'services.pipewire',
-  'Benutzer':             'users.users',
-  'Programme':            'environment.systemPackages',
-  'Schriftarten':         'fonts.packages',
-  'Nix & System':         'nix.settings',
-  'Home Manager':         'home-manager',
-  'Hardware':             'hardware',
-  'Virtualisierung':      'virtualisation.docker',
-  'Dateisystem & Backup': 'services.snapper',
+  'SYST':               'networking.hostName',
+  'I18N':        'time.timeZone',
+  'NETW':             'networking.networkmanager',
+  'SERV':             'services.printing',
+  'DESK':              'services.xserver',
+  'AUDI':                'services.pipewire',
+  'USER':             'users.users',
+  'PROG':            'environment.systemPackages',
+  'FONT':         'fonts.packages',
+  'NIXS':         'nix.settings',
+  'HOME':         'home-manager',
+  'HDWR':             'hardware',
+  'VIRT':      'virtualisation.docker',
+  'FSYS': 'services.snapper',
 };
 
 /** Active sec-docs popup element, used to close it when clicking outside. */

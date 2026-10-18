@@ -444,6 +444,14 @@ function closeAdmin() {
   document.getElementById('admin-overlay').classList.add('hidden');
 }
 
+/** True while any other overlay (validation settings, file viewer, …) is open
+ *  on top of the admin panel – pulling the panel away underneath it would
+ *  leave that dialog floating over the form. */
+function _adminSubdialogOpen() {
+  return [...document.querySelectorAll('.overlay')]
+    .some(el => el.id !== 'admin-overlay' && !el.classList.contains('hidden'));
+}
+
 function _switchAdminTab(tab) {
   _activeAdminTab = tab;
   document.querySelectorAll('.admin-tab').forEach(btn => {
@@ -702,9 +710,9 @@ async function saveValidationSettings() {
 
 // All hideable configuration sections (System is always visible)
 const _ALL_SECTIONS = [
-  'Boot', 'Lokalisierung', 'Netzwerk', 'Services', 'Desktop', 'Audio',
-  'Benutzer', 'Programme', 'Schriftarten', 'Nix & System', 'Home Manager',
-  'Hardware', 'Virtualisierung', 'Dateisystem & Backup',
+  'BOOT', 'I18N', 'NETW', 'SERV', 'DESK', 'AUDI',
+  'USER', 'PROG', 'FONT', 'NIXS', 'HOME',
+  'HDWR', 'VIRT', 'FSYS',
 ];
 
 function openSectionsSettings() {
@@ -807,7 +815,7 @@ function _showValidationResults(findings) {
                           idx + 1, findings.length);
       // detail_key is absent where the detail is pure data (paths, file lists,
       // error texts) – tOr then falls back to that data unchanged
-      const detailText = tOr(f.detail_key, f.detail, ...(f.detail_params || []));
+      const detailText = tOr(f.detail_key, f.detail, ...secParams(f.detail_params));
       const detail = detailText
         ? `<div class="git-guard-card-desc" style="margin-top:4px;white-space:pre-line">${_esc(detailText)}</div>`
         : '';
@@ -820,7 +828,7 @@ function _showValidationResults(findings) {
         <span style="color:${color};font-size:16px;flex-shrink:0;margin-top:1px">${icon}</span>
         <div class="git-guard-card-info">
           <div class="git-guard-card-title">${_esc(counter)}</div>
-          <div style="font-size:13px">${_esc(tOr(f.message_key, f.message, ...(f.params || [])))}</div>${detail}${action}
+          <div style="font-size:13px">${_esc(tOr(f.message_key, f.message, ...secParams(f.params)))}</div>${detail}${action}
         </div>
       </div>`;
     }).join('') + '</div>';

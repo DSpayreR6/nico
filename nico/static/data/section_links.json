@@ -1,181 +1,181 @@
 {
-  "System": {
+  "SYST": {
     "de": {
-      "wiki":    "https://wiki.nixos.org/wiki/NixOS_Manual",
+      "wiki": "https://wiki.nixos.org/wiki/NixOS_Manual",
       "options": "https://search.nixos.org/options?query=networking.hostName"
     },
     "en": {
-      "wiki":    "https://wiki.nixos.org/wiki/NixOS_Manual",
+      "wiki": "https://wiki.nixos.org/wiki/NixOS_Manual",
       "options": "https://search.nixos.org/options?query=networking.hostName"
     }
   },
-  "Lokalisierung": {
+  "I18N": {
     "de": {
-      "wiki":    "https://wiki.nixos.org/wiki/Localization",
+      "wiki": "https://wiki.nixos.org/wiki/Localization",
       "options": "https://search.nixos.org/options?query=i18n"
     },
     "en": {
-      "wiki":    "https://wiki.nixos.org/wiki/Localization",
+      "wiki": "https://wiki.nixos.org/wiki/Localization",
       "options": "https://search.nixos.org/options?query=i18n"
     }
   },
-  "Netzwerk": {
+  "NETW": {
     "de": {
-      "wiki":    "https://wiki.nixos.org/wiki/Networking",
+      "wiki": "https://wiki.nixos.org/wiki/Networking",
       "options": "https://search.nixos.org/options?query=networking"
     },
     "en": {
-      "wiki":    "https://wiki.nixos.org/wiki/Networking",
+      "wiki": "https://wiki.nixos.org/wiki/Networking",
       "options": "https://search.nixos.org/options?query=networking"
     }
   },
-  "Services": {
+  "SERV": {
     "de": {
-      "wiki":    "https://wiki.nixos.org/wiki/NixOS_Manual",
+      "wiki": "https://wiki.nixos.org/wiki/NixOS_Manual",
       "options": "https://search.nixos.org/options?query=services"
     },
     "en": {
-      "wiki":    "https://wiki.nixos.org/wiki/NixOS_Manual",
+      "wiki": "https://wiki.nixos.org/wiki/NixOS_Manual",
       "options": "https://search.nixos.org/options?query=services"
     }
   },
-  "Desktop": {
+  "DESK": {
     "de": {
-      "wiki":    "https://wiki.nixos.org/wiki/Category:Desktop_environments",
+      "wiki": "https://wiki.nixos.org/wiki/Category:Desktop_environments",
       "options": "https://search.nixos.org/options?query=services.xserver"
     },
     "en": {
-      "wiki":    "https://wiki.nixos.org/wiki/Category:Desktop_environments",
+      "wiki": "https://wiki.nixos.org/wiki/Category:Desktop_environments",
       "options": "https://search.nixos.org/options?query=services.xserver"
     }
   },
-  "Audio": {
+  "AUDI": {
     "de": {
-      "wiki":    "https://wiki.nixos.org/wiki/PipeWire",
+      "wiki": "https://wiki.nixos.org/wiki/PipeWire",
       "options": "https://search.nixos.org/options?query=services.pipewire"
     },
     "en": {
-      "wiki":    "https://wiki.nixos.org/wiki/PipeWire",
+      "wiki": "https://wiki.nixos.org/wiki/PipeWire",
       "options": "https://search.nixos.org/options?query=services.pipewire"
     }
   },
-  "Benutzer": {
+  "USER": {
     "de": {
-      "wiki":    "https://wiki.nixos.org/wiki/NixOS_Manual",
+      "wiki": "https://wiki.nixos.org/wiki/NixOS_Manual",
       "options": "https://search.nixos.org/options?query=users.users"
     },
     "en": {
-      "wiki":    "https://wiki.nixos.org/wiki/NixOS_Manual",
+      "wiki": "https://wiki.nixos.org/wiki/NixOS_Manual",
       "options": "https://search.nixos.org/options?query=users.users"
     }
   },
-  "Programme": {
+  "PROG": {
     "de": {
-      "wiki":    "https://wiki.nixos.org/wiki/NixOS_Manual",
+      "wiki": "https://wiki.nixos.org/wiki/NixOS_Manual",
       "options": "https://search.nixos.org/options?query=environment.systemPackages"
     },
     "en": {
-      "wiki":    "https://wiki.nixos.org/wiki/NixOS_Manual",
+      "wiki": "https://wiki.nixos.org/wiki/NixOS_Manual",
       "options": "https://search.nixos.org/options?query=environment.systemPackages"
     }
   },
-  "Schriftarten": {
+  "FONT": {
     "de": {
-      "wiki":    "https://wiki.nixos.org/wiki/Fonts",
+      "wiki": "https://wiki.nixos.org/wiki/Fonts",
       "options": "https://search.nixos.org/options?query=fonts"
     },
     "en": {
-      "wiki":    "https://wiki.nixos.org/wiki/Fonts",
+      "wiki": "https://wiki.nixos.org/wiki/Fonts",
       "options": "https://search.nixos.org/options?query=fonts"
     }
   },
-  "Nix & System": {
+  "NIXS": {
     "de": {
-      "wiki":    "https://wiki.nixos.org/wiki/Flakes",
+      "wiki": "https://wiki.nixos.org/wiki/Flakes",
       "options": "https://search.nixos.org/options?query=nix"
     },
     "en": {
-      "wiki":    "https://wiki.nixos.org/wiki/Flakes",
+      "wiki": "https://wiki.nixos.org/wiki/Flakes",
       "options": "https://search.nixos.org/options?query=nix"
     }
   },
-  "Home Manager": {
+  "HOME": {
     "de": {
-      "wiki":    "https://wiki.nixos.org/wiki/Home_Manager",
+      "wiki": "https://wiki.nixos.org/wiki/Home_Manager",
       "options": "https://nix-community.github.io/home-manager/options.xhtml"
     },
     "en": {
-      "wiki":    "https://wiki.nixos.org/wiki/Home_Manager",
+      "wiki": "https://wiki.nixos.org/wiki/Home_Manager",
       "options": "https://nix-community.github.io/home-manager/options.xhtml"
     }
   },
-  "Hardware": {
+  "HDWR": {
     "de": {
-      "wiki":    "https://wiki.nixos.org/wiki/NixOS_Manual",
+      "wiki": "https://wiki.nixos.org/wiki/NixOS_Manual",
       "options": "https://search.nixos.org/options?query=hardware"
     },
     "en": {
-      "wiki":    "https://wiki.nixos.org/wiki/NixOS_Manual",
+      "wiki": "https://wiki.nixos.org/wiki/NixOS_Manual",
       "options": "https://search.nixos.org/options?query=hardware"
     }
   },
-  "Virtualisierung": {
+  "VIRT": {
     "de": {
-      "wiki":    "https://wiki.nixos.org/wiki/Docker",
+      "wiki": "https://wiki.nixos.org/wiki/Docker",
       "options": "https://search.nixos.org/options?query=virtualisation"
     },
     "en": {
-      "wiki":    "https://wiki.nixos.org/wiki/Docker",
+      "wiki": "https://wiki.nixos.org/wiki/Docker",
       "options": "https://search.nixos.org/options?query=virtualisation"
     }
   },
-  "Dateisystem & Backup": {
+  "FSYS": {
     "de": {
-      "wiki":    "https://wiki.nixos.org/wiki/Btrfs",
+      "wiki": "https://wiki.nixos.org/wiki/Btrfs",
       "options": "https://search.nixos.org/options?query=services.snapper"
     },
     "en": {
-      "wiki":    "https://wiki.nixos.org/wiki/Btrfs",
+      "wiki": "https://wiki.nixos.org/wiki/Btrfs",
       "options": "https://search.nixos.org/options?query=services.snapper"
     }
   },
-  "Start": {
+  "HEAD": {
     "de": {
-      "wiki":    "https://wiki.nixos.org/wiki/Flakes",
+      "wiki": "https://wiki.nixos.org/wiki/Flakes",
       "options": "https://nix.dev/concepts/flakes"
     },
     "en": {
-      "wiki":    "https://wiki.nixos.org/wiki/Flakes",
+      "wiki": "https://wiki.nixos.org/wiki/Flakes",
       "options": "https://nix.dev/concepts/flakes"
     }
   },
-  "Inputs": {
+  "INPU": {
     "de": {
-      "wiki":    "https://wiki.nixos.org/wiki/Flakes",
+      "wiki": "https://wiki.nixos.org/wiki/Flakes",
       "options": "https://nix.dev/manual/nix/stable/command-ref/new-cli/nix3-flake"
     },
     "en": {
-      "wiki":    "https://wiki.nixos.org/wiki/Flakes",
+      "wiki": "https://wiki.nixos.org/wiki/Flakes",
       "options": "https://nix.dev/manual/nix/stable/command-ref/new-cli/nix3-flake"
     }
   },
-  "Outputs": {
+  "OUTP": {
     "de": {
-      "wiki":    "https://wiki.nixos.org/wiki/Flakes",
+      "wiki": "https://wiki.nixos.org/wiki/Flakes",
       "options": "https://search.nixos.org/options?query=nixpkgs"
     },
     "en": {
-      "wiki":    "https://wiki.nixos.org/wiki/Flakes",
+      "wiki": "https://wiki.nixos.org/wiki/Flakes",
       "options": "https://search.nixos.org/options?query=nixpkgs"
     }
   },
-  "Hosts": {
+  "OUTH": {
     "de": {
-      "wiki":    "https://wiki.nixos.org/wiki/Flakes",
+      "wiki": "https://wiki.nixos.org/wiki/Flakes",
       "options": "https://search.nixos.org/options?query=nixpkgs.lib.nixosSystem"
     },
     "en": {
-      "wiki":    "https://wiki.nixos.org/wiki/Flakes",
+      "wiki": "https://wiki.nixos.org/wiki/Flakes",
       "options": "https://search.nixos.org/options?query=nixpkgs.lib.nixosSystem"
     }
   }

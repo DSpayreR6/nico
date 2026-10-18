@@ -1,5 +1,26 @@
 # NiCo – Changelog
 
+## Unreleased
+
+### New Features
+
+- The file system section is now "Maintenance & snapshots" and starts with options that hold for every file system, with the btrfs jobs as their own group below – adding another file system later means one more group, not a rebuild
+- Disk monitoring (`services.smartd.enable`): reports drive errors before a disk fails, independent of the file system
+- `/tmp` in RAM (`boot.tmp.useTmpfs`) with its size (`boot.tmp.tmpfsSize`, percentage or bytes), and clearing `/tmp` on boot (`boot.tmp.cleanOnBoot`) – the latter is greyed out while `/tmp` is in RAM, because a tmpfs starts empty anyway, and keeps its stored value
+- The deprecated spellings `boot.tmpOnTmpfs`, `boot.tmpOnTmpfsSize` and `boot.cleanTmpDir` are read on import and written back under their current names
+- New validator rule: btrfs auto-scrub or auto-balance enabled while no btrfs is mounted on this machine, plus a separate finding when the balance job's `/` is not btrfs – the config builds and boots, so the jobs used to fail silently forever
+- A note above the btrfs group when this machine does not run btrfs; nothing is disabled, because the config may well be edited for another host
+- Sections are anchored by a four-character code in the generated files (`# ── FSYS · Maintenance & snapshots ──`, `# <brick: FSYS / #2 name>`), per-host zones as `HOST:<name>`. The anchor is language-neutral, so a section can be renamed in the UI without touching a single file
+- The text after the code is always English, matching the Nix option names around it; the section name is translated in the panel, the code view and the brick dialogs. Previously every file carried German section names regardless of the interface language
+- German section names written by earlier versions are still read and are rewritten to codes on the next write, including the `Host: name` form – a brick keeps its section instead of drifting to the end of the file
+- Sections now have a single source (`brix.py`): order, the name written into files and the translation key. Frontend, validator and documentation links read it from `/api/sections` instead of each keeping their own list
+- Files carry a format version in the `nico-version` line (`#f2`). It counts layout changes, not releases, and is derived from the markers actually present, so a file that was only re-stamped is not mislabelled
+- Opening a config written by a newer NiCo now warns and lets the user decide instead of failing silently: nothing can be lost (unknown content is kept as a brick) but blocks may be reordered, so NiCo makes a safety commit before the first write and refuses writes until the notice is confirmed
+
+### Bug Fixes
+
+- The gear icon closes the admin panel again when it is already open, instead of only ever opening it – closing does not trigger the autosave that opening does, and an open sub-dialog keeps the panel in place
+
 ## 0.12.0 (2026-10-17)
 
 ### New Features

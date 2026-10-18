@@ -21,10 +21,10 @@ function openBrixInsert() {
                    : BRICK_SECTIONS;
     sections.forEach(s => {
       const opt = document.createElement('option');
-      opt.value = s; opt.textContent = s;
+      opt.value = s; opt.textContent = secLabel(s);
       sel.appendChild(opt);
     });
-    sel.value = 'End';
+    sel.value = 'TAIL';
   }
   document.getElementById('brix-name-input').focus();
 }
@@ -35,7 +35,7 @@ function closeBrixInsert() {
 
 async function insertBrix() {
   const name    = document.getElementById('brix-name-input').value.trim();
-  const section = document.getElementById('brix-section-select')?.value || 'End';
+  const section = document.getElementById('brix-section-select')?.value || 'TAIL';
   const errorEl = document.getElementById('brix-insert-error');
   errorEl.classList.add('hidden');
 
@@ -142,8 +142,8 @@ async function openBrixDelete() {
 }
 
 // ── Brix verschieben ────────────────────────────────────────────────────────
-const FLAKE_BRICK_SECTIONS = ['Start', 'Inputs-Extra', 'Outputs-Extra', 'End'];
-const HM_BRICK_SECTIONS    = ['Start', 'Home Manager', 'End'];
+const FLAKE_BRICK_SECTIONS = ['HEAD', 'INPX', 'OUTX', 'TAIL'];
+const HM_BRICK_SECTIONS    = ['HEAD', 'HOME', 'TAIL'];
 let _brixMoveTarget = null;
 
 function _getFlakeBrickSections(cfg = null) {
@@ -154,7 +154,7 @@ function _getFlakeBrickSections(cfg = null) {
   hosts.forEach(host => {
     const name = typeof host === 'string' ? host : (host?.name || '');
     if (!name) return;
-    const section = `Host: ${name}`;
+    const section = SECTION_HOST_PREFIX + name;
     if (!sections.includes(section)) sections.push(section);
   });
   return sections;
@@ -200,13 +200,13 @@ async function openBrixMove(targetName = null) {
     sectionSel.innerHTML = '';
     (isFlake ? _getFlakeBrickSections(cfg) : _brixContextFtype === 'hm' ? HM_BRICK_SECTIONS : BRICK_SECTIONS).forEach(s => {
       const opt = document.createElement('option');
-      opt.value = s; opt.textContent = s;
+      opt.value = s; opt.textContent = secLabel(s);
       sectionSel.appendChild(opt);
     });
   }
 
   // Pre-fill section/order from the selected brick
-  if (sectionSel && block) sectionSel.value = block.section || 'End';
+  if (sectionSel && block) sectionSel.value = block.section || 'TAIL';
   document.getElementById('brix-move-order').value = block?.order ?? 1;
   document.getElementById('brix-move-warning').classList.add('hidden');
   document.getElementById('brix-move-overlay').classList.remove('hidden');

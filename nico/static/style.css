@@ -2594,6 +2594,22 @@ button:disabled {
 
 .admin-import-body { /* shown by default, hidden when collapsed */ }
 
+/* Group heading inside a panel section (e.g. "Gilt für alle Dateisysteme") */
+.field-rubrik {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1.2px;
+  color: var(--blue);
+  border-bottom: 1px solid var(--surface2);
+  padding-bottom: 5px;
+  margin: 14px 0 10px;
+}
+.sec-body > .field-rubrik:first-child { margin-top: 0; }
+
+/* Row whose control is pointless in the current combination of options */
+.toggle-row.row-inactive { opacity: 0.45; }
+
 /* Settings panel */
 .settings-rubrik {
   font-size: 10px;

@@ -9,7 +9,8 @@ import hashlib
 import re
 import shlex
 
-from .brix import format_brick, inject_brick_blocks
+from .brix import (FILE_FORMAT, SECTION_HDR_SEP, format_brick, inject_brick_blocks,
+                   section_file_label)
 from .importer import flake_host_brick_name, flake_host_section
 
 _NIX_ATTR_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_'-]*$")
@@ -48,7 +49,7 @@ def _int_or(value, default: int) -> int:
 #   # nico-version: a3f8c2d1          (legacy / no type)
 #   # nico-version: co#a3f8c2d1       (with type code)
 _VERSION_RE = re.compile(
-    r'^# nico-version: (?:[a-z]+#)?([0-9a-f]{8})(?:#[pr])?\n', re.MULTILINE
+    r'^# nico-version: (?:[a-z]+#)?([0-9a-f]{8})(?:#[pr])?(?:#f\d+)?\n', re.MULTILINE
 )
 # Matches only the legacy format (no type prefix) – used to detect missing type
 _VERSION_RE_NOTYPE = re.compile(
@@ -69,7 +70,7 @@ def _add_version_hash(content: str, ftype: str = "") -> str:
     h = content_hash(content)
     prefix = f"{ftype}#" if ftype else ""
     lines = content.split("\n")
-    lines.insert(1, f"# nico-version: {prefix}{h}")
+    lines.insert(1, f"# nico-version: {prefix}{h}#f{FILE_FORMAT}")
     return "\n".join(lines)
 
 
@@ -94,10 +95,17 @@ def check_version_hash(file_content: str) -> str:
 _MARKER_WIDTH = 78
 
 
-def _section(name: str) -> str:
-    """Return a section marker line:  # ── Name ──────────────────"""
-    dashes = "─" * max(1, _MARKER_WIDTH - len(name) - 6)
-    return f"\n  # ── {name} {dashes}"
+def _section(code: str) -> str:
+    """
+    Return a section marker line:  # ── CODE · Name ────────────────
+
+    The code is the anchor NiCo parses, the name behind it is for the reader
+    and always English – see brix.SECTIONS for why it does not follow the UI
+    language.
+    """
+    text = f"{code} {SECTION_HDR_SEP} {section_file_label(code)}"
+    dashes = "─" * max(1, _MARKER_WIDTH - len(text) - 6)
+    return f"\n  # ── {text} {dashes}"
 
 
 def _has_section_brix(brix: dict, section: str) -> bool:
@@ -142,12 +150,12 @@ def _sec_boot(data: dict, brix: dict) -> "list[str]":
     plymouth_enabled    = data.get("plymouth_enabled", False)
     plymouth_theme      = (data.get("plymouth_theme", "") or "").strip()
     if not (boot_loader != "none" or boot_kernel_params or boot_initrd_systemd
-            or plymouth_enabled or _has_section_brix(brix, "Boot")):
+            or plymouth_enabled or _has_section_brix(brix, "BOOT")):
         return []
     boot_efi_can_touch = data.get("boot_efi_can_touch", False)
     boot_efi_mount     = (data.get("boot_efi_mount_point", "/boot") or "/boot").strip()
     boot_config_limit  = _int_or(data.get("boot_config_limit"), 5)
-    lines = [_section("Boot")]
+    lines = [_section("BOOT")]
     if boot_loader != "none":
         if boot_loader == "systemd-boot":
             lines += [
@@ -177,9 +185,9 @@ def _sec_system(data: dict, *, host_mode: bool) -> "list[str]":
         # Sparse host file: no stateVersion, section only when set
         if not hostname:
             return []
-        return [_section("System"), f'  networking.hostName = "{nix_esc(hostname)}";']
+        return [_section("SYST"), f'  networking.hostName = "{nix_esc(hostname)}";']
     state_version = (data.get("state_version") or "").strip()
-    lines = [_section("System")]
+    lines = [_section("SYST")]
     if hostname:
         lines += [f'  networking.hostName = "{nix_esc(hostname)}";']
     lines += [
@@ -223,8 +231,8 @@ def _sec_localization(data: dict, brix: dict) -> "list[str]":
         ]
     if data.get("keyboard_console"):
         loc_lines += [f'  console.keyMap = "{nix_esc(data["keyboard_console"])}";']
-    if loc_lines or _has_section_brix(brix, "Lokalisierung"):
-        return [_section("Lokalisierung")] + loc_lines
+    if loc_lines or _has_section_brix(brix, "I18N"):
+        return [_section("I18N")] + loc_lines
     return []
 
 
@@ -244,8 +252,8 @@ def _sec_network(data: dict, brix: dict, *, nm_default: bool) -> "list[str]":
         fw_udp = [p for p in (data.get("firewall_udp_ports") or "").split() if p.isdigit()]
         if fw_udp:
             net_lines += [f"  networking.firewall.allowedUDPPorts = [ {' '.join(fw_udp)} ];"]
-    if net_lines or _has_section_brix(brix, "Netzwerk"):
-        return [_section("Netzwerk")] + net_lines
+    if net_lines or _has_section_brix(brix, "NETW"):
+        return [_section("NETW")] + net_lines
     return []
 
 
@@ -273,8 +281,8 @@ def _sec_services(data: dict, brix: dict) -> "list[str]":
         svc_lines += ["  services.pcscd.enable = true;"]
     if data.get("sunshine"):
         svc_lines += ["  services.sunshine.enable = true;"]
-    if svc_lines or _has_section_brix(brix, "Services"):
-        return [_section("Services")] + svc_lines
+    if svc_lines or _has_section_brix(brix, "SERV"):
+        return [_section("SERV")] + svc_lines
     return []
 
 
@@ -282,9 +290,9 @@ def _sec_desktop(data: dict, brix: dict) -> "list[str]":
     de = data.get("desktop_environment", "none") or "none"
     de_snippet = _DE_SNIPPETS.get(de, "")
     autologin_user = data.get("autologin_user", "")
-    if not (de_snippet or autologin_user or _has_section_brix(brix, "Desktop")):
+    if not (de_snippet or autologin_user or _has_section_brix(brix, "DESK")):
         return []
-    lines = [_section("Desktop")]
+    lines = [_section("DESK")]
     if de_snippet:
         lines += [de_snippet]
     if autologin_user:
@@ -312,8 +320,8 @@ def _sec_audio(data: dict, brix: dict, *, gate_32bit: bool) -> "list[str]":
     # gate_32bit (CO): 32bit only together with pipewire; host emits it alone
     if data.get("pipewire_32bit") and (data.get("pipewire") or not gate_32bit):
         audio_lines += ["  services.pipewire.alsa.support32Bit = true;"]
-    if audio_lines or _has_section_brix(brix, "Audio"):
-        return [_section("Audio")] + audio_lines
+    if audio_lines or _has_section_brix(brix, "AUDI"):
+        return [_section("AUDI")] + audio_lines
     return []
 
 
@@ -341,11 +349,11 @@ def _user_block_lines(name: str, description: str, uid: str, password: str,
 def _sec_users(data: dict, brix: dict) -> "list[str]":
     username = data.get("username", "")
     if not username:
-        return [_section("Benutzer")] if _has_section_brix(brix, "Benutzer") else []
+        return [_section("USER")] if _has_section_brix(brix, "USER") else []
     user_groups_list  = data.get("user_groups", ["wheel", "networkmanager"])
     user_groups_extra = [g for g in (data.get("user_groups_extra") or "").split() if g]
     user_all_groups   = sorted(set(user_groups_list + user_groups_extra)) or ["wheel"]
-    lines = [_section("Benutzer")]
+    lines = [_section("USER")]
     lines += _user_block_lines(
         username,
         data.get("user_description", ""),
@@ -440,8 +448,8 @@ def _sec_programs(data: dict, brix: dict) -> "list[str]":
             pkg_lines,
             "  ];",
         ]
-    if prog_lines or _has_section_brix(brix, "Programme"):
-        return [_section("Programme")] + prog_lines
+    if prog_lines or _has_section_brix(brix, "PROG"):
+        return [_section("PROG")] + prog_lines
     return []
 
 
@@ -452,13 +460,13 @@ def _sec_fonts(data: dict, brix: dict) -> "list[str]":
     if fonts_all:
         font_lines = "\n".join(f"    {f}" for f in fonts_all)
         return [
-            _section("Schriftarten"),
+            _section("FONT"),
             "  fonts.packages = with pkgs; [",
             font_lines,
             "  ];",
         ]
-    if _has_section_brix(brix, "Schriftarten"):
-        return [_section("Schriftarten")]
+    if _has_section_brix(brix, "FONT"):
+        return [_section("FONT")]
     return []
 
 
@@ -479,8 +487,8 @@ def _sec_nix_system(data: dict, brix: dict) -> "list[str]":
             f'    options = "--delete-older-than {nix_esc(data.get("nix_gc_age", "30d"))}";',
             "  };",
         ]
-    if nix_lines or _has_section_brix(brix, "Nix & System"):
-        return [_section("Nix & System")] + nix_lines
+    if nix_lines or _has_section_brix(brix, "NIXS"):
+        return [_section("NIXS")] + nix_lines
     return []
 
 
@@ -505,8 +513,8 @@ def _sec_hardware(data: dict, brix: dict) -> "list[str]":
         hw_lines += ["  hardware.ledger.enable = true;"]
     if data.get("ratbagd"):
         hw_lines += ["  services.ratbagd.enable = true;"]
-    if hw_lines or _has_section_brix(brix, "Hardware"):
-        return [_section("Hardware")] + hw_lines
+    if hw_lines or _has_section_brix(brix, "HDWR"):
+        return [_section("HDWR")] + hw_lines
     return []
 
 
@@ -535,13 +543,25 @@ def _sec_virtualisation(data: dict, brix: dict) -> "list[str]":
         virt_lines += ["  virtualisation.libvirtd.enable = true;"]
         if data.get("virt_manager"):
             virt_lines += ["  programs.virt-manager.enable = true;"]
-    if virt_lines or _has_section_brix(brix, "Virtualisierung"):
-        return [_section("Virtualisierung")] + virt_lines
+    if virt_lines or _has_section_brix(brix, "VIRT"):
+        return [_section("VIRT")] + virt_lines
     return []
 
 
 def _sec_backup(data: dict, brix: dict) -> "list[str]":
     backup_lines = []
+    # Options that apply to every filesystem
+    if data.get("smartd"):
+        backup_lines += ["  services.smartd.enable = true;"]
+    if data.get("tmp_use_tmpfs"):
+        backup_lines += ["  boot.tmp.useTmpfs = true;"]
+        size = str(data.get("tmp_tmpfs_size") or "").strip()
+        if size:
+            # The option takes a string ("50%") or a positive integer (bytes)
+            value = size if size.isdigit() else f'"{nix_esc(size)}"'
+            backup_lines += [f"  boot.tmp.tmpfsSize = {value};"]
+    if data.get("tmp_clean_on_boot"):
+        backup_lines += ["  boot.tmp.cleanOnBoot = true;"]
     if data.get("btrfs_scrub"):
         backup_lines += ["  services.btrfs.autoScrub.enable = true;"]
     if data.get("btrfs_balance"):
@@ -573,8 +593,8 @@ def _sec_backup(data: dict, brix: dict) -> "list[str]":
                     f"    TIMELINE_LIMIT_YEARLY = {sn_cfg.get('yearly', 0)};",
                     "  };",
                 ]
-    if backup_lines or _has_section_brix(brix, "Dateisystem & Backup"):
-        return [_section("Dateisystem & Backup")] + backup_lines
+    if backup_lines or _has_section_brix(brix, "FSYS"):
+        return [_section("FSYS")] + backup_lines
     return []
 
 
@@ -592,8 +612,8 @@ def _sec_home_manager(data: dict, brix: dict) -> "list[str]":
         hm_lines += ["  home-manager.useGlobalPkgs = true;"]
     if data.get("hm_use_user_packages"):
         hm_lines += ["  home-manager.useUserPackages = true;"]
-    if hm_lines or _has_section_brix(brix, "Home Manager"):
-        return [_section("Home Manager")] + hm_lines
+    if hm_lines or _has_section_brix(brix, "HOME"):
+        return [_section("HOME")] + hm_lines
     return []
 
 
@@ -738,18 +758,18 @@ def generate_flake_nix(data: dict, nixos_dir: "str | Path | None" = None) -> str
     content = (
         "# Generated by NiCo – NixOS Configurator\n"
         "{\n"
-        + _section("Start") + "\n"
+        + _section("HEAD") + "\n"
         + f'  description = "{nix_esc(description)}";\n'
-        + _section("Inputs") + "\n"
+        + _section("INPU") + "\n"
         + "  inputs = {\n"
         + f"{inputs_block}\n"
-        + _section("Inputs-Extra") + "\n"
+        + _section("INPX") + "\n"
         + "  };\n"
     )
 
     if has_outputs_declaration:
         # Legacy: whole outputs provided by Brix
-        content += _section("Outputs") + "\n"
+        content += _section("OUTP") + "\n"
     else:
         # ── outputs args ──────────────────────────────────────────────────────
         out_args: list[str] = ["self", "nixpkgs"]
@@ -762,8 +782,10 @@ def generate_flake_nix(data: dict, nixos_dir: "str | Path | None" = None) -> str
         out_args_str = ", ".join(out_args) + ", ..."
 
         def _host_header(name: str) -> str:
-            dashes = "─" * max(1, _MARKER_WIDTH - len(f"Host: {name}") - 10)
-            return f"      # ── Host: {name} {dashes}"
+            code = flake_host_section(name)
+            text = f"{code} {SECTION_HDR_SEP} {section_file_label(code)}"
+            dashes = "─" * max(1, _MARKER_WIDTH - len(text) - 10)
+            return f"      # ── {text} {dashes}"
 
         def _default_host_body(name: str) -> str:
             body = [
@@ -809,13 +831,13 @@ def generate_flake_nix(data: dict, nixos_dir: "str | Path | None" = None) -> str
             cfg_block = _host_entry({"name": hostname})
 
         content += (
-            _section("Outputs") + "\n"
+            _section("OUTP") + "\n"
             + f"  outputs = {{ {out_args_str} }}: {{\n"
             + "    nixosConfigurations = {\n"
-            + _section("Outputs-Hosts") + "\n"
+            + _section("OUTH") + "\n"
             + f"{cfg_block}\n"
             + "    };\n"
-            + _section("Outputs-Extra") + "\n"
+            + _section("OUTX") + "\n"
             + "  };\n"
         )
 

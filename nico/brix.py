@@ -4,7 +4,7 @@ Brick blocks are manually written Nix sections that NiCo never modifies.
 They are extracted before regenerating a file and re-inserted afterwards.
 
 Syntax:
-  # <brick: SectionName / #N brick-name>
+  # <brick: CODE / #N brick-name>
   ...nix code...
   # </brick: brick-name>
 
@@ -12,7 +12,9 @@ Rules:
   - Unique name per block
   - No nesting
   - Multiple blocks per file allowed
-  - SectionName: which NiCo section this brick belongs to
+  - CODE: four-character section code (see SECTIONS), language-neutral so a
+    section can be renamed in the UI without touching a single file.  Per-host
+    sections carry the host name as payload: HOST:<name>
   - N: order within the section (1, 2, 3, ...)
 """
 
@@ -24,33 +26,177 @@ _END       = re.compile(r"#\s*</brick:\s*([\w\-]+)\s*>")
 _START_OLD = re.compile(r"#\s*<brix:\s*([\w\-]+)\s*>")
 _END_OLD   = re.compile(r"#\s*</brix:\s*([\w\-]+)\s*>")
 
+# ── File format version ───────────────────────────────────────────────────────
+# Counts only changes to the file layout NiCo parses, not NiCo releases: a new
+# release must not make older files look unreadable.  Rides in the nico-version
+# line as a trailing "#f<N>" – metadata for NiCo, not for the user to read.
+#
+#   1  (implicit, no marker)  German section names in markers and headers
+#   2                         four-character section codes, "CODE · Name" headers
+FILE_FORMAT = 2
+SUPPORTED_FORMATS = frozenset({1, 2})
+
+# ── Sections ──────────────────────────────────────────────────────────────────
+# The single source for sections: code -> (name written into the .nix, i18n key
+# for the UI).  Order of this table is the order bricks are sorted in.
+#
+# The name in the file is always English and lives here, not in a language file:
+# the generator must be able to write it even when a translation is missing, and
+# a file whose text depended on the UI language would be rewritten on every
+# language switch.  Translation happens only where NiCo leads – in the UI.
+SECTIONS: dict[str, tuple[str, str]] = {
+    "HEAD": ("Start",                   "sec.start"),
+    "BOOT": ("Boot",                    "sec.boot"),
+    "SYST": ("System",                  "sec.system"),
+    "I18N": ("Localisation",            "sec.localization"),
+    "NETW": ("Networking",              "sec.network"),
+    "SERV": ("Services",                "sec.services"),
+    "DESK": ("Desktop",                 "sec.desktop"),
+    "AUDI": ("Audio",                   "sec.audio"),
+    "USER": ("Users",                   "sec.user"),
+    "PROG": ("Programs",                "sec.packages"),
+    "FONT": ("Fonts",                   "sec.fonts"),
+    "NIXS": ("Nix & system",            "sec.nixSystem"),
+    "HDWR": ("Hardware",                "sec.hardware"),
+    "VIRT": ("Virtualisation",          "sec.virtualization"),
+    "FSYS": ("Maintenance & snapshots", "sec.filesystem"),
+    "HOME": ("Home Manager",            "sec.homeManager"),
+    "TAIL": ("End",                     "sec.end"),
+    # flake.nix: headers of the real inputs/outputs blocks …
+    "INPU": ("Inputs",                  "sec.inputs"),
+    "OUTP": ("Outputs",                 "sec.outputs"),
+    # … and the injection zones inside them
+    "INPX": ("Inputs extra",            "sec.inputsExtra"),
+    "OUTX": ("Outputs extra",           "sec.outputsExtra"),
+    "OUTH": ("Outputs hosts",           "sec.outputsHosts"),
+}
+
 # Canonical section order for sorting bricks in the generated file
-SECTION_ORDER: list[str] = [
-    "Start",
-    "Boot", "System", "Lokalisierung", "Netzwerk", "Services",
-    "Desktop", "Audio", "Benutzer", "Programme",
-    "Schriftarten", "Nix & System", "Hardware", "Virtualisierung",
-    "Dateisystem & Backup", "Home Manager",
-    "End",
-]
+SECTION_ORDER: list[str] = ["HEAD",
+                            "BOOT", "SYST", "I18N", "NETW", "SERV",
+                            "DESK", "AUDI", "USER", "PROG",
+                            "FONT", "NIXS", "HDWR", "VIRT",
+                            "FSYS", "HOME",
+                            "TAIL"]
 
 # Zone sections: bricks are injected immediately when their section marker is
 # encountered in the generated file, rather than being flushed at the next
 # regular section boundary.  Used for injection points inside nested blocks
 # (e.g. inside inputs = { } or outputs = { } in flake.nix).
-ZONE_SECTIONS: frozenset[str] = frozenset({"Inputs-Extra", "Outputs-Extra", "Outputs-Hosts"})
+ZONE_SECTIONS: frozenset[str] = frozenset({"INPX", "OUTX", "OUTH"})
 
-# User-facing section names that map to their actual injection-point equivalents.
-# "Inputs" and "Outputs" in the move dialog mean "add inside the block", which
-# corresponds to the -Extra zone markers already present in generated flake.nix.
-SECTION_ALIASES: dict[str, str] = {
-    "Inputs": "Inputs-Extra",
-    "Outputs": "Outputs-Extra",
+# German section names written by NiCo 0.12.0 and earlier.  Kept permanently:
+# another machine with an older NiCo, a restored backup or a hand-copied marker
+# still carries them, and without this map such a brick would count as an
+# unknown section and be flushed to the end of the file.
+LEGACY_SECTIONS: dict[str, str] = {
+    "Start": "HEAD",
+    "Boot": "BOOT",
+    "System": "SYST",
+    "Lokalisierung": "I18N",
+    "Netzwerk": "NETW",
+    "Services": "SERV",
+    "Desktop": "DESK",
+    "Audio": "AUDI",
+    "Benutzer": "USER",
+    "Programme": "PROG",
+    "Schriftarten": "FONT",
+    "Nix & System": "NIXS",
+    "Hardware": "HDWR",
+    "Virtualisierung": "VIRT",
+    "Dateisystem & Backup": "FSYS",
+    "Home Manager": "HOME",
+    "End": "TAIL",
+    "Inputs-Extra": "INPX",
+    "Outputs-Extra": "OUTX",
+    "Outputs-Hosts": "OUTH",
+    # UI aliases of the move dialog
+    "Inputs": "INPX",
+    "Outputs": "OUTX",
+    "Hosts": "OUTH",
 }
+
+_HOST_PREFIX     = "HOST:"
+_CODE_RE         = re.compile(r"^[A-Z0-9]{4}(?::[A-Za-z0-9_.-]+)?$")
+_LEGACY_HOST_RE  = re.compile(r"^Host:\s*(\S+)$")
+
+
+def normalize_section(name: str) -> str:
+    """
+    Map any section spelling to its code.
+
+    Accepts codes (``FSYS``, ``HOST:martin``), the German names written by
+    older NiCo versions, and the legacy ``Host: martin`` form.  An unknown
+    name is returned unchanged – it then sorts before TAIL like before, and
+    nothing is lost.
+    """
+    name = (name or "").strip()
+    if _CODE_RE.match(name):
+        return name
+    m = _LEGACY_HOST_RE.match(name)
+    if m:
+        return _HOST_PREFIX + m.group(1)
+    return LEGACY_SECTIONS.get(name, name)
+
+
+def section_file_label(code: str) -> str:
+    """English text written after the code into the .nix section header."""
+    code = normalize_section(code)
+    if code.startswith(_HOST_PREFIX):
+        return f"Host {code[len(_HOST_PREFIX):]}"
+    entry = SECTIONS.get(code)
+    return entry[0] if entry else code
+
+
+def section_i18n_key(code: str) -> str:
+    """i18n key the UI uses to show this section in the user's language."""
+    code = normalize_section(code)
+    if code.startswith(_HOST_PREFIX):
+        return "sec.host"
+    entry = SECTIONS.get(code)
+    return entry[1] if entry else ""
+
+
+def detect_content_format(content: str) -> int:
+    """
+    Format the markers in *content* actually use.
+
+    Read from the file instead of trusting its header: a body NiCo has just
+    regenerated is format 2 even when the old header said 1, and a file that
+    was only re-stamped keeps the format its markers still have.
+
+      1  at least one German section name or `Host: name`
+      2  every marker carries a section code
+      FILE_FORMAT  no NiCo markers at all – nothing that could be stale
+    """
+    raw = [m.group(1).strip() for m in _START.finditer(content)]
+    for line in content.splitlines():
+        m = _SECTION_HDR.search(line)
+        if not m:
+            continue
+        text = m.group(1)
+        raw.append(text.split(SECTION_HDR_SEP, 1)[0].strip()
+                   if SECTION_HDR_SEP in text else text.strip())
+    if not raw:
+        return FILE_FORMAT
+    return 1 if any(not _CODE_RE.match(name) for name in raw) else 2
+
+
+def sections_for_frontend() -> dict:
+    """Section tables for /api/sections – keeps the frontend from copying them."""
+    return {
+        "sections": [{"code": code, "file_label": label, "i18n": key}
+                     for code, (label, key) in SECTIONS.items()],
+        "legacy":   dict(LEGACY_SECTIONS),
+        "order":    list(SECTION_ORDER),
+        "zones":    sorted(ZONE_SECTIONS),
+        "host_prefix": _HOST_PREFIX,
+        "header_sep":  SECTION_HDR_SEP,
+    }
 
 
 def _is_zone_section(section: str) -> bool:
-    return section in ZONE_SECTIONS or section.startswith("Host: ")
+    return section in ZONE_SECTIONS or section.startswith(_HOST_PREFIX)
 
 
 def expand_nested_legacy(blocks: dict[str, dict]) -> dict[str, dict]:
@@ -92,9 +238,9 @@ def expand_nested_legacy(blocks: dict[str, dict]) -> dict[str, dict]:
                 if m_end and m_end.group(1) == cur_name:
                     sub_body = "".join(cur_lines).rstrip("\n")
                     result[cur_name] = {
-                        "section": "End",
+                        "section": "TAIL",
                         "order":   sub_order,
-                        "text":    format_brick("End", sub_order, cur_name, sub_body),
+                        "text":    format_brick("TAIL", sub_order, cur_name, sub_body),
                     }
                     sub_order += 1
                     cur_name  = None
@@ -194,7 +340,7 @@ def extract_brick_blocks(nix_content: str) -> dict[str, dict]:
     lines = nix_content.splitlines(keepends=True)
 
     current_name: str | None = None
-    current_section: str = "End"
+    current_section: str = "TAIL"
     current_order: int = 1
     current_lines: list[str] = []
     is_legacy: bool = False
@@ -204,16 +350,19 @@ def extract_brick_blocks(nix_content: str) -> dict[str, dict]:
         if current_name is None:
             m = _START.search(line)
             if m:
-                current_section = m.group(1).strip()
+                raw_section     = m.group(1).strip()
+                current_section = normalize_section(raw_section)
                 current_order   = int(m.group(2))
                 current_name    = m.group(3)
                 current_lines   = [line]
-                is_legacy       = False
+                # A German section name from an older NiCo counts as legacy too:
+                # rebuilding the text rewrites the marker with the section code
+                is_legacy       = current_section != raw_section
             else:
                 m_old = _START_OLD.search(line)
                 if m_old:
                     current_name    = m_old.group(1)
-                    current_section = "End"
+                    current_section = "TAIL"
                     current_order   = legacy_auto_order
                     current_lines   = [line]
                     is_legacy       = True
@@ -295,6 +444,15 @@ def _section_rank(section: str) -> int:
 
 
 _SECTION_HDR = re.compile(r"^\s*#\s*──+\s*(.+?)\s*──")
+# Header text is "CODE · English name"; files from older NiCo carry the German
+# name alone, which normalize_section() maps to its code.
+SECTION_HDR_SEP = "·"
+
+
+def section_of_header(text: str) -> str:
+    """Section code from the captured text of a section header line."""
+    head = text.split(SECTION_HDR_SEP, 1)[0].strip() if SECTION_HDR_SEP in text else text.strip()
+    return normalize_section(head)
 
 
 def inject_brick_blocks(nix_content: str, blocks: dict[str, dict]) -> str:
@@ -316,7 +474,7 @@ def inject_brick_blocks(nix_content: str, blocks: dict[str, dict]) -> str:
     zone_bricks: dict[str, list[dict]] = {}
     regular_blocks: dict[str, dict] = {}
     for name, block in blocks.items():
-        sec = SECTION_ALIASES.get(block.get("section", ""), block.get("section", ""))
+        sec = normalize_section(block.get("section", ""))
         block = {**block, "section": sec}
         if _is_zone_section(sec):
             zone_bricks.setdefault(sec, []).append(block)
@@ -349,7 +507,7 @@ def inject_brick_blocks(nix_content: str, blocks: dict[str, dict]) -> str:
     for line in lines:
         m = _SECTION_HDR.search(line)
         if m:
-            section_name = m.group(1).strip()
+            section_name = section_of_header(m.group(1))
             if _is_zone_section(section_name):
                 # Zone section: inject its bricks immediately after this marker
                 result.append(line)
@@ -451,7 +609,7 @@ def next_order_for_section(blocks: dict[str, dict], section: str) -> int:
 
 def brix_content_to_bricks(
     brix_content: str,
-    section: str = "Start",
+    section: str = "HEAD",
     existing_blocks: dict[str, dict] | None = None,
 ) -> dict[str, dict]:
     """Convert build_rest_brix output (# <brix:> formatted content) into

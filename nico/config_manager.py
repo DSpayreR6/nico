@@ -186,7 +186,13 @@ DEFAULT_NIXOS_CONFIG = {
     "libvirtd":             False,
     "virt_manager":         False,
 
-    # ── Dateisystem & Backup
+    # ── Dateisystem & Backup: gilt für alle Dateisysteme
+    "smartd":            False,
+    "tmp_use_tmpfs":     False,
+    "tmp_tmpfs_size":    "50%",
+    "tmp_clean_on_boot": False,
+
+    # ── Dateisystem & Backup: btrfs
     "btrfs_scrub":      False,
     "btrfs_balance":           False,
     "btrfs_balance_frequency": "weekly",
@@ -207,6 +213,22 @@ DEFAULT_NIXOS_CONFIG = {
 # ── App-level settings (APP_SETTINGS_FILE, XDG) ──────────────────────────────
 # Program preferences that stay on this machine: config path, language, theme.
 
+def _migrate_section_names(settings: dict) -> dict:
+    """
+    Rewrite stored section names to section codes.
+
+    ``hidden_sections`` holds section names the user hid. They were German
+    before the codes existed, so without this the selection would silently
+    stop matching and every section would reappear.
+    """
+    from .brix import normalize_section
+
+    hidden = settings.get("hidden_sections")
+    if isinstance(hidden, list):
+        settings["hidden_sections"] = [normalize_section(s) for s in hidden]
+    return settings
+
+
 def get_app_settings() -> dict:
     import json
     import copy
@@ -220,7 +242,7 @@ def get_app_settings() -> dict:
             with open(APP_SETTINGS_FILE, encoding="utf-8") as f:
                 stored = json.load(f)
             defaults.update(stored)
-            return defaults
+            return _migrate_section_names(defaults)
         except Exception:
             if attempt == 2:
                 return defaults

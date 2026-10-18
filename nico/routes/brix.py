@@ -61,7 +61,7 @@ def register(app, ctx):
             return err
         body    = request.get_json(silent=True) or {}
         name    = body.get("name", "").strip()
-        section = body.get("section", "End").strip()
+        section = body.get("section", "TAIL").strip()
         fname   = body.get("file", "configuration.nix")
         if not name:
             return jsonify({"error": "ERR_NO_BRICK_NAME"}), 400

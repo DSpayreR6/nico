@@ -1070,14 +1070,14 @@ const Sidebar = (() => {
                 data-i18n-title="sections.expandAllTitle"
                 title="Alle Sektionen aufklappen">${niIcon('chevron-down')} <span data-i18n="sections.expandAll">Aufklappen</span></button>
       </div>
-      <section class="collapsible hm-section" data-section="Start">
+      <section class="collapsible hm-section" data-section="HEAD">
         <h3 class="sec-toggle"><span data-i18n="hm.argsSection">Argumente</span></h3>
         <div class="sec-body">
           <div id="hm-args-list">${argsRowsHtml}</div>
           <button type="button" id="hm-add-arg-btn" class="fh-add-item-btn">+ ${escHtml(t('hm.addArg') || 'Argument hinzufügen')}</button>
         </div>
       </section>
-      <section class="collapsible hm-section" data-section="Home Manager">
+      <section class="collapsible hm-section" data-section="HOME">
         <h3 class="sec-toggle"><span data-i18n="hm.userSection">Benutzer</span></h3>
         <div class="sec-body">
           <div class="hm-field">
@@ -1099,7 +1099,7 @@ const Sidebar = (() => {
         </div>
       </section>
       ${shell ? `
-      <section class="collapsible hm-section" data-section="Shell">
+      <section class="collapsible hm-section" data-section="SHEL">
         <h3 class="sec-toggle"><span data-i18n="hm.shell">Shell</span> <span class="hint">(${escHtml(shell)})</span></h3>
         <div class="sec-body">
           <label for="hm-initExtra" data-i18n="hm.shellInitExtra">Shell-Init (extra)</label>
@@ -1108,7 +1108,7 @@ const Sidebar = (() => {
                     placeholder='export PATH="$HOME/.local/bin:$PATH"'>${escHtml(initExtra)}</textarea>
         </div>
       </section>` : ''}
-      <section class="collapsible hm-section" data-section="Pakete">
+      <section class="collapsible hm-section" data-section="HPKG">
         <h3 class="sec-toggle"><span data-i18n="hm.packages">Pakete</span></h3>
         <div class="sec-body">
           <p class="hint" data-i18n="hm.packagesHint" style="margin-bottom:4px">(ein Nix-Attr pro Zeile)</p>
@@ -1377,7 +1377,7 @@ const Sidebar = (() => {
       _brixTargetFile  = 'flake.nix';
       _brixContextFile = 'flake.nix';
 
-      ['__header__', 'Start', 'Inputs', 'Inputs-Extra', 'Outputs', 'Outputs-Hosts', 'Outputs-Extra', 'Hosts', 'End'].forEach(s => collapsedSections.add(s));
+      ['__header__', 'HEAD', 'INPU', 'INPX', 'OUTP', 'OUTH', 'OUTX', 'OUTH', 'TAIL'].forEach(s => collapsedSections.add(s));
       applySectionCollapse();
 
       _flakeFormDirty = false;
@@ -1416,7 +1416,7 @@ const Sidebar = (() => {
       _brixContextFile = 'flake.nix';
 
       // Collapse all sections by default
-      ['__header__', 'Start', 'Inputs', 'Inputs-Extra', 'Outputs', 'Outputs-Hosts', 'Outputs-Extra', 'Hosts', 'End'].forEach(s => collapsedSections.add(s));
+      ['__header__', 'HEAD', 'INPU', 'INPX', 'OUTP', 'OUTH', 'OUTX', 'OUTH', 'TAIL'].forEach(s => collapsedSections.add(s));
       applySectionCollapse();
 
       // Render preview
@@ -1559,7 +1559,7 @@ const Sidebar = (() => {
     });
 
     // Collapse/expand buttons (form sections + code preview via collapsedSections)
-    const FLAKE_PREVIEW_SECTIONS = ['__header__', 'Start', 'Inputs', 'Inputs-Extra', 'Outputs', 'Outputs-Hosts', 'Outputs-Extra', 'Hosts', 'End'];
+    const FLAKE_PREVIEW_SECTIONS = ['__header__', 'HEAD', 'INPU', 'INPX', 'OUTP', 'OUTH', 'OUTX', 'OUTH', 'TAIL'];
     document.getElementById('flake-collapse-all-btn')?.addEventListener('click', () => {
       FLAKE_PREVIEW_SECTIONS.forEach(s => collapsedSections.add(s));
       applySectionCollapse();
