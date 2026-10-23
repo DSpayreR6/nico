@@ -1,5 +1,23 @@
 # NiCo – Changelog
 
+## Unreleased
+
+### New Features
+
+- New validator rule: a user name NixOS would reject is reported before the rebuild, for the main user and every additional user
+- New validator rule: hardware-configuration.nix sitting in the root directory while flake.nix expects it under `hosts/<name>/` – the state an existing config ends up in after switching to flakes
+- A failed rebuild or dry-run now points at the check, with a button that runs it straight away: most of these failures are things the check names in plain words
+- Package search animates its status line with the search term and, after three seconds, the elapsed time – the first `nix search` can take a minute, and until now nothing moved on screen at all
+- The setup dialog says that a new directory is created by simply typing its path; the directory browser only ever offered existing ones, and the question "where is your config directory" implied one had to exist
+- The same hint when changing the config path in the admin panel, and in the directory browser when it is opened from setup
+
+### Bug Fixes
+
+- A non-flake `configuration.nix` never imported hardware-configuration.nix, so a newly created config could not build ("The 'fileSystems' option does not specify your root file system") – flake setups were never affected, because there the host body in flake.nix carries the import
+- A quoted user name gained one escaping layer per save (`nico` → `"nico"` → `"\"nico\""`) until NixOS refused it: attribute paths are now read in their canonical form, and a name already damaged is repaired on the next read instead of growing further
+- The check reported a missing hardware import for configs that keep their imports in a Nix brick, and for flake hosts whose import sits in flake.nix – it is therefore an error now instead of a warning
+- Package search: a failed request left "Searching …" on screen forever with no message, and a slow earlier search could overwrite the results of a newer one
+
 ## 0.13.0 (2026-10-18)
 
 ### New Features

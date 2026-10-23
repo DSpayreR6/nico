@@ -460,6 +460,23 @@ def _extract_fields(kv: 'dict[str, str]', clean: str) -> 'tuple[dict, set[str]]'
         r['snapper_configs'] = _sn_cfgs
 
     # ── Benutzer ──────────────────────────────────────────────────────────────
+    def _plain_user_name(name: str) -> str:
+        """Peel quote layers off a user attribute name until it is stable.
+
+        A NixOS username can never contain a quote, so anything quoted here is
+        either a hand-written "name" or the escalated form older NiCo versions
+        produced (every save added a layer: nico → "nico" → "\\"nico\\""). The
+        parser now keeps such names clean, this repairs configs already damaged
+        – otherwise they would keep growing with every write.
+        """
+        prev = None
+        while prev != name:
+            prev = name
+            if len(name) >= 2 and name.startswith('"') and name.endswith('"'):
+                name = name[1:-1]
+            name = name.replace('\\"', '"').replace('\\\\', '\\')
+        return name
+
     _EXCL   = {'root', 'nobody', 'guest', 'gast'}
     _SHELLS = {'pkgs.zsh': 'zsh', 'pkgs.fish': 'fish',
                'pkgs.bash': 'bash', 'pkgs.nushell': 'nushell'}
@@ -473,7 +490,7 @@ def _extract_fields(kv: 'dict[str, str]', clean: str) -> 'tuple[dict, set[str]]'
     extra_users: list[dict] = []
 
     for user_key, user_vt in user_bindings:
-        uname = user_key.split('.')[-1]
+        uname = _plain_user_name(user_key.split('.')[-1])
         if uname in _EXCL:
             continue
         inner = _np.extract_inner_block(user_vt) or user_vt
@@ -579,8 +596,10 @@ def _rx_top_level_bindings(nix_content: str) -> 'tuple[dict[str, str], list[tupl
     for stmt in _split_top_level_stmts(content):
         m = re.match(r'([\w."\-]+)\s*=\s*(.*?)\s*;?\s*$', stmt, re.DOTALL)
         if m:
-            kv[m.group(1)] = m.group(2)
-            stmts.append((m.group(1), stmt))
+            from .nix_parser import normalize_attrpath
+            key = normalize_attrpath(m.group(1))   # same canonical form as the ts path
+            kv[key] = m.group(2)
+            stmts.append((key, stmt))
         else:
             stmts.append((None, stmt))
     return kv, stmts

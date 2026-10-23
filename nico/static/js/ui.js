@@ -515,7 +515,7 @@ function bindUI() {
     const cur = document.getElementById('nixos-dir-input').value.trim();
     openDirBrowser(cur || '~', path => {
       document.getElementById('nixos-dir-input').value = path;
-    });
+    }, null, { newHint: true });
   });
 
   // Dir-Browser
@@ -876,7 +876,10 @@ function bindUI() {
   });
   on('pkg-search-input', 'input',   e => {
     clearTimeout(pkgDebounce);
-    pkgDebounce = setTimeout(() => runPkgSearch(e.target.value.trim()), 400);
+    const q = e.target.value.trim();
+    // Spinner starts before the debounce: otherwise the first 400 ms look dead
+    if (q.length >= 2) startPkgSpinner(q); else stopPkgSpinner(true);
+    pkgDebounce = setTimeout(() => runPkgSearch(q), 400);
   });
   on('pkg-search-input', 'keydown', e => { if (e.key === 'Escape') closePkgModal(); });
 

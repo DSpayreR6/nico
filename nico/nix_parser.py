@@ -28,6 +28,64 @@ KNOWN_PREFIXES: frozenset[str] = frozenset({
 _RE_BRIX_START = re.compile(r"#\s*<brix:\s*([\w.-]+)(?:\s+(inactive))?\s*>")
 _RE_BRIX_END   = re.compile(r"#\s*</brix:\s*([\w.-]+)(?:\s+inactive)?\s*>")
 
+#: A plain Nix identifier, i.e. an attrpath component that needs no quoting.
+_RE_ATTR_IDENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_'-]*$")
+
+
+def _split_attrpath(text: str) -> list[str]:
+    """Split a dotted attrpath, ignoring dots inside "..." and ${...}."""
+    parts: list[str] = []
+    buf: list[str] = []
+    depth  = 0
+    in_str = False
+    esc    = False
+    for ch in text:
+        if in_str:
+            buf.append(ch)
+            if esc:
+                esc = False
+            elif ch == "\\":
+                esc = True
+            elif ch == '"':
+                in_str = False
+            continue
+        if ch == '"':
+            in_str = True
+        elif ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+        elif ch == "." and depth == 0:
+            parts.append("".join(buf).strip())
+            buf = []
+            continue
+        buf.append(ch)
+    parts.append("".join(buf).strip())
+    return parts
+
+
+def normalize_attrpath(text: str) -> str:
+    """Canonical dotted form of an attrpath: drop quotes a component does not need.
+
+    `users.users."nico"` and `users.users.nico` are the same attribute in Nix,
+    but the raw source text differs. Everything downstream compares keys as
+    strings, so the quoted spelling used to be carried into the data – and the
+    generator then quoted it again on write, one layer per save.
+
+    Only quotes around a plain identifier are removed. `a."b.c"` keeps them,
+    because `a.b.c` would mean something else (nested attributes instead of one
+    attribute named "b.c").
+    """
+    out: list[str] = []
+    for part in _split_attrpath(text):
+        if len(part) >= 2 and part.startswith('"') and part.endswith('"'):
+            inner = re.sub(r"\\(.)", r"\1", part[1:-1])
+            if _RE_ATTR_IDENT.match(inner):
+                out.append(inner)
+                continue
+        out.append(part)
+    return ".".join(out)
+
 # ── Data classes ───────────────────────────────────────────────────────────────
 
 @dataclass
@@ -210,7 +268,7 @@ def _parse_binding(node, src_bytes: bytes) -> Binding | None:
     if attrpath is None:
         return None
     return Binding(
-        key=attrpath,
+        key=normalize_attrpath(attrpath),
         value_text=_node_source(value_node, src_bytes),
         full_text=_node_source(node, src_bytes),
         start_line=node.start_point[0] + 1,

@@ -615,17 +615,60 @@ async function addPackage(pkg) {
   return true;
 }
 
+// ── Package search spinner ──────────────────────────────────────────────────
+// `nix search` can take a minute on the first call while nixpkgs metadata is
+// fetched. A static status line looks like nothing is happening, so the line
+// animates and shows the elapsed seconds once the wait becomes noticeable.
+const PKG_SPIN_FRAMES = ['|', '/', '-', '\\'];
+const PKG_SPIN_MS     = 120;
+const PKG_SPIN_SECS_AFTER = 3;   // seconds before the elapsed counter appears
+
+function renderPkgSpinner() {
+  const statusEl = document.getElementById('pkg-search-status');
+  if (!statusEl) return;
+  const frame = PKG_SPIN_FRAMES[pkgSpinFrame % PKG_SPIN_FRAMES.length];
+  const secs  = Math.floor((Date.now() - pkgSpinStart) / 1000);
+  const parts = [
+    `<span class="pkg-spin">${escHtml(frame)}</span>`,
+    escHtml(t('pkg.searching', pkgSpinQuery)),
+  ];
+  if (secs >= PKG_SPIN_SECS_AFTER) parts.push(escHtml(t('pkg.searchElapsed', secs)));
+  statusEl.innerHTML = parts.join(' ');
+}
+
+function startPkgSpinner(query) {
+  stopPkgSpinner();
+  pkgSpinQuery = query;
+  pkgSpinFrame = 0;
+  pkgSpinStart = Date.now();
+  document.getElementById('pkg-search-status')?.classList.add('searching');
+  renderPkgSpinner();
+  pkgSpinTimer = setInterval(() => { pkgSpinFrame++; renderPkgSpinner(); }, PKG_SPIN_MS);
+}
+
+/** Stops the animation. Callers set their own status text afterwards; passing
+ *  clear=true wipes the line (modal closed, query too short). */
+function stopPkgSpinner(clear = false) {
+  if (pkgSpinTimer) { clearInterval(pkgSpinTimer); pkgSpinTimer = null; }
+  const statusEl = document.getElementById('pkg-search-status');
+  if (!statusEl) return;
+  statusEl.classList.remove('searching');
+  if (clear) statusEl.textContent = '';
+}
+
 // ── Package search modal ────────────────────────────────────────────────────
 function openPkgModal() {
+  stopPkgSpinner(true);
   document.getElementById('pkg-overlay').classList.remove('hidden');
   document.getElementById('pkg-search-input').value = '';
   document.getElementById('pkg-search-results').innerHTML = '';
-  document.getElementById('pkg-search-status').textContent = '';
   document.getElementById('pkg-manual-input').value = '';
   document.getElementById('pkg-search-input').focus();
 }
 
 function closePkgModal() {
+  clearTimeout(pkgDebounce);
+  stopPkgSpinner(true);
   document.getElementById('pkg-overlay').classList.add('hidden');
 }
 
@@ -643,13 +686,24 @@ async function addManualPackage() {
 async function runPkgSearch(query) {
   const statusEl  = document.getElementById('pkg-search-status');
   const resultsEl = document.getElementById('pkg-search-results');
-  if (query.length < 2) { statusEl.textContent = ''; resultsEl.innerHTML = ''; return; }
+  if (query.length < 2) { stopPkgSpinner(true); resultsEl.innerHTML = ''; return; }
 
-  statusEl.textContent = t('pkg.searching');
-  resultsEl.innerHTML  = '';
+  const seq = ++pkgSearchSeq;
+  startPkgSpinner(query);
+  resultsEl.innerHTML = '';
 
-  const res  = await csrfFetch(`/api/packages/search?q=${encodeURIComponent(query)}`);
-  const data = await res.json();
+  let data;
+  try {
+    const res = await csrfFetch(`/api/packages/search?q=${encodeURIComponent(query)}`);
+    data = await res.json();
+  } catch (e) {
+    if (seq !== pkgSearchSeq) return;          // superseded, newer search owns the line
+    stopPkgSpinner();
+    statusEl.textContent = t('pkg.error', String(e.message || e));
+    return;
+  }
+  if (seq !== pkgSearchSeq) return;            // a newer search is already running
+  stopPkgSpinner();
 
   if (data.error) { statusEl.textContent = t('pkg.error', tErr(data.error)); return; }
 

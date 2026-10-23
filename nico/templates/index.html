@@ -33,6 +33,9 @@
           <button type="button" id="setup-browse-btn" class="btn-browse"
                   data-i18n-title="setup.browse" title="Verzeichnis auswählen">…</button>
         </div>
+        <p class="setup-hint" data-i18n="setup.dirHint">
+          Vorhandenes Verzeichnis wählen (…) oder neuen Pfad eintippen – NiCo legt es dann an.
+        </p>
         <div id="setup-error" class="setup-error hidden"></div>
         <button id="setup-btn" class="btn-primary" data-i18n="setup.btn">Einrichten</button>
       </div>
@@ -73,6 +76,9 @@
       <div id="dirbrowser-quicklinks" class="dirbrowser-quicklinks hidden"></div>
       <div id="dirbrowser-path" class="dirbrowser-path"></div>
       <ul id="dirbrowser-list" class="dirbrowser-list"></ul>
+      <p id="dirbrowser-new-hint" class="setup-hint hidden" data-i18n="dirbrowser.newHint">
+        Neues Verzeichnis? Abbrechen und den Pfad direkt eintippen.
+      </p>
       <div class="confirm-buttons" style="margin-top:12px">
         <button id="dirbrowser-select-btn" class="btn-primary" data-i18n="dirbrowser.select">Auswählen</button>
         <button id="dirbrowser-cancel-btn" data-i18n="dirbrowser.cancel">Abbrechen</button>
@@ -1799,6 +1805,9 @@
               <button type="button" id="settings-cancel-btn" class="btn-surface btn-small"
                       data-i18n="admin.settingsCancelBtn">Abbrechen</button>
             </div>
+            <p id="settings-path-hint" class="setup-hint hidden" data-i18n="admin.settingsPathHint">
+              Neues Verzeichnis? Pfad einfach eintippen – NiCo legt es an.
+            </p>
             <div id="settings-error" class="settings-error hidden"></div>
 
             <div style="margin-top:8px" id="default-host-row" class="hidden">

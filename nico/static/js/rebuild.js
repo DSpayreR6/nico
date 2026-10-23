@@ -499,6 +499,7 @@ function attachRebuildMonitor(fromIndex = 0) {
     document.querySelectorAll('.rebuild-phase-col').forEach(el => el.classList.remove('active'));
     resultEl.className  = 'rebuild-result ' + (success ? 'result-success' : 'result-failed');
     resultEl.innerHTML  = message;
+    if (!success) appendValidationHint(resultEl);
     closeBtn.disabled    = false;
   }
 
@@ -740,7 +741,25 @@ function _dryRunShowStatus(ok) {
   if (status) {
     status.innerHTML = (ok ? niIcon('check') : niIcon('x-circle')) + ' ' + escHtml(ok ? t('dryrun.success') : t('dryrun.failed'));
     status.className   = 'dryrun-status ' + (ok ? 'status-ok' : 'status-failed');
+    if (!ok) appendValidationHint(status);
   }
+}
+
+/** Red line below a failed build: most of these failures are things the
+ *  validator names in plain words, and it is not obvious that it exists. */
+function appendValidationHint(container) {
+  if (!container || container.querySelector('.validate-hint')) return;
+  const box = document.createElement('div');
+  box.className = 'validate-hint';
+  const text = document.createElement('span');
+  text.textContent = t('rebuild.validateHint');
+  const btn = document.createElement('button');
+  btn.type        = 'button';
+  btn.className   = 'btn-surface btn-small';
+  btn.textContent = t('rebuild.validateBtn');
+  btn.addEventListener('click', () => runValidation());
+  box.append(text, btn);
+  container.appendChild(box);
 }
 
 function _dryRunHostHeader(body) {

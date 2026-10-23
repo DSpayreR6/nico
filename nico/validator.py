@@ -68,7 +68,15 @@ ALL_RULES: list[Rule] = [
     Rule("hardware_imported",
          "Hardware-Config eingebunden",
          "Prüft ob hardware-configuration.nix in imports eingebunden ist.",
-         "warning"),
+         "error"),
+    Rule("hardware_host_location",
+         "Hardware-Config am erwarteten Ort",
+         "Meldet eine Hardware-Config im Wurzelverzeichnis, während flake.nix sie im Host-Verzeichnis erwartet.",
+         "error", flake_only=True),
+    Rule("user_name_valid",
+         "Benutzername gültig",
+         "Prüft Benutzernamen gegen die von NixOS erlaubte Schreibweise.",
+         "error"),
     Rule("hardware_matches",
          "Hardware passt zum System",
          "Warnt wenn die Hardware-Config Disk-UUIDs enthält die auf diesem System nicht existieren.",
@@ -229,6 +237,28 @@ def run_validation(
 def _extract_imports(nix_content: str) -> list[str]:
     """Return file paths found inside imports = [...] in nix_content."""
     return [p for p, _ in _extract_imports_with_lines(nix_content)]
+
+
+_RE_BRICK_MARKER = re.compile(r'^\s*#\s*</?bri[xc]k?:', re.IGNORECASE)
+
+
+def _brick_bodies(nix_content: str) -> str:
+    """All brick bodies of a file joined – the part _extract_imports() strips.
+
+    Marker lines are dropped, because _extract_imports() runs
+    strip_brick_blocks() on whatever it is handed and would otherwise throw
+    the whole thing away again.
+    """
+    from .brix import extract_brick_blocks
+    try:
+        blocks = extract_brick_blocks(nix_content)
+    except Exception:
+        return ""
+    out: list[str] = []
+    for block in blocks.values():
+        out += [ln for ln in block.get("text", "").splitlines()
+                if not _RE_BRICK_MARKER.match(ln)]
+    return "\n".join(out)
 
 
 def _extract_imports_with_lines(nix_content: str) -> list[tuple[str, int]]:
@@ -506,16 +536,110 @@ def _rule_hardware_imported(nixos_dir: str, config: dict, is_flake: bool,
     except OSError:
         return []
 
-    paths = _extract_imports(content)
+    # A flake host gets the import from the host body in flake.nix, not from
+    # its own default.nix – looking only at the file here would report every
+    # flake host as broken.
+    if is_flake:
+        try:
+            flake = (Path(nixos_dir) / "flake.nix").read_text(encoding="utf-8")
+        except OSError:
+            flake = ""
+        if "hardware-configuration.nix" in flake:
+            return []
+
+    # _extract_imports() strips bricks, so an imports block the user keeps as a
+    # brick would look missing. Imported configs carry theirs exactly that way.
+    paths = _extract_imports(content) + _extract_imports(_brick_bodies(content))
     if not any("hardware-configuration" in p for p in paths):
         return [Finding(
             rule_id="hardware_imported",
-            severity="warning",
+            severity="error",
             message=f"hardware-configuration.nix existiert, ist aber nicht in {co_name} eingebunden.", message_key="validator.f.hardware_imported", params=[co_name],
             detail="In imports = [ ./hardware-configuration.nix ] aufnehmen.",
             detail_key="validator.d.hardware_imported",
         )]
     return []
+
+
+def _rule_hardware_host_location(nixos_dir: str, config: dict, is_flake: bool,
+                                 host: str | None = None) -> list[Finding]:
+    """Flake expects the hardware config per host, but it sits in the root.
+
+    Setup copies hardware-configuration.nix next to configuration.nix. Whoever
+    switches to flakes afterwards keeps that file, while the generated host
+    body imports hosts/<name>/hardware-configuration.nix – a path that does not
+    exist. The flake then fails to evaluate, with an error that says nothing
+    about the actual cause.
+    """
+    flake_path = Path(nixos_dir) / "flake.nix"
+    if not flake_path.exists():
+        return []
+    if not (Path(nixos_dir) / "hardware-configuration.nix").exists():
+        return []
+
+    try:
+        content = flake_path.read_text(encoding="utf-8")
+    except OSError:
+        return []
+
+    from . import config_manager as _cm
+    hosts_dir = (_cm.load_config_settings(nixos_dir).get("hosts_dir") or "hosts").strip() or "hosts"
+
+    raw_hosts = [host] if host else (config.get("flake_hosts") or [])
+    hosts = [h.get("name") if isinstance(h, dict) else h for h in raw_hosts]
+    hosts = [h for h in hosts if h]
+
+    findings = []
+    for host_name in hosts:
+        rel = f"{hosts_dir}/{host_name}/hardware-configuration.nix"
+        if rel not in content:
+            continue                       # this host does not expect one there
+        if (Path(nixos_dir) / rel).exists():
+            continue
+        findings.append(Finding(
+            rule_id="hardware_host_location",
+            severity="error",
+            message=f"flake.nix bindet ./{rel} ein, die Datei liegt aber im Wurzelverzeichnis.",
+            message_key="validator.f.hardware_host_location", params=[rel],
+            detail="hardware-configuration.nix in das Host-Verzeichnis verschieben.",
+            detail_key="validator.d.hardware_host_location",
+        ))
+    return findings
+
+
+# NixOS useradd check, see nixos/modules/config/users-groups.nix
+_RE_USERNAME = re.compile(r"^[a-z_]([a-z0-9_-]{0,31}|[a-z0-9_-]{0,30}\$)$")
+
+
+def _rule_user_name_valid(nixos_dir: str, config: dict, is_flake: bool,
+                          host: str | None = None) -> list[Finding]:
+    """Report user names NixOS will reject.
+
+    A name that fails here stops the rebuild at assertion time, after the
+    evaluation, so the message arrives late and reads like a Nix internal.
+    """
+    names: list[str] = []
+    primary = (config.get("username") or "").strip()
+    if primary:
+        names.append(primary)
+    for extra in config.get("extra_users") or []:
+        name = (extra.get("username") or "").strip() if isinstance(extra, dict) else ""
+        if name:
+            names.append(name)
+
+    findings = []
+    for name in names:
+        if _RE_USERNAME.match(name):
+            continue
+        findings.append(Finding(
+            rule_id="user_name_valid",
+            severity="error",
+            message=f"Benutzername {name!r} ist für NixOS nicht gültig.",
+            message_key="validator.f.user_name_valid", params=[name],
+            detail="Erlaubt sind Kleinbuchstaben, Ziffern, - und _, beginnend mit Buchstabe oder _.",
+            detail_key="validator.d.user_name_valid",
+        ))
+    return findings
 
 
 def _rule_hardware_matches(nixos_dir: str, config: dict, is_flake: bool,
@@ -1888,6 +2012,8 @@ _RULE_FNS: dict[str, object] = {
     "host_orphaned":         _rule_host_orphaned,
     "flake_arch_matches":    _rule_flake_arch_matches,
     "hardware_imported":     _rule_hardware_imported,
+    "hardware_host_location": _rule_hardware_host_location,
+    "user_name_valid":       _rule_user_name_valid,
     "hardware_matches":      _rule_hardware_matches,
     "duplicate_attrs":       _rule_duplicate_attrs,
     "imports_exist":         _rule_imports_exist,

@@ -565,16 +565,20 @@ function initSettingsPanel() {
 
   if (!changeBtn) return;
 
+  const pathHint = document.getElementById('settings-path-hint');
+
   changeBtn.addEventListener('click', () => {
     const current = document.getElementById('settings-current-path')?.value || '';
     newInput.value = current;
     changeRow.classList.remove('hidden');
+    pathHint?.classList.remove('hidden');
     errorDiv.classList.add('hidden');
     newInput.focus();
   });
 
   cancelBtn.addEventListener('click', () => {
     changeRow.classList.add('hidden');
+    pathHint?.classList.add('hidden');
     errorDiv.classList.add('hidden');
   });
 

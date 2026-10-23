@@ -5,8 +5,14 @@
 let _dirBrowserCallback = null;
 let _dirBrowserCurrent  = null;
 
-function openDirBrowser(startPath, callback, quickLinks) {
+/** opts.newHint: show the "type the path for a new directory" line. Only for
+ *  callers that can create a directory (setup, config path change) – the admin
+ *  import needs an existing configuration.nix, where the hint would mislead. */
+function openDirBrowser(startPath, callback, quickLinks, opts = {}) {
   _dirBrowserCallback = callback;
+
+  document.getElementById('dirbrowser-new-hint')
+    ?.classList.toggle('hidden', !opts.newHint);
 
   const ql = document.getElementById('dirbrowser-quicklinks');
   if (quickLinks && quickLinks.length) {
@@ -61,6 +67,7 @@ async function loadDirBrowser(path) {
 
 function closeDirBrowser() {
   document.getElementById('dirbrowser-overlay').classList.add('hidden');
+  document.getElementById('dirbrowser-new-hint')?.classList.add('hidden');
   const ql = document.getElementById('dirbrowser-quicklinks');
   ql.innerHTML = '';
   ql.classList.add('hidden');

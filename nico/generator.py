@@ -645,6 +645,30 @@ def _nix_args_of(data: dict) -> str:
     return nix_args
 
 
+_RE_BRIX_IMPORTS = re.compile(r'^\s*imports\s*=', re.MULTILINE)
+
+
+def _hardware_import_lines(data: dict, brix: dict) -> "list[str]":
+    """imports = [ ./hardware-configuration.nix ]; – non-flake configs only.
+
+    Without it the build stops at "The 'fileSystems' option does not specify
+    your root file system": a freshly created config has nothing else that
+    would pull the file in.
+
+    Flake configs are left alone on purpose. There the host body in flake.nix
+    already imports hosts/<name>/hardware-configuration.nix, and a second,
+    different hardware config in the same build makes fileSystems collide.
+
+    Skipped as well when a brick already declares imports – a second imports
+    attribute in the same set is an evaluation error.
+    """
+    if data.get("flakes") or not data.get("hardware_config"):
+        return []
+    if any(_RE_BRIX_IMPORTS.search(b.get("text", "")) for b in (brix or {}).values()):
+        return []
+    return ["", "  imports = [ ./hardware-configuration.nix ];"]
+
+
 def generate_configuration_nix(data: dict) -> str:
     brix = data.get("brick_blocks", {})
     lines = [
@@ -652,6 +676,7 @@ def generate_configuration_nix(data: dict) -> str:
         "# Do not edit manually. Use NiCo or add custom Nix via Nix-Bricks.",
         f"{{ {_nix_args_of(data)} }}: {{",
     ]
+    lines += _hardware_import_lines(data, brix)
     lines += _build_sections(data, brix, host_mode=False)
     lines += [
         "",
@@ -668,6 +693,11 @@ def generate_host_nix(data: dict, host_name: str, hw_config: bool = False) -> st
     """
     Generate hosts/{host_name}/default.nix from sparse host-specific data.
     Only fields present in data are emitted.
+
+    hw_config is deliberately unused: the hardware config of a flake host is
+    imported by the host body in flake.nix, not from here. Importing it a
+    second time would be noise at best, and a different hardware config in the
+    same build at worst.
     """
     brix = data.get("brick_blocks", {})
     lines = [

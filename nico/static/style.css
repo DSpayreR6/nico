@@ -1909,6 +1909,21 @@ textarea:focus {
 .rebuild-result.result-success { color: var(--green); background: rgba(166,227,161,.08); }
 .rebuild-result.result-failed  { color: var(--red);   background: rgba(243,139,168,.08); }
 
+/* Hint below a failed rebuild or dry-run: points at the validator */
+.validate-hint {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(243, 139, 168, .35);
+  color: var(--red);
+  font-size: 13px;
+  font-weight: normal;
+}
+
 .log-warning { color: var(--yellow); }
 .log-error   { color: var(--red);   }
 
@@ -2226,6 +2241,19 @@ textarea:focus {
   color: var(--subtext0);
   min-height: 18px;
   margin-bottom: 6px;
+}
+
+/* While a search runs this line is the only sign of life – do not dim it */
+.pkg-search-status.searching {
+  color: var(--text);
+}
+
+/* Fixed width, otherwise the line jitters as the frame changes */
+.pkg-spin {
+  display: inline-block;
+  width: 1ch;
+  font-family: var(--mono);
+  color: var(--blue);
 }
 
 .pkg-results {

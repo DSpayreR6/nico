@@ -289,6 +289,12 @@ let searchMatches  = [];   // visible .search-match elements in active tab
 let searchMatchIdx = -1;
 let searchDebounce = null;
 let pkgDebounce     = null;
+// ASCII spinner state for the package search (see startPkgSpinner in preview.js)
+let pkgSpinTimer    = null;
+let pkgSpinFrame    = 0;
+let pkgSpinStart    = 0;
+let pkgSpinQuery    = '';
+let pkgSearchSeq    = 0;    // guards against a slow earlier search overwriting a newer one
 let _treeContextMenu = null;
 
 // Section names that are currently collapsed – always start fully collapsed
