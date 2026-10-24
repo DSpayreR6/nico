@@ -2,9 +2,11 @@ name: CodeQL
 
 on:
   push:
-    branches: ["main"]
+    # dev as well: work lands there first, and a finding that only shows up at
+    # release time is a finding found too late.
+    branches: ["main", "dev"]
   pull_request:
-    branches: ["main"]
+    branches: ["main", "dev"]
   schedule:
     # Weekly on Sunday 05:00 UTC
     - cron: "0 5 * * 0"

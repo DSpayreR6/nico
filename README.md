@@ -105,6 +105,19 @@ cd nico
 ./start.sh
 ```
 
+### Testing version
+
+Every command above gives you the released version from the `main` branch.
+Work in progress lives on `dev` and carries a `-dev` version number:
+
+```bash
+nix run github:DSpayreR6/nico/dev --refresh
+```
+
+Use it to try a fix before it is released, or when a bug report asks you to.
+It is not meant for everyday use — it may change or break at any time, and the
+`--refresh` is needed because Nix otherwise serves a cached copy of the branch.
+
 ---
 
 ## Status

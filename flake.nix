@@ -37,7 +37,9 @@
         in {
           default = pkgs.stdenv.mkDerivation {
             pname = "nico";
-            version = "0.13.0"; # update on each release
+            # dev branch: the version being worked towards, with -dev.
+            # Dropped when merging into main for a release (see vorgaben.txt).
+            version = "0.14.0-dev";
 
             src = ./.;
 
