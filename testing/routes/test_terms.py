@@ -114,7 +114,36 @@ for lang in sorted(p.stem for p in LANG.glob("*.json")):
     check(f"{lang}: commitPush nennt (commit & push)",
           "commit" in push.lower() and "push" in push.lower(), push)
 
-print("\n5. Nix-Brix ist der Plural, Nix-Brick der Singular")
+print("\n5. Der Eigenname wird nirgends übersetzt")
+# Nur in Schlüsseln, die über Nix-Brix sprechen: "Block"/"块"/"блок" meint
+# woanders gewöhnliche Code-Blöcke und darf dort stehen bleiben.
+def brick_key(key: str) -> bool:
+    k = key.lower()
+    return "brix" in k or "brick" in k or key in ("import.brixInfo", "admin.importHint")
+
+TRANSLATED = {
+    "de": r"(?<!Nix-)\bBri[cx]k?s?\b",
+    "en": r"(?<!Nix-)\bbri[cx]ks?\b|Nix bri[cx]k",
+    "es": r"\bbloques?\b|(?<!Nix-)\bbricks?\b",
+    "fr": r"\bblocs?\b|\bbriques?\b|(?<!Nix-)\bbricks?\b",
+    "ja": r"ブリック|ブロック",
+    "ru": r"\bблок\w*\b|кирпич\w*",
+    "zh": r"砖块|积木",
+}
+for lang, pattern in TRANSLATED.items():
+    data = json.loads((LANG / f"{lang}.json").read_text(encoding="utf-8"))
+    hits = [k for k, v in data.items()
+            if isinstance(v, str) and brick_key(k) and re.search(pattern, v, re.IGNORECASE)]
+    check(f"{lang}: Nix-Brick/Nix-Brix unübersetzt", not hits, hits[:4])
+
+print("\n6. Keine Doppelungen aus dem Umbau")
+for lang in sorted(p.stem for p in LANG.glob("*.json")):
+    data = json.loads((LANG / f"{lang}.json").read_text(encoding="utf-8"))
+    hits = [k for k, v in data.items()
+            if isinstance(v, str) and re.search(r"Nix-Bri[cx]k?\s*(?:Nix\b|Bri[cx])", v)]
+    check(f"{lang}: kein 'Nix-Brick Nix' o. ä.", not hits, hits[:3])
+
+print("\n7. Nix-Brix ist der Plural, Nix-Brick der Singular")
 de = json.loads((LANG / "de.json").read_text(encoding="utf-8"))
 # "Nix-Bricks" ist als Genitiv Singular korrekt ("die Marker eines Nix-Bricks"),
 # falsch ist es nur als Plural – deshalb wird nach Pluralwörtern davor gesucht.
