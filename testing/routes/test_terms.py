@@ -143,7 +143,22 @@ for lang in sorted(p.stem for p in LANG.glob("*.json")):
             if isinstance(v, str) and re.search(r"Nix-Bri[cx]k?\s*(?:Nix\b|Bri[cx])", v)]
     check(f"{lang}: kein 'Nix-Brick Nix' o. ä.", not hits, hits[:3])
 
-print("\n7. Nix-Brix ist der Plural, Nix-Brick der Singular")
+print("\n7. Startknöpfe tragen den Namen ihrer Funktion")
+# Der Knopf unter einem fehlgeschlagenen Rebuild hieß "Run check", die Funktion
+# im Menü "Validation" – so findet niemand das eine über das andere.
+for lang in sorted(p.stem for p in LANG.glob("*.json")):
+    data = json.loads((LANG / f"{lang}.json").read_text(encoding="utf-8"))
+    func = data.get("header.nixosValidate", "").strip()
+    # Auf den Wortstamm prüfen, nicht auf das ganze Wort: flektierende Sprachen
+    # beugen den Funktionsnamen im Satz ("Проверка" → "Запустить проверку"),
+    # und das ist richtig so.
+    stem = func[:max(4, len(func) - 2)].lower()
+    for key in ("rebuild.validateBtn", "admin.validation.runBtn"):
+        label = data.get(key, "")
+        check(f"{lang}: {key} nennt '{func}'", stem and stem in label.lower(),
+              f"{label!r} vs Stamm {stem!r}")
+
+print("\n8. Nix-Brix ist der Plural, Nix-Brick der Singular")
 de = json.loads((LANG / "de.json").read_text(encoding="utf-8"))
 # "Nix-Bricks" ist als Genitiv Singular korrekt ("die Marker eines Nix-Bricks"),
 # falsch ist es nur als Plural – deshalb wird nach Pluralwörtern davor gesucht.

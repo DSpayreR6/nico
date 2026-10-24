@@ -824,7 +824,7 @@
   "admin.validation.settingsHint": "Активные правила проверяются при каждой валидации. Правила flake показываются только для flake-конфигов.",
   "admin.validation.save": "Сохранить",
   "admin.validation.saved": "Правила проверки сохранены",
-  "admin.validation.runBtn": "Проверить сейчас",
+  "admin.validation.runBtn": "Запустить проверку",
   "admin.validation.resultsTitle": "Результат проверки",
   "admin.validation.noFindings": "Проблем не найдено.",
   "admin.validation.findingCounter": "Замечание {0} из {1}",
