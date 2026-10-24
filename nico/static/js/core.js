@@ -85,7 +85,7 @@ function _closeFormatDialog() {
 async function formatProceed() {
   const res  = await csrfFetch('/api/format/safety-commit', { method: 'POST' });
   const data = await res.json().catch(() => ({}));
-  if (!data.success && data.message) showToast(t('format.commitFailed', data.message), 'error');
+  if (!data.success && data.message) showToast(t('format.commitFailed', tErr(data.message)), 'error');
   await csrfFetch('/api/format/proceed', { method: 'POST' }).catch(() => {});
   _closeFormatDialog();
   showToast(t('format.proceeding'), 'success');

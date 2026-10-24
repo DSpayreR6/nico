@@ -163,6 +163,24 @@ def register(app, ctx):
         ok, msg = git_manager.git_discard_changes(nixos_dir)
         return jsonify({"success": ok, "message": msg})
 
+    @app.route("/api/git/commit", methods=["POST"])
+    def git_commit_only():
+        """Commit without pushing – for a repository that has no remote.
+
+        Pushing needs a remote, committing does not. Without this route the
+        rebuild monitor could only offer "Commit & Push", which fails on a
+        local-only repository.
+        """
+        if err := _check_csrf(): return err
+        nixos_dir, err = _require_setup()
+        if err:
+            return err
+        label = (request.get_json(silent=True) or {}).get("label", "")
+        ok, msg, skipped = git_manager.auto_commit(nixos_dir, label=label)
+        if not ok and "nothing to commit" in msg:
+            ok, msg = True, ""
+        return jsonify({"success": ok, "message": msg, "skipped_large": skipped})
+
     @app.route("/api/git/commit-push", methods=["POST"])
     def git_commit_push():
         if err := _check_csrf(): return err

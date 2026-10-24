@@ -12,11 +12,16 @@
 - The same hint when changing the config path in the admin panel, and in the directory browser when it is opened from setup
 - New validator rule: a line in a user's extra Nix field that sets an attribute NiCo already writes from the form – Nix refuses an attribute defined twice, and the build stops at evaluation
 - Saving now refuses to write a file in which the same attribute is defined twice, naming it, instead of leaving a config behind that does not build
+- After a rebuild, the monitor offers what git can actually do: nothing without a repository, "create restore point" for a local one, "Commit & Push" only with a remote configured
 
 ### Bug Fixes
 
 - Blocks NiCo only partly understands lost their remaining fields on the first save. Measured on a realistic config: 15 of 18 neighbouring fields, among them `services.openssh.settings.PasswordAuthentication = false`, `ports`, `services.printing.drivers`, `services.xserver.xkb.options`, `nix.settings.substituters` and `boot.loader.systemd-boot.editor` – several of them security settings whose loss goes unnoticed. Whatever NiCo does not write back is kept as a Nix brick now, filed under the section it belongs to
 - Statement boundaries were found by counting braces and semicolons without regard for strings and comments, so a `{` or `;` inside either tore statements apart – polybar configs in `'' … ''` blocks are full of both
+- The rebuild monitor offered "Commit & Push" after every successful rebuild, even when the config directory was no git repository at all – the button could only fail. Found on a fresh NixOS installation, where git is not installed to begin with
+- Git errors were German plain text in 20 places (`"Kein Git-Repository."`, `"Kein Remote konfiguriert."`): they never passed through the translation layer, so every non-German user read German. They are error codes now, translated in all seven languages
+- Pushing without a configured remote returned git's own raw output – itself localised, so the message language followed the system instead of NiCo's setting
+- The interface assumed git and a repository were present until proven otherwise, which offered actions that could only fail; it now assumes neither until the status answers
 
 - Everything in a `users.users.<name>` block NiCo has no form field for was dropped on the first save, without a word: `packages` (every graphical install starts with `kdePackages.kate` there), `hashedPassword`, `openssh.authorizedKeys.keys`, `home`, `createHome`, `linger`. Such lines are kept in the user's extra Nix field now
 - A user declared with `isSystemUser` is no longer pulled into the form at all: the generator always writes `isNormalUser`, which NixOS refuses alongside it. The block survives untouched as a Nix brick instead

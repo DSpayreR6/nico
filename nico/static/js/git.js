@@ -349,7 +349,7 @@ function showGitStartGuard(check, configDir) {
           if (data.success) {
             location.reload();
           } else {
-            errEl.textContent   = t(errKeyMap[cardId], data.message || '');
+            errEl.textContent   = t(errKeyMap[cardId], data.message ? tErr(data.message) : '');
             errEl.style.display = '';
             btn.disabled        = false;
             btn.textContent     = origText;
@@ -486,17 +486,20 @@ async function rollbackTo(hash, dateStr, message) {
   const data = await res.json();
 
   if (data.success) {
-    showToast(data.message || t('git.rollbackSuccess'), 'success');
+    showToast(tErr(data.message) || t('git.rollbackSuccess'), 'success');
     closeAdmin();
     await loadConfig();   // refresh form + preview to reflect restored files
   } else {
-    showToast(data.message || t('git.rollbackError'), 'error');
+    showToast(tErr(data.message) || t('git.rollbackError'), 'error');
   }
 }
 
 // ── Git integration ────────────────────────────────────────────────────────
 // Git-Status wird gecacht damit openWriteConfirm() darauf zugreifen kann
-let _gitStatus = { git_installed: true, has_git: true };
+// Pessimistic until checkGitStatus() has answered: assuming git is there
+// offers actions that can only fail – on a fresh NixOS install git is not
+// even installed, and a new config directory is no repository yet.
+let _gitStatus = { git_installed: false, has_git: false };
 
 async function checkGitStatus() {
   try {
@@ -590,7 +593,7 @@ async function loadGitignoreEditor() {
       const res  = await csrfFetch('/api/git/create-gitignore', { method: 'POST' });
       const data = await res.json();
       if (data.success) { showToast(t('admin.gitignore.created'), 'success'); loadGitignoreEditor(); }
-      else showToast(data.message || t('toast.error'), 'error');
+      else showToast(tErr(data.message), 'error');
     });
   }
 
@@ -605,7 +608,7 @@ async function loadGitignoreEditor() {
       });
       const data = await res.json();
       if (data.success) showToast(t('admin.gitignore.saved'), 'success');
-      else showToast(data.message || t('toast.error'), 'error');
+      else showToast(tErr(data.message), 'error');
     });
   }
 
@@ -616,7 +619,7 @@ async function loadGitignoreEditor() {
       const res  = await csrfFetch('/api/git/create-gitignore', { method: 'POST' });
       const data = await res.json();
       if (data.success) { showToast(t('admin.gitignore.added'), 'success'); loadGitignoreEditor(); }
-      else showToast(data.message || t('toast.error'), 'error');
+      else showToast(tErr(data.message), 'error');
     });
   }
 

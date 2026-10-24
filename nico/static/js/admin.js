@@ -332,8 +332,12 @@ function _loadAdminSettings() {
             statusEl.textContent = t('git.setRemoteSavedRestart');
             statusEl.style.color = 'var(--green)';
             showToast(t('git.setRemoteSavedRestart'), 'success');
-            document.getElementById('nixos-git-push-btn')?.classList.remove('hidden');
-            document.getElementById('nixos-git-pull-btn')?.classList.remove('hidden');
+            // Only with a repository: a remote URL can be entered without one,
+            // and push/pull would then fail (see the check in line 341).
+            if (rs.has_git) {
+              document.getElementById('nixos-git-push-btn')?.classList.remove('hidden');
+              document.getElementById('nixos-git-pull-btn')?.classList.remove('hidden');
+            }
             document.getElementById('git-push-settings-row')?.classList.remove('hidden');
           });
         }

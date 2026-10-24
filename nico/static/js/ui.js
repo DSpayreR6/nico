@@ -303,12 +303,18 @@ const _PUSH_ERR_MSGS = {
   FILE_TOO_LARGE:   'git.pushErr.FILE_TOO_LARGE',
   TIMEOUT:          'git.pushErr.TIMEOUT',
   UNKNOWN:          'git.pushErr.UNKNOWN',
+  // Not push failures but states in which pushing cannot work at all.
+  ERR_NO_GIT_REPO:  'errors.ERR_NO_GIT_REPO',
+  ERR_NO_REMOTE:    'errors.ERR_NO_REMOTE',
 };
 
 function _showGitPushErrorModal(msg, errorCode) {
   const friendly = errorCode && _PUSH_ERR_MSGS[errorCode]
     ? t(_PUSH_ERR_MSGS[errorCode])
     : '';
+  // The message may itself be an ERR_ code (git_manager returns those instead
+  // of German plain text) – tErr translates it, other output stays verbatim.
+  msg = tErr(msg);
   const overlay = document.createElement('div');
   overlay.className = 'overlay';
   overlay.innerHTML = `
@@ -850,7 +856,7 @@ function bindUI() {
             const pushRes  = await csrfFetch('/api/git/commit-push', { method: 'POST' });
             const pushData = await pushRes.json();
             if (!pushData.success) {
-              alert(t('git.closePrompt.error', pushData.message || ''));
+              alert(t('git.closePrompt.error', tErr(pushData.message) || ''));
             }
           }
         }

@@ -353,6 +353,26 @@ async function openRebuild(mode = 'switch') {
  * Attaching never starts a rebuild, so this is also the path used after a tab
  * switch, a reload or a browser restart.
  */
+
+/**
+ * What git can actually do for this config right now.
+ *
+ * Three states, because they need different offers: no repository (nothing to
+ * commit into), a local repository without remote (commit yes, push no), and a
+ * repository with remote (both). Asked fresh each time – the user may have run
+ * "Git initialisieren" or added a remote while the page was open.
+ */
+async function _gitCapabilities() {
+  try {
+    const res  = await csrfFetch('/api/git/remote-status');
+    const data = await res.json();
+    return { canCommit: !!data.has_git, canPush: !!(data.has_git && data.has_remote) };
+  } catch (e) {
+    // Unknown state: offer nothing rather than a button that fails.
+    return { canCommit: false, canPush: false };
+  }
+}
+
 function attachRebuildMonitor(fromIndex = 0) {
   const overlay      = document.getElementById('rebuild-overlay');
   const logEl        = document.getElementById('rebuild-log');
@@ -562,8 +582,12 @@ function attachRebuildMonitor(fromIndex = 0) {
       es.close();
       _rebuildES = null;
       if (msg.success) {
-        csrfFetch('/api/config/settings').then(r => r.json()).then(cfg => {
-          if (_gitSync && cfg.push_after_rebuild) {
+        csrfFetch('/api/config/settings').then(r => r.json()).then(async cfg => {
+          // What git can do here decides what is offered: committing needs a
+          // repository, pushing needs a remote on top of that. Offering
+          // "Commit & Push" without either is a button that can only fail.
+          const git = await _gitCapabilities();
+          if (_gitSync && cfg.push_after_rebuild && git.canPush) {
             csrfFetch('/api/git/commit-push', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
@@ -582,16 +606,19 @@ function attachRebuildMonitor(fromIndex = 0) {
               _showGitPushErrorModal(String(e));
               pushBtn.classList.remove('hidden');
             });
-          } else {
+          } else if (git.canCommit) {
+            // No repository at all → no button; the only sensible action is
+            // "Git initialisieren" in the admin panel.
+            pushBtn.textContent = git.canPush ? t('rebuild.commitPush') : t('rebuild.commitOnly');
             pushBtn.classList.remove('hidden');
           }
-          // Manual push button – also the retry path after a failed auto-push.
+          // Manual button – also the retry path after a failed auto-push.
           pushBtn.onclick = async () => {
             const origText = pushBtn.textContent;
             pushBtn.disabled = true;
             pushBtn.textContent = '…';
             try {
-              const res  = await csrfFetch('/api/git/commit-push', {
+              const res  = await csrfFetch(git.canPush ? '/api/git/commit-push' : '/api/git/commit', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ label: 'NiCo: Rebuild erfolgreich' }),
@@ -599,9 +626,9 @@ function attachRebuildMonitor(fromIndex = 0) {
               const data = await res.json();
               if (data.success) {
                 pushBtn.classList.add('hidden');
-                pushInfoEl.textContent = t('rebuild.pushDone');
+                pushInfoEl.textContent = git.canPush ? t('rebuild.pushDone') : t('rebuild.commitDone');
                 pushInfoEl.classList.remove('hidden');
-                await _finishAfterPush(data.info);
+                if (git.canPush) await _finishAfterPush(data.info);
               } else {
                 _showGitPushErrorModal(data.message || t('toast.error'), data.error_code);
               }

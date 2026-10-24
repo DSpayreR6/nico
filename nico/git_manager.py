@@ -36,6 +36,13 @@ GITIGNORE_ENTRIES = [
 # is a "foreign file": the foreign-file guard asks before committing it.
 CONFIG_FILE_NAMES = frozenset({"flake.lock", "config.json", ".gitignore"})
 
+# Messages that double as error codes. These used to be 20 copies of a German
+# sentence returned as plain text – it never passed through t(), so an English
+# user read German. The frontend sends every message through tErr(), which
+# translates anything starting with ERR_ and shows the rest verbatim.
+ERR_NO_GIT_REPO = "ERR_NO_GIT_REPO"
+ERR_NO_REMOTE   = "ERR_NO_REMOTE"
+
 
 def is_config_file(relpath: str) -> bool:
     """True if relpath is part of the NixOS config (never treated as foreign)."""
@@ -285,7 +292,7 @@ def stage_all(nixos_dir: str) -> tuple[bool, str]:
     """Stage current files in nixos_dir for rebuild flows.
     Respects the foreign-file guard (see _stage_for_commit)."""
     if not is_git_repo(nixos_dir):
-        return False, "Kein Git-Repository."
+        return False, ERR_NO_GIT_REPO
     _stage_for_commit(nixos_dir)
     return True, ""
 
@@ -299,7 +306,7 @@ def auto_commit(nixos_dir: str, label: str = "") -> tuple[bool, str, list[str]]:
     committing less than they asked for.
     """
     if not is_git_repo(nixos_dir):
-        return False, "Kein Git-Repository.", []
+        return False, ERR_NO_GIT_REPO, []
 
     _ensure_identity(nixos_dir)
     skipped = _stage_for_commit(nixos_dir)
@@ -341,7 +348,7 @@ def _append_gitignore_entries(nixos_dir: str, entries: list[str]) -> None:
 def include_foreign_files(nixos_dir: str, files: list[str]) -> tuple[bool, str]:
     """Stage the given untracked foreign files so the next commit includes them."""
     if not is_git_repo(nixos_dir):
-        return False, "Kein Git-Repository."
+        return False, ERR_NO_GIT_REPO
     # Refuse oversized files here rather than dropping them silently in
     # _stage_for_commit: this is the one place where the user actively asked
     # for the file to go into git, so they get a reason instead of nothing.
@@ -363,7 +370,7 @@ def include_foreign_files(nixos_dir: str, files: list[str]) -> tuple[bool, str]:
 def exclude_foreign_files(nixos_dir: str, files: list[str]) -> tuple[bool, str]:
     """Put the given untracked foreign files on .gitignore (created if missing)."""
     if not is_git_repo(nixos_dir):
-        return False, "Kein Git-Repository."
+        return False, ERR_NO_GIT_REPO
     allowed = set(list_untracked_foreign(nixos_dir))
     chosen  = [f for f in files if f in allowed]
     if chosen:
@@ -375,7 +382,7 @@ def untrack_foreign_files(nixos_dir: str, files: list[str]) -> tuple[bool, str]:
     """Remove tracked foreign files from git (files stay on disk), put them on
     .gitignore and commit. Note: the files remain in the git history."""
     if not is_git_repo(nixos_dir):
-        return False, "Kein Git-Repository."
+        return False, ERR_NO_GIT_REPO
     allowed = set(list_tracked_foreign(nixos_dir))
     chosen  = [f for f in files if f in allowed]
     if not chosen:
@@ -432,7 +439,7 @@ def git_pull(nixos_dir: str) -> tuple[bool, str, dict]:
     Returns (success, output_message, info) – info describes what came in.
     """
     if not is_git_repo(nixos_dir):
-        return False, "Kein Git-Repository.", {}
+        return False, ERR_NO_GIT_REPO, {}
     rc, before = _run(["rev-parse", "HEAD"], cwd=nixos_dir)
     before = before.strip() if rc == 0 else ""
     rc, out = _run(["pull"], cwd=nixos_dir, timeout=REMOTE_TRANSFER_TIMEOUT, remote=True)
@@ -444,10 +451,10 @@ def git_pull(nixos_dir: str) -> tuple[bool, str, dict]:
 def git_fetch_remote(nixos_dir: str) -> tuple[bool, str]:
     """Fetch the configured remote without changing local files."""
     if not is_git_repo(nixos_dir):
-        return False, "Kein Git-Repository."
+        return False, ERR_NO_GIT_REPO
     remote_name = _get_primary_remote_name(nixos_dir)
     if not remote_name:
-        return False, "Kein Remote konfiguriert."
+        return False, ERR_NO_REMOTE
     rc, out = _run(["fetch", "--quiet", remote_name], cwd=nixos_dir, timeout=30, remote=True)
     if rc != 0:
         return False, out or "git fetch fehlgeschlagen"
@@ -457,10 +464,10 @@ def git_fetch_remote(nixos_dir: str) -> tuple[bool, str]:
 def list_remote_branches(nixos_dir: str) -> tuple[bool, list[str], str]:
     """List fetched remote branches below the configured remote."""
     if not is_git_repo(nixos_dir):
-        return False, [], "Kein Git-Repository."
+        return False, [], ERR_NO_GIT_REPO
     remote_name = _get_primary_remote_name(nixos_dir)
     if not remote_name:
-        return False, [], "Kein Remote konfiguriert."
+        return False, [], ERR_NO_REMOTE
     rc, out = _run(["for-each-ref", "--format=%(refname:short)", f"refs/remotes/{remote_name}/*"], cwd=nixos_dir)
     if rc != 0:
         return False, [], out or "Remote-Branches konnten nicht gelesen werden."
@@ -481,7 +488,7 @@ def list_remote_branches(nixos_dir: str) -> tuple[bool, list[str], str]:
 def set_upstream_branch(nixos_dir: str, remote_branch: str) -> tuple[bool, str]:
     """Connect the current local branch to a <remote>/<branch> upstream."""
     if not is_git_repo(nixos_dir):
-        return False, "Kein Git-Repository."
+        return False, ERR_NO_GIT_REPO
     rc, local_branch = _run(["rev-parse", "--abbrev-ref", "HEAD"], cwd=nixos_dir)
     if rc != 0 or not local_branch or local_branch.strip() == "HEAD":
         return False, "Lokaler Branch konnte nicht ermittelt werden."
@@ -489,7 +496,7 @@ def set_upstream_branch(nixos_dir: str, remote_branch: str) -> tuple[bool, str]:
     remote_branch = remote_branch.strip()
     remote_name = _get_primary_remote_name(nixos_dir)
     if not remote_name:
-        return False, "Kein Remote konfiguriert."
+        return False, ERR_NO_REMOTE
     if not remote_branch.startswith(f"{remote_name}/"):
         return False, "Ungültiger Remote-Branch."
     rc, out = _run(["branch", "--set-upstream-to", remote_branch, local_branch], cwd=nixos_dir)
@@ -650,7 +657,7 @@ def clean_large_files(nixos_dir: str, paths: list[str], delete_from_disk: bool =
     the user says so.
     """
     if not is_git_repo(nixos_dir):
-        return False, "Kein Git-Repository.", {}
+        return False, ERR_NO_GIT_REPO, {}
     report = large_file_report(nixos_dir)
     if any(p in [x[0] for x in report["published"]] for p in paths):
         return False, ("Die Datei liegt bereits auf dem Server. Das ließe sich nur durch "
@@ -736,7 +743,11 @@ def _oversized_push_message(blobs: list[tuple[str, int]]) -> str:
 def git_push(nixos_dir: str) -> tuple[bool, str, str]:
     """Run git push. Returns (success, raw_output, error_code)."""
     if not is_git_repo(nixos_dir):
-        return False, "Kein Git-Repository.", "UNKNOWN"
+        return False, ERR_NO_GIT_REPO, ERR_NO_GIT_REPO
+    if not _get_primary_remote_name(nixos_dir):
+        # Without this, git's own error comes back raw – and localised, so the
+        # message language follows the system, not NiCo's.
+        return False, ERR_NO_REMOTE, ERR_NO_REMOTE
     if blobs := oversized_blobs_to_push(nixos_dir):
         return False, _oversized_push_message(blobs), "FILE_TOO_LARGE"
     rc, out = _run(["push"], cwd=nixos_dir, timeout=REMOTE_TRANSFER_TIMEOUT, remote=True)
@@ -748,7 +759,7 @@ def git_push(nixos_dir: str) -> tuple[bool, str, str]:
 def check_write_access(nixos_dir: str) -> tuple[bool, str, str]:
     """Test push write access via dry run. Returns (ok, error_code, raw_output)."""
     if not is_git_repo(nixos_dir):
-        return False, 'UNKNOWN', 'Kein Git-Repository.'
+        return False, ERR_NO_GIT_REPO, ERR_NO_GIT_REPO
     rc, out = _run(["push", "--dry-run"], cwd=nixos_dir, timeout=60, remote=True)
     if rc != 0:
         return False, classify_push_error(out), out
@@ -758,7 +769,7 @@ def check_write_access(nixos_dir: str) -> tuple[bool, str, str]:
 def set_remote(nixos_dir: str, url: str) -> tuple[bool, str]:
     """Add or update origin remote. Returns (ok, raw_output)."""
     if not is_git_repo(nixos_dir):
-        return False, 'Kein Git-Repository.'
+        return False, ERR_NO_GIT_REPO
     remote_name = _get_primary_remote_name(nixos_dir) or "origin"
     rc, _ = _run(["remote", "get-url", remote_name], cwd=nixos_dir)
     if rc == 0:
@@ -773,7 +784,7 @@ def set_remote(nixos_dir: str, url: str) -> tuple[bool, str]:
 def git_reset_hard(nixos_dir: str) -> tuple[bool, str]:
     """Reset to the configured upstream branch and remove untracked files."""
     if not is_git_repo(nixos_dir):
-        return False, "Kein Git-Repository."
+        return False, ERR_NO_GIT_REPO
     rc, upstream = _run(["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"], cwd=nixos_dir)
     if rc != 0 or not upstream:
         return False, "Kein Upstream-Branch konfiguriert."
@@ -787,7 +798,7 @@ def git_reset_hard(nixos_dir: str) -> tuple[bool, str]:
 def git_discard_changes(nixos_dir: str) -> tuple[bool, str]:
     """Discard uncommitted changes and untracked files. Local commits stay intact."""
     if not is_git_repo(nixos_dir):
-        return False, "Kein Git-Repository."
+        return False, ERR_NO_GIT_REPO
     rc, out = _run(["reset", "--hard", "HEAD"], cwd=nixos_dir)
     if rc != 0:
         return False, out or "git reset fehlgeschlagen"
@@ -801,7 +812,7 @@ def git_commit_push(nixos_dir: str, label: str = "") -> tuple[bool, str, str, di
     failure so the UI can show a readable reason instead of raw git output,
     info lists what was transferred (collected before the push, see push_info)."""
     if not is_git_repo(nixos_dir):
-        return False, "Kein Git-Repository.", "UNKNOWN", {}
+        return False, ERR_NO_GIT_REPO, ERR_NO_GIT_REPO, {}
     _ensure_identity(nixos_dir)
     ok_commit, msg_commit, _skipped = auto_commit(nixos_dir, label=label or "NiCo: Lokale Änderungen")
     if not ok_commit and "nothing to commit" not in msg_commit:
@@ -1063,7 +1074,9 @@ def git_push_force(nixos_dir: str) -> tuple[bool, str, str]:
     """Run git push --force on the current branch.
     Returns (success, raw_output, error_code) – same contract as git_push."""
     if not is_git_repo(nixos_dir):
-        return False, "Kein Git-Repository.", "UNKNOWN"
+        return False, ERR_NO_GIT_REPO, ERR_NO_GIT_REPO
+    if not _get_primary_remote_name(nixos_dir):
+        return False, ERR_NO_REMOTE, ERR_NO_REMOTE
     if blobs := oversized_blobs_to_push(nixos_dir):
         return False, _oversized_push_message(blobs), "FILE_TOO_LARGE"
     rc, out = _run(["push", "--force"], cwd=nixos_dir, timeout=REMOTE_TRANSFER_TIMEOUT, remote=True)
@@ -1076,7 +1089,7 @@ def git_commit_push_force(nixos_dir: str) -> tuple[bool, str, str, dict]:
     """Commit all local changes (if any) and force-push to remote.
     Returns (success, message, error_code, info) – see git_commit_push."""
     if not is_git_repo(nixos_dir):
-        return False, "Kein Git-Repository.", "UNKNOWN", {}
+        return False, ERR_NO_GIT_REPO, ERR_NO_GIT_REPO, {}
     _ensure_identity(nixos_dir)
     ok_commit, msg_commit, _skipped = auto_commit(nixos_dir, label="NiCo: Lokale Änderungen")
     if not ok_commit and "nothing to commit" not in msg_commit:
@@ -1149,7 +1162,7 @@ def rollback(nixos_dir: str, commit_hash: str) -> tuple[bool, str]:
     if not _re.fullmatch(r"[0-9a-f]{7,40}", commit_hash):
         return False, "Ungültiger Commit-Hash."
     if not is_git_repo(nixos_dir):
-        return False, "Kein Git-Repository."
+        return False, ERR_NO_GIT_REPO
 
     _ensure_identity(nixos_dir)
 
@@ -1241,7 +1254,7 @@ def get_diff(nixos_dir: str, from_hash: str, to_hash: str = "HEAD") -> dict:
     if not _valid(from_hash) or not _valid(to_hash):
         return {"error": "Ungültiger Commit-Hash"}
     if not is_git_repo(nixos_dir):
-        return {"error": "Kein Git-Repository"}
+        return {"error": ERR_NO_GIT_REPO}
 
     rc, out = _run(["diff", "-w", "--name-status", from_hash, to_hash],
                    cwd=nixos_dir, timeout=30)
