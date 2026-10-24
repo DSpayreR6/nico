@@ -143,7 +143,28 @@ for lang in sorted(p.stem for p in LANG.glob("*.json")):
             if isinstance(v, str) and re.search(r"Nix-Bri[cx]k?\s*(?:Nix\b|Bri[cx])", v)]
     check(f"{lang}: kein 'Nix-Brick Nix' o. ä.", not hits, hits[:3])
 
-print("\n7. Startknöpfe tragen den Namen ihrer Funktion")
+print("\n7. 'Validator' ist ein Eigenname und bleibt unübersetzt")
+# Jede Sprache hätte eine eigene Form (validación, validateur, валидатор,
+# 検証, 校验). Nicht gemeint ist die semantische Prüfung durch Nix selbst
+# (ERR_DRY_TIMEOUT_SEM) – die heißt zu Recht weiter so.
+VALIDATOR_KEYS = ("header.nixosValidate", "admin.validation.title",
+                  "admin.validation.runBtn", "admin.validation.settingsBtn",
+                  "admin.validation.settingsTitle", "admin.validation.resultsTitle",
+                  "admin.validation.saved", "rebuild.validateBtn", "rebuild.validateHint")
+TRANSLATED_FUNC = {
+    "de": r"Validierung", "en": r"validation", "es": r"validaci[oó]n|validador",
+    "fr": r"validation|validateur", "ja": r"検証", "ru": r"валидац|проверк",
+    "zh": r"校验",
+}
+for lang, pattern in TRANSLATED_FUNC.items():
+    data = json.loads((LANG / f"{lang}.json").read_text(encoding="utf-8"))
+    hits = [k for k in VALIDATOR_KEYS
+            if isinstance(data.get(k), str) and re.search(pattern, data[k], re.IGNORECASE)]
+    check(f"{lang}: Validator unübersetzt", not hits, hits)
+    check(f"{lang}: Menüeintrag heißt Validator",
+          data.get("header.nixosValidate") == "Validator", data.get("header.nixosValidate"))
+
+print("\n8. Startknöpfe tragen den Namen ihrer Funktion")
 # Der Knopf unter einem fehlgeschlagenen Rebuild hieß "Run check", die Funktion
 # im Menü "Validation" – so findet niemand das eine über das andere.
 for lang in sorted(p.stem for p in LANG.glob("*.json")):
@@ -158,7 +179,7 @@ for lang in sorted(p.stem for p in LANG.glob("*.json")):
         check(f"{lang}: {key} nennt '{func}'", stem and stem in label.lower(),
               f"{label!r} vs Stamm {stem!r}")
 
-print("\n8. Nix-Brix ist der Plural, Nix-Brick der Singular")
+print("\n9. Nix-Brix ist der Plural, Nix-Brick der Singular")
 de = json.loads((LANG / "de.json").read_text(encoding="utf-8"))
 # "Nix-Bricks" ist als Genitiv Singular korrekt ("die Marker eines Nix-Bricks"),
 # falsch ist es nur als Plural – deshalb wird nach Pluralwörtern davor gesucht.
