@@ -14,6 +14,9 @@
 - Saving now refuses to write a file in which the same attribute is defined twice, naming it, instead of leaving a config behind that does not build
 - After a rebuild, the monitor offers what git can actually do: nothing without a repository, "create restore point" for a local one, "Commit & Push" only with a remote configured
 - The info dialog shows the commit behind the version. A version number alone stays the same for a whole development cycle, so two builds of it were indistinguishable; a trailing `+` marks a modified working tree
+- One word per language for each concept. Every language used four or five terms for the same thing – English alone had commit, snapshot, checkpoint and restore point, Spanish five. Buttons now read "create checkpoint (commit)": the plain term for newcomers, the git term in brackets for everyone who knows it
+- `Nix-Brick` and `Nix-Brix` are treated as the name they are and stay untranslated in every language; they used to appear as `bloque`, `bloc`, `brique`, `ブリック`, `блок`, `кирпич` and `砖块`, so nobody could look the term up or talk about it
+- `snapshot` is reserved for Snapper and btrfs snapshots and no longer doubles as a word for commits
 
 ### Bug Fixes
 
