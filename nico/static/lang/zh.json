@@ -298,6 +298,7 @@
   "rebuild.title": "NixOS 重建",
   "rebuild.optionsTitle": "重建选项",
   "rebuild.optFlakeUpdate": "更新 flake（nix flake update）",
+  "rebuild.optFlakeUpdateNoFlake": "仅在使用 flakes 时可用——此配置未使用。",
   "rebuild.optSafeMode": "安全重建（最多1个并行构建任务）",
   "rebuild.optTerminal": "在终端窗口中运行",
   "rebuild.optShutdown": "重建后关机",

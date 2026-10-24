@@ -121,9 +121,14 @@ function _showHostPicker(hosts, { allowAll = false, title = '', defaultHost = nu
 
 /**
  * Zeigt einen kleinen Optionen-Dialog vor Rebuild/Dry-Run.
- * Gibt { updateFlake: bool } zurück, oder null wenn abgebrochen.
- * Die Voreinstellung des Toggles kommt aus dem Admin-Panel.
- * Nur bei Flake-Modus angezeigt.
+ * Gibt { updateFlake, safeMode, useTerminal, … } zurück, oder null bei Abbruch.
+ * Die Voreinstellungen kommen aus dem Admin-Panel.
+ *
+ * Wird auch ohne Flakes angezeigt (2026-10-24): vorher sprang NiCo bei einer
+ * Nicht-Flake-Config direkt in den Rebuild, womit auch "im Terminal starten",
+ * "Befehl kopieren" und der Schonmodus wegfielen – alles Dinge, die nichts mit
+ * Flakes zu tun haben. Nur das Flake-Update ist ausgegraut statt versteckt: so
+ * sieht man, dass es die Möglichkeit gibt, ohne davon gestört zu werden.
  */
 async function _showRebuildOptions(hostInfo, { hostname = '', mode = 'switch' } = {}) {
   let defaultFlakeUpdate = false;
@@ -143,13 +148,21 @@ async function _showRebuildOptions(hostInfo, { hostname = '', mode = 'switch' } 
     defaultFlakeUpdate = !!(document.getElementById('flake-update-toggle')?.checked);
   }
 
-  if (!hostInfo.flake_mode) return { updateFlake: false, useTerminal: false, safeMode: defaultSafeMode, shutdownAfter: false, pushShutdownAfter: false };
+  const isFlake = !!hostInfo.flake_mode;
+  if (!isFlake) defaultFlakeUpdate = false;   // ohne Flake gibt es nichts zu aktualisieren
 
   // Vollständiger Pfad statt '.#host': der kopierte Befehl muss aus jedem
   // Verzeichnis heraus funktionieren (manifest.md "nächste Ziele").
   const _buildCmd = (upd, safe) => {
     const safeArgs = safe ? ' --max-jobs 1 --cores 4' : '';
     const flakeDir = configDir || '.';
+    if (!isFlake) {
+      // Muss zeigen, was NiCo selbst ausführt (routes/rebuild.py): ohne
+      // -I nixos-config würde der kopierte Befehl /etc/nixos bauen und damit
+      // eine andere Config als die geöffnete.
+      const conf = configDir ? `${configDir}/configuration.nix` : 'configuration.nix';
+      return `sudo nixos-rebuild ${mode} -I nixos-config=${conf}${safeArgs}`;
+    }
     const base = `sudo nixos-rebuild ${mode} --flake ${flakeDir}#${hostname || 'hostname'}${safeArgs}`;
     return upd ? `nix flake update --flake ${flakeDir} && ${base}` : base;
   };
@@ -160,13 +173,16 @@ async function _showRebuildOptions(hostInfo, { hostname = '', mode = 'switch' } 
     overlay.innerHTML = `
       <div class="dialog-box" style="min-width:360px">
         <h2 class="dialog-title">${t('rebuild.optionsTitle')}</h2>
-        <label class="toggle-row" style="margin:12px 0 10px;cursor:pointer">
+        <label class="toggle-row${isFlake ? '' : ' row-inactive'}"
+               style="margin:12px 0 ${isFlake ? '10' : '2'}px;cursor:${isFlake ? 'pointer' : 'default'}">
           <span>${t('rebuild.optFlakeUpdate')}</span>
           <span class="toggle-wrap">
-            <input type="checkbox" id="_rbo-flake-update" ${defaultFlakeUpdate ? 'checked' : ''}>
+            <input type="checkbox" id="_rbo-flake-update"
+                   ${defaultFlakeUpdate ? 'checked' : ''} ${isFlake ? '' : 'disabled'}>
             <span class="toggle-track"><span class="toggle-thumb"></span></span>
           </span>
         </label>
+        ${isFlake ? '' : `<div class="hint" style="margin:0 0 10px;padding-left:2px">${t('rebuild.optFlakeUpdateNoFlake')}</div>`}
         <label class="toggle-row" style="margin:0 0 10px;cursor:pointer">
           <span>${t('rebuild.optSafeMode')}</span>
           <span class="toggle-wrap">

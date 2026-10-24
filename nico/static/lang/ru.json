@@ -298,6 +298,7 @@
   "rebuild.title": "NixOS Rebuild",
   "rebuild.optionsTitle": "Параметры rebuild",
   "rebuild.optFlakeUpdate": "Обновить flake (nix flake update)",
+  "rebuild.optFlakeUpdateNoFlake": "Доступно только с flakes — эта конфигурация их не использует.",
   "rebuild.optSafeMode": "Безопасная сборка (макс. 1 параллельный процесс)",
   "rebuild.optTerminal": "Выполнить в окне терминала",
   "rebuild.optShutdown": "Выключить после сборки",

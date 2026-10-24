@@ -298,6 +298,7 @@
   "rebuild.title": "NixOS Rebuild",
   "rebuild.optionsTitle": "Rebuild options",
   "rebuild.optFlakeUpdate": "Update flake (nix flake update)",
+  "rebuild.optFlakeUpdateNoFlake": "Only possible with flakes – this configuration does not use them.",
   "rebuild.optSafeMode": "Safe rebuild (max. 1 parallel build job)",
   "rebuild.optTerminal": "Run in terminal window",
   "rebuild.optShutdown": "Shutdown after rebuild",

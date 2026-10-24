@@ -298,6 +298,7 @@
   "rebuild.title": "NixOS Rebuild",
   "rebuild.optionsTitle": "Rebuildオプション",
   "rebuild.optFlakeUpdate": "flakeを更新（nix flake update）",
+  "rebuild.optFlakeUpdateNoFlake": "flake を使う構成でのみ利用できます。この構成では使っていません。",
   "rebuild.optSafeMode": "セーフリビルド（最大1並列ビルドジョブ）",
   "rebuild.optTerminal": "ターミナルウィンドウで実行",
   "rebuild.optShutdown": "リビルド後にシャットダウン",
