@@ -41,3 +41,42 @@ def get_version() -> str:
         pass
 
     return ""
+
+
+def get_revision() -> str:
+    """Commit this build came from, or an empty string when unknown.
+
+    The version alone cannot tell two builds of the same cycle apart: it stays
+    at e.g. 0.14.0-dev from one release to the next, so a report from a test
+    build off the dev branch would be unplaceable. Same two cases as
+    get_version(): a file stamped at build time, or the working tree's git.
+    """
+    stamped = Path(__file__).resolve().parent / "REVISION"
+    try:
+        if stamped.is_file():
+            value = stamped.read_text(encoding="utf-8").strip()
+            if value and value != "unknown":
+                return value
+    except OSError:
+        pass
+
+    import subprocess
+    root = Path(__file__).resolve().parent.parent
+    try:
+        out = subprocess.run(
+            ["git", "-C", str(root), "rev-parse", "--short", "HEAD"],
+            capture_output=True, text=True, timeout=5, check=False,
+        )
+        if out.returncode == 0:
+            rev = out.stdout.strip()
+            dirty = subprocess.run(
+                ["git", "-C", str(root), "status", "--porcelain"],
+                capture_output=True, text=True, timeout=5, check=False,
+            )
+            # A modified working tree is not that commit any more – saying so
+            # avoids chasing a bug in code that was never built.
+            return f"{rev}+" if dirty.returncode == 0 and dirty.stdout.strip() else rev
+    except (OSError, subprocess.SubprocessError):
+        pass
+
+    return ""

@@ -13,6 +13,7 @@
 - New validator rule: a line in a user's extra Nix field that sets an attribute NiCo already writes from the form – Nix refuses an attribute defined twice, and the build stops at evaluation
 - Saving now refuses to write a file in which the same attribute is defined twice, naming it, instead of leaving a config behind that does not build
 - After a rebuild, the monitor offers what git can actually do: nothing without a repository, "create restore point" for a local one, "Commit & Push" only with a remote configured
+- The info dialog shows the commit behind the version. A version number alone stays the same for a whole development cycle, so two builds of it were indistinguishable; a trailing `+` marks a modified working tree
 
 ### Bug Fixes
 

@@ -4,12 +4,16 @@ Sprachdateien.
 Hintergrund 2026-10-17: about.versionVal stand siebenmal in den Sprachdateien
 und war bei 0.9.10 stehengeblieben, während flake.nix 0.11.0 sagte und die
 Tags v0.10.0 und v0.11.0 längst existierten.
+
+Erweitert 2026-10-24: Hinter der Version steht der Commit in Klammern. Seit es
+einen dev-Branch gibt, bleibt die Versionsnummer einen ganzen Zyklus lang
+gleich (0.14.0-dev) – zwei Teststände wären sonst nicht auseinanderzuhalten.
 """
 import os, pathlib, sys, threading, time, re, pathlib, json
 ROOT = pathlib.Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(ROOT))
 from nico.server import create_app
-from nico.version import get_version
+from nico.version import get_revision, get_version
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.service import Service
@@ -35,11 +39,18 @@ print(f"  flake.nix sagt: {expected}")
 try:
     check("get_version() stimmt mit flake.nix überein", get_version() == expected, get_version())
 
+    rev = get_revision()
+    print(f"  Commit: {rev or '(keiner ermittelbar)'}")
+
     d.get(f"http://127.0.0.1:{PORT}/"); time.sleep(4)
     d.execute_script("document.getElementById('about-btn').click();")
     time.sleep(1)
     shown = d.find_element(By.ID, "about-version").text.strip()
-    check(f"Dialog zeigt {expected}", shown == expected, shown)
+    check(f"Dialog beginnt mit {expected}", shown.startswith(expected), shown)
+    if rev:
+        check(f"Commit {rev} steht dahinter", f"({rev})" in shown, shown)
+    else:
+        check("ohne Commit nur die Version", shown == expected, shown)
 
     for lang in ("en", "ja"):
         d.execute_script("localStorage.setItem('nico_lang', arguments[0]);", lang)
@@ -47,7 +58,7 @@ try:
         d.execute_script("document.getElementById('about-btn').click();")
         time.sleep(1)
         shown = d.find_element(By.ID, "about-version").text.strip()
-        check(f"{lang}: zeigt dieselbe Version", shown == expected, shown)
+        check(f"{lang}: zeigt dieselbe Version", shown.startswith(expected), shown)
 
     for p in sorted(pathlib.Path(str(ROOT) + "/nico/static/lang").glob("*.json")):
         keys = json.loads(p.read_text(encoding="utf-8"))

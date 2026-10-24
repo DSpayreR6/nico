@@ -55,6 +55,12 @@
               # it stays maintained in exactly one place (see nico/version.py)
               printf '%s' "$version" > $out/lib/nico/nico/VERSION
 
+              # The commit this was built from. The version alone cannot tell
+              # two dev builds apart – it stays 0.14.0-dev for a whole cycle,
+              # so a bug report from a test build would be unplaceable.
+              printf '%s' "${self.shortRev or self.dirtyShortRev or "unknown"}" \
+                > $out/lib/nico/nico/REVISION
+
               mkdir -p $out/bin
               makeWrapper ${pythonEnv}/bin/python $out/bin/nico \
                 --add-flags "-m nico.main" \

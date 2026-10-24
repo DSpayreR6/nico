@@ -83,7 +83,14 @@ async function checkStatus() {
     // Version comes from the server (flake.nix / stamped VERSION), never from
     // the language files – it is a number, not a translation
     const verEl = document.getElementById('about-version');
-    if (verEl) verEl.textContent = data.version || '';
+    // The commit is shown next to the version because the version alone stays
+    // the same for a whole cycle (0.14.0-dev) – two test builds off the dev
+    // branch would otherwise look identical.
+    if (verEl) {
+      verEl.textContent = data.revision
+        ? `${data.version || ''} (${data.revision})`
+        : (data.version || '');
+    }
     if (data.setup_complete) {
       // A rebuild that is still running (or whose result has not been seen yet)
       // leaves the working tree dirty on purpose – flake.lock and written .nix

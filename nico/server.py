@@ -18,7 +18,7 @@ from flask import Flask, jsonify, render_template, request
 from . import config_manager, generator, git_manager, importer, routes, validator
 from .brix import brix_content_to_bricks
 from .core import validate_user_path as _validate_user_path
-from .version import get_version
+from .version import get_revision, get_version
 
 
 _THEMES_DIR = Path(__file__).parent / "static" / "themes"
@@ -267,8 +267,10 @@ def create_app() -> Flask:
                 "root_fstype":       _root_fstype(),
                 "running_host":      validator.running_host(),
                 "version":           get_version(),
+                "revision":          get_revision(),
             })
-        return jsonify({"setup_complete": False, "version": get_version()})
+        return jsonify({"setup_complete": False, "version": get_version(),
+                        "revision": get_revision()})
 
     # Write guard for configs from a newer NiCo: the user may override, but not
     # by accident.  Cached because it reads every .nix file in the config.
