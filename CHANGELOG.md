@@ -10,8 +10,12 @@
 - Package search animates its status line with the search term and, after three seconds, the elapsed time – the first `nix search` can take a minute, and until now nothing moved on screen at all
 - The setup dialog says that a new directory is created by simply typing its path; the directory browser only ever offered existing ones, and the question "where is your config directory" implied one had to exist
 - The same hint when changing the config path in the admin panel, and in the directory browser when it is opened from setup
+- New validator rule: a line in a user's extra Nix field that sets an attribute NiCo already writes from the form – Nix refuses an attribute defined twice, and the build stops at evaluation
 
 ### Bug Fixes
+
+- Everything in a `users.users.<name>` block NiCo has no form field for was dropped on the first save, without a word: `packages` (every graphical install starts with `kdePackages.kate` there), `hashedPassword`, `openssh.authorizedKeys.keys`, `home`, `createHome`, `linger`. Such lines are kept in the user's extra Nix field now
+- A user declared with `isSystemUser` is no longer pulled into the form at all: the generator always writes `isNormalUser`, which NixOS refuses alongside it. The block survives untouched as a Nix brick instead
 
 - A non-flake `configuration.nix` never imported hardware-configuration.nix, so a newly created config could not build ("The 'fileSystems' option does not specify your root file system") – flake setups were never affected, because there the host body in flake.nix carries the import
 - A quoted user name gained one escaping layer per save (`nico` → `"nico"` → `"\"nico\""`) until NixOS refused it: attribute paths are now read in their canonical form, and a name already damaged is repaired on the next read instead of growing further

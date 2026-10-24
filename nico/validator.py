@@ -77,6 +77,11 @@ ALL_RULES: list[Rule] = [
          "Benutzername gültig",
          "Prüft Benutzernamen gegen die von NixOS erlaubte Schreibweise.",
          "error"),
+    Rule("user_extra_conflict",
+         "Doppeltes Nutzer-Attribut",
+         "Meldet Zeilen im Textfeld eines Nutzers, die ein Attribut setzen, das NiCo "
+         "schon aus dem Formular schreibt – Nix lehnt doppelte Attribute ab.",
+         "error"),
     Rule("hardware_matches",
          "Hardware passt zum System",
          "Warnt wenn die Hardware-Config Disk-UUIDs enthält die auf diesem System nicht existieren.",
@@ -638,6 +643,50 @@ def _rule_user_name_valid(nixos_dir: str, config: dict, is_flake: bool,
             message_key="validator.f.user_name_valid", params=[name],
             detail="Erlaubt sind Kleinbuchstaben, Ziffern, - und _, beginnend mit Buchstabe oder _.",
             detail_key="validator.d.user_name_valid",
+        ))
+    return findings
+
+
+def _rule_user_extra_conflict(nixos_dir: str, config: dict, is_flake: bool,
+                              host: str | None = None) -> list[Finding]:
+    """Report free-text user lines that collide with a form field.
+
+    The generator writes those attributes itself, so a hand-typed line of the
+    same name ends up in the block twice and Nix aborts the build with
+    "attribute … already defined". Imported content never triggers this (the
+    importer keeps such fields out); it takes typing into the field by hand.
+    """
+    from .generator import USER_BLOCK_FIELDS
+    from .importer import _split_top_level_stmts, _stmt_attr_name
+
+    entries: list[tuple[str, str]] = []
+    primary = (config.get("username") or "").strip()
+    if primary:
+        entries.append((primary, config.get("user_extra_nix") or ""))
+    for extra in config.get("extra_users") or []:
+        if isinstance(extra, dict) and (extra.get("username") or "").strip():
+            entries.append((extra["username"].strip(), extra.get("extra_nix") or ""))
+
+    findings = []
+    for name, extra_nix in entries:
+        if not extra_nix.strip():
+            continue
+        clashes = sorted({
+            attr for stmt in _split_top_level_stmts(extra_nix)
+            if (attr := _stmt_attr_name(stmt)) in USER_BLOCK_FIELDS
+        })
+        if not clashes:
+            continue
+        findings.append(Finding(
+            rule_id="user_extra_conflict",
+            severity="error",
+            message=f"Nutzer {name!r}: {', '.join(clashes)} steht in den weiteren "
+                    f"Nix-Zeilen und wird zugleich aus dem Formular geschrieben.",
+            message_key="validator.f.user_extra_conflict",
+            params=[name, ", ".join(clashes)],
+            detail="Nix lehnt ein doppelt definiertes Attribut ab. Zeile aus dem "
+                   "Textfeld entfernen und das Formularfeld darüber verwenden.",
+            detail_key="validator.d.user_extra_conflict",
         ))
     return findings
 
@@ -2014,6 +2063,7 @@ _RULE_FNS: dict[str, object] = {
     "hardware_imported":     _rule_hardware_imported,
     "hardware_host_location": _rule_hardware_host_location,
     "user_name_valid":       _rule_user_name_valid,
+    "user_extra_conflict":   _rule_user_extra_conflict,
     "hardware_matches":      _rule_hardware_matches,
     "duplicate_attrs":       _rule_duplicate_attrs,
     "imports_exist":         _rule_imports_exist,

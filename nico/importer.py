@@ -76,6 +76,53 @@ def _brix_name_from_stmt(stmt: str) -> str:
     m = re.match(r'\s*([\w.\-]+)', stmt)
     return m.group(1).replace('.', '-') if m else 'imported'
 
+
+def _stmt_attr_name(stmt: str) -> str:
+    """First path segment of a statement's attribute ('openssh.a.b = …' → 'openssh').
+
+    Leading comment lines belong to the statement that follows them and are
+    skipped – otherwise a commented field would look unrecognised and end up
+    written twice.
+    """
+    for line in stmt.splitlines():
+        s = line.strip()
+        if not s or s.startswith('#'):
+            continue
+        head = s.split('=', 1)[0].strip()
+        return head.split('.', 1)[0].strip().strip('"')
+    return ''
+
+
+def _dedent_stmt(stmt: str) -> str:
+    """Strip a statement's block indentation, keeping its inner shape.
+
+    Must be stable across roundtrips: the writer adds the block indent back, so
+    anything left on the continuation lines here would accumulate with every
+    save – the same escalation the quoted user name had.
+    """
+    lines = stmt.splitlines()
+    if len(lines) < 2:
+        return stmt.strip()
+    tail   = lines[1:]
+    widths = [len(l) - len(l.lstrip()) for l in tail if l.strip()]
+    cut    = min(widths) if widths else 0
+    return '\n'.join([lines[0].strip()] + [l[cut:].rstrip() for l in tail]).rstrip()
+
+
+def _user_rest_text(inner: str) -> str:
+    """Statements of a users.users.<name> block NiCo has no form field for.
+
+    Kept verbatim in the user's free-text field (extra_nix) so nothing is lost
+    – vorgaben.txt forbids discarding unsupported Nix content. Fields the
+    generator writes itself are left out; they would otherwise be defined
+    twice and Nix rejects that.
+    """
+    from .generator import USER_BLOCK_FIELDS  # local: generator imports us
+
+    rest = [_dedent_stmt(stmt) for stmt in _split_top_level_stmts(inner)
+            if _stmt_attr_name(stmt) not in USER_BLOCK_FIELDS]
+    return '\n'.join(rest).strip()
+
 # ── shared field map ──────────────────────────────────────────────────────────
 
 def _extract_fields(kv: 'dict[str, str]', clean: str) -> 'tuple[dict, set[str]]':
@@ -494,7 +541,17 @@ def _extract_fields(kv: 'dict[str, str]', clean: str) -> 'tuple[dict, set[str]]'
         if uname in _EXCL:
             continue
         inner = _np.extract_inner_block(user_vt) or user_vt
+
+        # A service user cannot be expressed in the form: the generator always
+        # writes isNormalUser, and NixOS refuses a block that carries both
+        # ("exactly one of isNormalUser and isSystemUser"). Leave the binding
+        # unclaimed, then it survives whole as a Nix brick.
+        if any(_stmt_attr_name(s) == 'isSystemUser'
+               for s in _split_top_level_stmts(inner)):
+            continue
+
         consumed.add(user_key)
+        rest_nix = _user_rest_text(inner)
 
         def _ue(pattern, text=inner):
             m = re.search(pattern, text)
@@ -517,6 +574,7 @@ def _extract_fields(kv: 'dict[str, str]', clean: str) -> 'tuple[dict, set[str]]'
             if m:
                 groups = re.findall(r'"(\w+)"', m.group(1))
                 if groups: r['user_groups'] = groups
+            if rest_nix: r['user_extra_nix'] = rest_nix
         else:
             eu: dict = {'username': uname}
             v = _ue(r'description\s*=\s*"([^"]*)"')
@@ -531,6 +589,7 @@ def _extract_fields(kv: 'dict[str, str]', clean: str) -> 'tuple[dict, set[str]]'
             if m:
                 groups = re.findall(r'"(\w+)"', m.group(1))
                 if groups: eu['groups'] = groups
+            if rest_nix: eu['extra_nix'] = rest_nix
             extra_users.append(eu)
 
     if extra_users:

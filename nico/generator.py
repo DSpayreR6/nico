@@ -325,6 +325,34 @@ def _sec_audio(data: dict, brix: dict, *, gate_32bit: bool) -> "list[str]":
     return []
 
 
+# Sub-attributes this module writes inside a users.users.<name> block.
+# Single source of truth: the importer keeps these out of the free-text field
+# (extra_nix) and the validator reports them when typed in by hand. A field
+# written here but missing from this set would end up defined twice, which Nix
+# rejects with "attribute … already defined".
+USER_BLOCK_FIELDS = frozenset({
+    "isNormalUser",
+    "description",
+    "uid",
+    "initialPassword",
+    "extraGroups",
+    "shell",
+})
+
+
+def _extra_nix_lines(extra_nix: str, indent: str = "    ") -> "list[str]":
+    """Re-indent free-text Nix lines to the block's level.
+
+    Only the common leading whitespace is removed, so the relative shape of
+    multi-line statements (lists, nested sets) survives.
+    """
+    raw = [ln for ln in extra_nix.splitlines() if ln.strip()]
+    if not raw:
+        return []
+    common = min(len(ln) - len(ln.lstrip()) for ln in raw)
+    return [f"{indent}{ln[common:].rstrip()}" for ln in raw]
+
+
 def _user_block_lines(name: str, description: str, uid: str, password: str,
                       groups: "list[str]", shell: str, extra_nix: str) -> "list[str]":
     groups_str = " ".join(f'"{nix_esc(g)}"' for g in groups)
@@ -339,9 +367,7 @@ def _user_block_lines(name: str, description: str, uid: str, password: str,
     if shell != "bash":
         shell_pkg = _SHELL_PKGS.get(shell, shell)
         lines += [f"    shell = pkgs.{shell_pkg};"]
-    for ln in extra_nix.splitlines():
-        if ln.strip():
-            lines += [f"    {ln.strip()}"]
+    lines += _extra_nix_lines(extra_nix)
     lines += ["  };"]
     return lines
 

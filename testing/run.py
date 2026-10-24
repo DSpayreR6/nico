@@ -177,6 +177,12 @@ def _compare_managed_fields(original: Path, result: Path, case: CaseResult) -> N
         if key in ignored or key.rsplit(".", 1)[-1] in ignored:
             continue
         if key not in actual:
+            # An option that is empty in the original (e.g. a systemPackages
+            # list with every entry commented out) is not written back at all –
+            # NiCo omits empty options on purpose. Nothing is lost, so this is
+            # not a regression.
+            if expected_value in ([], {}, "", None):
+                continue
             case.fail(f"missing managed field after roundtrip: {key}")
             continue
         if _normalize(actual[key]) != _normalize(expected_value):

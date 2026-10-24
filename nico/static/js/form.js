@@ -642,12 +642,9 @@ function populateFormFromData(data) {
   if ('keyboard_console'   in data) v('keyboard_console',    data.keyboard_console);
   if ('desktop_environment' in data) v('desktop_environment', data.desktop_environment);
   if ('autologin_user'     in data) v('autologin_user',      data.autologin_user);
-  if ('username'           in data) v('username',            data.username);
-  if ('user_description'   in data) v('user_description',    data.user_description);
-  if ('user_uid'           in data) v('user_uid',            data.user_uid);
-  if ('user_groups_extra'  in data) v('user_groups_extra',   data.user_groups_extra);
-  if ('user_shell'         in data) v('user_shell',          data.user_shell || 'bash');
-  if ('user_extra_nix'     in data) v('user_extra_nix',      data.user_extra_nix);
+  // Nutzerfelder stehen in den Nutzerkarten (users.js, Klassen statt Ids) und
+  // werden unten über renderAllUsers() gefüllt – Einzelfelder gibt es dafür
+  // nicht mehr.
   if ('nix_gc_frequency'   in data) v('nix_gc_frequency',    data.nix_gc_frequency);
   if ('nix_gc_age'         in data) v('nix_gc_age',          data.nix_gc_age);
   if ('fonts_extra'        in data) v('fonts_extra',         data.fonts_extra);
