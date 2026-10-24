@@ -42,6 +42,24 @@
 - wenn funktionen geändert, hinzugefügt oder gelöscht wurden, nachfragen ob changelog angepasst werden soll
 - Code-Revision (Abschnitt in manifest.md) nur durch Fable oder stärkere Modelle; kleinere Modelle prüfen oder revidieren dort nichts
 
+**Branches (Entscheidung 2026-10-24, Details in vorgaben.txt):**
+- `main` ist der veröffentlichte Stand und ändert sich **nur** bei einem Release.
+  `nix run github:DSpayreR6/nico` ohne Ref nimmt den Standard-Branch – jeder Push
+  auf `main` geht sofort an alle Nutzer, auch an `nix profile upgrade` und an
+  Configs mit `inputs.nico.url`.
+- **Niemals direkt auf `main` committen.** Vor jeder Änderung Branch prüfen
+  (`git branch --show-current`); steht dort `main`, zuerst nach `dev` wechseln.
+- Gearbeitet wird auf `dev`, dort auch unfertige Zwischenstände pushen.
+  Version auf `dev` ist die kommende mit `-dev` (z. B. `0.14.0-dev`).
+- **Nach jedem Commit** daran erinnern, dass `main` nicht mitwandert, und dazu
+  eine klare Empfehlung geben, ob ein Release an dieser Stelle sinnvoll ist –
+  nicht nur die Frage stellen.
+  - Dafür: ein Fehler ist behoben, der Nutzer aktiv trifft (Datenverlust,
+    Config baut nicht, Sicherheitseinstellung geht verloren); der Stand ist
+    getestet, möglichst in der VM; der Changelog-Block ist vollständig.
+  - Dagegen: die Arbeit steckt mitten in einer Serie; es fehlen Tests, der
+    VM-Durchlauf oder Übersetzungen; es betrifft nur Tests, Doku oder Aufräumen.
+
 **Mehrsprachigkeit:**
 - Geplante Sprachen: de, en, es, fr, ja, ru, zh
 - Neue Sprache = neue `.json` in `nico/static/lang/` → erscheint automatisch (`/api/langs` scannt das Verzeichnis)
