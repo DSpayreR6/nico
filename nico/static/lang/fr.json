@@ -460,6 +460,7 @@
   "errors.ERR_SYSTEM_PATH": "Accès au répertoire système non autorisé.",
   "errors.ERR_NOT_SETUP": "NiCo n'est pas encore configuré.",
   "errors.ERR_SWITCH_RUNNING": "L'activation précédente du système est toujours en cours. Une deuxième reconstruction échouerait, car l'activation ne peut pas s'exécuter deux fois en même temps. Veuillez attendre qu'elle se termine.",
+  "errors.ERR_DUPLICATE_ATTR": "Le même réglage apparaît deux fois dans le fichier, le plus souvent parce qu'un brick Nix définit ce que le formulaire écrit aussi. Nix le refuse, donc rien n'a été écrit. Retirez la ligne du brick.",
   "errors.ERR_CSRF": "Jeton CSRF invalide.",
   "errors.ERR_DIR_CREATE": "Impossible de créer le répertoire.",
   "errors.ERR_NOT_A_DIR": "Le chemin n'est pas un répertoire.",

@@ -573,6 +573,7 @@
   "errors.ERR_SYSTEM_PATH":      "Zugriff auf Systemverzeichnis nicht erlaubt.",
   "errors.ERR_NOT_SETUP":        "NiCo ist noch nicht eingerichtet.",
   "errors.ERR_SWITCH_RUNNING": "Die vorige Systemumstellung läuft noch. Ein zweiter Rebuild würde daran scheitern, dass die Umstellung nicht zweimal gleichzeitig laufen kann. Bitte warten, bis sie fertig ist.",
+  "errors.ERR_DUPLICATE_ATTR": "Dieselbe Einstellung steht zweimal in der Datei – meist, weil ein Nix-Brick etwas setzt, das auch das Formular schreibt. Nix lehnt das ab, deshalb wurde nichts geschrieben. Bitte die Zeile im Brick entfernen.",
   "errors.ERR_CSRF":             "Ungültiger CSRF-Token.",
   "errors.ERR_DIR_CREATE":       "Verzeichnis konnte nicht angelegt werden.",
   "errors.ERR_NOT_A_DIR":        "Der Pfad ist kein Verzeichnis.",

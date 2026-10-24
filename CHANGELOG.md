@@ -11,8 +11,12 @@
 - The setup dialog says that a new directory is created by simply typing its path; the directory browser only ever offered existing ones, and the question "where is your config directory" implied one had to exist
 - The same hint when changing the config path in the admin panel, and in the directory browser when it is opened from setup
 - New validator rule: a line in a user's extra Nix field that sets an attribute NiCo already writes from the form – Nix refuses an attribute defined twice, and the build stops at evaluation
+- Saving now refuses to write a file in which the same attribute is defined twice, naming it, instead of leaving a config behind that does not build
 
 ### Bug Fixes
+
+- Blocks NiCo only partly understands lost their remaining fields on the first save. Measured on a realistic config: 15 of 18 neighbouring fields, among them `services.openssh.settings.PasswordAuthentication = false`, `ports`, `services.printing.drivers`, `services.xserver.xkb.options`, `nix.settings.substituters` and `boot.loader.systemd-boot.editor` – several of them security settings whose loss goes unnoticed. Whatever NiCo does not write back is kept as a Nix brick now, filed under the section it belongs to
+- Statement boundaries were found by counting braces and semicolons without regard for strings and comments, so a `{` or `;` inside either tore statements apart – polybar configs in `'' … ''` blocks are full of both
 
 - Everything in a `users.users.<name>` block NiCo has no form field for was dropped on the first save, without a word: `packages` (every graphical install starts with `kdePackages.kate` there), `hashedPassword`, `openssh.authorizedKeys.keys`, `home`, `createHome`, `linger`. Such lines are kept in the user's extra Nix field now
 - A user declared with `isSystemUser` is no longer pulled into the form at all: the generator always writes `isNormalUser`, which NixOS refuses alongside it. The block survives untouched as a Nix brick instead

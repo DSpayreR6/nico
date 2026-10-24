@@ -876,7 +876,21 @@ def write_config_files(
     if conf_file.exists():
         data["brick_blocks"] = extract_brick_blocks(conf_file.read_text(encoding="utf-8"))
 
-    conf_file.write_text(generator.generate_configuration_nix(data), encoding="utf-8")
+    # Refuse to write a file Nix would reject. The same leaf defined twice –
+    # typically a brick carrying an attribute the form writes as well – stops
+    # the build with "attribute … already defined". Writing it anyway would
+    # leave the config unbuildable, so this is the one place that blocks
+    # (unlike nested bricks below, which a form cannot fix).
+    generated = generator.generate_configuration_nix(data)
+    duplicates = importer.duplicate_leaf_paths(generated)
+    if duplicates:
+        return {
+            "success":    False,
+            "error":      "ERR_DUPLICATE_ATTR",
+            "duplicates": duplicates[:10],
+        }
+
+    conf_file.write_text(generated, encoding="utf-8")
     written = ["configuration.nix"]
 
     if data.get("flakes"):

@@ -79,6 +79,52 @@ SECTION_ORDER: list[str] = ["HEAD",
                             "FSYS", "HOME",
                             "TAIL"]
 
+# Which section a NixOS attribute path belongs to, most specific prefix first.
+# Used to file rescued bricks where a user would look for them; anything not
+# listed here lands in HEAD.
+SECTION_BY_ATTRPATH: tuple[tuple[str, str], ...] = (
+    ("services.xserver.xkb",        "I18N"),
+    ("services.pipewire",           "AUDI"),
+    ("services.pulseaudio",         "AUDI"),
+    ("security.rtkit",              "AUDI"),
+    ("services.displayManager",     "DESK"),
+    ("services.desktopManager",     "DESK"),
+    ("services.xserver",            "DESK"),
+    ("services.snapper",            "FSYS"),
+    ("services.btrfs",              "FSYS"),
+    ("services.smartd",             "FSYS"),
+    ("services.flatpak",            "PROG"),
+    ("services.openssh",            "NETW"),
+    ("boot.tmp",                    "FSYS"),
+    ("boot",                        "BOOT"),
+    ("i18n",                        "I18N"),
+    ("console",                     "I18N"),
+    ("time",                        "I18N"),
+    ("networking",                  "NETW"),
+    ("users",                       "USER"),
+    ("fonts",                       "FONT"),
+    ("programs",                    "PROG"),
+    ("environment",                 "PROG"),
+    ("nixpkgs",                     "NIXS"),
+    ("nix",                         "NIXS"),
+    ("hardware",                    "HDWR"),
+    ("virtualisation",              "VIRT"),
+    ("fileSystems",                 "FSYS"),
+    ("swapDevices",                 "FSYS"),
+    ("system",                      "SYST"),
+    ("services",                    "SERV"),
+)
+
+
+def section_for_attrpath(path: str) -> str:
+    """Section a NixOS attribute path belongs to, HEAD when nothing matches."""
+    clean = path.strip().strip('"')
+    for prefix, section in SECTION_BY_ATTRPATH:
+        if clean == prefix or clean.startswith(prefix + "."):
+            return section
+    return "HEAD"
+
+
 # Zone sections: bricks are injected immediately when their section marker is
 # encountered in the generated file, rather than being flushed at the next
 # regular section boundary.  Used for injection points inside nested blocks

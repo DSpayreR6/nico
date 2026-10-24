@@ -135,6 +135,7 @@ def register(app, ctx):
         cfg_path = dst / "configuration.nix"
         recognized: dict = {}
         rest_brix = ""
+        content = ""
         if cfg_path.is_file():
             try:
                 content   = cfg_path.read_text(encoding="utf-8", errors="replace")
@@ -143,7 +144,7 @@ def register(app, ctx):
             except OSError:
                 pass
 
-        data = _apply_import_result(nixos_dir, recognized, rest_brix)
+        data = _apply_import_result(nixos_dir, recognized, rest_brix, content)
         _reimport_flake(nixos_dir, data)
 
         return jsonify({
@@ -317,7 +318,7 @@ def register(app, ctx):
             return jsonify({"error": "ERR_NO_PATH"}), 400
 
         # ── Common: merge into nico.json ─────────────────────────────────────
-        data = _apply_import_result(nixos_dir, recognized, rest_brix)
+        data = _apply_import_result(nixos_dir, recognized, rest_brix, content)
 
         # Flake.nix: parse → panel-Felder + Brix, dann sauber regenerieren
         if any(Path(f).name == "flake.nix" for f in files_copied):
@@ -431,7 +432,7 @@ def register(app, ctx):
         except Exception:
             pass  # source might not exist or be readable
 
-        _apply_import_result(nixos_dir, recognized, rest_brix)
+        _apply_import_result(nixos_dir, recognized, rest_brix, content)
 
         return jsonify({
             "success":      True,
@@ -486,11 +487,13 @@ def register(app, ctx):
                 "text":    format_brick("HEAD", order, brick_name, rest_brix.strip()),
             }
             data["brick_blocks"] = blocks
+        rescued = importer.rescue_into_bricks(data, content)
         config_manager.save_config(nixos_dir, data)
 
         return jsonify({
             "ok":        True,
             "recognized": list(recognized.keys()),
-            "brix_added": bool(rest_brix.strip()),
+            "brix_added": bool(rest_brix.strip()) or bool(rescued),
+            "rescued":   rescued,
         })
 

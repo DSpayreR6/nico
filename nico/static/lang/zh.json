@@ -460,6 +460,7 @@
   "errors.ERR_SYSTEM_PATH": "不允许访问系统目录。",
   "errors.ERR_NOT_SETUP": "NiCo 尚未设置。",
   "errors.ERR_SWITCH_RUNNING": "上一次系统切换仍在进行中。切换无法同时执行两次，因此第二次重建会失败。请等待其完成。",
+  "errors.ERR_DUPLICATE_ATTR": "同一项设置在文件中出现了两次，通常是某个 Nix 积木设置了表单也会写入的内容。Nix 不接受这种情况，因此未写入任何内容。请从积木中删除该行。",
   "errors.ERR_CSRF": "无效的 CSRF 令牌。",
   "errors.ERR_DIR_CREATE": "无法创建目录。",
   "errors.ERR_NOT_A_DIR": "该路径不是目录。",

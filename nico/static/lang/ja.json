@@ -460,6 +460,7 @@
   "errors.ERR_SYSTEM_PATH": "システムディレクトリへのアクセスは許可されていません。",
   "errors.ERR_NOT_SETUP": "NiCoはまだ設定されていません。",
   "errors.ERR_SWITCH_RUNNING": "前回のシステム切り替えがまだ実行中です。切り替えは同時に二度実行できないため、二つ目のリビルドは失敗します。完了するまでお待ちください。",
+  "errors.ERR_DUPLICATE_ATTR": "同じ設定がファイル内に二度あります。多くは Nix ブリックがフォームと同じ項目を設定している場合です。Nix はこれを受け付けないため、何も書き込みませんでした。ブリックから該当行を削除してください。",
   "errors.ERR_CSRF": "CSRFトークンが無効です。",
   "errors.ERR_DIR_CREATE": "ディレクトリを作成できませんでした。",
   "errors.ERR_NOT_A_DIR": "パスはディレクトリではありません。",

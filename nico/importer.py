@@ -38,21 +38,73 @@ def _strip_nix_comments(text: str) -> str:
     return text
 
 
+def _mask_literals(content: str) -> str:
+    """Blank out comments and string bodies, keeping length and line breaks.
+
+    Statement boundaries are found by counting braces and semicolons. A '{' or
+    ';' inside a string or a comment shifts that count and tears statements
+    apart in the middle – polybar configs in '' … '' blocks are full of both.
+    Masking first keeps the arithmetic honest; the text itself is always cut
+    from the original.
+    """
+    out = list(content)
+    i, n = 0, len(content)
+    while i < n:
+        ch = content[i]
+        if ch == '#':
+            while i < n and content[i] != '\n':
+                out[i] = ' '
+                i += 1
+        elif content.startswith("''", i):
+            out[i] = out[i + 1] = ' '
+            i += 2
+            while i < n and not content.startswith("''", i):
+                if content[i] != '\n':
+                    out[i] = ' '
+                i += 1
+            if i < n:
+                out[i] = out[i + 1] = ' '
+                i += 2
+        elif ch == '"':
+            out[i] = ' '
+            i += 1
+            while i < n and content[i] != '"':
+                if content[i] == '\\':
+                    out[i] = ' '
+                    i += 1
+                    if i < n and content[i] != '\n':
+                        out[i] = ' '
+                        i += 1
+                    continue
+                if content[i] != '\n':
+                    out[i] = ' '
+                i += 1
+            if i < n:
+                out[i] = ' '
+                i += 1
+        else:
+            i += 1
+    return ''.join(out)
+
+
 def _split_top_level_stmts(content: str) -> list[str]:
     # A depth-0 semicolon usually ends a statement – except when it closes a
     # pending 'with expr;' / 'assert cond;' inside the current value
     # (e.g. environment.systemPackages = with pkgs; [ ... ];).
+    # Boundaries are computed on a masked copy (strings/comments blanked), the
+    # text is cut from the original.
+    masked = _mask_literals(content)
     statements, depth, start, pending = [], 0, 0, 0
     i, n = 0, len(content)
     while i < n:
-        ch = content[i]
+        ch = masked[i]
         if ch in ('{', '[', '('):
             depth += 1
         elif ch in ('}', ']', ')'):
             depth -= 1
         elif depth == 0 and ch in ('w', 'a'):
-            m = re.match(r'(?:with|assert)\b', content[i:])
-            if m and (i == 0 or not (content[i - 1].isalnum() or content[i - 1] in '._-')):
+            m = re.match(r'(?:with|assert)\b', masked[i:])
+            if m and (i == 0 or not (masked[i - 1].isalnum() or masked[i - 1] in '._-')):
                 pending += 1
                 i += m.end()
                 continue
@@ -107,6 +159,210 @@ def _dedent_stmt(stmt: str) -> str:
     widths = [len(l) - len(l.lstrip()) for l in tail if l.strip()]
     cut    = min(widths) if widths else 0
     return '\n'.join([lines[0].strip()] + [l[cut:].rstrip() for l in tail]).rstrip()
+
+
+def _split_stmt(stmt: str) -> 'tuple[str, str]':
+    """Split a statement into (attribute path, value text).
+
+    Leading comment lines belong to the statement that follows them and are
+    dropped first – a comment may well contain an '=' and would otherwise be
+    mistaken for the assignment.
+    """
+    from .nix_parser import normalize_attrpath
+
+    lines = stmt.splitlines()
+    start = 0
+    while start < len(lines) and (not lines[start].strip()
+                                  or lines[start].strip().startswith('#')):
+        start += 1
+    body = '\n'.join(lines[start:])
+    head, sep, value = body.partition('=')
+    if not sep:
+        return '', ''
+    return normalize_attrpath(head.strip()), value.rstrip().rstrip(';')
+
+
+def _stmt_path(stmt: str) -> str:
+    """Attribute path on the left of a statement's '='."""
+    return _split_stmt(stmt)[0]
+
+
+def _attrset_inner(value: str) -> 'str | None':
+    """Inner text of an attribute-set value, None for anything else.
+
+    Lists, functions, `with …; [ … ]` and strings must stay whole – splitting
+    them would invent attribute paths that do not exist.
+    """
+    v = value.strip()
+    if not (v.startswith('{') and v.endswith('}')):
+        return None
+    return v[1:-1]
+
+
+def _leaf_paths(prefix: str, stmt: str) -> 'set[str]':
+    """Every attribute path a statement defines, fully qualified.
+
+    `services.openssh = { enable = true; settings.X = false; }` with an empty
+    prefix yields {services.openssh.enable, services.openssh.settings.X}.
+    """
+    path, value = _split_stmt(stmt)
+    if not path:
+        return set()
+    full = f'{prefix}.{path}' if prefix else path
+    inner = _attrset_inner(value)
+    if inner is None:
+        return {full}
+    leaves: set[str] = set()
+    for sub in _split_top_level_stmts(inner):
+        leaves |= _leaf_paths(full, sub)
+    return leaves or {full}
+
+
+def content_leaf_paths(content: str) -> 'set[str]':
+    """Every attribute path defined in a .nix file, brick contents included."""
+    return set(content_leaf_path_list(content))
+
+
+def content_leaf_path_list(content: str) -> 'list[str]':
+    """Like content_leaf_paths, but keeps repetitions so they can be counted."""
+    body = _strip_module_head(content)
+    paths: list[str] = []
+    for stmt in _split_top_level_stmts(body):
+        paths.extend(sorted(_leaf_paths('', stmt)))
+    return paths
+
+
+def duplicate_leaf_paths(content: str) -> 'list[str]':
+    """Attribute paths defined more than once in the same file.
+
+    Nix merges two definitions of the same *path* (`a.b = {x;}` next to
+    `a.b = {y;}`) but refuses the same *leaf* twice – it stops with
+    "attribute … already defined" and the config does not build. Brick bodies
+    count here: the whole point is to catch a rescued brick colliding with what
+    the form writes.
+    """
+    counts: dict[str, int] = {}
+    for path in content_leaf_path_list(content):
+        counts[path] = counts.get(path, 0) + 1
+    return sorted(p for p, n in counts.items() if n > 1)
+
+
+def _strip_module_head(content: str) -> str:
+    """Drop the `{ config, pkgs, ... }:` head and the outermost braces.
+
+    Brick markers are comments and stay in place: their bodies are ordinary Nix
+    and must count as written, otherwise already rescued text gets rescued a
+    second time.
+    """
+    text = content
+    m = re.search(r'^\s*\{[^}]*\}\s*:\s*', text, re.MULTILINE)
+    if m:
+        text = text[m.end():]
+    text = text.strip()
+    if text.startswith('{') and text.endswith('}'):
+        text = text[1:-1]
+    return text
+
+
+def _rescue_statements(prefix: str, inner: str, written: 'set[str]') -> 'list[str]':
+    """Statements of a block that NiCo does not write back anywhere.
+
+    Walks down only where a block is partly written: a statement whose paths
+    are all missing from `written` is rescued whole, one that is fully written
+    is dropped, and a mixed one is split a level deeper.
+    """
+    out: list[str] = []
+    for stmt in _split_top_level_stmts(inner):
+        leaves = _leaf_paths(prefix, stmt)
+        if not leaves:
+            continue
+        missing = leaves - written
+        if not missing:
+            continue                      # NiCo writes all of it
+        if missing == leaves:
+            out.append(_dedent_stmt(stmt))  # none of it survives → keep as is
+            continue
+        # Partly written: descend, otherwise the written half would be
+        # defined twice and Nix aborts with "already defined".
+        path, value = _split_stmt(stmt)
+        sub_inner = _attrset_inner(value)
+        full = f'{prefix}.{path}' if prefix else path
+        if sub_inner is None:
+            continue                      # leaf is written, nothing to rescue
+        deeper = _rescue_statements(full, sub_inner, written)
+        if deeper:
+            body = '\n'.join(f'  {ln}' for text in deeper for ln in text.splitlines())
+            out.append(f'{path} = {{\n{body}\n}};')
+    return out
+
+
+def rescue_lost_bindings(original: str, data: dict) -> 'list[tuple[str, str]]':
+    """(section, statement) pairs for everything NiCo would not write back.
+
+    Measured against the generator's actual output instead of a hand-kept list
+    of known fields: a list would go stale the moment a field is added, and
+    every stale entry produces a duplicate attribute, which Nix rejects.
+    Brick contents are part of that output, so already rescued text is not
+    rescued twice.
+    """
+    from . import generator as _gen
+    from .brix import section_for_attrpath
+
+    try:
+        written = content_leaf_paths(_gen.generate_configuration_nix(data))
+    except Exception:
+        return []                         # never let the rescue break an import
+
+    body = _strip_module_head(original)
+    rescued: list[tuple[str, str]] = []
+    for stmt in _split_top_level_stmts(body):
+        leaves = _leaf_paths('', stmt)
+        if not leaves or not (leaves - written):
+            continue
+        if leaves - written == leaves:
+            continue        # untouched by NiCo – build_rest_brix handles it
+        path, value = _split_stmt(stmt)
+        sub_inner = _attrset_inner(value)
+        if sub_inner is None:
+            continue
+        deeper = _rescue_statements(path, sub_inner, written)
+        if deeper:
+            inner_body = '\n'.join(f'  {ln}' for text in deeper for ln in text.splitlines())
+            rescued.append((section_for_attrpath(path),
+                            f'{path} = {{\n{inner_body}\n}};'))
+
+    return rescued
+
+
+def rescue_into_bricks(data: dict, original: str) -> 'list[str]':
+    """Put everything NiCo would drop from `original` into data['brick_blocks'].
+
+    Returns the names of the bricks created, so callers can report what was
+    rescued instead of leaving the user guessing.
+    """
+    from .brix import format_brick, next_order_for_section
+
+    pairs = rescue_lost_bindings(original, data)
+    if not pairs:
+        return []
+
+    blocks = data.get("brick_blocks", {}) or {}
+    names: list[str] = []
+    for section, text in pairs:
+        base = _brix_name_from_stmt(text)
+        name, n = base, 2
+        while name in blocks:
+            name = f'{base}-{n}'
+            n += 1
+        order = next_order_for_section(blocks, section)
+        blocks[name] = {
+            "section": section,
+            "order":   order,
+            "text":    format_brick(section, order, name, text),
+        }
+        names.append(name)
+    data["brick_blocks"] = blocks
+    return names
 
 
 def _user_rest_text(inner: str) -> str:

@@ -146,9 +146,16 @@ def create_app() -> Flask:
         except ValueError:
             return False
 
-    def _apply_import_result(nixos_dir: str, recognized: dict, rest_brix: str) -> dict:
+    def _apply_import_result(nixos_dir: str, recognized: dict, rest_brix: str,
+                             original_content: str = "") -> dict:
         """Merge parsed import data into nico.json: recognized fields, rest
-        content as bricks, hardware_config flag. Saves and returns data."""
+        content as bricks, hardware_config flag. Saves and returns data.
+
+        original_content: the imported file as it was on disk. Given it, every
+        attribute NiCo would not write back is rescued as a brick – blocks it
+        only partly understands (services.*, boot.*, nix.*) would otherwise
+        lose their remaining fields silently on the first save.
+        """
         data = config_manager.load_config(nixos_dir) or {}
         for key, val in recognized.items():
             data[key] = val
@@ -157,6 +164,8 @@ def create_app() -> Flask:
             rest_blocks = brix_content_to_bricks(rest_brix, section="Start", existing_blocks=blocks)
             blocks.update(rest_blocks)
             data["brick_blocks"] = blocks
+        if original_content.strip():
+            importer.rescue_into_bricks(data, original_content)
         if (Path(nixos_dir) / "hardware-configuration.nix").exists():
             data["hardware_config"] = True
         config_manager.save_config(nixos_dir, data)

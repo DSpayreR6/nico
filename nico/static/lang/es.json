@@ -460,6 +460,7 @@
   "errors.ERR_SYSTEM_PATH": "Acceso al directorio del sistema no permitido.",
   "errors.ERR_NOT_SETUP": "NiCo aún no está configurado.",
   "errors.ERR_SWITCH_RUNNING": "La activación anterior del sistema todavía se está ejecutando. Una segunda reconstrucción fallaría, porque la activación no puede ejecutarse dos veces a la vez. Espera a que termine.",
+  "errors.ERR_DUPLICATE_ATTR": "El mismo ajuste aparece dos veces en el archivo, normalmente porque un brick de Nix define algo que también escribe el formulario. Nix lo rechaza, así que no se escribió nada. Quita la línea del brick.",
   "errors.ERR_CSRF": "Token CSRF inválido.",
   "errors.ERR_DIR_CREATE": "No se pudo crear el directorio.",
   "errors.ERR_NOT_A_DIR": "La ruta no es un directorio.",
