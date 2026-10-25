@@ -82,6 +82,29 @@ ALL_RULES: list[Rule] = [
          "Meldet Zeilen im Textfeld eines Nutzers, die ein Attribut setzen, das NiCo "
          "schon aus dem Formular schreibt – Nix lehnt doppelte Attribute ab.",
          "error"),
+    Rule("user_no_password",
+         "Anmeldung möglich",
+         "Prüft ob jeder Benutzer, den der Rebuild neu anlegt, ein Passwort oder einen "
+         "SSH-Schlüssel hat – ohne beides legt NixOS das Konto gesperrt an.",
+         "error", host_local=True),
+    Rule("user_uid_duplicate",
+         "uid doppelt vergeben",
+         "Meldet dieselbe uid bei mehreren Benutzern in der Config.",
+         "error"),
+    Rule("user_uid_system",
+         "uid passt zum Rechner",
+         "Vergleicht die uid-Angaben mit den Benutzern dieses Rechners: gewechselte uid "
+         "oder eine uid, die schon jemand anderem gehört.",
+         "error", host_local=True),
+    Rule("group_gid_duplicate",
+         "gid doppelt vergeben",
+         "Meldet dieselbe gid bei mehreren Gruppen in der Config.",
+         "error"),
+    Rule("group_gid_system",
+         "gid passt zum Rechner",
+         "Vergleicht die gid-Angaben mit den Gruppen dieses Rechners: gewechselte gid "
+         "oder eine gid, die schon einer anderen Gruppe gehört.",
+         "error", host_local=True),
     Rule("hardware_matches",
          "Hardware passt zum System",
          "Warnt wenn die Hardware-Config Disk-UUIDs enthält die auf diesem System nicht existieren.",
@@ -124,12 +147,30 @@ ALL_RULES: list[Rule] = [
          "der zur nixpkgs-Version übereinstimmt.",
          "error", flake_only=True),
     Rule("state_version_match",
-         "stateVersion passt zu nixpkgs",
-         "Prüft ob system.stateVersion in den NixOS-Configs zur nixpkgs-Release-Version passt.",
+         "System-State-Version nicht neuer als nixpkgs",
+         "Meldet eine system.stateVersion, die neuer ist als das gebaute nixpkgs-Release – "
+         "mit einem Release, das es dort noch nicht gibt, kann niemand installiert haben.",
+         "warning", flake_only=True),
+    Rule("state_version_future",
+         "System-State-Version nicht aus der Zukunft",
+         "Meldet eine system.stateVersion, die neuer ist als das Release, das dieser Rechner "
+         "läuft.",
+         "warning", host_local=True),
+    Rule("state_version_missing",
+         "System-State-Version gesetzt",
+         "Meldet eine Config ohne system.stateVersion – NixOS nimmt dann das gerade gebaute "
+         "Release, was für jede älter installierte Maschine falsch ist.",
+         "warning"),
+    Rule("state_version_per_host",
+         "System-State-Version pro Host",
+         "Meldet eine system.stateVersion in der gemeinsamen Basis-Config einer Flake mit "
+         "mehreren Hosts – jede Maschine wurde zu ihrer eigenen Zeit installiert.",
          "warning", flake_only=True),
     Rule("hm_state_version_match",
-         "HM stateVersion konsistent",
-         "Prüft ob home.stateVersion in HM-Configs mit system.stateVersion übereinstimmt.",
+         "Home-State-Version passt zum HM-Zweig",
+         "Meldet eine home.stateVersion, die neuer ist als der verwendete "
+         "Home-Manager-Zweig. Mit system.stateVersion wird sie nicht verglichen – "
+         "die beiden zählen verschiedene Dinge.",
          "warning"),
     Rule("hm_duplicate_args",
          "Doppelte HM-Argumente",
@@ -691,6 +732,436 @@ def _rule_user_extra_conflict(nixos_dir: str, config: dict, is_flake: bool,
     return findings
 
 
+# Attributes that give a user a way in. Any single one is enough; none of them
+# means NixOS creates the account locked ("!" in /etc/shadow) – no password is
+# then accepted, not even an empty one, and the machine needs an installer to
+# get back into.
+_RE_USER_LOGIN = re.compile(
+    r'\b(?:hashedPassword|initialPassword|initialHashedPassword|'
+    r'hashedPasswordFile|passwordFile|password)\s*=')
+_RE_USER_SSH_KEY = re.compile(r'authorizedKeys\s*\.\s*key(?:s|Files)\s*=\s*\[[^\]]*"')
+_RE_USER_UID = re.compile(r'\buid\s*=\s*(\d+)')
+_RE_USER_SYSTEM = re.compile(r'\bisSystemUser\s*=\s*true')
+_RE_MUTABLE_USERS_OFF = re.compile(r'users\s*\.\s*mutableUsers\s*=\s*false')
+
+
+def _file_bindings(content: str) -> dict:
+    """attrpath → value text for one file, brick bodies included.
+
+    The same two tracks the importer uses – tree-sitter first, regex fallback –
+    so both see the same bindings. Counting braces by hand is not an option
+    here: a `{` inside a '' … '' string tears the block apart, and user blocks
+    are exactly where such strings turn up (ssh keys, shell aliases).
+
+    Brick bodies are read as well. A freshly imported config keeps everything
+    NiCo does not understand as a Nix brick, and a user block can sit in there.
+    """
+    from . import nix_parser as _np
+    from .importer import _rx_top_level_bindings
+    kv: dict = {}
+    try:
+        parsed = _np.parse(content)
+        if parsed.available:
+            kv = dict(_np.make_kv(parsed))
+    except Exception:
+        kv = {}
+    if not kv:
+        try:
+            kv, _ = _rx_top_level_bindings(content)
+        except Exception:
+            kv = {}
+    bricks = _brick_bodies(content)
+    if bricks.strip():
+        try:
+            brick_kv, _ = _rx_top_level_bindings(bricks)
+            for key, value in brick_kv.items():
+                kv.setdefault(key, value)
+        except Exception:
+            pass
+    return kv
+
+
+def _scan_user_text(entry: dict, text: str) -> None:
+    """Fold one piece of a user block into the facts collected for that user."""
+    if _RE_USER_LOGIN.search(text) or _RE_USER_SSH_KEY.search(text):
+        entry["has_login"] = True
+    if _RE_USER_SYSTEM.search(text):
+        entry["is_system"] = True
+    m = _RE_USER_UID.search(text)
+    if m and entry["uid"] is None:
+        entry["uid"] = int(m.group(1))
+
+
+def _attr_line(content: str, name: str, kind: str = "users") -> int:
+    """Line of the first users.<kind>.<name> mention – for the message only."""
+    m = re.search(r'users\s*\.\s*' + kind + r'\s*\.\s*"?' + re.escape(name) + r'"?',
+                  content)
+    return content[:m.start()].count("\n") + 1 if m else 0
+
+
+def _other_host_dirs(nixos_dir: str, host: str | None) -> set:
+    """Host directories that do not belong to `host`.
+
+    A user declared for another machine says nothing about this one – reporting
+    it would be noise on every multi-host config.
+    """
+    if not host:
+        return set()
+    from . import config_manager as _cm
+    try:
+        cfg_settings = _cm.load_config_settings(nixos_dir)
+    except Exception:
+        return set()
+    hosts_dir = (cfg_settings.get("hosts_dir") or "hosts").strip() or "hosts"
+    root = Path(nixos_dir) / hosts_dir
+    if not root.is_dir():
+        return set()
+    return {d for d in root.iterdir() if d.is_dir() and d.name != host}
+
+
+def _scoped_nix_files(nixos_dir: str, host: str | None = None):
+    """Yield (path, rel, content) for the .nix files that build `host`.
+
+    Other hosts' directories stay out; the root files are always in, that is
+    where a flake config keeps what applies to every host.
+    """
+    base = Path(nixos_dir)
+    skip_dirs = _other_host_dirs(nixos_dir, host)
+    for nix_file in sorted(base.rglob("*.nix")):
+        if ".git" in nix_file.parts:
+            continue
+        if any(d in nix_file.parents for d in skip_dirs):
+            continue
+        try:
+            content = nix_file.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        try:
+            rel = str(nix_file.relative_to(base))
+        except ValueError:
+            rel = nix_file.name
+        yield nix_file, rel, content
+
+
+def _other_host_finding(rule_id: str, host: str, this_host: str) -> Finding:
+    """A host-local rule can only speak for the machine it runs on."""
+    return Finding(
+        rule_id=rule_id,
+        severity="info",
+        message=f'Host "{host}" kann hier nicht geprüft werden – '
+                f'dieser Rechner ist "{this_host}".',
+        message_key="validator.f.host_other", params=[host, this_host],
+        detail="Diese Prüfung liest das laufende System. Führe den Validator "
+               "auf dem betroffenen Rechner erneut aus.",
+        detail_key="validator.d.host_other",
+    )
+
+
+def _declared_users(nixos_dir: str, host: str | None = None) -> dict:
+    """Every users.users.<name> in the config, with what matters for logging in.
+
+    Both spellings are collected: the attrset block NiCo writes and the dotted
+    form (users.users.martin.uid = 1001) a hand-written config may use.
+
+    With a host given, the other hosts' directories stay out: their users
+    belong to another machine. The root files are always read – that is where a
+    flake config keeps what applies to every host.
+    """
+    from . import nix_parser as _np
+    users: dict = {}
+    for _nix_file, rel, content in _scoped_nix_files(nixos_dir, host):
+        for key, value_text in _file_bindings(content).items():
+            parts = key.split(".")
+            if len(parts) < 3 or parts[0] != "users" or parts[1] != "users":
+                continue
+            name = parts[2].strip('"')
+            if not name or name in _EXCL_USERS:
+                continue
+            entry = users.setdefault(name, {
+                "uid": None, "has_login": False, "is_system": False,
+                "file": rel, "line": _attr_line(content, name),
+            })
+            if len(parts) == 3:
+                _scan_user_text(entry, _np.extract_inner_block(value_text) or value_text)
+            else:
+                _scan_user_text(entry, f'{".".join(parts[3:])} = {value_text}')
+    return users
+
+
+def _system_uids() -> dict:
+    """name → uid as the running machine has them (/etc/passwd)."""
+    try:
+        import pwd
+        return {p.pw_name: p.pw_uid for p in pwd.getpwall()}
+    except Exception:
+        return {}
+
+
+_RE_GROUP_GID = re.compile(r'\bgid\s*=\s*(\d+)')
+
+
+def _declared_groups(nixos_dir: str, host: str | None = None) -> dict:
+    """Every users.groups.<name> with a pinned gid, both spellings.
+
+    Groups carry the file permissions, and their gid is the same kind of
+    mutable system state as a uid: NixOS hands it out once and writes it to
+    /etc/group, outside any generation.
+    """
+    from . import nix_parser as _np
+    groups: dict = {}
+    for _nix_file, rel, content in _scoped_nix_files(nixos_dir, host):
+        for key, value_text in _file_bindings(content).items():
+            parts = key.split(".")
+            if len(parts) < 3 or parts[0] != "users" or parts[1] != "groups":
+                continue
+            name = parts[2].strip('"')
+            if not name:
+                continue
+            entry = groups.setdefault(name, {
+                "gid": None, "file": rel,
+                "line": _attr_line(content, name, kind="groups"),
+            })
+            text = ((_np.extract_inner_block(value_text) or value_text)
+                    if len(parts) == 3
+                    else f'{".".join(parts[3:])} = {value_text}')
+            m = _RE_GROUP_GID.search(text)
+            if m and entry["gid"] is None:
+                entry["gid"] = int(m.group(1))
+    return groups
+
+
+def _system_gids() -> dict:
+    """name → gid as the running machine has them (/etc/group)."""
+    try:
+        import grp
+        return {g.gr_name: g.gr_gid for g in grp.getgrall()}
+    except Exception:
+        return {}
+
+
+def _rule_group_gid_duplicate(nixos_dir: str, config: dict, is_flake: bool,
+                              host: str | None = None) -> list[Finding]:
+    """Report the same gid pinned for more than one group."""
+    by_gid: dict = {}
+    for name, info in _declared_groups(nixos_dir, host).items():
+        if info["gid"] is not None:
+            by_gid.setdefault(info["gid"], []).append(name)
+
+    findings = []
+    for gid, names in sorted(by_gid.items()):
+        if len(names) < 2:
+            continue
+        joined = ", ".join(sorted(names))
+        findings.append(Finding(
+            rule_id="group_gid_duplicate",
+            severity="error",
+            message=f"gid {gid} ist für mehrere Gruppen vergeben: {joined}.",
+            message_key="validator.f.group_gid_duplicate", params=[gid, joined],
+            detail="Zwei Gruppen mit derselben gid teilen sich alle "
+                   "Dateirechte: wer in der einen ist, kommt an die Dateien der "
+                   "anderen. Eine der gid-Angaben ändern oder weglassen.",
+            detail_key="validator.d.group_gid_duplicate",
+        ))
+    return findings
+
+
+def _rule_group_gid_system(nixos_dir: str, config: dict, is_flake: bool,
+                           host: str | None = None) -> list[Finding]:
+    """Compare pinned gids with the groups of the running machine.
+
+    Same two accidents as with uids, only one floor down: the gid of an
+    existing group changes and leaves its files behind without a group that
+    reaches them, or the gid already belongs to another group here – which
+    silently widens who may read what.
+    """
+    this_host = running_host()
+    if host and this_host and host != this_host:
+        return [_other_host_finding("group_gid_system", host, this_host)]
+
+    existing = _system_gids()
+    if not existing:
+        return []
+    owner_of = {gid: name for name, gid in existing.items()}
+
+    findings = []
+    for name, info in sorted(_declared_groups(nixos_dir, host).items()):
+        gid = info["gid"]
+        if gid is None:
+            continue
+        here = existing.get(name)
+        if here is not None and here != gid:
+            findings.append(Finding(
+                rule_id="group_gid_system",
+                severity="error",
+                message=f'Gruppe "{name}" hat auf diesem Rechner gid {here}, '
+                        f"die Config verlangt {gid}.",
+                message_key="validator.f.group_gid_changed",
+                params=[name, here, gid],
+                detail=f"Der Rebuild ändert die gid von {here} auf {gid}. "
+                       f'Dateien, die der Gruppe "{name}" gehören, tragen '
+                       f"weiter {here} und werden danach von keiner Gruppe "
+                       f"mehr erreicht.",
+                detail_key="validator.d.group_gid_changed",
+                detail_params=[name, here, gid],
+            ))
+        owner = owner_of.get(gid)
+        if owner and owner != name:
+            findings.append(Finding(
+                rule_id="group_gid_system",
+                severity="error",
+                message=f'gid {gid} für "{name}" gehört auf diesem Rechner '
+                        f'schon der Gruppe "{owner}".',
+                message_key="validator.f.group_gid_taken",
+                params=[gid, name, owner],
+                detail="Zwei Gruppen mit derselben gid teilen sich alle "
+                       "Dateirechte – eine stille Rechteausweitung, die nirgends "
+                       "auffällt. Eine freie gid wählen oder die Angabe "
+                       "weglassen, dann vergibt NixOS selbst eine.",
+                detail_key="validator.d.group_gid_taken",
+            ))
+    return findings
+
+
+def _mutable_users_off(nixos_dir: str) -> bool:
+    """True if any config file sets users.mutableUsers = false."""
+    for nix_file in sorted(Path(nixos_dir).rglob("*.nix")):
+        if ".git" in nix_file.parts:
+            continue
+        try:
+            content = nix_file.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        if _RE_MUTABLE_USERS_OFF.search(content):
+            return True
+    return False
+
+
+def _rule_user_no_password(nixos_dir: str, config: dict, is_flake: bool,
+                           host: str | None = None) -> list[Finding]:
+    """Report a user the rebuild would create without any way to log in.
+
+    Silent for users that already exist on this machine: with mutableUsers at
+    its default their password lives in /etc/shadow, outside the config, and
+    nothing is lost. Unless mutableUsers = false makes the config the only
+    source – then an existing password is dropped too.
+    """
+    users = _declared_users(nixos_dir, host)
+    if not users:
+        return []
+
+    # /etc/passwd is the running machine's. Judging another host by it would
+    # report every user that machine simply does not have.
+    this_host = running_host()
+    if host and this_host and host != this_host:
+        return [_other_host_finding("user_no_password", host, this_host)]
+
+    immutable = _mutable_users_off(nixos_dir)
+    existing = _system_uids()
+
+    findings = []
+    for name, info in sorted(users.items()):
+        if info["is_system"] or info["has_login"]:
+            continue
+        if immutable:
+            detail_key = "validator.d.user_no_password_immutable"
+        elif name not in existing:
+            detail_key = "validator.d.user_no_password"
+        else:
+            continue
+        findings.append(Finding(
+            rule_id="user_no_password",
+            severity="error",
+            message=f'Benutzer "{name}" ({info["file"]} Zeile {info["line"]}) '
+                    f"hat keinen Weg sich anzumelden.",
+            message_key="validator.f.user_no_password",
+            params=[name, info["file"], info["line"]],
+            detail=f'Nach dem Rebuild ist das Konto "{name}" gesperrt. '
+                   "Passwort über das Formular setzen (initialPassword) oder "
+                   "hashedPassword in den weiteren Nix-Zeilen eintragen.",
+            detail_key=detail_key, detail_params=[name],
+        ))
+    return findings
+
+
+def _rule_user_uid_duplicate(nixos_dir: str, config: dict, is_flake: bool,
+                             host: str | None = None) -> list[Finding]:
+    """Report the same uid handed to more than one user."""
+    by_uid: dict = {}
+    for name, info in _declared_users(nixos_dir, host).items():
+        if info["uid"] is not None:
+            by_uid.setdefault(info["uid"], []).append(name)
+
+    findings = []
+    for uid, names in sorted(by_uid.items()):
+        if len(names) < 2:
+            continue
+        joined = ", ".join(sorted(names))
+        findings.append(Finding(
+            rule_id="user_uid_duplicate",
+            severity="error",
+            message=f"uid {uid} ist für mehrere Benutzer vergeben: {joined}.",
+            message_key="validator.f.user_uid_duplicate", params=[uid, joined],
+            detail="Zwei Benutzer mit derselben uid teilen sich alle "
+                   "Dateirechte. Eine der uid-Angaben ändern oder weglassen.",
+            detail_key="validator.d.user_uid_duplicate",
+        ))
+    return findings
+
+
+def _rule_user_uid_system(nixos_dir: str, config: dict, is_flake: bool,
+                          host: str | None = None) -> list[Finding]:
+    """Compare the uid in the config with the users of the running machine.
+
+    Two different accidents, both silent until the next login: the uid of an
+    existing user changes (the home directory keeps the old owner), or the uid
+    already belongs to somebody else here.
+    """
+    this_host = running_host()
+    if host and this_host and host != this_host:
+        return [_other_host_finding("user_uid_system", host, this_host)]
+
+    existing = _system_uids()
+    if not existing:
+        return []
+    owner_of = {uid: name for name, uid in existing.items()}
+
+    findings = []
+    for name, info in sorted(_declared_users(nixos_dir, host).items()):
+        uid = info["uid"]
+        if uid is None:
+            continue
+        here = existing.get(name)
+        if here is not None and here != uid:
+            findings.append(Finding(
+                rule_id="user_uid_system",
+                severity="error",
+                message=f'Benutzer "{name}" hat auf diesem Rechner uid {here}, '
+                        f"die Config verlangt {uid}.",
+                message_key="validator.f.user_uid_changed",
+                params=[name, here, uid],
+                detail="Der Rebuild ändert die uid, das Heimatverzeichnis "
+                       "behält den alten Eigentümer – die Sitzung bricht dann "
+                       "direkt nach der Anmeldung ab.",
+                detail_key="validator.d.user_uid_changed",
+                detail_params=[name, here, uid],
+            ))
+        owner = owner_of.get(uid)
+        if owner and owner != name:
+            findings.append(Finding(
+                rule_id="user_uid_system",
+                severity="error",
+                message=f'uid {uid} für "{name}" gehört auf diesem Rechner '
+                        f'schon "{owner}".',
+                message_key="validator.f.user_uid_taken",
+                params=[uid, name, owner],
+                detail="Zwei Konten mit derselben uid teilen sich alle "
+                       "Dateirechte. Eine freie uid wählen oder die Angabe "
+                       "weglassen – dann vergibt NixOS selbst eine.",
+                detail_key="validator.d.user_uid_taken",
+            ))
+    return findings
+
+
 def _rule_hardware_matches(nixos_dir: str, config: dict, is_flake: bool,
                            host: str | None = None) -> list[Finding]:
     base, _ = _host_paths(nixos_dir, config, host)
@@ -1124,6 +1595,176 @@ def _rule_flake_hm_branch(nixos_dir: str, config: dict, is_flake: bool,
     return findings
 
 
+# ── stateVersion ──────────────────────────────────────────────────────────────
+#
+# system.stateVersion names the release a machine was *installed* with and is
+# never raised afterwards: it keeps the defaults of stateful options at the
+# values the data on disk was written for. home.stateVersion is Home Manager's
+# own marker for the same idea, bound to a home directory instead of a machine.
+# The two count different things and are equal only by coincidence, so none of
+# the rules below compares them with each other.
+
+_RE_SYS_STATE_VERSION = re.compile(r'system\s*\.\s*stateVersion\s*=\s*"([^"]+)"')
+_RE_HM_STATE_VERSION = re.compile(r'home\s*\.\s*stateVersion\s*=\s*"([^"]+)"')
+
+
+def _release_tuple(version: str) -> "tuple | None":
+    """'25.11' → (25, 11). None for anything else (unstable, master, empty)."""
+    m = re.fullmatch(r'(\d+)\.(\d+)', (version or "").strip())
+    return (int(m.group(1)), int(m.group(2))) if m else None
+
+
+def _running_release() -> str:
+    """The release this machine runs, as 'YY.MM' – empty if unreadable."""
+    text = ""
+    try:
+        text = Path("/run/current-system/nixos-version").read_text(encoding="utf-8")
+    except OSError:
+        try:
+            osr = Path("/etc/os-release").read_text(encoding="utf-8")
+            m = re.search(r'^VERSION_ID="?([^"\n]+)', osr, re.M)
+            text = m.group(1) if m else ""
+        except OSError:
+            return ""
+    m = re.match(r'(\d+\.\d+)', text.strip())
+    return m.group(1) if m else ""
+
+
+def _hm_dir_path(nixos_dir: str) -> Path:
+    from . import config_manager as _cm
+    try:
+        name = (_cm.load_config_settings(nixos_dir).get("hm_dir") or "home")
+    except Exception:
+        name = "home"
+    return Path(nixos_dir) / name
+
+
+def _state_version_sites(nixos_dir: str, host: str | None,
+                         home_manager: bool = False) -> list:
+    """(value, rel, line) for every stateVersion of that kind in scope."""
+    hm_dir = _hm_dir_path(nixos_dir)
+    pattern = _RE_HM_STATE_VERSION if home_manager else _RE_SYS_STATE_VERSION
+    sites = []
+    for nix_file, rel, content in _scoped_nix_files(nixos_dir, host):
+        in_hm = hm_dir.exists() and nix_file.is_relative_to(hm_dir)
+        if in_hm != home_manager:
+            continue
+        for i, line in enumerate(content.split("\n"), 1):
+            m = pattern.search(line)
+            if m:
+                sites.append((m.group(1), rel, i))
+    return sites
+
+
+def _rule_state_version_missing(nixos_dir: str, config: dict, is_flake: bool,
+                                host: str | None = None) -> list[Finding]:
+    """Report a config without any system.stateVersion.
+
+    Without it NixOS falls back to the release currently being built – right
+    only for a machine installed with exactly that release, and silently wrong
+    for every older one.
+    """
+    if _state_version_sites(nixos_dir, host):
+        return []
+    # Nothing written yet is the setup case, not a finding.
+    if not any(True for _ in _scoped_nix_files(nixos_dir, host)):
+        return []
+    where = f'hosts/{host}' if host else "configuration.nix"
+    return [Finding(
+        rule_id="state_version_missing",
+        severity="warning",
+        message="system.stateVersion ist nicht gesetzt.",
+        message_key="validator.f.state_version_missing",
+        detail="Ohne den Wert nimmt NixOS das Release, das gerade gebaut wird. "
+               f"Eintragen ist das Release, mit dem diese Maschine installiert "
+               f"wurde ({where}).",
+        detail_key="validator.d.state_version_missing", detail_params=[where],
+    )]
+
+
+def _rule_state_version_future(nixos_dir: str, config: dict, is_flake: bool,
+                               host: str | None = None) -> list[Finding]:
+    """Report a stateVersion newer than the release this machine runs.
+
+    Nobody can have installed with a release that did not exist yet, so such a
+    value is always wrong – the case a fresh VM lands in when it imports a
+    config from a machine that is further along.
+    """
+    this_host = running_host()
+    if host and this_host and host != this_host:
+        return [_other_host_finding("state_version_future", host, this_host)]
+
+    running = _running_release()
+    running_t = _release_tuple(running)
+    if not running_t:
+        return []
+
+    findings = []
+    for value, rel, line in _state_version_sites(nixos_dir, host):
+        value_t = _release_tuple(value)
+        if value_t and value_t > running_t:
+            findings.append(Finding(
+                rule_id="state_version_future",
+                severity="warning",
+                message=f'{rel} Zeile {line}: system.stateVersion "{value}" ist '
+                        f"neuer als das laufende Release {running}.",
+                message_key="validator.f.state_version_future",
+                params=[rel, line, value, running],
+                detail="stateVersion ist das Release, mit dem die Maschine "
+                       "installiert wurde. Ein neuerer Wert kann nicht "
+                       "stimmen – er lässt NixOS neue Vorgaben auf alten "
+                       "Zustand anwenden.",
+                detail_key="validator.d.state_version_future",
+                detail_params=[value, running],
+            ))
+    return findings
+
+
+def _rule_state_version_per_host(nixos_dir: str, config: dict, is_flake: bool,
+                                 host: str | None = None) -> list[Finding]:
+    """Report one shared stateVersion standing in for several machines.
+
+    Each host was installed at its own time, so the value belongs in the host
+    file. In the common base config it claims the same installation date for
+    every machine the flake builds.
+    """
+    flake_path = Path(nixos_dir) / "flake.nix"
+    try:
+        content = flake_path.read_text(encoding="utf-8")
+    except OSError:
+        return []
+    hosts = _flake_defined_hosts(content)
+    if len(hosts) < 2:
+        return []
+
+    from . import config_manager as _cm
+    try:
+        hosts_dir = (_cm.load_config_settings(nixos_dir).get("hosts_dir") or "hosts")
+    except Exception:
+        hosts_dir = "hosts"
+    hosts_dir = hosts_dir.strip().strip("/") or "hosts"
+
+    findings = []
+    for value, rel, line in _state_version_sites(nixos_dir, host):
+        if rel.replace("\\", "/").startswith(f"{hosts_dir}/"):
+            continue
+        names = ", ".join(sorted(hosts))
+        findings.append(Finding(
+            rule_id="state_version_per_host",
+            severity="warning",
+            message=f'{rel} Zeile {line}: system.stateVersion "{value}" gilt so '
+                    f"für alle {len(hosts)} Hosts.",
+            message_key="validator.f.state_version_per_host",
+            params=[rel, line, value, len(hosts)],
+            detail=f"Betroffen: {names}. Jede Maschine wurde zu ihrer eigenen "
+                   f"Zeit installiert, der Wert gehört darum in "
+                   f"{hosts_dir}/<name>/default.nix.",
+            detail_key="validator.d.state_version_per_host",
+            detail_params=[names, hosts_dir],
+        ))
+    return findings
+
+
 def _rule_state_version_match(nixos_dir: str, config: dict, is_flake: bool,
                                host: str | None = None) -> list[Finding]:
     flake_path = Path(nixos_dir) / "flake.nix"
@@ -1138,100 +1779,85 @@ def _rule_state_version_match(nixos_dir: str, config: dict, is_flake: bool,
     if not nixpkgs_url:
         return []
     nixpkgs_version = _parse_nixpkgs_version(nixpkgs_url)
-    if not nixpkgs_version or nixpkgs_version == 'unstable':
+    nixpkgs_t = _release_tuple(nixpkgs_version or "")
+    if not nixpkgs_t:
         return []
 
-    pat = re.compile(r'system\s*\.\s*stateVersion\s*=\s*"([^"]+)"')
+    # Only "newer than" is a defect. A stateVersion *older* than nixpkgs is the
+    # normal state of every machine that has seen an upgrade, and demanding
+    # equality is what dragged this config's value up release by release.
     findings = []
-    base = Path(nixos_dir)
-
-    for nix_file in sorted(base.rglob("*.nix")):
-        if ".git" in nix_file.parts:
+    for state_ver, rel, i in _state_version_sites(nixos_dir, host):
+        state_t = _release_tuple(state_ver)
+        if not state_t or state_t <= nixpkgs_t:
             continue
-        try:
-            file_content = nix_file.read_text(encoding="utf-8")
-        except OSError:
-            continue
-        try:
-            rel = str(nix_file.relative_to(base))
-        except ValueError:
-            rel = nix_file.name
-
-        for i, line in enumerate(file_content.split('\n'), 1):
-            m = pat.search(line)
-            if m:
-                state_ver = m.group(1)
-                if state_ver != nixpkgs_version:
-                    findings.append(Finding(
-                        rule_id="state_version_match",
-                        severity="warning",
-                        message=f"{rel} Zeile {i}: system.stateVersion \"{state_ver}\" ≠ nixpkgs {nixpkgs_version}.", message_key="validator.f.state_version_match", params=[rel, i, state_ver, nixpkgs_version],
-                        detail=(
-                            f"flake.nix Zeile {nixpkgs_line}: nixpkgs → {nixpkgs_url}\n"
-                            f"{rel} Zeile {i}: system.stateVersion = \"{state_ver}\"\n"
-                            f"Erwartet: system.stateVersion = \"{nixpkgs_version}\""
-                        ),
-                        detail_key="validator.d.state_version_match",
-                        detail_params=[nixpkgs_line, nixpkgs_url, rel, i, state_ver, nixpkgs_version],
-                    ))
+        findings.append(Finding(
+            rule_id="state_version_match",
+            severity="warning",
+            message=f'{rel} Zeile {i}: system.stateVersion "{state_ver}" ist neuer '
+                    f"als nixpkgs {nixpkgs_version}.",
+            message_key="validator.f.state_version_match",
+            params=[rel, i, state_ver, nixpkgs_version],
+            detail=(
+                f"flake.nix Zeile {nixpkgs_line}: nixpkgs → {nixpkgs_url}\n"
+                f'{rel} Zeile {i}: system.stateVersion = "{state_ver}"\n'
+                "Mit einem Release installiert, das es im gebauten nixpkgs noch "
+                "nicht gibt – das kann nicht stimmen."
+            ),
+            detail_key="validator.d.state_version_match",
+            detail_params=[nixpkgs_line, nixpkgs_url, rel, i, state_ver],
+        ))
 
     return findings
 
 
 def _rule_hm_state_version_match(nixos_dir: str, config: dict, is_flake: bool,
                                   host: str | None = None) -> list[Finding]:
-    from . import config_manager as _cm
-    cfg_settings = _cm.load_config_settings(nixos_dir)
-    hm_dir_name = cfg_settings.get("hm_dir") or "home"
-    base = Path(nixos_dir)
-    hm_dir = base / hm_dir_name
+    """Report a home.stateVersion newer than the Home Manager branch in use.
 
-    sys_pat = re.compile(r'system\s*\.\s*stateVersion\s*=\s*"([^"]+)"')
-    hm_pat  = re.compile(r'home\s*\.\s*stateVersion\s*=\s*"([^"]+)"')
-
-    system_versions: list[tuple[str, str, int]] = []
-    hm_versions:     list[tuple[str, str, int]] = []
-
-    for nix_file in sorted(base.rglob("*.nix")):
-        if ".git" in nix_file.parts:
-            continue
-        try:
-            file_content = nix_file.read_text(encoding="utf-8")
-        except OSError:
-            continue
-        try:
-            rel = str(nix_file.relative_to(base))
-        except ValueError:
-            rel = nix_file.name
-
-        is_hm = hm_dir.exists() and nix_file.is_relative_to(hm_dir)
-        pat = hm_pat if is_hm else sys_pat
-        target = hm_versions if is_hm else system_versions
-
-        for i, line in enumerate(file_content.split('\n'), 1):
-            m = pat.search(line)
-            if m:
-                target.append((m.group(1), rel, i))
-
-    if not system_versions or not hm_versions:
+    Deliberately *not* compared against system.stateVersion any more: that
+    value marks when the machine was installed, this one when the user's Home
+    Manager state began. Whoever starts Home Manager years after the install
+    has two different and both correct values.
+    """
+    flake_path = Path(nixos_dir) / "flake.nix"
+    try:
+        content = flake_path.read_text(encoding="utf-8")
+    except OSError:
         return []
 
-    sys_ver, sys_rel, sys_line = system_versions[0]
+    hm_url, hm_line = _extract_flake_input_url(content, 'home-manager')
+    if not hm_url:
+        return []
+    hm_ref = _parse_github_ref(hm_url) or ""
+    m = re.match(r'release-(\d+\.\d+)', hm_ref)
+    branch_t = _release_tuple(m.group(1)) if m else None
+    if not branch_t:
+        return []   # master/unstable: no release to compare against
+
     findings = []
-    for hm_ver, hm_rel, hm_line in hm_versions:
-        if hm_ver != sys_ver:
-            findings.append(Finding(
-                rule_id="hm_state_version_match",
-                severity="warning",
-                message=f"{hm_rel} Zeile {hm_line}: home.stateVersion \"{hm_ver}\" ≠ system.stateVersion \"{sys_ver}\".", message_key="validator.f.hm_state_version_match", params=[hm_rel, hm_line, hm_ver, sys_ver],
-                detail=(
-                    f"{sys_rel} Zeile {sys_line}: system.stateVersion = \"{sys_ver}\"\n"
-                    f"{hm_rel} Zeile {hm_line}: home.stateVersion = \"{hm_ver}\"\n"
-                    "Beide Werte müssen identisch sein."
-                ),
-                detail_key="validator.d.hm_state_version_match",
-                detail_params=[sys_rel, sys_line, sys_ver, hm_rel, hm_line, hm_ver],
-            ))
+    for hm_ver, hm_rel, line in _state_version_sites(nixos_dir, host,
+                                                     home_manager=True):
+        hm_t = _release_tuple(hm_ver)
+        if not hm_t or hm_t <= branch_t:
+            continue
+        findings.append(Finding(
+            rule_id="hm_state_version_match",
+            severity="warning",
+            message=f'{hm_rel} Zeile {line}: home.stateVersion "{hm_ver}" ist neuer '
+                    f"als der Home-Manager-Zweig {hm_ref}.",
+            message_key="validator.f.hm_state_version_match",
+            params=[hm_rel, line, hm_ver, hm_ref],
+            detail=(
+                f"flake.nix Zeile {hm_line}: home-manager → {hm_url}\n"
+                f'{hm_rel} Zeile {line}: home.stateVersion = "{hm_ver}"\n'
+                "Der Wert ist das Release, mit dem der Home-Manager-Zustand "
+                "dieses Nutzers angefangen hat; neuer als der verwendete Zweig "
+                "kann er nicht sein."
+            ),
+            detail_key="validator.d.hm_state_version_match",
+            detail_params=[hm_line, hm_url, hm_rel, line, hm_ver],
+        ))
 
     return findings
 
@@ -2064,6 +2690,11 @@ _RULE_FNS: dict[str, object] = {
     "hardware_host_location": _rule_hardware_host_location,
     "user_name_valid":       _rule_user_name_valid,
     "user_extra_conflict":   _rule_user_extra_conflict,
+    "user_no_password":      _rule_user_no_password,
+    "user_uid_duplicate":    _rule_user_uid_duplicate,
+    "user_uid_system":       _rule_user_uid_system,
+    "group_gid_duplicate":   _rule_group_gid_duplicate,
+    "group_gid_system":      _rule_group_gid_system,
     "hardware_matches":      _rule_hardware_matches,
     "duplicate_attrs":       _rule_duplicate_attrs,
     "imports_exist":         _rule_imports_exist,
@@ -2075,6 +2706,9 @@ _RULE_FNS: dict[str, object] = {
     "hm_allowunfree":        _rule_hm_allowunfree,
     "flake_hm_branch":       _rule_flake_hm_branch,
     "state_version_match":   _rule_state_version_match,
+    "state_version_future":  _rule_state_version_future,
+    "state_version_missing": _rule_state_version_missing,
+    "state_version_per_host": _rule_state_version_per_host,
     "hm_state_version_match": _rule_hm_state_version_match,
     "hm_duplicate_args":      _rule_hm_duplicate_args,
     "snapper_btrfs":          _rule_snapper_btrfs,

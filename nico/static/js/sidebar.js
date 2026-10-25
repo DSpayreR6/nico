@@ -1089,7 +1089,7 @@ const Sidebar = (() => {
             <input id="hm-homeDir" type="text" value="${escHtml(homeDir)}" autocomplete="off" spellcheck="false" />
           </div>
           <div class="hm-field">
-            <label data-i18n="hm.stateVersion">State-Version</label>
+            <label data-i18n="hm.stateVersion">Home-State-Version (home.stateVersion)</label>
             <input id="hm-stateVersion" type="text" value="${escHtml(stateVersion)}" autocomplete="off" spellcheck="false" />
           </div>
           <div class="hm-field hm-field-check">
