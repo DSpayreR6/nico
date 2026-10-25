@@ -133,13 +133,23 @@ nico_bin() {
 }
 
 # ── Running a command ────────────────────────────────────────────────────────
-# Printed first, then executed through eval so that the line on screen is
+# Shown, confirmed, then executed through eval so that the line on screen is
 # literally the line that runs – no second, hidden variant.
 
 LAST_STATUS=0
 
+# Enter means yes, so the extra step costs one keypress
+confirm() {
+    printf '%s%s [Y/n] %s' "$C_CMD" "$1" "$C_OFF"
+    read -r answer || return 1
+    case "$answer" in
+        ''|y|Y|yes|YES|j|J) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
 exec_cmd() {
-    printf '\n%s$ %s%s\n\n' "$C_CMD" "$1" "$C_OFF"
+    printf '\n'
     eval "$1"
     LAST_STATUS=$?
     printf '\n%s[exit %s]%s\n' "$C_DIM" "$LAST_STATUS" "$C_OFF"
@@ -151,34 +161,47 @@ pause() {
     printf '\n'
 }
 
-run_cmd() {
+# Printing the command alone was not enough: nix starts writing immediately
+# and pushes the line out of sight before anyone has read it. The question
+# holds it there. Answering no is useful in its own right – it shows the
+# command without running it, so the script doubles as a place to look one up.
+
+ask_cmd() {
+    printf '\n%s$ %s%s\n\n' "$C_CMD" "$1" "$C_OFF"
+    if ! confirm 'Run this command?'; then
+        printf '%sNot run.%s\n\n' "$C_DIM" "$C_OFF"
+        return 1
+    fi
     exec_cmd "$1"
-    pause
+    return 0
+}
+
+run_cmd() {
+    ask_cmd "$1" && pause
 }
 
 # Installing is the one action where nothing visible happens: no window, no
 # program running, just a prompt again. Offering the start right here is what
-# everyone expects to happen anyway.
+# everyone expects to happen anyway. No second "Run this command?" after it –
+# that is the same decision asked twice.
 
 install_cmd() {
-    exec_cmd "$1"
+    ask_cmd "$1" || return
     if [ "$LAST_STATUS" -ne 0 ]; then
         pause
         return
     fi
-    printf '\n%sStart NiCo now? [Y/n] %s' "$C_CMD" "$C_OFF"
-    read -r answer || answer=n
-    case "$answer" in
-        ''|y|Y|yes|YES|j|J)
-            bin=$(nico_bin)
-            if [ -n "$bin" ]; then
-                exec_cmd "$bin"
-            else
-                printf '%sInstalled, but no `nico` command found yet. Open a new\n' "$C_DIM"
-                printf 'terminal and type: nico%s\n' "$C_OFF"
-            fi
-            ;;
-    esac
+    printf '\n'
+    if confirm 'Start NiCo now?'; then
+        bin=$(nico_bin)
+        if [ -n "$bin" ]; then
+            printf '\n%s$ %s%s\n' "$C_CMD" "$bin" "$C_OFF"
+            exec_cmd "$bin"
+        else
+            printf '%sInstalled, but no `nico` command found yet. Open a new\n' "$C_DIM"
+            printf 'terminal and type: nico%s\n' "$C_OFF"
+        fi
+    fi
     pause
 }
 
