@@ -1526,15 +1526,28 @@ def build_flake_brix(content: str) -> dict:
     if inputs_block:
         brace_open  = inputs_block.index('{') + 1
         brace_close = inputs_block.rindex('}')
+        # The flat form spreads one input over several statements:
+        #   yandex-browser.url = "github:…";
+        #   yandex-browser.inputs.nixpkgs.follows = "nixpkgs";
+        # Keyed by name alone, the second statement replaced the first and the
+        # url was gone. What was left declared an input without a url, so Nix
+        # looked the bare name up in the flake registries and the rebuild died
+        # with "cannot find flake 'flake:yandex-browser'". All statements of
+        # one input therefore go into one brick, in their original order.
+        grouped: dict[str, list[str]] = {}
         for entry in _flake_split_attrs(inputs_block[brace_open:brace_close]):
             name = _flake_attr_name(entry)
             if name and name not in _KNOWN_INPUTS:
-                brix[name] = {
-                    "section": "Inputs-Extra",
-                    "order":   order_inputs,
-                    "text":    format_brick("Inputs-Extra", order_inputs, name, entry),
-                }
-                order_inputs += 1
+                grouped.setdefault(name, []).append(entry)
+        for name, entries in grouped.items():
+            brix[name] = {
+                "section": "Inputs-Extra",
+                "order":   order_inputs,
+                "text":    format_brick(
+                    "Inputs-Extra", order_inputs, name, "\n".join(entries),
+                ),
+            }
+            order_inputs += 1
 
     # ── outputs ───────────────────────────────────────────────────────────────
     outputs_match = re.search(r'\boutputs\s*=\s*\{[^}]*\}\s*:\s*\{', content)
@@ -1568,16 +1581,27 @@ def build_flake_brix(content: str) -> dict:
                     "text": format_brick(section, 1, brick_name, body),
                 }
 
-        # Other output keys (formatter etc.) → "Outputs-Extra"
+        # Other output keys (formatter etc.) → "Outputs-Extra".
+        # Grouped by name for the same reason as the inputs above: the flat
+        # form may spread one key over several statements. The brick name is
+        # made unique as well, because inputs and outputs share this dict and
+        # a name used on both sides would otherwise lose one of them.
+        grouped_out: dict[str, list[str]] = {}
         for entry in _flake_split_attrs(outputs_body):
             name = _flake_attr_name(entry)
             if name and name not in _KNOWN_OUTPUTS:
-                brix[name] = {
-                    "section": "Outputs-Extra",
-                    "order":   order_outputs_extra,
-                    "text":    format_brick("Outputs-Extra", order_outputs_extra, name, entry),
-                }
-                order_outputs_extra += 1
+                grouped_out.setdefault(name, []).append(entry)
+        for name, entries in grouped_out.items():
+            brick_name = _unique_brick_name(brix, name)
+            brix[brick_name] = {
+                "section": "Outputs-Extra",
+                "order":   order_outputs_extra,
+                "text":    format_brick(
+                    "Outputs-Extra", order_outputs_extra, brick_name,
+                    "\n".join(entries),
+                ),
+            }
+            order_outputs_extra += 1
 
     return brix
 
