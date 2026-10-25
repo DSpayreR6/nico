@@ -91,6 +91,11 @@ nix profile install github:DSpayreR6/nico
 This gives you the `nico` command and an entry in your application menu.
 Update it later with `nix profile upgrade nico`.
 
+Nix 2.34 renamed `nix profile install` to `nix profile add`. Both still work —
+the old name only prints a deprecation warning — but older Nix versions do not
+know `add` yet, which is why the command above uses `install`. The install
+menu picks whichever name your Nix has.
+
 Or declare it in your own flake, so it travels with your config to your other
 machines:
 
