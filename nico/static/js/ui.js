@@ -620,7 +620,6 @@ function bindUI() {
   document.getElementById('firewall_udp_enable')?.addEventListener('change', function() {
     document.getElementById('firewall-udp-detail')?.classList.toggle('hidden', !this.checked);
   });
-  document.getElementById('state_version')?.addEventListener('input', updateStateVersionStyle);
   document.getElementById('firefox')?.addEventListener('change', function() {
     document.getElementById('firefox-detail')?.classList.toggle('hidden', !this.checked);
   });

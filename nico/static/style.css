@@ -2316,11 +2316,6 @@ textarea:focus {
   font-size: 14px;
 }
 
-#state_version.field-warn {
-  border-color: var(--red);
-  outline-color: var(--red);
-}
-
 /* Sub-option detail panels — left accent stripe + indent */
 .sub-detail {
   padding-left: 14px;

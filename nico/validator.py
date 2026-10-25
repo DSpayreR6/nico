@@ -1702,15 +1702,23 @@ def _rule_state_version_missing(nixos_dir: str, config: dict, is_flake: bool,
     # Nothing written yet is the setup case, not a finding.
     if not any(True for _ in _scoped_nix_files(nixos_dir, host)):
         return []
-    where = f'hosts/{host}' if host else "configuration.nix"
+
+    # Where to put it has to agree with state_version_per_host: with host
+    # directories in play, the base config is the wrong place, and naming it
+    # here would send the user back and forth between two rules.
+    hosts_root = _hosts_dir_path(nixos_dir)
+    if hosts_root.is_dir() and any(d.is_dir() for d in hosts_root.iterdir()):
+        where = f"{hosts_root.name}/{host or '<name>'}/default.nix"
+    else:
+        where = "configuration.nix"
     return [Finding(
         rule_id="state_version_missing",
         severity="warning",
         message="system.stateVersion ist nicht gesetzt.",
         message_key="validator.f.state_version_missing",
         detail="Ohne den Wert nimmt NixOS das Release, das gerade gebaut wird. "
-               f"Eintragen ist das Release, mit dem diese Maschine installiert "
-               f"wurde ({where}).",
+               f"Einzutragen ist das Release, mit dem diese Maschine "
+               f"installiert wurde ({where}).",
         detail_key="validator.d.state_version_missing", detail_params=[where],
     )]
 

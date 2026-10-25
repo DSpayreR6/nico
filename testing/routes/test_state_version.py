@@ -116,6 +116,27 @@ check("mit Wert still", f == [], [x.message for x in f])
 check("leeres Verzeichnis still",
       run(validator._rule_state_version_missing, make({})) == [])
 
+# Der Rat muss zu state_version_per_host passen: mit Host-Verzeichnissen ist
+# die Basis-Config der falsche Ort, und beide Regeln dürfen den Nutzer nicht
+# gegeneinander schicken.
+d_none_hosts = make({
+    "flake.nix": FLAKE_TWO_HOSTS,
+    "configuration.nix": base(""),
+    "hosts/nix-desktop/default.nix": base(""),
+    "hosts/nix-laptop/default.nix": base(""),
+})
+f = run(validator._rule_state_version_missing, d_none_hosts, host="nix-desktop")
+check("Rat nennt die Host-Datei",
+      f and f[0].detail_params == ["hosts/nix-desktop/default.nix"],
+      f and f[0].detail_params)
+f = run(validator._rule_state_version_missing, d_none_hosts)
+check("ohne Host-Angabe das Muster",
+      f and f[0].detail_params == ["hosts/<name>/default.nix"],
+      f and f[0].detail_params)
+f = run(validator._rule_state_version_missing, make({"configuration.nix": base("")}))
+check("ohne Hosts weiter configuration.nix",
+      f and f[0].detail_params == ["configuration.nix"], f and f[0].detail_params)
+
 print("\n7. Ein Wert für mehrere Hosts")
 f = run(validator._rule_state_version_per_host, d)
 check("ein Fund", len(f) == 1, [x.message for x in f])

@@ -108,11 +108,6 @@ function toggleBootEfiOptions(show) {
 function togglePlymouthOptions(show) {
   document.getElementById('plymouth-options')?.classList.toggle('hidden', !show);
 }
-function updateStateVersionStyle() {
-  const el = document.getElementById('state_version');
-  if (!el) return;
-  el.classList.toggle('field-warn', !el.value.trim());
-}
 function togglePipewireOptions(show) {
   document.getElementById('pipewire-options')?.classList.toggle('hidden', !show);
 }
@@ -606,7 +601,7 @@ function populateFormFromData(data) {
   const ch = (id, val) => { const el = document.getElementById(id); if (el) el.checked = !!val; };
 
   if ('hostname'           in data) v('hostname',            data.hostname);
-  if ('state_version'      in data) { v('state_version', data.state_version); updateStateVersionStyle(); }
+  if ('state_version'      in data) { v('state_version', data.state_version); }
   if ('nix_args'           in data) v('nix_args',            data.nix_args || 'config, pkgs, lib');
   if ('timezone'           in data) v('timezone',            data.timezone);
   if ('locale'             in data) v('locale',              data.locale);
