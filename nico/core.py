@@ -10,7 +10,7 @@ import re
 from datetime import datetime
 from pathlib import Path
 
-from . import config_manager, generator, git_manager, hm_generator, importer
+from . import atomic, config_manager, generator, git_manager, hm_generator, importer
 from .brix import (
     FILE_FORMAT,
     SUPPORTED_FORMATS,
@@ -249,7 +249,7 @@ def modify_brick_in_file(
         return False, "ERR_BRICK_NESTED", introduced
 
     try:
-        fpath.write_text(final, encoding="utf-8")
+        atomic.write_text(fpath, final)
     except OSError:
         return False, "ERR_WRITE", []
 
@@ -664,7 +664,7 @@ def read_config_file(nixos_dir: str, rel_path: str, *, persist_stamp: bool = Tru
         content = insert_type(content, stamp)
         if persist_stamp:
             try:
-                target.write_text(content, encoding="utf-8")
+                atomic.write_text(target, content)
             except OSError:
                 pass
         ftype = stamp
@@ -676,7 +676,7 @@ def read_config_file(nixos_dir: str, rel_path: str, *, persist_stamp: bool = Tru
             content = set_type_in_content(content, override)
             if persist_stamp:
                 try:
-                    target.write_text(content, encoding="utf-8")
+                    atomic.write_text(target, content)
                 except OSError:
                     pass
             ftype = override
@@ -739,7 +739,7 @@ def write_raw_config_file(
         if introduced:
             raise NestedBricksError(introduced)
 
-    target.write_text(content, encoding="utf-8")
+    atomic.write_text(target, content)
 
     skipped_large: list[str] = []
     if commit:
@@ -800,8 +800,9 @@ def load_and_normalize_config(nixos_dir: str) -> dict:
                     rest_blocks = brix_content_to_bricks(rest, section="HEAD", existing_blocks=blocks)
                     blocks.update(rest_blocks)
                 data["brick_blocks"] = blocks
-                cfg_nix.write_text(
-                    generator.generate_configuration_nix(data), encoding="utf-8"
+                atomic.write_text(
+                    cfg_nix,
+                    generator.generate_configuration_nix(data)
                 )
             else:
                 data["brick_blocks"] = extract_brick_blocks(nix_content)
@@ -826,9 +827,9 @@ def load_and_normalize_config(nixos_dir: str) -> dict:
                 flake_brix = importer.build_flake_brix(flake_content)
                 flake_brix = importer.ensure_flake_host_bricks(flake_content, flake_brix)
                 data["flake_brick_blocks"] = flake_brix
-                flake_nix_path.write_text(
-                    generator.generate_flake_nix(data, nixos_dir=nixos_dir),
-                    encoding="utf-8",
+                atomic.write_text(
+                    flake_nix_path,
+                    generator.generate_flake_nix(data, nixos_dir=nixos_dir)
                 )
                 flake_content = flake_nix_path.read_text(encoding="utf-8")
             flake_brix = extract_brick_blocks(flake_content)
@@ -890,7 +891,7 @@ def write_config_files(
             "duplicates": duplicates[:10],
         }
 
-    conf_file.write_text(generated, encoding="utf-8")
+    atomic.write_text(conf_file, generated)
     written = ["configuration.nix"]
 
     if data.get("flakes"):
@@ -904,7 +905,7 @@ def write_config_files(
                 flake_brix = importer.ensure_flake_host_bricks(_flake_content, flake_brix)
                 if flake_brix:
                     data["flake_brick_blocks"] = flake_brix
-            flake_file.write_text(generator.generate_flake_nix(data, nixos_dir=str(nixos_path)), encoding="utf-8")
+            atomic.write_text(flake_file, generator.generate_flake_nix(data, nixos_dir=str(nixos_path)))
             written.append("flake.nix")
 
     # Root home.nix is legacy (pre HM-refactor) and never written anymore;

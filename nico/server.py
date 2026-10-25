@@ -15,7 +15,7 @@ from pathlib import Path
 
 from flask import Flask, jsonify, render_template, request
 
-from . import config_manager, generator, git_manager, importer, routes, validator
+from . import atomic, config_manager, generator, git_manager, importer, routes, validator
 from .brix import brix_content_to_bricks
 from .core import validate_user_path as _validate_user_path
 from .version import get_revision, get_version
@@ -185,9 +185,9 @@ def create_app() -> Flask:
             data.update(flake_fields)
             config_manager.save_config(nixos_dir, data)
             data["flake_brick_blocks"] = flake_brix
-            flake_path.write_text(
-                generator.generate_flake_nix(data, nixos_dir=nixos_dir),
-                encoding="utf-8",
+            atomic.write_text(
+                flake_path,
+                generator.generate_flake_nix(data, nixos_dir=nixos_dir)
             )
         except OSError:
             pass

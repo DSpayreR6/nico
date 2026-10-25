@@ -24,6 +24,8 @@ import os
 import re
 from pathlib import Path
 
+from . import atomic
+
 
 def _xdg_config_home() -> Path:
     env = os.environ.get("XDG_CONFIG_HOME", "").strip()
@@ -58,7 +60,7 @@ def _migrate_legacy_app_settings() -> None:
         content = _LEGACY_APP_SETTINGS_FILE.read_text(encoding="utf-8")
         json.loads(content)  # migrate only valid JSON
         APP_SETTINGS_FILE.parent.mkdir(parents=True, exist_ok=True)
-        APP_SETTINGS_FILE.write_text(content, encoding="utf-8")
+        atomic.write_text(APP_SETTINGS_FILE, content)
         _LEGACY_APP_SETTINGS_FILE.rename(
             _LEGACY_APP_SETTINGS_FILE.with_name("nico-settings.json.bak")
         )
@@ -252,22 +254,10 @@ def get_app_settings() -> dict:
 
 def save_app_settings(settings: dict) -> None:
     import json
-    import os
-    import tempfile
     existing = get_app_settings()
     existing.update(settings)
     APP_SETTINGS_FILE.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.NamedTemporaryFile(
-        "w",
-        encoding="utf-8",
-        dir=APP_SETTINGS_FILE.parent,
-        delete=False,
-    ) as f:
-        json.dump(existing, f, indent=2)
-        f.flush()
-        os.fsync(f.fileno())
-        tmp_name = f.name
-    Path(tmp_name).replace(APP_SETTINGS_FILE)
+    atomic.write_text(APP_SETTINGS_FILE, json.dumps(existing, indent=2))
 
 
 def get_nixos_config_dir() -> str | None:
@@ -302,19 +292,12 @@ def load_config_settings(nixos_dir: str) -> dict:
 def save_config_settings(nixos_dir: str, settings: dict) -> None:
     """Save config.json to the nixos config directory (atomic, like app settings)."""
     import json
-    import os
-    import tempfile
-    f = _config_json(nixos_dir)
     existing = load_config_settings(nixos_dir)
     existing.update(settings)
-    with tempfile.NamedTemporaryFile(
-        "w", encoding="utf-8", dir=f.parent, delete=False,
-    ) as fh:
-        json.dump(existing, fh, indent=2, ensure_ascii=False)
-        fh.flush()
-        os.fsync(fh.fileno())
-        tmp_name = fh.name
-    Path(tmp_name).replace(f)
+    atomic.write_text(
+        _config_json(nixos_dir),
+        json.dumps(existing, indent=2, ensure_ascii=False),
+    )
 
 
 # ── Legacy: nico.json migration ───────────────────────────────────────────────
@@ -424,8 +407,9 @@ def save_config(nixos_config_dir: str, data: dict) -> None:
         except OSError:
             pass
 
-    nix_file.write_text(
-        _gen.generate_configuration_nix(data), encoding="utf-8"
+    atomic.write_text(
+        nix_file,
+        _gen.generate_configuration_nix(data)
     )
 
 
@@ -489,6 +473,7 @@ def save_host_config(nixos_dir: str, host_name: str, data: dict) -> None:
     ).is_file()
 
     host_dir.mkdir(parents=True, exist_ok=True)
-    nix_file.write_text(
-        _gen.generate_host_nix(data, host_name, hw_config), encoding="utf-8"
+    atomic.write_text(
+        nix_file,
+        _gen.generate_host_nix(data, host_name, hw_config)
     )

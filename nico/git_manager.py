@@ -13,6 +13,8 @@ import subprocess
 from datetime import datetime
 from pathlib import Path
 
+from . import atomic
+
 # SSH-Optionen für alle Remote-Operationen: kein interaktiver Prompt,
 # neuer Host-Key wird automatisch akzeptiert, Verbindungs-Timeout 10s.
 _SSH_ENV = {
@@ -130,7 +132,7 @@ def create_gitignore(nixos_dir: str) -> tuple[bool, str]:
         content = "# NiCo\n"
     content += "\n".join(missing) + "\n"
     try:
-        path.write_text(content, encoding="utf-8")
+        atomic.write_text(path, content)
         return True, ""
     except Exception as exc:
         return False, str(exc)
@@ -147,7 +149,7 @@ def read_gitignore(nixos_dir: str) -> tuple[bool, str]:
 def write_gitignore(nixos_dir: str, content: str) -> tuple[bool, str]:
     """Overwrite .gitignore with the given content."""
     try:
-        (Path(nixos_dir) / ".gitignore").write_text(content, encoding="utf-8")
+        atomic.write_text(Path(nixos_dir) / ".gitignore", content)
         return True, ""
     except Exception as exc:
         return False, str(exc)
@@ -342,7 +344,7 @@ def _append_gitignore_entries(nixos_dir: str, entries: list[str]) -> None:
     if content and not content.endswith("\n"):
         content += "\n"
     content += "\n".join(add) + "\n"
-    path.write_text(content, encoding="utf-8")
+    atomic.write_text(path, content)
 
 
 def include_foreign_files(nixos_dir: str, files: list[str]) -> tuple[bool, str]:

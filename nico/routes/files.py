@@ -9,7 +9,7 @@ from pathlib import Path
 
 from flask import jsonify, request
 
-from .. import config_manager, git_manager, importer
+from .. import atomic, config_manager, git_manager, importer
 from ..core import (
     _FILENAME_TYPE_HINTS,
     _SAFE_NAME_RE,
@@ -227,7 +227,7 @@ def register(app, ctx):
             if entry_type == "dir":
                 target.mkdir(parents=False, exist_ok=False)
             else:
-                target.write_text("", encoding="utf-8")
+                atomic.write_text(target, "")
         except OSError as exc:
             return jsonify({"error": "ERR_FILE_WRITE", "detail": str(exc)}), 500
 
@@ -488,7 +488,7 @@ def register(app, ctx):
                 ftype = _get_nico_type(content)
                 if ftype:
                     content = _set_type_in_content(content, ftype)
-                target.write_text(content, encoding='utf-8')
+                atomic.write_text(target, content)
                 written.append(rel)
             except OSError:
                 return jsonify({"error": "ERR_FILE_WRITE"}), 500
@@ -538,7 +538,7 @@ def register(app, ctx):
             new_content = _set_type_in_content(content, ftype)
 
             try:
-                target.write_text(new_content, encoding="utf-8")
+                atomic.write_text(target, new_content)
             except OSError:
                 # Schreibgeschützte Datei – Typ aus Dateinamen zurückgeben falls vorhanden
                 hint = _FILENAME_TYPE_HINTS.get(target.name)
@@ -603,7 +603,7 @@ def register(app, ctx):
                 updated = _set_type_in_content(updated, ftype)
 
             try:
-                target.write_text(updated, encoding="utf-8")
+                atomic.write_text(target, updated)
             except OSError:
                 return jsonify({"error": "ERR_FILE_WRITE"}), 500
 

@@ -13,6 +13,7 @@ Strategie:
 import re
 import shutil
 from pathlib import Path
+from . import atomic
 from .brix import strip_brick_blocks
 
 ETC_NIXOS = Path("/etc/nixos")
@@ -1250,7 +1251,7 @@ def scrub_nico_comments_in_tree(nixos_dir: str | Path) -> list[str]:
         cleaned = strip_nico_comment_lines(original)
         if cleaned == original:
             continue
-        f.write_text(cleaned, encoding="utf-8")
+        atomic.write_text(f, cleaned)
         changed.append(str(rel))
     return changed
 

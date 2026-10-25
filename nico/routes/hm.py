@@ -9,7 +9,7 @@ from pathlib import Path
 
 from flask import jsonify, request
 
-from .. import config_manager, git_manager, hm_generator
+from .. import atomic, config_manager, git_manager, hm_generator
 from ..core import (
     get_nico_type as _get_nico_type,
     hm_patch_args as _hm_patch_args,
@@ -70,7 +70,7 @@ def register(app, ctx):
         if target.exists():
             return jsonify({"error": "ERR_FILE_EXISTS"}), 409
         content = hm_generator.create_hm_file(username, home_dir, state_version)
-        target.write_text(content, encoding="utf-8")
+        atomic.write_text(target, content)
         git_manager.auto_commit(nixos_dir)
         rel = str(target.relative_to(Path(nixos_dir)))
         return jsonify({"success": True, "path": rel, "content": content})
@@ -126,7 +126,7 @@ def register(app, ctx):
         content = _hm_update_hash(content)
 
         try:
-            target.write_text(content, encoding="utf-8")
+            atomic.write_text(target, content)
         except OSError:
             return jsonify({"error": "ERR_FILE_WRITE"}), 500
 

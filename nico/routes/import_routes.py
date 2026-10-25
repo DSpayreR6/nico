@@ -8,7 +8,7 @@ from pathlib import Path
 
 from flask import jsonify, request
 
-from .. import config_manager, git_manager, importer
+from .. import atomic, config_manager, git_manager, importer
 from ..brix import format_brick, next_order_for_section
 from ..core import (
     classify_filename as _classify_filename,
@@ -128,7 +128,7 @@ def register(app, ctx):
                 if dest is None:  # zip-slip: entry would land outside config dir
                     continue
                 dest.parent.mkdir(parents=True, exist_ok=True)
-                dest.write_bytes(zf.read(member))
+                atomic.write_bytes(dest, zf.read(member))
                 files_copied.append(name)
 
         # configuration.nix parsen
@@ -209,7 +209,7 @@ def register(app, ctx):
                 new_content = _set_type_in_content(content, ftype)
                 changed = new_content != content
                 if changed:
-                    nix_file.write_text(new_content, encoding="utf-8")
+                    atomic.write_text(nix_file, new_content)
                 done.append({"file": str(rel), "type": ftype, "changed": changed})
             except OSError as exc:
                 errors.append({"file": str(rel), "error": str(exc)})
@@ -288,7 +288,7 @@ def register(app, ctx):
                 if dest is None:  # traversal or hidden path segment
                     continue
                 dest.parent.mkdir(parents=True, exist_ok=True)
-                dest.write_text(fcont, encoding="utf-8")
+                atomic.write_text(dest, fcont)
                 files_copied.append(rel)
 
         elif config_path:

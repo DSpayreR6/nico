@@ -9,7 +9,7 @@ from pathlib import Path
 
 from flask import jsonify, request
 
-from .. import config_manager, generator, git_manager, importer
+from .. import atomic, config_manager, generator, git_manager, importer
 from ..brix import extract_brick_blocks
 from ..core import get_nico_type as _get_nico_type
 
@@ -76,8 +76,9 @@ def register(app, ctx):
         data["flake_hosts"] = current_hosts
 
         try:
-            flake_path.write_text(
-                generator.generate_flake_nix(data, nixos_dir=nixos_dir), encoding="utf-8"
+            atomic.write_text(
+                flake_path,
+                generator.generate_flake_nix(data, nixos_dir=nixos_dir)
             )
         except OSError as exc:
             return jsonify({"error": str(exc)}), 500
@@ -124,8 +125,9 @@ def register(app, ctx):
         data["flake_brick_blocks"] = brix
 
         try:
-            flake_path.write_text(
-                generator.generate_flake_nix(data, nixos_dir=nixos_dir), encoding="utf-8"
+            atomic.write_text(
+                flake_path,
+                generator.generate_flake_nix(data, nixos_dir=nixos_dir)
             )
         except OSError as exc:
             return jsonify({"error": str(exc)}), 500

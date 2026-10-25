@@ -9,7 +9,7 @@ from pathlib import Path
 
 from flask import jsonify, request
 
-from .. import config_manager, generator, git_manager, importer
+from .. import atomic, config_manager, generator, git_manager, importer
 from ..brix import extract_brick_blocks, brix_content_to_bricks
 from ..core import (
     NestedBricksError as _NestedBricksError,
@@ -192,9 +192,9 @@ def register(app, ctx):
                 data[key] = val
 
         try:
-            flake_file.write_text(
-                generator.generate_flake_nix(data, nixos_dir=str(nixos_path)),
-                encoding="utf-8",
+            atomic.write_text(
+                flake_file,
+                generator.generate_flake_nix(data, nixos_dir=str(nixos_path))
             )
         except OSError as exc:
             return jsonify({"error": str(exc)}), 500
@@ -428,7 +428,7 @@ def register(app, ctx):
 
         hw_config = (host_dir / "hardware-configuration.nix").exists()
         host_dir.mkdir(parents=True, exist_ok=True)
-        host_nix.write_text(generator.generate_host_nix(host_data, host_name, hw_config), encoding="utf-8")
+        atomic.write_text(host_nix, generator.generate_host_nix(host_data, host_name, hw_config))
 
         if do_commit:
             try:
