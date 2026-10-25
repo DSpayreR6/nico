@@ -1506,6 +1506,20 @@ _KNOWN_INPUTS = frozenset({"nixpkgs", "home-manager", "nixos-hardware", "plasma-
 _KNOWN_OUTPUTS = frozenset({"nixosConfigurations"})
 
 
+def flake_brix_for(content: str) -> dict:
+    """Bricks for a flake.nix – existing markers win over fresh derivation.
+
+    A file NiCo wrote carries its own brick markers, and those are what the
+    user sees and edits. Deriving bricks from such a file again wrapped the
+    old markers inside new ones (nested, with the old closing marker lost)
+    and renamed the bricks on the way – `yandex` became `yandex-browser`.
+    So: derive only what is not marked yet.
+    """
+    from .brix import extract_brick_blocks
+    existing = extract_brick_blocks(content)
+    return existing if existing else build_flake_brix(content)
+
+
 def build_flake_brix(content: str) -> dict:
     """
     Parse a flake.nix and return a Brix-blocks dict for everything that cannot

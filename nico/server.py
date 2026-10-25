@@ -180,7 +180,7 @@ def create_app() -> Flask:
         try:
             flake_content = flake_path.read_text(encoding="utf-8")
             flake_fields  = importer.parse_flake_nix(flake_content)
-            flake_brix    = importer.build_flake_brix(flake_content)
+            flake_brix    = importer.flake_brix_for(flake_content)
             flake_brix    = importer.ensure_flake_host_bricks(flake_content, flake_brix)
             data.update(flake_fields)
             config_manager.save_config(nixos_dir, data)
