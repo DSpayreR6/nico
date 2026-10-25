@@ -317,6 +317,9 @@ async function openRebuild(mode = 'switch') {
   if (!await _autoSave()) return;
   if (!await _writeNix()) return;
 
+  // Validator auf dem geschriebenen Stand – rote Funde halten hier auf
+  if (!await _validationGate(hostname ? [hostname] : [], mode)) return;
+
   // Terminal-Modus: Befehl in externem Terminal ausführen
   if (opts.useTerminal) {
     const res = await csrfFetch('/api/rebuild/open-terminal', {
@@ -811,6 +814,55 @@ function _dryRunHostHeader(body) {
   return '';
 }
 
+/** Host names the gate below has to check for a dry-run body. */
+function _dryRunGateHosts(hostInfo, body) {
+  if (!hostInfo?.flake_mode) return [];
+  if (body.all_hosts) {
+    return (hostInfo.hosts || []).map(h => (typeof h === 'object' ? h.name : h));
+  }
+  return body.hostname ? [body.hostname] : [];
+}
+
+/** Run the Validator silently before building and stop at red findings.
+ *
+ * Runs on the written state on disk, so it belongs after the save and write
+ * calls, not before them. Warnings and hints never interrupt – only an error
+ * brings the output up, with the force button at its end.
+ *
+ * A gate that cannot do its job must not be what stops a build: every failure
+ * in here lets the run through.
+ */
+async function _validationGate(hosts, mode) {
+  const targets = (hosts && hosts.length) ? hosts : [null];
+  const seen = new Set();
+  const findings = [];
+
+  for (const host of targets) {
+    let list;
+    try {
+      const res = await csrfFetch('/api/validate', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ host }),
+      });
+      list = (await res.json()).findings || [];
+    } catch {
+      return true;
+    }
+    for (const f of list) {
+      // The shared base config produces the same finding for every host.
+      const key = [f.rule_id, f.message_key, (f.params || []).join(''),
+                   f.message].join('|');
+      if (seen.has(key)) continue;
+      seen.add(key);
+      findings.push(f);
+    }
+  }
+
+  if (!findings.some(f => f.severity === 'error')) return true;
+  return await showValidationGate(findings, mode);
+}
+
 async function _buildDryRunBody(hostInfo = null) {
   if (!hostInfo) hostInfo = await _fetchFlakeHosts();
   const base = getFormData();
@@ -851,6 +903,11 @@ async function runDryRun() {
   if (!await _autoSave()) return;
   if (!await _writeNix()) return;
 
+  if (!await _validationGate(_dryRunGateHosts(hostInfo, body), 'dryrun')) {
+    overlay.classList.add('hidden');
+    return;
+  }
+
   const res = await csrfFetch('/api/dry-run', {
     method:  'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -873,6 +930,8 @@ async function runSaveAndDryRun() {
   if (!await Sidebar.flakeSave()) return;
   if (!await _autoSave()) return;
   if (!await _writeNix()) return;
+
+  if (!await _validationGate(_dryRunGateHosts(hostInfo, body), 'dryrun')) return;
 
   const overlay = document.getElementById('dryrun-overlay');
   const output  = document.getElementById('dryrun-output');

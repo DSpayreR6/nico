@@ -1924,6 +1924,36 @@ textarea:focus {
   font-weight: normal;
 }
 
+/* Validator als Tor vor dem Bauen: Hinweis oben, Erzwingen ganz unten – der
+   Knopf liegt bewusst hinter der Ausgabe, nicht daneben. */
+.validate-gate-notice {
+  margin-bottom: 14px;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--red) 40%, var(--surface2));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--red) 10%, var(--surface0));
+  font-size: 13px;
+  line-height: 1.45;
+}
+.validate-gate-actions {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid var(--surface2);
+}
+.btn-force {
+  border-color: color-mix(in srgb, var(--red) 55%, var(--surface2));
+  color: var(--red);
+}
+.btn-force:hover {
+  background: color-mix(in srgb, var(--red) 15%, var(--surface0));
+  border-color: var(--red);
+  color: var(--red);
+}
+
 .log-warning { color: var(--yellow); }
 .log-error   { color: var(--red);   }
 

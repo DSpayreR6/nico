@@ -803,9 +803,49 @@ async function runValidation() {
   _showValidationResults(findings);
 }
 
-function _showValidationResults(findings) {
+/** Validator output as a gate before a build.
+ *
+ * Shown only when something red came out of it. The findings come first and
+ * the force button last, inside the scrolling body: whoever wants to build
+ * anyway has to scroll past everything the run was stopped for. Resolves true
+ * for "build anyway", false for cancel and for closing the dialog.
+ *
+ * `mode` names the function the force button starts, as every button here does
+ * ('switch'/'boot' → the rebuild, 'dryrun' → the syntax check).
+ */
+function showValidationGate(findings, mode = 'switch') {
+  return new Promise(resolve => {
+    _showValidationResults(findings, { gate: true, mode });
+
+    let settled = false;
+    const done = (value) => {
+      if (settled) return;
+      settled = true;
+      closeValidationResults();
+      resolve(value);
+    };
+    document.getElementById('validation-gate-force')
+      ?.addEventListener('click', () => done(true), { once: true });
+    document.getElementById('validation-gate-cancel')
+      ?.addEventListener('click', () => done(false), { once: true });
+    // The header's x is a cancel like any other – the overlay deliberately
+    // cannot be dismissed by clicking the background.
+    document.getElementById('validation-results-close')
+      ?.addEventListener('click', () => done(false), { once: true });
+  });
+}
+
+function _showValidationResults(findings, opts = {}) {
   const body = document.getElementById('validation-results-body');
   if (!body) return;
+
+  if (opts.gate) {
+    // Red first: the reason the build was stopped should be read before the
+    // rest, and the force button stays below all of it.
+    const rank = { error: 0, warning: 1, info: 2 };
+    findings = [...findings].sort(
+      (a, b) => (rank[a.severity] ?? 3) - (rank[b.severity] ?? 3));
+  }
 
   if (!findings.length) {
     body.innerHTML = `<p style="color:var(--green);font-weight:600"
@@ -840,6 +880,22 @@ function _showValidationResults(findings) {
         </div>
       </div>`;
     }).join('') + '</div>';
+  }
+
+  if (opts.gate) {
+    const errors = findings.filter(f => f.severity === 'error').length;
+    const isDry  = opts.mode === 'dryrun';
+    const notice = isDry ? t('validator.gate.noticeDryRun', errors)
+                         : t('validator.gate.noticeBuild', errors);
+    const force  = isDry ? t('validator.gate.forceDryRun')
+                         : t('validator.gate.forceBuild');
+    body.innerHTML =
+      `<div class="validate-gate-notice">${_esc(notice)}</div>` +
+      body.innerHTML +
+      `<div class="validate-gate-actions">
+         <button id="validation-gate-cancel" class="btn-surface">${_esc(t('validator.gate.cancel'))}</button>
+         <button id="validation-gate-force" class="btn-surface btn-force">${_esc(force)}</button>
+       </div>`;
   }
 
   document.getElementById('validation-results-overlay').classList.remove('hidden');

@@ -56,3 +56,12 @@ Gruppen mit ihren Feldern, die /tmp-Größe nur bei aktivem tmpfs, das
 Ausgrauen von "/tmp beim Booten leeren" ohne Wertverlust, und das Zahnrad
 als Umschalter – inklusive der Regel, dass ein offener Unterdialog Vorrang
 hat.
+
+## test_validator_gate.py
+
+Der Validator vor dem Bauen, 27 Prüfungen: rote Funde öffnen die Ausgabe,
+Warnungen und Hinweise lassen durch. Geprüft wird auch die Reihenfolge im
+Dialog – Hinweis zuerst, Karten in der Mitte (rot vor gelb vor blau), die
+Knöpfe als letztes Element –, dass derselbe Fund aus mehreren Hosts nur
+einmal erscheint, dass der Erzwingen-Knopf den Namen der Funktion trägt, die
+er startet, und dass im Menü aufgerufen keine Knöpfe erscheinen.
