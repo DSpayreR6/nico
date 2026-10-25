@@ -107,8 +107,10 @@ ALL_RULES: list[Rule] = [
          "error", host_local=True),
     Rule("hardware_matches",
          "Hardware passt zum System",
-         "Warnt wenn die Hardware-Config Disk-UUIDs enthält die auf diesem System nicht existieren.",
-         "warning", host_local=True),
+         "Hält an, wenn die hardware-configuration.nix dieses Rechners Datenträger "
+         "nennt, die es hier nicht gibt, oder sich nicht prüfen lässt. Die Dateien "
+         "anderer Hosts bleiben unberührt – die sollen zu anderen Rechnern passen.",
+         "error", host_local=True),
     Rule("duplicate_attrs",
          "Doppelte Attribute",
          "Meldet doppelte Top-Level-Attribute die Nix nicht akzeptiert.",
@@ -1185,45 +1187,91 @@ def _rule_user_uid_system(nixos_dir: str, config: dict, is_flake: bool,
 
 def _rule_hardware_matches(nixos_dir: str, config: dict, is_flake: bool,
                            host: str | None = None) -> list[Finding]:
-    base, _ = _host_paths(nixos_dir, config, host)
-    hw = base / "hardware-configuration.nix"
-    if not hw.exists():
+    """
+    Does the hardware config of *this* machine's host describe this machine?
+
+    The question is answered in nico/hardware.py, because the import and the
+    restore paths have to ask exactly the same one and must not drift apart.
+
+    Only our own host is judged.  hosts/nix-laptop/hardware-configuration.nix is
+    supposed to not match this machine, and the old version of this rule reported
+    it as broken whenever the laptop host was validated from the desktop.
+    """
+    from . import hardware as _hw
+
+    decision = _hw.inspect(nixos_dir)
+
+    if decision.action == _hw.OK:
         return []
 
-    try:
-        content = hw.read_text(encoding="utf-8")
-    except OSError:
+    if decision.action == _hw.ADD:
+        # No hardware config anywhere – hardware_imported already covers that,
+        # and there is nothing machine-specific to add here.
         return []
 
-    hw_uuids = set(re.findall(
-        r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}',
-        content, re.IGNORECASE,
-    ))
-    if not hw_uuids:
-        return []
-
-    try:
-        result = subprocess.run(
-            ["blkid", "-s", "UUID", "-o", "value"],
-            capture_output=True, text=True, timeout=5,
-        )
-        local_uuids = {u.strip().lower() for u in result.stdout.splitlines() if u.strip()}
-    except Exception:
-        return []  # blkid not available → skip silently
-
-    unknown = {u for u in hw_uuids if u.lower() not in local_uuids}
-    if unknown:
-        sample = sorted(unknown)[:3]
-        extra = f" und {len(unknown) - 3} weitere" if len(unknown) > 3 else ""
+    if decision.action == _hw.PICK_HOST:
+        names = ", ".join(decision.hosts) or "?"
         return [Finding(
             rule_id="hardware_matches",
-            severity="warning",
-            message="Hardware-Config enthält Disk-UUIDs die auf diesem System nicht existieren.", message_key="validator.f.hardware_matches", params=[],
-            detail="Unbekannte UUIDs: " + ", ".join(sample) + extra,
-            detail_key="validator.d.hardware_matches",
-            detail_params=[", ".join(sample) + extra],
+            severity="error",
+            message=f'Zu welchem Host "{_hw.running_host()}" gehört, ist nicht '
+                    f"erkennbar – keine hardware-configuration.nix passt eindeutig "
+                    f"zu diesem Rechner.",
+            message_key="validator.f.hardware_ambiguous",
+            params=[_hw.running_host()],
+            detail=(
+                f"Hosts in der Config: {names}. Vor dem Bauen muss festgelegt "
+                "werden, welcher Host dieser Rechner ist – gebaut wird sonst "
+                "mit den Datenträgern einer anderen Maschine."
+            ),
+            detail_key="validator.d.hardware_ambiguous",
+            detail_params=[names],
         )]
-    return []
+
+    target = decision.target
+    if target is None:
+        return []
+    # Validating a different host says nothing about this machine's disks.
+    if host and target.host and host != target.host:
+        return []
+
+    where = str(target.path.relative_to(Path(nixos_dir)))
+
+    if target.verdict == _hw.MISMATCH:
+        sample = target.missing[:3]
+        extra = len(target.missing) - len(sample)
+        shown = ", ".join(sample) + (f" (+{extra})" if extra > 0 else "")
+        return [Finding(
+            rule_id="hardware_matches",
+            severity="error",
+            message=f"{where} nennt Datenträger, die es auf diesem Rechner nicht gibt.",
+            message_key="validator.f.hardware_matches",
+            params=[where],
+            detail=(
+                f"Nicht vorhanden: {shown}. Die Datei beschreibt eine andere "
+                "Maschine – gebaut wird eine Config, die hier keine Festplatte "
+                "findet. Die Datei dieses Rechners eintragen, bevor gebaut wird."
+            ),
+            detail_key="validator.d.hardware_matches",
+            detail_params=[shown],
+        )]
+
+    # UNKNOWN – nothing checkable, or a reference we cannot resolve.
+    unres = ", ".join(target.unresolved[:3]) or "–"
+    return [Finding(
+        rule_id="hardware_matches",
+        severity="error",
+        message=f"{where} lässt sich nicht gegen diesen Rechner prüfen.",
+        message_key="validator.f.hardware_unknown",
+        params=[where],
+        detail=(
+            f"Nicht prüfbare Angaben: {unres}. Ob die Datei zu diesem Rechner "
+            "gehört, ist damit offen – und eine falsche Datei kostet das ganze "
+            "System. Einmal bestätigen oder die Datei dieses Rechners eintragen."
+        ),
+        detail_key="validator.d.hardware_unknown",
+        detail_params=[unres],
+    )]
 
 
 def _rule_duplicate_attrs(nixos_dir: str, config: dict, is_flake: bool,

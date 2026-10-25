@@ -122,6 +122,10 @@ async function checkStatus() {
         // After the start guard, never next to it: two stacked overlays leave
         // the user unable to tell which one they are answering.
         if (!rebuildOwnsWorktree) await checkGitHygiene();
+        // A config cloned in from outside never passes through the import, so
+        // this is the only moment NiCo sees a foreign hardware config before
+        // the user reaches the rebuild button.
+        if (!rebuildOwnsWorktree) await checkHardwareMatch();
         if (_gitSync || _gitStatusOnly) checkGitStatus();
         if (_gitSync) checkGitRemoteStatus();
         if (_gitSync) csrfFetch('/api/git/log').then(r => r.json()).then(d => {
@@ -355,6 +359,10 @@ async function applyImport(confirmed = false) {
     document.getElementById('import-overlay').classList.add('hidden');
     if (data.success) {
       await refreshAfterImport();
+      // Before the success toast: the import may have brought another
+      // machine's hardware config, and that has to be settled before anyone
+      // walks over to the rebuild button.
+      await checkHardwareMatch(data.hardware);
       showToast(t('import.success'), 'success');
     } else {
       showToast(tErr(data.error), 'error');

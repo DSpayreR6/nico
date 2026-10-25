@@ -489,6 +489,8 @@ async function rollbackTo(hash, dateStr, message) {
     showToast(tErr(data.message) || t('git.rollbackSuccess'), 'success');
     closeAdmin();
     await loadConfig();   // refresh form + preview to reflect restored files
+    // A restored commit can carry a hardware config from before a disk change.
+    await checkHardwareMatch(data.hardware);
   } else {
     showToast(tErr(data.message) || t('git.rollbackError'), 'error');
   }

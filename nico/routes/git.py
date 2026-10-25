@@ -152,7 +152,11 @@ def register(app, ctx):
         if err:
             return err
         ok, msg = git_manager.git_reset_hard(nixos_dir)
-        return jsonify({"success": ok, "message": msg})
+        # A restore can bring back a hardware config from before a disk change
+        # or from another machine entirely – same question as after an import.
+        from .hardware import decision_json
+        return jsonify({"success": ok, "message": msg,
+                        "hardware": decision_json(nixos_dir) if ok else None})
 
     @app.route("/api/git/discard-local", methods=["POST"])
     def git_discard_local():
@@ -427,7 +431,9 @@ def register(app, ctx):
         body = request.get_json(silent=True) or {}
         commit_hash = body.get("hash", "")
         ok, msg = git_manager.rollback(nixos_dir, commit_hash)
-        return jsonify({"success": ok, "message": msg})
+        from .hardware import decision_json
+        return jsonify({"success": ok, "message": msg,
+                        "hardware": decision_json(nixos_dir) if ok else None})
 
     @app.route("/api/git/diff")
     def git_diff():

@@ -434,11 +434,17 @@ def register(app, ctx):
 
         _apply_import_result(nixos_dir, recognized, rest_brix, content)
 
+        # An import copies whatever hardware-configuration.nix the source
+        # carries. If that file describes a different machine, the config that
+        # just arrived cannot boot here - the user has to decide before
+        # anything is built, so the answer travels back with the import.
+        from .hardware import decision_json
         return jsonify({
             "success":      True,
             "recognized":   list(recognized.keys()),
             "has_brix":     bool(rest_brix.strip()),
             "files_copied": files_copied,
+            "hardware":     decision_json(nixos_dir),
         })
 
     @app.route("/api/import/from-path", methods=["POST"])
