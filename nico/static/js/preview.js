@@ -465,6 +465,41 @@ function applySectionCollapse() {
   });
 }
 
+/** Collapse or expand everything the current view can fold: every rendered
+ *  section plus every individual brick.
+ *
+ *  The sections are read from the DOM instead of a hard-coded list, because
+ *  the flake view has one section per host (`HOST:nix-vm`) and no list can
+ *  know their names – they stayed open however often you pressed "collapse
+ *  all". BRICK_SECTIONS is merged in so that a section which is not rendered
+ *  right now still gets the right state for when it appears.
+ *
+ *  One implementation for all three views. There used to be three copies –
+ *  configuration.nix, flake.nix and Home Manager – and each had forgotten
+ *  something else: the flake copy never touched the bricks at all, the Home
+ *  Manager copy expanded them but never collapsed them.
+ */
+function setAllCollapsed(collapsed) {
+  const sections = new Set(['__header__', ...BRICK_SECTIONS]);
+  document.querySelectorAll('.code-section[data-section], section[data-section]')
+    .forEach(el => sections.add(el.dataset.section));
+  sections.forEach(s => collapsed ? collapsedSections.add(s)
+                                  : collapsedSections.delete(s));
+  applySectionCollapse();
+
+  if (collapsed) {
+    document.querySelectorAll('.code-brix[data-brick-name]').forEach(el => {
+      collapsedBrix.add(el.dataset.brickName);
+      el.classList.add('collapsed');
+    });
+  } else {
+    collapsedBrix.clear();
+    document.querySelectorAll('.code-brix.collapsed')
+      .forEach(el => el.classList.remove('collapsed'));
+  }
+  localStorage.setItem('nico-collapsed-brix', JSON.stringify([...collapsedBrix]));
+}
+
 // ── Section filter & visibility ────────────────────────────────────────────
 
 /** Returns true if a left-panel section has no user-configured values. */

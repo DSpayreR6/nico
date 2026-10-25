@@ -345,37 +345,9 @@ function initPasswordToggle() {
 }
 
 // ── Alles ein-/aufklappen ──────────────────────────────────────────────────
-function collapseAll() {
-  document.querySelectorAll('section.collapsible').forEach(s => {
-    collapsedSections.add(s.dataset.section);
-    s.classList.add('collapsed');
-  });
-  // Also add code-only sections (Home Manager) that have no left-panel element
-  BRICK_SECTIONS.forEach(s => collapsedSections.add(s));
-  collapsedSections.add('__header__');
-  applySectionCollapse();
-  // Auch individuelle Brix einklappen – Gegenstück zu expandAll()
-  document.querySelectorAll('.code-brix[data-brick-name]').forEach(el => {
-    collapsedBrix.add(el.dataset.brickName);
-    el.classList.add('collapsed');
-  });
-  localStorage.setItem('nico-collapsed-brix', JSON.stringify([...collapsedBrix]));
-}
-
-function expandAll() {
-  document.querySelectorAll('section.collapsible').forEach(s => {
-    collapsedSections.delete(s.dataset.section);
-    s.classList.remove('collapsed');
-  });
-  // Also remove code-only sections
-  BRICK_SECTIONS.forEach(s => collapsedSections.delete(s));
-  collapsedSections.delete('__header__');
-  applySectionCollapse();
-  // Auch individuelle Brix aufklappen
-  collapsedBrix.clear();
-  localStorage.setItem('nico-collapsed-brix', '[]');
-  document.querySelectorAll('.code-brix.collapsed').forEach(el => el.classList.remove('collapsed'));
-}
+// Shared with the flake and Home Manager views – see setAllCollapsed()
+function collapseAll() { setAllCollapsed(true);  }
+function expandAll()   { setAllCollapsed(false); }
 
 // ── UI helpers ─────────────────────────────────────────────────────────────
 function showSetupOverlay() {

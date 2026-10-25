@@ -1133,17 +1133,8 @@ const Sidebar = (() => {
       });
     });
 
-    collapseAllBtn?.addEventListener('click', () => {
-      HM_PREVIEW_SECTIONS.forEach(s => collapsedSections.add(s));
-      applySectionCollapse();
-    });
-    expandAllBtn?.addEventListener('click', () => {
-      HM_PREVIEW_SECTIONS.forEach(s => collapsedSections.delete(s));
-      applySectionCollapse();
-      collapsedBrix.clear();
-      localStorage.setItem('nico-collapsed-brix', '[]');
-      document.querySelectorAll('.code-brix.collapsed').forEach(el => el.classList.remove('collapsed'));
-    });
+    collapseAllBtn?.addEventListener('click', () => setAllCollapsed(true));
+    expandAllBtn?.addEventListener('click',   () => setAllCollapsed(false));
 
     // Remove-Buttons via Event-Delegation
     argsList.addEventListener('click', e => {
@@ -1558,16 +1549,13 @@ const Sidebar = (() => {
       _scheduleFlakePreviewUpdate();
     });
 
-    // Collapse/expand buttons (form sections + code preview via collapsedSections)
-    const FLAKE_PREVIEW_SECTIONS = ['__header__', 'HEAD', 'INPU', 'INPX', 'OUTP', 'OUTH', 'OUTX', 'OUTH', 'TAIL'];
-    document.getElementById('flake-collapse-all-btn')?.addEventListener('click', () => {
-      FLAKE_PREVIEW_SECTIONS.forEach(s => collapsedSections.add(s));
-      applySectionCollapse();
-    });
-    document.getElementById('flake-expand-all-btn')?.addEventListener('click', () => {
-      FLAKE_PREVIEW_SECTIONS.forEach(s => collapsedSections.delete(s));
-      applySectionCollapse();
-    });
+    // Collapse/expand buttons. setAllCollapsed reads the rendered sections,
+    // which is what the host sections (HOST:<name>) need – a fixed list
+    // cannot name them, so they used to stay open.
+    document.getElementById('flake-collapse-all-btn')?.addEventListener('click',
+      () => setAllCollapsed(true));
+    document.getElementById('flake-expand-all-btn')?.addEventListener('click',
+      () => setAllCollapsed(false));
 
     // NOTE: sec-toggle click is handled globally by the main init (toggleSection).
     // No extra listener needed here – adding one would double-fire and cancel the toggle.
