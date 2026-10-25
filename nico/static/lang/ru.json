@@ -929,6 +929,7 @@
   "validator.f.state_version_conflict": "system.stateVersion определён дважды: {0}, строка {1}, и {2}, строка {3}.",
   "validator.f.state_version_per_host": "{0}, строка {1}: system.stateVersion «{2}» так действует для {3} хостов.",
   "validator.d.state_version_missing": "Без него NixOS берёт релиз, который собирается сейчас. Укажите релиз, с которым была установлена эта машина ({0}).",
+  "validator.d.state_version_missing_hint": "Без него NixOS берёт релиз, который собирается сейчас. Укажите релиз, с которым была установлена эта машина ({0}). Эта машина настроена {2} — тогда актуальным релизом был «{1}». Выведено из /var/lib/nixos, /etc/machine-id и ключей хоста SSH: они создаются при первом запуске и больше никогда.",
   "validator.f.state_version_missing": "system.stateVersion не задан.",
   "validator.d.state_version_future": "stateVersion — это релиз, с которым установлена машина. На момент установки системы {1} релиза «{0}» ещё не было, значит значение неверно: NixOS применит новые значения по умолчанию к старому состоянию.",
   "validator.f.state_version_future": "{0}, строка {1}: system.stateVersion «{2}» новее работающего релиза {3}.",

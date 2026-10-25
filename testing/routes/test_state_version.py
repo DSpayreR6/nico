@@ -127,15 +127,71 @@ d_none_hosts = make({
 })
 f = run(validator._rule_state_version_missing, d_none_hosts, host="nix-desktop")
 check("Rat nennt die Host-Datei",
-      f and f[0].detail_params == ["hosts/nix-desktop/default.nix"],
+      f and f[0].detail_params[0] == "hosts/nix-desktop/default.nix",
       f and f[0].detail_params)
 f = run(validator._rule_state_version_missing, d_none_hosts)
 check("ohne Host-Angabe das Muster",
-      f and f[0].detail_params == ["hosts/<name>/default.nix"],
+      f and f[0].detail_params[0] == "hosts/<name>/default.nix",
       f and f[0].detail_params)
 f = run(validator._rule_state_version_missing, make({"configuration.nix": base("")}))
 check("ohne Hosts weiter configuration.nix",
-      f and f[0].detail_params == ["configuration.nix"], f and f[0].detail_params)
+      f and f[0].detail_params[0] == "configuration.nix", f and f[0].detail_params)
+
+print("\n6b. Hergeleiteter Vorschlag – nur wenn er eindeutig ist")
+import datetime
+for day, want in (("2026-03-23", "25.11"), ("2026-01-15", "25.11"),
+                  ("2026-07-01", "26.05"), ("2024-08-09", "24.05"),
+                  ("2025-12-25", "25.11")):
+    y, m, dd = map(int, day.split("-"))
+    got = validator._release_for_date(datetime.date(y, m, dd))
+    check(f"{day} → {want}", got == want, got)
+for day in ("2026-05-20", "2026-06-05", "2026-11-10", "2025-12-05"):
+    y, m, dd = map(int, day.split("-"))
+    got = validator._release_for_date(datetime.date(y, m, dd))
+    check(f"{day} ist zu nah am Releasewechsel", got == "", got)
+
+_orig_birth = validator._birth_date
+try:
+    same = datetime.date(2026, 3, 23)
+    validator._birth_date = lambda p: same
+    check("einige Marker am selben Tag → Vorschlag",
+          validator._install_release() == ("25.11", same),
+          validator._install_release())
+    # Neuinstallation oder Umbau: Marker aus verschiedenen Tagen sagen nichts.
+    seq = iter([same, datetime.date(2026, 9, 1), same, same])
+    validator._birth_date = lambda p: next(seq, same)
+    check("Marker aus verschiedenen Tagen → kein Vorschlag",
+          validator._install_release() == ("", None),
+          validator._install_release())
+    # Dateisystem ohne Geburtszeit.
+    validator._birth_date = lambda p: None
+    check("ohne Geburtszeit → kein Vorschlag",
+          validator._install_release() == ("", None),
+          validator._install_release())
+finally:
+    validator._birth_date = _orig_birth
+
+_orig_install = validator._install_release
+try:
+    validator._install_release = lambda: ("25.11", datetime.date(2026, 3, 23))
+    f = run(validator._rule_state_version_missing, d_none, host="nix-desktop")
+    check("Vorschlag steht im Detail",
+          f and f[0].detail_key == "validator.d.state_version_missing_hint",
+          f and f[0].detail_key)
+    check("Wert und Datum als Parameter",
+          f and f[0].detail_params[1:] == ["25.11", "2026-03-23"],
+          f and f[0].detail_params)
+    f = run(validator._rule_state_version_missing, d_none, host="nix-laptop")
+    check("fremder Host bekommt keinen Vorschlag",
+          f and f[0].detail_key == "validator.d.state_version_missing",
+          f and f[0].detail_key)
+    validator._install_release = lambda: ("", None)
+    f = run(validator._rule_state_version_missing, d_none, host="nix-desktop")
+    check("unsichere Herleitung bleibt stumm",
+          f and f[0].detail_key == "validator.d.state_version_missing",
+          f and f[0].detail_key)
+finally:
+    validator._install_release = _orig_install
 
 print("\n7. Ein Wert für mehrere Hosts")
 f = run(validator._rule_state_version_per_host, d)

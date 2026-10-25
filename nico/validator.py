@@ -1689,6 +1689,68 @@ def _state_version_sites(nixos_dir: str, host: str | None,
     return sites
 
 
+# Markers that are created when a machine is first set up and never again:
+# the first activation, the first boot. NixOS records its installation date
+# nowhere, so this is the only evidence there is.
+_INSTALL_MARKERS = ("/var/lib/nixos", "/etc/machine-id",
+                    "/etc/ssh/ssh_host_ed25519_key", "/etc/ssh/ssh_host_rsa_key")
+
+
+def _birth_date(path: str):
+    """The file's birth date, or None when the filesystem does not keep one."""
+    try:
+        out = subprocess.run(["stat", "-c", "%w", path], capture_output=True,
+                             text=True, timeout=3).stdout.strip()
+    except Exception:
+        return None
+    m = re.match(r'(\d{4})-(\d{2})-(\d{2})', out)
+    if not m:
+        return None            # "-" on filesystems without birth time
+    import datetime
+    try:
+        return datetime.date(int(m.group(1)), int(m.group(2)), int(m.group(3)))
+    except ValueError:
+        return None
+
+
+def _release_for_date(day) -> str:
+    """The NixOS release current at that date, '' when too close to call.
+
+    Releases land at the end of May and the end of November, but the exact day
+    moves by a week or two. Within three weeks of a turn, a date cannot decide
+    between two releases – and a stateVersion that is one release off is the
+    very damage these rules exist for, so nothing is claimed there.
+    """
+    import datetime
+    turns = []
+    for year in (day.year - 1, day.year, day.year + 1):
+        turns.append((datetime.date(year, 5, 31), f"{year % 100:02d}.05"))
+        turns.append((datetime.date(year, 11, 30), f"{year % 100:02d}.11"))
+    turns.sort()
+    if any(abs((day - when).days) <= 21 for when, _ in turns):
+        return ""
+    current = [name for when, name in turns if when <= day]
+    return current[-1] if current else ""
+
+
+def _install_release() -> tuple:
+    """(release, date) derived from this machine's install markers.
+
+    Returns ('', None) unless several markers agree and the date is far enough
+    from a release turn to be unambiguous.
+    """
+    dates = [d for d in (_birth_date(p) for p in _INSTALL_MARKERS) if d]
+    if len(dates) < 2:
+        return "", None
+    day = min(dates)
+    # Markers from different days mean something was reinstalled or rebuilt in
+    # place; then this is not an installation date.
+    if (max(dates) - day).days > 1:
+        return "", None
+    release = _release_for_date(day)
+    return (release, day) if release else ("", None)
+
+
 def _rule_state_version_missing(nixos_dir: str, config: dict, is_flake: bool,
                                 host: str | None = None) -> list[Finding]:
     """Report a config without any system.stateVersion.
@@ -1711,6 +1773,29 @@ def _rule_state_version_missing(nixos_dir: str, config: dict, is_flake: bool,
         where = f"{hosts_root.name}/{host or '<name>'}/default.nix"
     else:
         where = "configuration.nix"
+    # The derived value is only for the machine NiCo runs on – and only when
+    # the markers agree and the date is not near a release turn. Unsure means
+    # nothing is named: a wrong number with an explanation gets typed in.
+    this_host = running_host()
+    release, day = ("", None)
+    if not host or not this_host or host == this_host:
+        release, day = _install_release()
+
+    if release:
+        return [Finding(
+            rule_id="state_version_missing",
+            severity="warning",
+            message="system.stateVersion ist nicht gesetzt.",
+            message_key="validator.f.state_version_missing",
+            detail="Ohne den Wert nimmt NixOS das Release, das gerade gebaut "
+                   f"wird. Einzutragen ist das Release, mit dem diese Maschine "
+                   f"installiert wurde ({where}). Dieser Rechner wurde am "
+                   f"{day.isoformat()} eingerichtet – damals war \"{release}\" "
+                   "das aktuelle Release.",
+            detail_key="validator.d.state_version_missing_hint",
+            detail_params=[where, release, day.isoformat()],
+        )]
+
     return [Finding(
         rule_id="state_version_missing",
         severity="warning",

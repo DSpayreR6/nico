@@ -929,6 +929,7 @@
   "validator.f.state_version_conflict": "system.stateVersion est défini deux fois : {0} ligne {1} et {2} ligne {3}.",
   "validator.f.state_version_per_host": "{0} ligne {1} : system.stateVersion « {2} » s'applique ainsi à {3} hôtes.",
   "validator.d.state_version_missing": "Sans cette valeur, NixOS prend la version en cours de compilation. Indiquez la version avec laquelle cette machine a été installée ({0}).",
+  "validator.d.state_version_missing_hint": "Sans cette valeur, NixOS prend la version en cours de compilation. Indiquez la version avec laquelle cette machine a été installée ({0}). Cette machine a été mise en service le {2} ; à cette date, « {1} » était la version courante. Déduit de /var/lib/nixos, /etc/machine-id et des clés d'hôte SSH, créées au premier démarrage et jamais ensuite.",
   "validator.f.state_version_missing": "system.stateVersion n'est pas défini.",
   "validator.d.state_version_future": "stateVersion est la version avec laquelle la machine a été installée. « {0} » n'existait pas lors de l'installation d'un système {1} : la valeur ne peut donc pas être correcte et fait appliquer par NixOS de nouveaux réglages par défaut à un état ancien.",
   "validator.f.state_version_future": "{0} ligne {1} : system.stateVersion « {2} » est plus récent que la version en cours {3}.",

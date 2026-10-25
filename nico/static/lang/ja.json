@@ -929,6 +929,7 @@
   "validator.f.state_version_conflict": "system.stateVersion が二重に定義されています: {0} {1} 行目と {2} {3} 行目。",
   "validator.f.state_version_per_host": "{0} {1} 行目: system.stateVersion「{2}」が {3} 台のホストに適用されます。",
   "validator.d.state_version_missing": "値がないと NixOS はいまビルドしているリリースを使います。このマシンをインストールしたリリースを記入してください（{0}）。",
+  "validator.d.state_version_missing_hint": "値がないと NixOS はいまビルドしているリリースを使います。このマシンをインストールしたリリースを記入してください（{0}）。このマシンの構築日は {2} で、その時点の最新リリースは「{1}」でした。/var/lib/nixos、/etc/machine-id、SSH ホスト鍵から導いています。これらは初回起動時にのみ作成されます。",
   "validator.f.state_version_missing": "system.stateVersion が設定されていません。",
   "validator.d.state_version_future": "stateVersion はマシンをインストールした際のリリースです。{1} のシステムをインストールした時点で「{0}」は存在しなかったため、この値は正しくありません。NixOS が新しい既定値を古い状態に適用してしまいます。",
   "validator.f.state_version_future": "{0} {1} 行目: system.stateVersion「{2}」は稼働中のリリース {3} より新しいです。",
