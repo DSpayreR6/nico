@@ -24,6 +24,32 @@ async function loadConfig() {
   loadHmFileList();
 }
 
+/** Re-read everything an import changed on disk.
+ *
+ * Deliberately not location.reload(), although the settings import and detach
+ * do that: an import writes its files *after* the safety commit, so they are
+ * still uncommitted when this runs. A reload would start checkStatus() →
+ * ensureGitStartGuard(), the start check would report `dirty`, and the guard
+ * would offer to discard exactly the files just imported.
+ *
+ * One implementation for all five import paths (admin directory, admin ZIP,
+ * /etc/nixos from the setup overlay, and the two manual ones) – each of them
+ * used to forget something else.
+ */
+async function refreshAfterImport() {
+  await categorizeFiles();
+  await loadConfig();
+  await Sidebar.loadTree();
+  // The tree highlight may still point at a file the import removed.
+  Sidebar.setActiveFile('configuration.nix', 'configuration.nix');
+  updateFsHint();
+  checkFileFormat();
+  // The import commits before writing and may have created the repository,
+  // so the git buttons are stale either way.
+  if (_gitSync || _gitStatusOnly) checkGitStatus();
+  if (_gitSync) checkGitRemoteStatus();
+}
+
 // ── Änderungserkennung (nico-version Hash) ────────────────────────────────
 function showIntegrityWarning(files) {
   let el = document.getElementById('integrity-warning-banner');
@@ -354,9 +380,7 @@ async function _doZipApply(confirmed) {
   }
 
   _zipImportResetState();
-  await categorizeFiles();
-  await loadConfig();
-  Sidebar.loadTree();
+  await refreshAfterImport();
   showToast(t('import.success'), 'success');
 }
 
@@ -514,8 +538,7 @@ async function _doAdminImport(configPath, confirmed, resultEl) {
   }
 
   resultEl.className = 'import-result hidden';
-  await categorizeFiles();
-  await loadConfig();
+  await refreshAfterImport();
   showToast(t('import.success'), 'success');
 }
 

@@ -354,9 +354,7 @@ async function applyImport(confirmed = false) {
     }
     document.getElementById('import-overlay').classList.add('hidden');
     if (data.success) {
-      await categorizeFiles();
-      await loadConfig();
-      Sidebar.loadTree();
+      await refreshAfterImport();
       showToast(t('import.success'), 'success');
     } else {
       showToast(tErr(data.error), 'error');
@@ -491,9 +489,7 @@ function initImportManual() {
     }
 
     document.getElementById('import-overlay').classList.add('hidden');
-    await categorizeFiles();
-    await loadConfig();
-    Sidebar.loadTree();
+    await refreshAfterImport();
     showToast(t('import.success'), 'success');
   });
 
@@ -514,9 +510,7 @@ function initImportManual() {
       return;
     }
     document.getElementById('import-overlay').classList.add('hidden');
-    await categorizeFiles();
-    await loadConfig();
-    Sidebar.loadTree();
+    await refreshAfterImport();
     showToast(t('import.success'), 'success');
   });
   on('import-manual-backup-cancel-btn', 'click', () => {
