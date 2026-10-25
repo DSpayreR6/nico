@@ -132,6 +132,20 @@ nico_bin() {
     fi
 }
 
+# "<profile name> <original flake url>" of an installed NiCo, empty if there
+# is none. Nix remembers the url a package was installed from, so an upgrade
+# already follows the right branch by itself – the menu only has to say which
+# one, instead of leaving people to guess what Update would pull.
+# Matched on the url rather than the name: the name is whatever Nix derived,
+# the url is ours. The sed strips the bold Nix puts around the name.
+
+nico_profile_entry() {
+    eval "$NIX profile list" 2>/dev/null \
+      | sed "s/$(printf '\033')\[[0-9;]*m//g" \
+      | awk '/^Name:/ { n = $2 }
+             /^Original flake URL:/ && $4 ~ /DSpayreR6\/nico/ { print n, $4; exit }'
+}
+
 # ── Running a command ────────────────────────────────────────────────────────
 # Shown, confirmed, then executed through eval so that the line on screen is
 # literally the line that runs – no second, hidden variant.
@@ -211,6 +225,13 @@ install_cmd() {
 # the most common form of colour blindness.
 
 menu() {
+    # Read again for every menu, not once at startup: after installing, the
+    # entries have to stop saying "not installed"
+    entry=$(nico_profile_entry)
+    PROFILE_NAME=${entry%% *}
+    PROFILE_URL=${entry#* }
+    [ "$entry" = "" ] && PROFILE_NAME='' && PROFILE_URL=''
+
     # Plain, not green: the script cannot tell whether the installed NiCo came
     # from main or from dev, and it should not claim what it has not checked.
     # NiCo's own info dialog answers that, with version and commit.
@@ -223,7 +244,13 @@ menu() {
     fi
     printf '%s  2  Test              start now, install nothing          [main]%s\n' "$C_STABLE" "$C_OFF"
     printf '%s  3  Install           install permanently, do not start   [main]%s\n' "$C_STABLE" "$C_OFF"
-    printf '%s  4  Update            update the installed NiCo%s\n'                  "$C_UPDATE" "$C_OFF"
+    if [ -n "$PROFILE_URL" ]; then
+        printf '%s  4  Update            %s%s\n' "$C_UPDATE" "$PROFILE_URL" "$C_OFF"
+    elif [ -n "$(nico_bin)" ]; then
+        printf '%s  4  Update            the installed NiCo%s\n' "$C_UPDATE" "$C_OFF"
+    else
+        printf '%s  4  Update            nothing installed to update%s\n' "$C_DIM" "$C_OFF"
+    fi
     printf '%s  5  Test (dev)        start now, install nothing          [dev]%s\n'  "$C_DEV"    "$C_OFF"
     printf '%s  6  Install (dev)     install permanently, do not start   [dev]%s\n'  "$C_DEV"    "$C_OFF"
     printf '%s  0  Quit%s\n\n'                                                       "$C_PLAIN"  "$C_OFF"
@@ -253,7 +280,17 @@ while :; do
             ;;
         2) run_cmd     "$NIX run $REPO_MAIN" ;;
         3) install_cmd "$NIX $PROFILE_ADD $REPO_MAIN" ;;
-        4) run_cmd     "$NIX profile upgrade nico" ;;
+        4)
+            if [ -z "$(nico_bin)" ]; then
+                printf '%sNothing installed to update – pick 3 for the released\n' "$C_DIM"
+                printf 'version or 6 for the development branch.%s\n\n' "$C_OFF"
+            else
+                # --refresh here too: an upgrade of a dev install would
+                # otherwise be served a cached copy of the branch, which is
+                # the one thing an upgrade must not do
+                run_cmd "$NIX profile upgrade ${PROFILE_NAME:-nico} --refresh"
+            fi
+            ;;
         # --refresh on every dev command: without it Nix serves a cached copy
         # of the branch, which is how you end up testing yesterday's fix
         5) run_cmd     "$NIX run $REPO_DEV --refresh" ;;
