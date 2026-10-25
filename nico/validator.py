@@ -799,34 +799,46 @@ def _attr_line(content: str, name: str, kind: str = "users") -> int:
     return content[:m.start()].count("\n") + 1 if m else 0
 
 
-def _other_host_dirs(nixos_dir: str, host: str | None) -> set:
+def _hosts_dir_path(nixos_dir: str) -> Path:
+    from . import config_manager as _cm
+    try:
+        name = (_cm.load_config_settings(nixos_dir).get("hosts_dir") or "hosts")
+    except Exception:
+        name = "hosts"
+    return Path(nixos_dir) / (name.strip().strip("/") or "hosts")
+
+
+def _other_host_dirs(nixos_dir: str, host: str | None,
+                     strict: bool = False) -> set:
     """Host directories that do not belong to `host`.
 
     A user declared for another machine says nothing about this one – reporting
     it would be noise on every multi-host config.
+
+    strict is for the rules that read the running machine (/etc/passwd,
+    /etc/group): when the host cannot be identified at all, they must not fall
+    back to reading every host directory, because then every user of every
+    other machine looks like a user missing here. Nothing attributable means
+    nothing read.
     """
-    if not host:
-        return set()
-    from . import config_manager as _cm
-    try:
-        cfg_settings = _cm.load_config_settings(nixos_dir)
-    except Exception:
-        return set()
-    hosts_dir = (cfg_settings.get("hosts_dir") or "hosts").strip() or "hosts"
-    root = Path(nixos_dir) / hosts_dir
+    root = _hosts_dir_path(nixos_dir)
     if not root.is_dir():
         return set()
-    return {d for d in root.iterdir() if d.is_dir() and d.name != host}
+    dirs = {d for d in root.iterdir() if d.is_dir()}
+    if host and (root / host) in dirs:
+        return dirs - {root / host}
+    return dirs if strict else set()
 
 
-def _scoped_nix_files(nixos_dir: str, host: str | None = None):
+def _scoped_nix_files(nixos_dir: str, host: str | None = None,
+                      strict: bool = False):
     """Yield (path, rel, content) for the .nix files that build `host`.
 
     Other hosts' directories stay out; the root files are always in, that is
     where a flake config keeps what applies to every host.
     """
     base = Path(nixos_dir)
-    skip_dirs = _other_host_dirs(nixos_dir, host)
+    skip_dirs = _other_host_dirs(nixos_dir, host, strict)
     for nix_file in sorted(base.rglob("*.nix")):
         if ".git" in nix_file.parts:
             continue
@@ -857,7 +869,8 @@ def _other_host_finding(rule_id: str, host: str, this_host: str) -> Finding:
     )
 
 
-def _declared_users(nixos_dir: str, host: str | None = None) -> dict:
+def _declared_users(nixos_dir: str, host: str | None = None,
+                    strict: bool = False) -> dict:
     """Every users.users.<name> in the config, with what matters for logging in.
 
     Both spellings are collected: the attrset block NiCo writes and the dotted
@@ -869,7 +882,7 @@ def _declared_users(nixos_dir: str, host: str | None = None) -> dict:
     """
     from . import nix_parser as _np
     users: dict = {}
-    for _nix_file, rel, content in _scoped_nix_files(nixos_dir, host):
+    for _nix_file, rel, content in _scoped_nix_files(nixos_dir, host, strict):
         for key, value_text in _file_bindings(content).items():
             parts = key.split(".")
             if len(parts) < 3 or parts[0] != "users" or parts[1] != "users":
@@ -900,7 +913,8 @@ def _system_uids() -> dict:
 _RE_GROUP_GID = re.compile(r'\bgid\s*=\s*(\d+)')
 
 
-def _declared_groups(nixos_dir: str, host: str | None = None) -> dict:
+def _declared_groups(nixos_dir: str, host: str | None = None,
+                     strict: bool = False) -> dict:
     """Every users.groups.<name> with a pinned gid, both spellings.
 
     Groups carry the file permissions, and their gid is the same kind of
@@ -909,7 +923,7 @@ def _declared_groups(nixos_dir: str, host: str | None = None) -> dict:
     """
     from . import nix_parser as _np
     groups: dict = {}
-    for _nix_file, rel, content in _scoped_nix_files(nixos_dir, host):
+    for _nix_file, rel, content in _scoped_nix_files(nixos_dir, host, strict):
         for key, value_text in _file_bindings(content).items():
             parts = key.split(".")
             if len(parts) < 3 or parts[0] != "users" or parts[1] != "groups":
@@ -943,7 +957,8 @@ def _rule_group_gid_duplicate(nixos_dir: str, config: dict, is_flake: bool,
                               host: str | None = None) -> list[Finding]:
     """Report the same gid pinned for more than one group."""
     by_gid: dict = {}
-    for name, info in _declared_groups(nixos_dir, host).items():
+    for name, info in _declared_groups(
+            nixos_dir, host or running_host(), strict=True).items():
         if info["gid"] is not None:
             by_gid.setdefault(info["gid"], []).append(name)
 
@@ -984,7 +999,8 @@ def _rule_group_gid_system(nixos_dir: str, config: dict, is_flake: bool,
     owner_of = {gid: name for name, gid in existing.items()}
 
     findings = []
-    for name, info in sorted(_declared_groups(nixos_dir, host).items()):
+    for name, info in sorted(
+            _declared_groups(nixos_dir, host or this_host, strict=True).items()):
         gid = info["gid"]
         if gid is None:
             continue
@@ -1045,15 +1061,15 @@ def _rule_user_no_password(nixos_dir: str, config: dict, is_flake: bool,
     nothing is lost. Unless mutableUsers = false makes the config the only
     source – then an existing password is dropped too.
     """
-    users = _declared_users(nixos_dir, host)
-    if not users:
-        return []
-
     # /etc/passwd is the running machine's. Judging another host by it would
     # report every user that machine simply does not have.
     this_host = running_host()
     if host and this_host and host != this_host:
         return [_other_host_finding("user_no_password", host, this_host)]
+
+    users = _declared_users(nixos_dir, host or this_host, strict=True)
+    if not users:
+        return []
 
     immutable = _mutable_users_off(nixos_dir)
     existing = _system_uids()
@@ -1086,8 +1102,12 @@ def _rule_user_no_password(nixos_dir: str, config: dict, is_flake: bool,
 def _rule_user_uid_duplicate(nixos_dir: str, config: dict, is_flake: bool,
                              host: str | None = None) -> list[Finding]:
     """Report the same uid handed to more than one user."""
+    # A uid collision only means something inside one machine; two hosts may
+    # hand the same uid to different people. Without a host given, that is
+    # this machine.
     by_uid: dict = {}
-    for name, info in _declared_users(nixos_dir, host).items():
+    for name, info in _declared_users(
+            nixos_dir, host or running_host(), strict=True).items():
         if info["uid"] is not None:
             by_uid.setdefault(info["uid"], []).append(name)
 
@@ -1126,7 +1146,8 @@ def _rule_user_uid_system(nixos_dir: str, config: dict, is_flake: bool,
     owner_of = {uid: name for name, uid in existing.items()}
 
     findings = []
-    for name, info in sorted(_declared_users(nixos_dir, host).items()):
+    for name, info in sorted(
+            _declared_users(nixos_dir, host or this_host, strict=True).items()):
         uid = info["uid"]
         if uid is None:
             continue
@@ -1604,8 +1625,15 @@ def _rule_flake_hm_branch(nixos_dir: str, config: dict, is_flake: bool,
 # The two count different things and are equal only by coincidence, so none of
 # the rules below compares them with each other.
 
-_RE_SYS_STATE_VERSION = re.compile(r'system\s*\.\s*stateVersion\s*=\s*"([^"]+)"')
-_RE_HM_STATE_VERSION = re.compile(r'home\s*\.\s*stateVersion\s*=\s*"([^"]+)"')
+# The priority wrappers matter here: a bare definition in the base config and
+# one in a host file are two definitions of the same option, and Nix refuses
+# that. With lib.mkDefault on the base, the host's value wins instead – that is
+# the difference between a config that builds and one that stops at evaluation.
+_PRIO = r'(?:(?:lib\s*\.\s*)?(mkDefault|mkForce|mkOverride\s*\d+)\s+)?'
+_RE_SYS_STATE_VERSION = re.compile(
+    r'system\s*\.\s*stateVersion\s*=\s*' + _PRIO + r'"([^"]+)"')
+_RE_HM_STATE_VERSION = re.compile(
+    r'home\s*\.\s*stateVersion\s*=\s*' + _PRIO + r'"([^"]+)"')
 
 
 def _release_tuple(version: str) -> "tuple | None":
@@ -1641,7 +1669,11 @@ def _hm_dir_path(nixos_dir: str) -> Path:
 
 def _state_version_sites(nixos_dir: str, host: str | None,
                          home_manager: bool = False) -> list:
-    """(value, rel, line) for every stateVersion of that kind in scope."""
+    """(value, rel, line, priority) for every stateVersion of that kind in scope.
+
+    priority is '' for a plain definition, otherwise the wrapper that was used
+    ('mkDefault', 'mkForce', …).
+    """
     hm_dir = _hm_dir_path(nixos_dir)
     pattern = _RE_HM_STATE_VERSION if home_manager else _RE_SYS_STATE_VERSION
     sites = []
@@ -1652,7 +1684,8 @@ def _state_version_sites(nixos_dir: str, host: str | None,
         for i, line in enumerate(content.split("\n"), 1):
             m = pattern.search(line)
             if m:
-                sites.append((m.group(1), rel, i))
+                prio = (m.group(1) or "").split()[0] if m.group(1) else ""
+                sites.append((m.group(2), rel, i, prio))
     return sites
 
 
@@ -1700,7 +1733,7 @@ def _rule_state_version_future(nixos_dir: str, config: dict, is_flake: bool,
         return []
 
     findings = []
-    for value, rel, line in _state_version_sites(nixos_dir, host):
+    for value, rel, line, _prio in _state_version_sites(nixos_dir, host):
         value_t = _release_tuple(value)
         if value_t and value_t > running_t:
             findings.append(Finding(
@@ -1737,25 +1770,60 @@ def _rule_state_version_per_host(nixos_dir: str, config: dict, is_flake: bool,
     if len(hosts) < 2:
         return []
 
-    from . import config_manager as _cm
-    try:
-        hosts_dir = (_cm.load_config_settings(nixos_dir).get("hosts_dir") or "hosts")
-    except Exception:
-        hosts_dir = "hosts"
-    hosts_dir = hosts_dir.strip().strip("/") or "hosts"
+    hosts_root = _hosts_dir_path(nixos_dir)
+    hosts_dir = hosts_root.name
+    # All host directories, not just the selected one: which hosts carry their
+    # own value decides whether the shared one is a defect at all.
+    base_sites: list = []
+    own: dict = {}
+    for value, rel, line, prio in _state_version_sites(nixos_dir, None):
+        parts = rel.replace("\\", "/").split("/")
+        if len(parts) >= 2 and parts[0] == hosts_dir:
+            own.setdefault(parts[1], (value, rel, line, prio))
+        else:
+            base_sites.append((value, rel, line, prio))
+
+    if not base_sites:
+        return []
 
     findings = []
-    for value, rel, line in _state_version_sites(nixos_dir, host):
-        if rel.replace("\\", "/").startswith(f"{hosts_dir}/"):
-            continue
-        names = ", ".join(sorted(hosts))
+    value, rel, line, prio = base_sites[0]
+
+    # Two definitions of one option: Nix aborts the evaluation unless the base
+    # one steps back with lib.mkDefault. This is the "checked against each
+    # other" part – a host value does not simply win.
+    if not prio:
+        for host_name, (h_value, h_rel, h_line, h_prio) in sorted(own.items()):
+            if h_prio == "mkForce":
+                continue
+            findings.append(Finding(
+                rule_id="state_version_per_host",
+                severity="error",
+                message=f"system.stateVersion ist zweimal definiert: {rel} Zeile "
+                        f"{line} und {h_rel} Zeile {h_line}.",
+                message_key="validator.f.state_version_conflict",
+                params=[rel, line, h_rel, h_line],
+                detail="Nix lehnt zwei Definitionen derselben Option ab und "
+                       f"bricht die Auswertung ab. Entweder den Wert in {rel} "
+                       f"Zeile {line} entfernen – dann gilt für jeden Host der "
+                       "eigene – oder dort lib.mkDefault davorschreiben, damit "
+                       "der Host-Wert gewinnt.",
+                detail_key="validator.d.state_version_conflict",
+                detail_params=[rel, line],
+            ))
+
+    # Only the hosts without their own value inherit the shared one. With a
+    # value of its own, a host is already correct and must not be named.
+    inheriting = sorted(h for h in hosts if h not in own)
+    if len(inheriting) >= 2:
+        names = ", ".join(inheriting)
         findings.append(Finding(
             rule_id="state_version_per_host",
             severity="warning",
             message=f'{rel} Zeile {line}: system.stateVersion "{value}" gilt so '
-                    f"für alle {len(hosts)} Hosts.",
+                    f"für {len(inheriting)} Hosts.",
             message_key="validator.f.state_version_per_host",
-            params=[rel, line, value, len(hosts)],
+            params=[rel, line, value, len(inheriting)],
             detail=f"Betroffen: {names}. Jede Maschine wurde zu ihrer eigenen "
                    f"Zeit installiert, der Wert gehört darum in "
                    f"{hosts_dir}/<name>/default.nix.",
@@ -1787,7 +1855,7 @@ def _rule_state_version_match(nixos_dir: str, config: dict, is_flake: bool,
     # normal state of every machine that has seen an upgrade, and demanding
     # equality is what dragged this config's value up release by release.
     findings = []
-    for state_ver, rel, i in _state_version_sites(nixos_dir, host):
+    for state_ver, rel, i, _prio in _state_version_sites(nixos_dir, host):
         state_t = _release_tuple(state_ver)
         if not state_t or state_t <= nixpkgs_t:
             continue
@@ -1836,8 +1904,8 @@ def _rule_hm_state_version_match(nixos_dir: str, config: dict, is_flake: bool,
         return []   # master/unstable: no release to compare against
 
     findings = []
-    for hm_ver, hm_rel, line in _state_version_sites(nixos_dir, host,
-                                                     home_manager=True):
+    for hm_ver, hm_rel, line, _prio in _state_version_sites(nixos_dir, host,
+                                                            home_manager=True):
         hm_t = _release_tuple(hm_ver)
         if not hm_t or hm_t <= branch_t:
             continue

@@ -136,6 +136,53 @@ check("und dort auch nicht 'fehlt'",
       run(validator._rule_state_version_missing, d_per_host,
           host="nix-desktop") == [])
 
+print("\n7b. Host-Wert hat Vorrang – und wird gegengeprüft")
+# Basis-Wert ohne mkDefault plus Host-Wert: Nix bricht ab.
+d_both = make({
+    "flake.nix": FLAKE_TWO_HOSTS,
+    "configuration.nix": base(),
+    "hosts/nix-laptop/default.nix": base('  system.stateVersion = "24.11";'),
+})
+f = run(validator._rule_state_version_per_host, d_both)
+conflict = [x for x in f if x.message_key == "validator.f.state_version_conflict"]
+check("doppelte Definition wird gemeldet", len(conflict) == 1,
+      [x.message_key for x in f])
+check("als Fehler, nicht als Warnung",
+      conflict and conflict[0].severity == "error",
+      conflict and conflict[0].severity)
+check("nennt beide Stellen",
+      conflict and conflict[0].params[0] == "configuration.nix"
+      and conflict[0].params[2] == "hosts/nix-laptop/default.nix",
+      conflict and conflict[0].params)
+check("nur noch ein Host erbt, also keine Streuungs-Warnung",
+      not [x for x in f if x.message_key == "validator.f.state_version_per_host"],
+      [x.message_key for x in f])
+
+# Mit lib.mkDefault in der Basis gewinnt der Host-Wert – das ist erlaubt.
+d_default = make({
+    "flake.nix": FLAKE_TWO_HOSTS,
+    "configuration.nix": base('  system.stateVersion = lib.mkDefault "26.05";'),
+    "hosts/nix-laptop/default.nix": base('  system.stateVersion = "24.11";'),
+})
+f = run(validator._rule_state_version_per_host, d_default)
+check("mkDefault erzeugt keinen Konflikt",
+      not [x for x in f if x.message_key == "validator.f.state_version_conflict"],
+      [x.message_key for x in f])
+check("mkDefault-Wert wird überhaupt gelesen",
+      [s for s in validator._state_version_sites(d_default, None)
+       if s[3] == "mkDefault"],
+      validator._state_version_sites(d_default, None))
+
+# Jeder Host mit eigenem Wert, Basis ohne: nichts zu melden.
+d_all_own = make({
+    "flake.nix": FLAKE_TWO_HOSTS,
+    "configuration.nix": base(""),
+    "hosts/nix-desktop/default.nix": base(),
+    "hosts/nix-laptop/default.nix": base('  system.stateVersion = "24.11";'),
+})
+f = run(validator._rule_state_version_per_host, d_all_own)
+check("alle Hosts eigenständig → still", f == [], [x.message for x in f])
+
 ONE_HOST = FLAKE_TWO_HOSTS.replace(
     '      nix-laptop  = nixpkgs.lib.nixosSystem { modules = [ ./configuration.nix ]; };\n', '')
 d_one = make({"flake.nix": ONE_HOST, "configuration.nix": base()})
