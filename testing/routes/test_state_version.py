@@ -229,6 +229,27 @@ check("neuer als der HM-Zweig → Fund", len(f) == 1, [x.message for x in f])
 check("nennt den Zweig", f and f[0].params[3] == "release-26.05",
       f and f[0].params)
 
+print("\n8b. Host-Formular: eingetragener Wert bleibt stehen")
+# Vorher schrieb der Generator im host_mode keine stateVersion - das Feld war
+# da, der Parser las es zurueck, nur beim Speichern verschwand der Wert.
+from nico import generator, importer
+
+host_nix = generator.generate_host_nix(
+    {"hostname": "nix-vm", "state_version": "25.11"}, "nix-vm", False)
+check("Wert steht in der Host-Datei",
+      'system.stateVersion = "25.11";' in host_nix, host_nix[:200])
+check("Roundtrip: Parser liest ihn zurueck",
+      importer.parse_config(host_nix).get("state_version") == "25.11",
+      importer.parse_config(host_nix).get("state_version"))
+
+leer = generator.generate_host_nix({"hostname": "nix-vm"}, "nix-vm", False)
+check("ohne Wert keine Zeile", "stateVersion" not in leer, leer[:200])
+check("und kein TODO-Kommentar", "TODO" not in leer, leer[:200])
+
+ganz_leer = generator.generate_host_nix({}, "nix-vm", False)
+check("ohne Hostname und ohne Wert kein SYST-Abschnitt",
+      "SYST" not in ganz_leer, ganz_leer[:200])
+
 print("\n9. Regeln sind registriert und standardmäßig an")
 for rid in ("state_version_future", "state_version_missing",
             "state_version_per_host", "state_version_match",

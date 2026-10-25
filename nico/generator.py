@@ -181,12 +181,23 @@ def _sec_boot(data: dict, brix: dict) -> "list[str]":
 
 def _sec_system(data: dict, *, host_mode: bool) -> "list[str]":
     hostname = (data.get("hostname") or "").strip()
-    if host_mode:
-        # Sparse host file: no stateVersion, section only when set
-        if not hostname:
-            return []
-        return [_section("SYST"), f'  networking.hostName = "{nix_esc(hostname)}";']
     state_version = (data.get("state_version") or "").strip()
+    if host_mode:
+        # Sparse host file: the section carries only what is actually set, and
+        # no TODO comment – an empty host file is the normal case.
+        #
+        # stateVersion is written here too. The field is in the host form and
+        # the parser reads it back from the host file; dropping it on write
+        # swallowed what the user had typed, without a word. It names the
+        # release a machine was installed with, so per host is where it
+        # belongs. Whether the base config may keep a value of its own is the
+        # user's decision – state_version_per_host reports the collision.
+        lines = []
+        if hostname:
+            lines += [f'  networking.hostName = "{nix_esc(hostname)}";']
+        if state_version:
+            lines += [f'  system.stateVersion = "{nix_esc(state_version)}";']
+        return ([_section("SYST")] + lines) if lines else []
     lines = [_section("SYST")]
     if hostname:
         lines += [f'  networking.hostName = "{nix_esc(hostname)}";']
