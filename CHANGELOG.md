@@ -18,6 +18,7 @@
 - One word per language for each concept. Every language used four or five terms for the same thing – English alone had commit, snapshot, checkpoint and restore point, Spanish five. Buttons now read "create checkpoint (commit)": the plain term for newcomers, the git term in brackets for everyone who knows it
 - `Nix-Brick` and `Nix-Brix` are treated as the name they are and stay untranslated in every language; they used to appear as `bloque`, `bloc`, `brique`, `ブリック`, `блок`, `кирпич` and `砖块`, so nobody could look the term up or talk about it
 - `snapshot` is reserved for Snapper and btrfs snapshots and no longer doubles as a word for commits
+- `install.sh`, a menu around the five nix commands from the README: try, install, update, and the same two for the development branch. It adds `--extra-experimental-features` by itself where flakes are still disabled, and prints every command in full before running it, so the script teaches the command instead of hiding it
 - The check is called `Validator` everywhere now, untranslated in every language – that is what the help has called it all along, while the interface said "validation". A button also carries the name of the function it starts: the one under a failed rebuild said "Run check" and led to a menu entry named "Validation"
 
 ### Bug Fixes

@@ -64,6 +64,24 @@ nix --extra-experimental-features 'nix-command flakes' run github:DSpayreR6/nico
 
 NiCo picks a free port (default `8421`) and opens your browser automatically.
 
+### Not sure which command is yours?
+
+There is a small menu that offers them all — try, install, update, and the same
+two for the development branch:
+
+```bash
+sh <(curl -sL https://raw.githubusercontent.com/DSpayreR6/nico/main/install.sh)
+```
+
+It adds the flake flags above by itself when your machine needs them, and it
+prints every command in full before running it, so you can see what it does and
+type it yourself next time. Read it first if you prefer — it is a single short
+shell script:
+
+```bash
+curl -sL https://raw.githubusercontent.com/DSpayreR6/nico/main/install.sh | less
+```
+
 ### Keep it installed
 
 ```bash
