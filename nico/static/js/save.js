@@ -381,6 +381,10 @@ async function _doZipApply(confirmed) {
 
   _zipImportResetState();
   await refreshAfterImport();
+  // A ZIP carries whatever hardware config the machine it came from had. This
+  // is the way a foreign config most often arrives, so it must be settled here
+  // – the start check would only see it on the next page load.
+  await checkHardwareMatch(data.hardware);
   showToast(t('import.success'), 'success');
 }
 
@@ -539,6 +543,7 @@ async function _doAdminImport(configPath, confirmed, resultEl) {
 
   resultEl.className = 'import-result hidden';
   await refreshAfterImport();
+  await checkHardwareMatch(data.hardware);
   showToast(t('import.success'), 'success');
 }
 

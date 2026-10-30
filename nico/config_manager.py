@@ -47,6 +47,15 @@ APP_SETTINGS_FILE = _xdg_config_home() / "nico" / "settings.json"
 # 2.1 GB log that was committed and blocked every further push.
 REBUILD_LOG_FILE = _xdg_cache_home() / "nico" / "nixos-rebuild.log"
 
+# This machine's hardware configs, parked across an import. An import replaces
+# every .nix in the config directory, the machine's own hardware config
+# included, and /etc/nixos is no substitute for it: NiCo's own symlink feature
+# points /etc/nixos *at* the config directory, so afterwards the "local" file is
+# the imported foreign one. Documented exception to the file-access rule in
+# vorgaben.txt (decision 2026-10-30) – NiCo writes outside project and config
+# directory here, next to the app settings.
+HW_STASH_DIR = _xdg_config_home() / "nico" / "hw-stash"
+
 # Pre-XDG location next to the package – migrated once, then never written again.
 _LEGACY_APP_SETTINGS_FILE = Path(__file__).parent.parent / "nico-settings.json"
 

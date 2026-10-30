@@ -43,6 +43,11 @@ def decision_json(nixos_dir: str) -> dict:
         "hosts":            d.hosts,
         "target":           _file_json(d.target, root) if d.target else None,
         "files":            [_file_json(f, root) for f in d.files],
+        # Both choices the dialog puts to the user, with NiCo's verdict on every
+        # entry. "sources" starts with the files parked before the import - the
+        # ones it just replaced.
+        "sources":          hardware.candidate_sources(nixos_dir),
+        "targets":          hardware.candidate_targets(nixos_dir),
     }
 
 
@@ -63,8 +68,9 @@ def register(app, ctx):
         """
         Carry out the user's decision.
 
-        "replace"  put this machine's file at the given host, keep the old one
-                   as .import.bak
+        "replace"  put the chosen file at the chosen host, keep the old one as
+                   .import.bak. The source comes from candidate_sources(); with
+                   none given it falls back to /etc/nixos.
         "confirm"  record that the file there does belong to this machine
         """
         if err := _check_csrf():
@@ -77,6 +83,8 @@ def register(app, ctx):
         action = (body.get("action") or "").strip()
         raw    = body.get("host")
         host   = raw.strip() if isinstance(raw, str) and raw.strip() else None
+        src_id = body.get("source")
+        src_id = src_id.strip() if isinstance(src_id, str) else ""
 
         root = Path(nixos_dir).resolve()
 
@@ -98,11 +106,23 @@ def register(app, ctx):
             return jsonify({"error": "ERR_SYSTEM_PATH"}), 403
 
         if action == "replace":
-            if not hardware.ETC_NIXOS_HW.is_file():
-                return jsonify({"error": "ERR_NO_LOCAL_HARDWARE"}), 400
+            if src_id:
+                source = hardware.resolve_source(nixos_dir, src_id)
+                if source is None:
+                    # The id travels through the browser; anything not on the
+                    # current candidate list is refused rather than resolved.
+                    return jsonify({"error": "ERR_NO_LOCAL_HARDWARE"}), 400
+            else:
+                if not hardware.ETC_NIXOS_HW.is_file():
+                    return jsonify({"error": "ERR_NO_LOCAL_HARDWARE"}), 400
+                source = hardware.ETC_NIXOS_HW
             try:
-                hardware.replace_with_local(target)
-            except ValueError:
+                hardware.replace_with_local(target, source)
+            except FileNotFoundError:
+                return jsonify({"error": "ERR_NO_LOCAL_HARDWARE"}), 400
+            except ValueError as exc:
+                if str(exc) == "source_is_target":
+                    return jsonify({"error": "ERR_HARDWARE_SAME_FILE"}), 409
                 return jsonify({"error": "ERR_LOCAL_HARDWARE_MISMATCH"}), 409
             except PermissionError:
                 return jsonify({"error": "ERR_IMPORT_PERMISSION"}), 403

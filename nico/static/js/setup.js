@@ -498,6 +498,7 @@ function initImportManual() {
 
     document.getElementById('import-overlay').classList.add('hidden');
     await refreshAfterImport();
+    await checkHardwareMatch(data.hardware);
     showToast(t('import.success'), 'success');
   });
 
@@ -519,6 +520,7 @@ function initImportManual() {
     }
     document.getElementById('import-overlay').classList.add('hidden');
     await refreshAfterImport();
+    await checkHardwareMatch(data.hardware);
     showToast(t('import.success'), 'success');
   });
   on('import-manual-backup-cancel-btn', 'click', () => {

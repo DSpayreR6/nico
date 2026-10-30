@@ -151,6 +151,11 @@ def register(app, ctx):
         nixos_dir, err = _require_setup()
         if err:
             return err
+        # Park this machine's hardware configs before the restore overwrites
+        # them – afterwards they are only reachable through git, and the dialog
+        # needs something it can actually put back.
+        from .. import hardware as _hw
+        _hw.stash_hw_files(nixos_dir)
         ok, msg = git_manager.git_reset_hard(nixos_dir)
         # A restore can bring back a hardware config from before a disk change
         # or from another machine entirely – same question as after an import.
@@ -430,6 +435,8 @@ def register(app, ctx):
             return err
         body = request.get_json(silent=True) or {}
         commit_hash = body.get("hash", "")
+        from .. import hardware as _hw
+        _hw.stash_hw_files(nixos_dir)
         ok, msg = git_manager.rollback(nixos_dir, commit_hash)
         from .hardware import decision_json
         return jsonify({"success": ok, "message": msg,

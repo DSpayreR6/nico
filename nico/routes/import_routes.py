@@ -8,13 +8,30 @@ from pathlib import Path
 
 from flask import jsonify, request
 
-from .. import atomic, config_manager, git_manager, importer
+from .. import atomic, config_manager, git_manager, hardware, importer
 from ..brix import format_brick, next_order_for_section
 from ..core import (
     classify_filename as _classify_filename,
     get_nico_type as _get_nico_type,
     set_type_in_content as _set_type_in_content,
 )
+
+
+def _stash_hardware(nixos_dir: str) -> None:
+    """Park this machine's hardware configs before an import replaces them.
+
+    Every import deletes the .nix files of the config directory and copies the
+    incoming ones over them – the machine's own hardware-configuration.nix
+    included. /etc/nixos is no fallback for it: with NiCo's own symlink feature
+    /etc/nixos *is* the config directory, so after the import the only file on
+    offer would be the imported foreign one. Failures are swallowed on purpose:
+    the pre-import ZIP and the git checkpoint still exist, and no import may be
+    blocked by a copy that is only there to make the repair offer better.
+    """
+    try:
+        hardware.stash_hw_files(nixos_dir)
+    except Exception:
+        pass
 
 
 def register(app, ctx):
@@ -105,6 +122,7 @@ def register(app, ctx):
             git_manager.auto_commit(nixos_dir, label="NiCo: Sicherung vor ZIP-Import")
         except Exception:
             pass
+        _stash_hardware(nixos_dir)
 
         dst = Path(nixos_dir)
 
@@ -147,11 +165,13 @@ def register(app, ctx):
         data = _apply_import_result(nixos_dir, recognized, rest_brix, content)
         _reimport_flake(nixos_dir, data)
 
+        from .hardware import decision_json
         return jsonify({
             "success":      True,
             "recognized":   recognized,
             "has_brix":     bool(rest_brix.strip()),
             "files_copied": files_copied,
+            "hardware":     decision_json(nixos_dir),
         })
 
     # ---------------------------------------------------------- categorize
@@ -252,6 +272,7 @@ def register(app, ctx):
                 return jsonify({"error": "ERR_BACKUP_FAILED", "detail": str(exc)}), 500
 
         git_manager.auto_commit(nixos_dir, label="NiCo: Sicherung vor Import")
+        _stash_hardware(nixos_dir)
 
         if files_data:
             # ── Content mode: browser sent file contents directly ─────────────
@@ -324,11 +345,13 @@ def register(app, ctx):
         if any(Path(f).name == "flake.nix" for f in files_copied):
             _reimport_flake(nixos_dir, data)
 
+        from .hardware import decision_json
         return jsonify({
             "success":      True,
             "recognized":   recognized,
             "has_brix":     bool(rest_brix.strip()),
             "files_copied": files_copied,
+            "hardware":     decision_json(nixos_dir),
         })
 
     @app.route("/api/import/check")
@@ -411,6 +434,7 @@ def register(app, ctx):
             git_manager.auto_commit(nixos_dir, label="NiCo: Sicherung vor Import")
         except Exception:
             pass
+        _stash_hardware(nixos_dir)
 
         src = importer.ETC_NIXOS / "configuration.nix"
         if not src.is_file():

@@ -40,6 +40,51 @@ function _hwVerdictLine(f) {
   return t('hw.line.match', where);
 }
 
+/** Short verdict label shown behind an entry in both dropdowns. */
+function _hwVerdictTag(verdict) {
+  if (verdict === 'match')    return t('hw.vMatch');
+  if (verdict === 'mismatch') return t('hw.vMismatch');
+  if (verdict === 'unknown')  return t('hw.vUnknown');
+  return '';
+}
+
+/**
+ * Where this machine's hardware config belongs.
+ *
+ * Every host of the config plus the root, whether a file sits there or not: a
+ * config arriving from another machine may have no host for this one, and then
+ * the answer is a new file rather than a replacement.
+ */
+function _hwTargetOptions(data) {
+  return (data.targets || []).map(e => {
+    const bits = [];
+    if (e.is_this_host) bits.push(t('hw.thisHost'));
+    if (!e.exists)      bits.push(t('hw.targetNew'));
+    else if (e.verdict) bits.push(_hwVerdictTag(e.verdict));
+    const suffix = bits.length ? `  —  ${bits.join(', ')}` : '';
+    // The host travels back, not the path: the route rebuilds the path from
+    // hosts_dir itself and refuses a host it does not know.
+    return `<option value="${escHtml(e.host || '')}">${escHtml(e.path + suffix)}</option>`;
+  }).join('');
+}
+
+/**
+ * Which file is this machine's.
+ *
+ * The files parked before the import come first – they are the ones it just
+ * replaced. A confirmed mismatch is listed but not selectable: naming another
+ * machine's disks would look like a repair and leave the config unbootable.
+ */
+function _hwSourceOptions(data) {
+  return (data.sources || []).map(s => {
+    const bits = [_hwVerdictTag(s.verdict)];
+    if (s.kind === 'stash') bits.unshift(t('hw.srcStash'));
+    if (s.host)             bits.unshift(s.host);
+    const label = `${s.label}  —  ${bits.filter(Boolean).join(', ')}`;
+    return `<option value="${escHtml(s.id)}"${s.usable ? '' : ' disabled'}>${escHtml(label)}</option>`;
+  }).join('');
+}
+
 async function _showHardwareDialog(data) {
   const overlay = document.createElement('div');
   overlay.className = 'overlay';
@@ -61,24 +106,19 @@ async function _showHardwareDialog(data) {
   const rows = shown.map(f =>
     `<div style="margin:4px 0;overflow-wrap:anywhere">• ${escHtml(_hwVerdictLine(f))}</div>`).join('');
 
-  const hostOptions = (data.hosts || []).map(h =>
-    `<option value="${escHtml(h)}">${escHtml(h)}</option>`).join('');
+  // Nothing is preselected in either list (decision 2026-10-25): with a wrong
+  // answer the damage is the whole installation, so the user picks both ends
+  // of the operation deliberately. The placeholder stays as the selected entry
+  // until they do.
+  const placeholder = `<option value="" disabled selected>${escHtml(t('hw.choose'))}</option>`;
+  const anySource   = (data.sources || []).some(s => s.usable);
 
-  const picker = isPick || isAdd
+  const sourceBlock = anySource
     ? `<div style="margin:10px 0">
-         <label for="hw-host" style="display:block;margin-bottom:4px">${escHtml(t('hw.pickLabel'))}</label>
-         <select id="hw-host">${hostOptions}</select>
+         <label for="hw-source" style="display:block;margin-bottom:4px">${escHtml(t('hw.sourceLabel'))}</label>
+         <select id="hw-source" style="max-width:100%">${placeholder}${_hwSourceOptions(data)}</select>
        </div>`
-    : '';
-
-  // No source means nothing can be put in place: the only honest offer left is
-  // to say so and name the command that creates one.
-  const canReplace = data.source_usable;
-  const sourceNote = canReplace
-    ? `<p style="margin-top:8px">${escHtml(t('hw.sourceOk', data.source_path))}</p>`
-    : `<p style="margin-top:8px;color:var(--red)">${escHtml(
-         data.source_verdict === 'mismatch' ? t('hw.sourceMismatch', data.source_path)
-                                            : t('hw.sourceMissing'))}</p>`;
+    : `<p style="margin-top:8px;color:var(--red)">${escHtml(t('hw.noSource'))}</p>`;
 
   overlay.innerHTML = `
     <div class="modal">
@@ -87,24 +127,37 @@ async function _showHardwareDialog(data) {
       <div class="gsi"><div class="gsi-block">
         <div class="gsi-block-body">${rows}</div>
       </div></div>
-      ${picker}
+      <div style="margin:10px 0">
+        <label for="hw-host" style="display:block;margin-bottom:4px">${escHtml(t('hw.pickLabel'))}</label>
+        <select id="hw-host" style="max-width:100%">${placeholder}${_hwTargetOptions(data)}</select>
+      </div>
+      ${sourceBlock}
       <p style="margin-top:10px"><strong>${escHtml(t('hw.warning'))}</strong></p>
-      ${sourceNote}
       <p id="hw-err" style="color:var(--red);display:none;margin-top:8px"></p>
       <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px;flex-wrap:wrap">
-        <button type="button" id="hw-confirm" class="btn-surface">${escHtml(t('hw.keepFile'))}</button>
-        <button type="button" id="hw-replace" class="btn-primary"${canReplace ? '' : ' disabled'}>${escHtml(t('hw.useLocal'))}</button>
+        <button type="button" id="hw-confirm" class="btn-surface" disabled>${escHtml(t('hw.keepFile'))}</button>
+        <button type="button" id="hw-replace" class="btn-primary" disabled>${escHtml(t('hw.useLocal'))}</button>
       </div>
     </div>`;
   document.body.appendChild(overlay);
 
   return new Promise(resolve => {
-    const err = overlay.querySelector('#hw-err');
-    const chosenHost = () => {
-      const sel = overlay.querySelector('#hw-host');
-      if (sel) return sel.value || null;
-      return target ? target.host : null;
+    const err     = overlay.querySelector('#hw-err');
+    const hostSel = overlay.querySelector('#hw-host');
+    const srcSel  = overlay.querySelector('#hw-source');
+    const btnOk   = overlay.querySelector('#hw-confirm');
+    const btnRep  = overlay.querySelector('#hw-replace');
+
+    // Confirming only needs a place, replacing needs a place and a file.
+    const sync = () => {
+      const hasTarget = hostSel.selectedIndex > 0;
+      const chosen    = hasTarget ? (data.targets || [])[hostSel.selectedIndex - 1] : null;
+      btnOk.disabled  = !hasTarget || !chosen || !chosen.exists;
+      btnRep.disabled = !hasTarget || !srcSel || srcSel.selectedIndex <= 0;
     };
+    hostSel.addEventListener('change', sync);
+    srcSel?.addEventListener('change', sync);
+    sync();
 
     const send = async (action, btn) => {
       btn.disabled = true;
@@ -113,7 +166,11 @@ async function _showHardwareDialog(data) {
         const res = await csrfFetch('/api/hardware/apply', {
           method:  'POST',
           headers: { 'Content-Type': 'application/json' },
-          body:    JSON.stringify({ action, host: chosenHost() }),
+          body:    JSON.stringify({
+            action,
+            host:   hostSel.value || null,
+            source: action === 'replace' ? (srcSel?.value || null) : null,
+          }),
         });
         const out = await res.json();
         if (!res.ok || out.error) throw new Error(tErr(out.error));
@@ -125,13 +182,11 @@ async function _showHardwareDialog(data) {
       } catch (e) {
         err.textContent = String(e.message || e);
         err.style.display = 'block';
-        btn.disabled = false;
+        sync();
       }
     };
 
-    overlay.querySelector('#hw-confirm')
-      .addEventListener('click', ev => send('confirm', ev.currentTarget));
-    overlay.querySelector('#hw-replace')
-      .addEventListener('click', ev => send('replace', ev.currentTarget));
+    btnOk.addEventListener('click', ev => send('confirm', ev.currentTarget));
+    btnRep.addEventListener('click', ev => send('replace', ev.currentTarget));
   });
 }

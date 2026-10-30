@@ -360,6 +360,21 @@ def replace_with_local(target: Path, source: Path | None = None) -> Path:
         # repair and leave the config just as unbootable.
         raise ValueError("source_mismatch")
 
+    # Source and target can be the same file without looking like it: NiCo's own
+    # symlink feature points /etc/nixos at the config directory, and then the
+    # offered "local" file *is* the one being replaced. Renaming it to .bak and
+    # then reading it left the config with no hardware-configuration.nix at all.
+    try:
+        same = src.resolve() == target.resolve()
+    except OSError:
+        same = False
+    if same:
+        raise ValueError("source_is_target")
+
+    # Read before moving anything: a failure after the rename would leave the
+    # target gone, which is the one outcome this function must never produce.
+    payload = src.read_bytes()
+
     target.parent.mkdir(parents=True, exist_ok=True)
     if target.exists():
         bak = target.with_name(target.name + IMPORT_BAK_SUFFIX)
@@ -367,8 +382,239 @@ def replace_with_local(target: Path, source: Path | None = None) -> Path:
             bak.unlink()
         target.replace(bak)
 
-    atomic.write_bytes(target, src.read_bytes())
+    atomic.write_bytes(target, payload)
     return target
+
+
+# ── Parking this machine's file across an import ─────────────────────────────
+#
+# The dialog used to run only after an import, with /etc/nixos as its single
+# possible source. That fails in the setup NiCo itself offers: with
+# /etc/nixos symlinked to the config directory, the import overwrites the only
+# correct file before anyone is asked. So every hardware config of the config
+# directory is copied aside *before* an import and offered afterwards.
+
+_STASH_META = "stash.json"
+
+
+def _stash_dir() -> Path:
+    from . import config_manager
+    return config_manager.HW_STASH_DIR
+
+
+def _stash_name(host: str | None) -> str:
+    """File name for a stashed host. Hosts are directory names, so they are
+    already safe, but a stray separator must never escape the stash dir."""
+    safe = re.sub(r"[^A-Za-z0-9_.-]", "_", host) if host else "_root"
+    return f"{safe or '_root'}.nix"
+
+
+def stash_hw_files(nixos_dir: str) -> list[dict]:
+    """
+    Copy every hardware-configuration.nix of the config directory aside.
+
+    Called right before an import replaces the .nix files. Only files that
+    describe *this* machine are worth keeping - another host's file is in the
+    git history and in the pre-import ZIP anyway, and offering it later as
+    "this machine's" would be the mistake the whole check is about. MATCH and
+    UNKNOWN are kept, MISMATCH is not.
+    """
+    import json
+
+    kept: list[dict] = []
+    for f in find_hw_files(nixos_dir):
+        if f.verdict == MISMATCH:
+            continue
+        try:
+            payload = f.path.read_bytes()
+        except OSError:
+            continue
+        dest = _stash_dir() / _stash_name(f.host)
+        try:
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            atomic.write_bytes(dest, payload)
+        except OSError:
+            continue
+        kept.append({
+            "file":    dest.name,
+            "host":    f.host,
+            "origin":  str(f.path),
+            "verdict": f.verdict,
+            "fp":      _content_fp(dest),
+            "at":      datetime.now().isoformat(timespec="seconds"),
+        })
+
+    if not kept:
+        return []
+    try:
+        atomic.write_text(
+            _stash_dir() / _STASH_META,
+            json.dumps(kept, indent=2, ensure_ascii=False),
+        )
+    except OSError:
+        pass
+    return kept
+
+
+def stashed_files() -> list[dict]:
+    """The parked files that still exist, newest stash first."""
+    import json
+
+    meta_file = _stash_dir() / _STASH_META
+    try:
+        entries = json.loads(meta_file.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+    if not isinstance(entries, list):
+        return []
+
+    out = []
+    for e in entries:
+        if not isinstance(e, dict) or not e.get("file"):
+            continue
+        path = _stash_dir() / str(e["file"])
+        if not path.is_file():
+            continue
+        out.append({**e, "path": path})
+    return out
+
+
+def stash_path(name: str) -> Path | None:
+    """Resolve a stash file name to its path, or None if it is not one."""
+    for e in stashed_files():
+        if e["file"] == name:
+            return e["path"]
+    return None
+
+
+# ── The two choices put to the user ──────────────────────────────────────────
+#
+# Which file is this machine's, and where in the config does it belong. NiCo
+# cannot answer the first reliably on a multi-host config - the hostname is a
+# hint, not proof - and the second is a decision about the user's own machine.
+# So both are offered as lists with NiCo's verdict next to every entry, nothing
+# preselected (decision 2026-10-25, extended 2026-10-30).
+
+SRC_STASH = "stash"
+SRC_ETC = "etc"
+SRC_CONFIG = "config"
+
+
+def source_id(kind: str, name: str = "") -> str:
+    return f"{kind}:{name}" if name else kind
+
+
+def candidate_sources(nixos_dir: str) -> list[dict]:
+    """
+    Every file that could be put in place as this machine's hardware config.
+
+    Order is deliberate: the files parked before the import come first - they
+    are the ones the import just replaced and the most likely answer - then
+    /etc/nixos, then whatever currently sits in the config directory.
+    """
+    root = Path(nixos_dir)
+    out: list[dict] = []
+
+    for e in stashed_files():
+        verdict = e.get("verdict") or classify(e["path"])[0]
+        out.append({
+            "id":      source_id(SRC_STASH, e["file"]),
+            "kind":    SRC_STASH,
+            "label":   e.get("origin") or str(e["path"]),
+            "host":    e.get("host"),
+            "at":      e.get("at"),
+            "verdict": verdict,
+            "usable":  verdict != MISMATCH,
+        })
+
+    if ETC_NIXOS_HW.is_file():
+        verdict = classify(ETC_NIXOS_HW)[0]
+        out.append({
+            "id":      source_id(SRC_ETC),
+            "kind":    SRC_ETC,
+            "label":   str(ETC_NIXOS_HW),
+            "host":    None,
+            "at":      None,
+            "verdict": verdict,
+            "usable":  verdict != MISMATCH,
+        })
+
+    for f in find_hw_files(nixos_dir):
+        rel = str(f.path.relative_to(root))
+        out.append({
+            "id":      source_id(SRC_CONFIG, rel),
+            "kind":    SRC_CONFIG,
+            "label":   rel,
+            "host":    f.host,
+            "at":      None,
+            "verdict": f.verdict,
+            "usable":  f.verdict != MISMATCH,
+        })
+    return out
+
+
+def resolve_source(nixos_dir: str, source_id_str: str) -> Path | None:
+    """Turn a source id from candidate_sources() back into a path.
+
+    Returns None for anything that is not on the current list - the id travels
+    through the browser, so it must not be trusted to stay inside the stash or
+    the config directory.
+    """
+    wanted = (source_id_str or "").strip()
+    if not wanted:
+        return None
+    root = Path(nixos_dir).resolve()
+    kind, _, name = wanted.partition(":")
+
+    if kind == SRC_STASH:
+        return stash_path(name)
+    if kind == SRC_ETC:
+        return ETC_NIXOS_HW if ETC_NIXOS_HW.is_file() else None
+    if kind == SRC_CONFIG:
+        base = Path(nixos_dir)
+        for f in find_hw_files(nixos_dir):
+            if str(f.path.relative_to(base)) == name:
+                return f.path
+    return None
+
+
+def candidate_targets(nixos_dir: str) -> list[dict]:
+    """
+    Every place this machine's hardware config could go.
+
+    Hosts without a file so far are included: a config arriving from another
+    machine may have no host for this one at all, and then the answer is a new
+    file rather than a replacement.
+    """
+    from . import config_manager
+
+    hosts_dir = _hosts_dir(nixos_dir)
+    by_host = {f.host: f for f in find_hw_files(nixos_dir)}
+    hosts = config_manager.scan_hosts(nixos_dir)
+    this = running_host()
+
+    out: list[dict] = []
+    root_file = by_host.get(None)
+    # The config root is only a target where it is actually used: a file lies
+    # there already, or the config has no hosts at all.
+    if root_file is not None or not hosts:
+        out.append({
+            "host":    None,
+            "path":    HW_NAME,
+            "exists":  root_file is not None,
+            "verdict": root_file.verdict if root_file else None,
+            "is_this_host": False,
+        })
+    for host in hosts:
+        f = by_host.get(host)
+        out.append({
+            "host":    host,
+            "path":    str(Path(hosts_dir) / host / HW_NAME),
+            "exists":  f is not None,
+            "verdict": f.verdict if f else None,
+            "is_this_host": bool(this) and host == this,
+        })
+    return out
 
 
 # ── One-time confirmation per host ───────────────────────────────────────────
