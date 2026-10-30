@@ -2684,11 +2684,60 @@ def _mounted_fstypes() -> set[str]:
     return types
 
 
+# Everything in a written config that only makes sense on btrfs. The first two
+# are what NiCo itself writes from the form; the rest catch hand-written and
+# imported declarations, which is where this rule used to be blind.
+_BTRFS_MARKERS = (
+    re.compile(r'services\s*\.\s*btrfs\s*\.\s*autoScrub'),
+    re.compile(r'systemd\s*\.\s*(?:services|timers)\s*\.\s*"?[\w.-]*btrfs[\w.-]*"?'),
+    re.compile(r'pkgs\s*\.\s*btrfs-progs'),
+    re.compile(r'\bbtrfs\s+(?:balance|scrub|quota|subvolume|filesystem|device)\b'),
+)
+
+
+def _btrfs_declarations(nixos_dir: str, host: str | None) -> list[str]:
+    """Files of the written config that set up something btrfs-only.
+
+    Read from disk rather than from NiCo's model on purpose. A Nix-Brick is
+    opaque to the model – `config` has no entry for it – so a rule asking
+    "is auto-scrub on?" stayed silent for every setting that arrived with an
+    import. On disk a brick is ordinary Nix and reads like anything else.
+    Found this way on 2026-10-30: a `btrfs-dynamic-reclaim` unit inside a
+    brick, which failed to start on a VM without btrfs and took the rebuild
+    down with it. No form field exists for it, so no model entry either.
+    """
+    from . import config_manager as _cm
+    from .importer import _strip_nix_comments
+
+    base = Path(nixos_dir)
+    cfg_settings = _cm.load_config_settings(nixos_dir)
+    hosts_dir = (cfg_settings.get("hosts_dir") or "hosts").strip() or "hosts"
+    hits: list[str] = []
+    for nix_file in sorted(base.rglob("*.nix")):
+        if ".git" in nix_file.parts:
+            continue
+        rel = nix_file.relative_to(base)
+        # A host directory belongs to its own host only; the base config
+        # applies to all of them.
+        if len(rel.parts) >= 2 and rel.parts[0] == hosts_dir:
+            if host and rel.parts[1] != host:
+                continue
+        try:
+            content = nix_file.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        content = _strip_nix_comments(content)
+        if any(rx.search(content) for rx in _BTRFS_MARKERS):
+            hits.append(str(rel))
+    return hits
+
+
 def _rule_btrfs_without_btrfs(nixos_dir: str, config: dict, is_flake: bool,
                               host: str | None = None) -> list[Finding]:
     scrub   = bool(config.get("btrfs_scrub"))
     balance = bool(config.get("btrfs_balance"))
-    if not (scrub or balance):
+    declared = _btrfs_declarations(nixos_dir, host)
+    if not (scrub or balance or declared):
         return []
 
     # /proc and findmnt read the running machine, so this can only speak for it.
@@ -2708,21 +2757,41 @@ def _rule_btrfs_without_btrfs(nixos_dir: str, config: dict, is_flake: bool,
 
     findings: list[Finding] = []
     if "btrfs" not in _mounted_fstypes():
-        # One key per case – a job list built here would put German words into
-        # every translated message
-        jobs, key = (("Auto-Scrub und Auto-Balance", "both") if scrub and balance else
-                     ("Auto-Scrub", "scrub") if scrub else
-                     ("Auto-Balance", "balance"))
-        findings.append(Finding(
-            rule_id="btrfs_without_btrfs",
-            severity="warning",
-            message=f"{jobs} aktiv, aber auf diesem Rechner ist kein btrfs eingebunden.",
-            message_key=f"validator.f.btrfs_without_btrfs.no_btrfs_{key}",
-            detail="Die Config baut und bootet, die Wartungsjobs laufen aber ins Leere: "
-                   "Scrub und Balance gibt es nur für btrfs. Bei ext4 oder einem anderen "
-                   "Dateisystem beide Schalter ausschalten.",
-            detail_key="validator.d.btrfs_without_btrfs.no_btrfs",
-        ))
+        if scrub or balance:
+            # One key per case – a job list built here would put German words into
+            # every translated message
+            jobs, key = (("Auto-Scrub und Auto-Balance", "both") if scrub and balance else
+                         ("Auto-Scrub", "scrub") if scrub else
+                         ("Auto-Balance", "balance"))
+            findings.append(Finding(
+                rule_id="btrfs_without_btrfs",
+                severity="warning",
+                message=f"{jobs} aktiv, aber auf diesem Rechner ist kein btrfs eingebunden.",
+                message_key=f"validator.f.btrfs_without_btrfs.no_btrfs_{key}",
+                detail="Die Config baut und bootet, die Wartungsjobs laufen aber ins Leere: "
+                       "Scrub und Balance gibt es nur für btrfs. Bei ext4 oder einem anderen "
+                       "Dateisystem beide Schalter ausschalten.",
+                detail_key="validator.d.btrfs_without_btrfs.no_btrfs",
+            ))
+        if declared:
+            # Not a form field – this came from a brick or a hand-written file.
+            # It is reported separately because the advice differs: there is no
+            # switch to turn off, the declaration has to be removed or moved to
+            # the host it belongs to.
+            findings.append(Finding(
+                rule_id="btrfs_without_btrfs",
+                severity="warning",
+                message=f"Diese Config richtet btrfs-Dienste ein, auf diesem Rechner "
+                        f"ist aber kein btrfs eingebunden ({', '.join(declared[:3])}).",
+                message_key="validator.f.btrfs_without_btrfs.declared",
+                params=[", ".join(declared[:3])],
+                detail="Gefunden in den geschriebenen .nix-Dateien, also auch in "
+                       "Nix-Brix. Ein btrfs-Dienst auf einem Rechner ohne btrfs "
+                       "scheitert beim Start und lässt den Rebuild fehlschlagen. "
+                       "Gehört die Einstellung zu einem anderen Rechner, verschiebe "
+                       "sie in dessen Host-Datei.",
+                detail_key="validator.d.btrfs_without_btrfs.declared",
+            ))
         return findings
 
     # btrfs exists somewhere, but NiCo's balance job runs on / specifically

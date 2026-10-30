@@ -528,6 +528,41 @@ function attachRebuildMonitor(fromIndex = 0) {
     }
   }
 
+  /**
+   * Which systemd units are in a failed state after the build.
+   *
+   * nixos-rebuild answers with an exit code; the reason sits somewhere in a
+   * log that has long scrolled past. A btrfs unit out of an imported
+   * Nix-Brick brought a rebuild down on 2026-10-30 and the one line that
+   * explained it had to be found with systemctl by hand (Martins VM-Test).
+   * Shown after a successful build as well – a unit failing quietly there is
+   * the one nobody looks for.
+   */
+  function _showFailedUnits(units) {
+    document.getElementById('rebuild-failed-units')?.remove();
+    if (!Array.isArray(units) || !units.length) return;
+
+    const box = document.createElement('div');
+    box.id = 'rebuild-failed-units';
+    box.className = 'rebuild-failed-units';
+    const rows = units.map(u => {
+      const desc = u.description ? ` – ${escHtml(u.description)}` : '';
+      const log  = (u.journal || '').trim();
+      const logHtml = log
+        ? `<pre style="margin:4px 0 0 14px;white-space:pre-wrap;overflow-wrap:anywhere;font-size:0.85em;opacity:0.85">${escHtml(log)}</pre>`
+        : '';
+      return `<div style="margin:8px 0">
+                <div style="overflow-wrap:anywhere"><strong>${escHtml(u.unit)}</strong>${desc}</div>
+                ${logHtml}
+              </div>`;
+    }).join('');
+    box.innerHTML = `<div style="color:var(--red);font-weight:600">${escHtml(
+                       t('rebuild.failedUnits', String(units.length)))}</div>
+                     ${rows}
+                     <div style="margin-top:6px;opacity:0.8">${escHtml(t('rebuild.failedUnitsHint'))}</div>`;
+    resultEl.insertAdjacentElement('afterend', box);
+  }
+
   function _finishMonitor(success, message) {
     isRunning = false;
     counterEl.textContent     = '';
@@ -583,6 +618,7 @@ function attachRebuildMonitor(fromIndex = 0) {
         ? niIcon('check-circle') + ' ' + t('rebuild.success')
         : niIcon('x-circle') + ' ' + t('rebuild.failed') + (firstErrorLine ? ': ' + firstErrorLine.substring(0, 80) : '');
       _finishMonitor(msg.success, label);
+      _showFailedUnits(msg.failed_units);
       if (msg.log_written) {
         logBtn.classList.remove('hidden');
         logBtn.onclick = async () => {

@@ -4,6 +4,7 @@ Split from server.py. Route bodies are unchanged; shared request helpers
 from create_app() are passed in via the ctx dict.
 """
 
+import json
 import os
 import re
 import secrets
@@ -91,6 +92,92 @@ def switch_unit_busy() -> bool:
     except (OSError, subprocess.SubprocessError):
         return False
     return res.stdout.strip() in _SWITCH_BUSY_STATES
+
+
+def failed_unit_names() -> set[str]:
+    """Names of the units systemd currently reports as failed.
+
+    Taken before a rebuild so that afterwards only what *this* run broke is
+    reported. A desktop carries failed units that have nothing to do with the
+    config - five KDE crash handlers on the machine this was written on - and
+    listing them after every build would be noise from day one.
+    """
+    try:
+        res = subprocess.run(
+            ["systemctl", "list-units", "--failed", "--no-legend", "--plain",
+             "--no-pager", "--output=json"],
+            capture_output=True, text=True, timeout=10,
+        )
+        entries = json.loads(res.stdout or "[]") if res.returncode == 0 else []
+    except (OSError, subprocess.SubprocessError, ValueError):
+        return set()
+    if not isinstance(entries, list):
+        return set()
+    return {e["unit"].strip() for e in entries
+            if isinstance(e, dict) and isinstance(e.get("unit"), str) and e["unit"].strip()}
+
+
+def failed_units(limit: int = 6, log_lines: int = 15,
+                 exclude: "set[str] | None" = None) -> list[dict]:
+    """Units systemd reports as failed, each with the tail of its journal.
+
+    Asked after every rebuild, successful or not. nixos-rebuild returns a
+    non-zero exit code when an activation script or a unit fails, but the
+    reason is buried in a log that scrolls past - on 2026-10-30 a
+    `btrfs-dynamic-reclaim` unit from an imported Nix-Brick brought a rebuild
+    down and the one line that explained it ("no writable btrfs volume found")
+    had to be dug out with systemctl by hand. A unit that fails quietly after
+    a *successful* rebuild is worse still: nobody looks.
+
+    Never raises and never blocks: no systemd, no permission or a timeout
+    simply means an empty list.
+    """
+    try:
+        res = subprocess.run(
+            ["systemctl", "list-units", "--failed", "--no-legend", "--plain",
+             "--no-pager", "--output=json"],
+            capture_output=True, text=True, timeout=10,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return []
+    if res.returncode != 0:
+        return []
+
+    try:
+        entries = json.loads(res.stdout or "[]")
+    except ValueError:
+        return []
+    if not isinstance(entries, list):
+        return []
+
+    skip = exclude or set()
+    out: list[dict] = []
+    for entry in entries:
+        if len(out) >= limit:
+            break
+        name = (entry or {}).get("unit") if isinstance(entry, dict) else None
+        if not isinstance(name, str) or not name.strip():
+            continue
+        name = name.strip()
+        if name in skip:
+            continue
+        journal = ""
+        try:
+            jr = subprocess.run(
+                ["journalctl", "-u", name, "-b", "-n", str(log_lines),
+                 "--no-pager", "--output=cat"],
+                capture_output=True, text=True, timeout=10,
+            )
+            if jr.returncode == 0:
+                journal = jr.stdout.strip()
+        except (OSError, subprocess.SubprocessError):
+            pass
+        out.append({
+            "unit":        name,
+            "description": (entry.get("description") or "").strip(),
+            "journal":     journal,
+        })
+    return out
 
 
 def _job_public(job):
@@ -401,6 +488,8 @@ def register(app, ctx):
         rebuild_log_on      = bool(app_settings.get("rebuild_log", False))
         prefetch_dry_run_on = bool(app_settings.get("prefetch_dry_run", True))
         log_path       = config_manager.REBUILD_LOG_FILE
+        # Snapshot before the build so only what this run broke is reported.
+        units_before   = failed_unit_names()
 
         def _generate():
             # Tracks active nix activities: {id: {'phase', 'pkg', 'nix_type', 'dl_done', 'dl_expected'}}
@@ -742,7 +831,10 @@ def register(app, ctx):
                     log_written = _write_rebuild_log(log_path, log_lines)
                 if not success:
                     yield f"data: {_json.dumps({'type': 'output', 'line': f'── Log gespeichert: {log_path} ──'})}\n\n"
-                yield f"data: {_json.dumps({'type': 'done', 'success': success, 'exit_code': proc.returncode, 'log_written': log_written})}\n\n"
+                # Asked in both outcomes: a unit that fails quietly after a
+                # successful rebuild is the one nobody notices.
+                units = failed_units(exclude=units_before)
+                yield f"data: {_json.dumps({'type': 'done', 'success': success, 'exit_code': proc.returncode, 'log_written': log_written, 'failed_units': units})}\n\n"
             except FileNotFoundError:
                 msg = "nixos-rebuild not found. Is NiCo running on a NixOS system?"
                 yield f"data: {_json.dumps({'type': 'error', 'message': msg})}\n\n"
