@@ -40,12 +40,55 @@ function _hwVerdictLine(f) {
   return t('hw.line.match', where);
 }
 
-/** Short verdict label shown behind an entry in both dropdowns. */
+/**
+ * Short verdict label.
+ *
+ * Deliberately weaker than "belongs to this machine": the check answers
+ * whether the devices a file names exist here, not whether it is the right
+ * file. A hardware config describing a USB stick passes and is still wrong.
+ */
 function _hwVerdictTag(verdict) {
   if (verdict === 'match')    return t('hw.vMatch');
   if (verdict === 'mismatch') return t('hw.vMismatch');
   if (verdict === 'unknown')  return t('hw.vUnknown');
   return '';
+}
+
+/**
+ * The files of the config, grouped by verdict – path only.
+ *
+ * The device identifiers behind a verdict used to stand in this list, three
+ * UUIDs per line. They are evidence, not information: the decision does not
+ * depend on *which* identifier is missing, and the list was unreadable. They
+ * moved behind the details toggle.
+ */
+function _hwFileGroups(data) {
+  const groups = [
+    ['match',    'hw.gMatch',    'var(--green)'],
+    ['mismatch', 'hw.gMismatch', 'var(--red)'],
+    ['unknown',  'hw.gUnknown',  'var(--fg-dim)'],
+  ];
+  return groups.map(([verdict, key, colour]) => {
+    const hits = (data.files || []).filter(f => f.verdict === verdict);
+    const body = hits.length
+      ? hits.map(f => `<div style="margin-left:14px;overflow-wrap:anywhere">${escHtml(f.path)}</div>`).join('')
+      : '<div style="margin-left:14px;opacity:0.6">–</div>';
+    return `<div style="margin:6px 0">
+              <div style="color:${colour};font-weight:600">${escHtml(t(key))}</div>
+              ${body}
+            </div>`;
+  }).join('');
+}
+
+/** The device identifiers behind the verdicts – hidden until asked for. */
+function _hwDetails(data) {
+  const lines = (data.files || []).map(f =>
+    `<div style="margin:3px 0;overflow-wrap:anywhere">• ${escHtml(_hwVerdictLine(f))}</div>`).join('');
+  if (!lines) return '';
+  return `<details style="margin-top:6px">
+            <summary style="cursor:pointer;opacity:0.8">${escHtml(t('hw.details'))}</summary>
+            <div style="margin-top:6px;font-size:0.9em">${lines}</div>
+          </details>`;
 }
 
 /**
@@ -60,7 +103,6 @@ function _hwTargetOptions(data) {
     const bits = [];
     if (e.is_this_host) bits.push(t('hw.thisHost'));
     if (!e.exists)      bits.push(t('hw.targetNew'));
-    else if (e.verdict) bits.push(_hwVerdictTag(e.verdict));
     const suffix = bits.length ? `  —  ${bits.join(', ')}` : '';
     // The host travels back, not the path: the route rebuilds the path from
     // hosts_dir itself and refuses a host it does not know.
@@ -69,20 +111,29 @@ function _hwTargetOptions(data) {
 }
 
 /**
- * Which file is this machine's.
+ * What to write at the chosen place.
+ *
+ * One list, one action. "Keep the file that is there" used to be a second
+ * button that ignored this list entirely – two buttons answering different
+ * questions, which is what made the dialog unreadable. It is an entry here
+ * now, available whenever a file actually sits at the chosen place.
  *
  * The files parked before the import come first – they are the ones it just
  * replaced. A confirmed mismatch is listed but not selectable: naming another
  * machine's disks would look like a repair and leave the config unbootable.
  */
+const HW_KEEP = '__keep__';
+
 function _hwSourceOptions(data) {
-  return (data.sources || []).map(s => {
+  const keep = `<option value="${HW_KEEP}">${escHtml(t('hw.keepFile'))}</option>`;
+  const rest = (data.sources || []).map(s => {
     const bits = [_hwVerdictTag(s.verdict)];
     if (s.kind === 'stash') bits.unshift(t('hw.srcStash'));
     if (s.host)             bits.unshift(s.host);
     const label = `${s.label}  —  ${bits.filter(Boolean).join(', ')}`;
     return `<option value="${escHtml(s.id)}"${s.usable ? '' : ' disabled'}>${escHtml(label)}</option>`;
   }).join('');
+  return keep + rest;
 }
 
 async function _showHardwareDialog(data) {
@@ -98,95 +149,116 @@ async function _showHardwareDialog(data) {
   else if (isAdd)  intro = t('hw.intro.add', data.this_host);
   else             intro = t('hw.intro.replace', data.this_host, target ? target.path : '');
 
-  // Only files that say something about this machine are listed. The hardware
-  // config of another host is supposed to not match here, and showing it as a
-  // problem would push the user toward "fixing" another machine's config.
-  const shown = isPick ? (data.files || [])
-                       : (data.files || []).filter(f => target && f.path === target.path);
-  const rows = shown.map(f =>
-    `<div style="margin:4px 0;overflow-wrap:anywhere">• ${escHtml(_hwVerdictLine(f))}</div>`).join('');
-
-  // Nothing is preselected in either list (decision 2026-10-25): with a wrong
-  // answer the damage is the whole installation, so the user picks both ends
-  // of the operation deliberately. The placeholder stays as the selected entry
-  // until they do.
+  // Nothing is preselected (decision 2026-10-25): with a wrong answer the
+  // damage is the whole installation, so the choice is made deliberately. The
+  // placeholder stays as the selected entry until it is.
   const placeholder = `<option value="" disabled selected>${escHtml(t('hw.choose'))}</option>`;
-  const anySource   = (data.sources || []).some(s => s.usable);
+  const targets     = data.targets || [];
 
-  const sourceBlock = anySource
+  // With a single possible place there is nothing to choose: the line above
+  // already names the machine, and a dropdown holding one entry is noise.
+  const targetBlock = targets.length > 1
     ? `<div style="margin:10px 0">
+         <label for="hw-host" style="display:block;margin-bottom:4px">${escHtml(t('hw.pickLabel'))}</label>
+         <select id="hw-host" style="max-width:100%">${placeholder}${_hwTargetOptions(data)}</select>
+       </div>`
+    : '';
+
+  // A place with no file and no usable source is the one dead end: there is
+  // nothing to select, so the dialog says what creates a hardware config and
+  // lets go instead of trapping the user behind a button that cannot work.
+  const anySource  = (data.sources || []).some(s => s.usable);
+  const anyFile    = targets.some(e => e.exists);
+  const deadEnd    = !anySource && !anyFile;
+
+  const body = deadEnd
+    ? `<p style="margin-top:10px;color:var(--red)">${escHtml(t('hw.noSource'))}</p>
+       <div style="display:flex;justify-content:flex-end;margin-top:14px">
+         <button type="button" id="hw-close" class="btn-primary">${escHtml(t('hw.close'))}</button>
+       </div>`
+    : `${targetBlock}
+       <div style="margin:10px 0">
          <label for="hw-source" style="display:block;margin-bottom:4px">${escHtml(t('hw.sourceLabel'))}</label>
          <select id="hw-source" style="max-width:100%">${placeholder}${_hwSourceOptions(data)}</select>
-       </div>`
-    : `<p style="margin-top:8px;color:var(--red)">${escHtml(t('hw.noSource'))}</p>`;
+       </div>
+       <p id="hw-err" style="color:var(--red);display:none;margin-top:8px"></p>
+       <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px;flex-wrap:wrap">
+         <button type="button" id="hw-apply" class="btn-primary" disabled>${escHtml(t('hw.useLocal'))}</button>
+       </div>`;
 
   overlay.innerHTML = `
     <div class="modal">
       <div class="modal-logo">${escHtml(t('hw.title'))}</div>
       <p>${escHtml(intro)}</p>
       <div class="gsi"><div class="gsi-block">
-        <div class="gsi-block-body">${rows}</div>
+        <div class="gsi-block-body">${_hwFileGroups(data)}${_hwDetails(data)}</div>
       </div></div>
-      <div style="margin:10px 0">
-        <label for="hw-host" style="display:block;margin-bottom:4px">${escHtml(t('hw.pickLabel'))}</label>
-        <select id="hw-host" style="max-width:100%">${placeholder}${_hwTargetOptions(data)}</select>
-      </div>
-      ${sourceBlock}
       <p style="margin-top:10px"><strong>${escHtml(t('hw.warning'))}</strong></p>
-      <p id="hw-err" style="color:var(--red);display:none;margin-top:8px"></p>
-      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px;flex-wrap:wrap">
-        <button type="button" id="hw-confirm" class="btn-surface" disabled>${escHtml(t('hw.keepFile'))}</button>
-        <button type="button" id="hw-replace" class="btn-primary" disabled>${escHtml(t('hw.useLocal'))}</button>
-      </div>
+      ${body}
     </div>`;
   document.body.appendChild(overlay);
 
   return new Promise(resolve => {
-    const err     = overlay.querySelector('#hw-err');
-    const hostSel = overlay.querySelector('#hw-host');
-    const srcSel  = overlay.querySelector('#hw-source');
-    const btnOk   = overlay.querySelector('#hw-confirm');
-    const btnRep  = overlay.querySelector('#hw-replace');
+    if (deadEnd) {
+      overlay.querySelector('#hw-close').addEventListener('click', () => {
+        overlay.remove();
+        resolve();
+      });
+      return;
+    }
 
-    // Confirming only needs a place, replacing needs a place and a file.
-    const sync = () => {
-      const hasTarget = hostSel.selectedIndex > 0;
-      const chosen    = hasTarget ? (data.targets || [])[hostSel.selectedIndex - 1] : null;
-      btnOk.disabled  = !hasTarget || !chosen || !chosen.exists;
-      btnRep.disabled = !hasTarget || !srcSel || srcSel.selectedIndex <= 0;
+    const err     = overlay.querySelector('#hw-err');
+    const hostSel = overlay.querySelector('#hw-host');   // absent when single
+    const srcSel  = overlay.querySelector('#hw-source');
+    const btn     = overlay.querySelector('#hw-apply');
+
+    const chosenTarget = () => {
+      if (!hostSel) return targets[0] || null;
+      return hostSel.selectedIndex > 0 ? targets[hostSel.selectedIndex - 1] : null;
     };
-    hostSel.addEventListener('change', sync);
-    srcSel?.addEventListener('change', sync);
+
+    // "Keep the file that is there" only means something where a file is.
+    const sync = () => {
+      const tgt  = chosenTarget();
+      const keep = srcSel.querySelector(`option[value="${HW_KEEP}"]`);
+      if (keep) {
+        keep.disabled = !tgt || !tgt.exists;
+        if (keep.disabled && srcSel.value === HW_KEEP) srcSel.selectedIndex = 0;
+      }
+      btn.disabled = !tgt || srcSel.selectedIndex <= 0;
+    };
+    hostSel?.addEventListener('change', sync);
+    srcSel.addEventListener('change', sync);
     sync();
 
-    const send = async (action, btn) => {
-      btn.disabled = true;
+    btn.addEventListener('click', async ev => {
+      const el = ev.currentTarget;
+      el.disabled = true;
       err.style.display = 'none';
+      const tgt    = chosenTarget();
+      const keep   = srcSel.value === HW_KEEP;
       try {
         const res = await csrfFetch('/api/hardware/apply', {
           method:  'POST',
           headers: { 'Content-Type': 'application/json' },
           body:    JSON.stringify({
-            action,
-            host:   hostSel.value || null,
-            source: action === 'replace' ? (srcSel?.value || null) : null,
+            action: keep ? 'confirm' : 'replace',
+            host:   tgt ? (tgt.host || null) : null,
+            source: keep ? null : srcSel.value,
           }),
         });
         const out = await res.json();
         if (!res.ok || out.error) throw new Error(tErr(out.error));
         overlay.remove();
         resolve();
-        // Replacing one host's file can leave another case open – ask again
-        // rather than letting a second problem through on the same run.
+        // Settling one host can leave another case open – ask again rather
+        // than letting a second problem through on the same run.
         if (out.hardware && out.hardware.blocking) await _showHardwareDialog(out.hardware);
       } catch (e) {
         err.textContent = String(e.message || e);
         err.style.display = 'block';
         sync();
       }
-    };
-
-    btnOk.addEventListener('click', ev => send('confirm', ev.currentTarget));
-    btnRep.addEventListener('click', ev => send('replace', ev.currentTarget));
+    });
   });
 }
