@@ -10,6 +10,23 @@ Built by a non-developer using Claude Code and OpenAI Codex as an experiment in 
 
 Feedback and discussion: https://discourse.nixos.org/t/nico-nixos-configurator/77117
 
+![The NiCo editor: form fields for the recognised options on the left, the resulting configuration.nix on the right, with a Nix brick marked in the file](docs/images/editor.png)
+
+*Form fields on the left, the file they produce on the right — and a Nix brick in it, the part NiCo never touches.*
+
+<details>
+<summary>Two more screenshots: the Validator and a rebuild</summary>
+
+![The Validator result dialog listing three findings, among them a btrfs service on a machine without btrfs](docs/images/validator.png)
+
+*The Validator runs before every build. This one found a btrfs service on a machine that has no btrfs — the config builds, the service fails at start and takes the rebuild down with it.*
+
+![The rebuild monitor showing the five build phases completed and a successful rebuild, with a button to create a checkpoint](docs/images/rebuild.png)
+
+*`nixos-rebuild` from inside NiCo, with its phases and its live output — and the offer to create a checkpoint afterwards.*
+
+</details>
+
 ---
 
 ## The core idea: Nix-Brix
