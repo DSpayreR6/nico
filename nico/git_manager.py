@@ -57,6 +57,18 @@ def foreign_guard_enabled(nixos_dir: str) -> bool:
     return bool(config_manager.load_config_settings(nixos_dir).get("git_foreign_guard", True))
 
 
+# Every path git prints is parsed here, so it has to arrive as it is on disk.
+# With core.quotePath on - the default - git escapes anything outside ASCII and
+# wraps it in quotes: "drucker-b\303\274ro.nix". Read literally, such a name
+# matches no file, and three things went wrong at once: a new config file with
+# an umlaut was never staged (auto_commit then reported success and an empty
+# skip list), the 50 MB guard did not see an oversized file and let its blob
+# into the commit, and a rollback left exactly those files on the newer state
+# while everything else went back - the mixed working tree this module takes
+# care to avoid everywhere else.
+_PATHS_VERBATIM = ["-c", "core.quotePath=false"]
+
+
 def _run(args: list[str], cwd: str, timeout: int = 10, remote: bool = False,
          input: str | None = None) -> tuple[int, str]:
     """Run a git command. Returns (returncode, combined stdout+stderr).
@@ -64,7 +76,7 @@ def _run(args: list[str], cwd: str, timeout: int = 10, remote: bool = False,
     Pass remote=True for commands that involve network access."""
     try:
         result = subprocess.run(
-            ["git"] + args,
+            ["git"] + _PATHS_VERBATIM + args,
             cwd=cwd,
             capture_output=True,
             text=True,
@@ -81,6 +93,24 @@ def _run(args: list[str], cwd: str, timeout: int = 10, remote: bool = False,
         return 1, f"__TIMEOUT__ git {args[0]} nach {timeout}s abgebrochen"
     except Exception as e:
         return 1, str(e)
+
+
+def _run_paths(args: list[str], cwd: str) -> tuple[int, list[str]]:
+    """Run a git command that prints a path list, NUL-separated.
+
+    `-z` is the only form git never escapes: with it a name keeps its bytes
+    whatever it contains, so nothing has to be unquoted afterwards. The
+    alternative - reading the normal output and undoing the escaping - has to
+    get tab, newline, backslash and quote right to be correct, and the cost of
+    getting it wrong is silent: the path matches no file, git stages nothing,
+    and the caller reports success for a file it never touched.
+
+    Returns (returncode, paths). An empty list on error - callers bail on rc.
+    """
+    rc, out = _run(args + ["-z"], cwd=cwd)
+    if rc != 0:
+        return rc, []
+    return rc, [p for p in out.split("\0") if p]
 
 
 def is_git_repo(nixos_dir: str) -> bool:
@@ -159,10 +189,8 @@ def list_tracked_files(nixos_dir: str) -> list[str]:
     """Return all files currently tracked by git."""
     if not is_git_repo(nixos_dir):
         return []
-    rc, out = _run(["ls-files"], cwd=nixos_dir)
-    if rc != 0:
-        return []
-    return [f.strip() for f in out.splitlines() if f.strip()]
+    rc, files = _run_paths(["ls-files"], cwd=nixos_dir)
+    return files if rc == 0 else []
 
 
 def init_repo(nixos_dir: str) -> tuple[bool, str]:
@@ -191,14 +219,17 @@ def list_untracked_foreign(nixos_dir: str) -> list[str]:
     (the candidates for the foreign-file dialog)."""
     if not is_git_repo(nixos_dir):
         return []
-    rc, out = _run(["status", "--porcelain", "-uall"], cwd=nixos_dir)
+    rc, entries = _run_paths(["status", "--porcelain", "-uall"], cwd=nixos_dir)
     if rc != 0:
         return []
     files = []
-    for line in out.splitlines():
-        if not line.startswith("??"):
+    for entry in entries:
+        if not entry.startswith("??"):
             continue
-        path = line[2:].strip().strip('"')
+        # This list is the allowlist for "add" and "gitignore" below, so an
+        # escaped name would be offered, accepted and then quietly match no
+        # file at all.
+        path = entry[2:].lstrip()
         if path and not is_config_file(path):
             files.append(path)
     return sorted(files)
@@ -249,10 +280,11 @@ def _unstage_oversized(nixos_dir: str) -> list[str]:
     branches added it. A tracked file keeps its previous committed version, a
     new one simply stays untracked. Returns what was skipped.
     """
-    rc, out = _run(["diff", "--cached", "--name-only", "--diff-filter=ACMR"], cwd=nixos_dir)
+    rc, staged = _run_paths(["diff", "--cached", "--name-only", "--diff-filter=ACMR"],
+                            cwd=nixos_dir)
     if rc != 0:
         return []
-    skipped = oversized_files(nixos_dir, [l.strip() for l in out.splitlines() if l.strip()])
+    skipped = oversized_files(nixos_dir, staged)
     for rel in skipped:
         # Already committed once: restore the index entry to the last committed
         # version, so the file stays tracked and only the new content is left
@@ -278,13 +310,15 @@ def _stage_for_commit(nixos_dir: str) -> list[str]:
         _run(["add", "-A"], cwd=nixos_dir)
         return _unstage_oversized(nixos_dir)
     _run(["add", "-u"], cwd=nixos_dir)
-    rc, out = _run(["status", "--porcelain", "-uall"], cwd=nixos_dir)
+    # -z entries are "XY <path>" without a line break; a rename adds a second
+    # chunk holding the old path, which cannot start with "??" and is skipped.
+    rc, entries = _run_paths(["status", "--porcelain", "-uall"], cwd=nixos_dir)
     if rc != 0:
         return _unstage_oversized(nixos_dir)
-    for line in out.splitlines():
-        if not line.startswith("??"):
+    for entry in entries:
+        if not entry.startswith("??"):
             continue
-        path = line[2:].strip().strip('"')
+        path = entry[2:].lstrip()
         if path and is_config_file(path):
             _run(["add", "--", path], cwd=nixos_dir)
     return _unstage_oversized(nixos_dir)
@@ -1168,28 +1202,38 @@ def rollback(nixos_dir: str, commit_hash: str) -> tuple[bool, str]:
 
     _ensure_identity(nixos_dir)
 
-    rc, out = _run(["ls-tree", "-r", "--name-only", commit_hash], cwd=nixos_dir)
-    if rc != 0 or not out.strip():
+    rc, target_list = _run_paths(["ls-tree", "-r", "--name-only", commit_hash],
+                                 cwd=nixos_dir)
+    if rc != 0 or not target_list:
         return False, "Commit nicht gefunden oder enthält keine Dateien."
 
-    target_files = {f.strip() for f in out.splitlines() if f.strip()}
+    target_files = set(target_list)
 
     restored = []
+    failed   = []
     for fname in sorted(target_files):
         rc, _ = _run(["checkout", commit_hash, "--", fname], cwd=nixos_dir)
         if rc == 0:
             restored.append(fname)
+        else:
+            failed.append(fname)
 
     if not restored:
         return False, "Keine Dateien wiederhergestellt."
 
+    # A file that could not be checked out stays on its newer content while
+    # everything around it went back - the mixed state this function exists to
+    # avoid. It must not pass as a successful restore.
+    if failed:
+        return False, ("Teilweise wiederhergestellt – diese Dateien stehen noch "
+                       "auf dem neueren Stand: " + ", ".join(sorted(failed)[:10]))
+
     # Tracked files that were added after the target commit must be removed,
     # otherwise the working tree is a mix of both states.
     removed = []
-    rc_cur, cur_out = _run(["ls-files"], cwd=nixos_dir)
+    rc_cur, current = _run_paths(["ls-files"], cwd=nixos_dir)
     if rc_cur == 0:
-        for fname in cur_out.splitlines():
-            fname = fname.strip()
+        for fname in current:
             if fname and fname not in target_files:
                 rc_rm, _ = _run(["rm", "-f", "--", fname], cwd=nixos_dir)
                 if rc_rm == 0:
