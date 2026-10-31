@@ -44,12 +44,25 @@ const Sidebar = (() => {
   }
 
   function closeFindBar() {
+    // Closing is the moment the focus may move into the text: the user is
+    // done searching and wants to edit at the match. Without this the cursor
+    // would stay in a hidden field and the first keystroke go nowhere.
+    const ta = _activeTextarea();
     elFindBar.classList.add('hidden');
     elFindInput.value = '';
     findMatches = [];
     elFindCount.textContent = '';
+    ta?.focus();
   }
 
+  // Searching must never type into the file. `_highlightMatch` used to focus
+  // the textarea, and it runs on every keystroke in the search field: after
+  // the first letter the focus sat in the text, and the second letter replaced
+  // the selected match. The search box edited the config.
+  //
+  // So the selection is set without taking the focus, and the focus only
+  // follows deliberately – on Escape, when the user wants to carry on editing
+  // at the match they found.
   function runFind() {
     const needle = elFindInput.value;
     const ta = _activeTextarea();
@@ -81,13 +94,16 @@ const Sidebar = (() => {
     _highlightMatch(_activeTextarea(), findMatches[findIndex], elFindInput.value.length);
   }
 
-  function _highlightMatch(ta, start, len) {
+  function _highlightMatch(ta, start, len, { takeFocus = false } = {}) {
     if (!ta) return;
-    ta.focus();
+    // setSelectionRange works on an unfocused textarea; the browser draws it
+    // as an inactive selection, which style.css makes visible. Scrolling is
+    // done by hand anyway, so nothing here needs the focus.
     ta.setSelectionRange(start, start + len);
     const linesBefore = ta.value.substring(0, start).split('\n').length - 1;
     const lineHeight  = parseInt(getComputedStyle(ta).lineHeight) || 22;
     ta.scrollTop = Math.max(0, linesBefore * lineHeight - ta.clientHeight / 2);
+    if (takeFocus) ta.focus();
   }
 
   function _activeTextarea() {

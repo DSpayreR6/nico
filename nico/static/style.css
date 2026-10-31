@@ -3673,6 +3673,15 @@ button:disabled {
   white-space: pre;
   min-width: 44px;
 }
+/* The search bar keeps the focus while typing, so the match it found is an
+   *inactive* selection – which browsers draw in a pale grey that is close to
+   invisible on this background. Stated explicitly, the hit stays readable
+   whether the focus is in the text or in the search field. */
+.raw-file-editor::selection {
+  background: var(--mauve, #cba6f7);
+  color: var(--base, #1e1e2e);
+}
+
 .raw-file-editor {
   flex: 1;
   min-width: 0;
