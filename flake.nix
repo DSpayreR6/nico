@@ -39,7 +39,7 @@
             pname = "nico";
             # dev branch: the version being worked towards, with -dev.
             # Dropped when merging into main for a release (see vorgaben.txt).
-            version = "0.14.0-dev";
+            version = "0.14.0";
 
             src = ./.;
 
