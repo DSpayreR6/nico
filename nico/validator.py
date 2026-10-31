@@ -49,6 +49,12 @@ class Rule:
 # ── Rule catalogue ─────────────────────────────────────────────────────────────
 
 ALL_RULES: list[Rule] = [
+    # First in the list because it is the floor every other rule stands on: a
+    # file Nix cannot read makes every finding below it guesswork.
+    Rule("nix_parses",
+         "Dateien sind lesbares Nix",
+         "Prüft vor dem Bau, ob Nix jede .nix-Datei lesen kann – Syntaxfehler und unbekannte Namen.",
+         "error"),
     Rule("user_in_config",
          "Benutzer in Config",
          "Prüft ob der aktuelle Systembenutzer in users.users.* angelegt ist.",
@@ -1351,6 +1357,128 @@ def _rule_duplicate_attrs(nixos_dir: str, config: dict, is_flake: bool,
                 message=f"{label}: Doppelte Attribute gefunden.", message_key="validator.f.duplicate_attrs", params=[label],
                 detail="\n".join(parts),
             ))
+    return findings
+
+
+_PARSE_TIMEOUT = 20
+
+
+def nix_parse_error(content: str) -> str | None:
+    """The Nix message if `content` is not readable Nix, else None.
+
+    None also when nix-instantiate is missing or too slow: not knowing is not
+    the same as being fine, but a caller must not refuse a write over a tool
+    it cannot find.
+
+    The temporary file is a parser detail and goes away immediately
+    (vorgaben.txt); its path is cut out of the message, which would otherwise
+    point at /tmp instead of the file the user is editing.
+    """
+    import tempfile
+    tmp = None
+    try:
+        with tempfile.NamedTemporaryFile("w", suffix=".nix", delete=False,
+                                         encoding="utf-8") as fh:
+            tmp = fh.name
+            fh.write(content)
+        r = subprocess.run(["nix-instantiate", "--parse", tmp],
+                           capture_output=True, text=True, timeout=_PARSE_TIMEOUT)
+        if r.returncode == 0:
+            return None
+        return (r.stderr or "").replace(tmp, "").strip() or "Nix kann die Datei nicht lesen."
+    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+        return None
+    finally:
+        if tmp:
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
+
+
+def breaks_parsing(before: str, after: str) -> str | None:
+    """The message if `after` cannot be read but `before` could.
+
+    Same shape as the nesting guard in core.modify_brick_in_file, and for the
+    same reason: a file that is already broken must stay editable, otherwise
+    the guard locks the user out of the very edit that would repair it. Only
+    what this write breaks is refused.
+    """
+    err = nix_parse_error(after)
+    if err is None:
+        return None
+    if nix_parse_error(before) is not None:
+        return None          # already broken before – not this write's doing
+    return err
+
+
+def _config_nix_files(nixos_dir: str) -> list[Path]:
+    """Every .nix file of the config directory, .git left out."""
+    return [f for f in sorted(Path(nixos_dir).rglob("*.nix"))
+            if ".git" not in f.parts]
+
+
+def _rule_nix_parses(nixos_dir: str, config: dict, is_flake: bool,
+                     host: str | None = None) -> list[Finding]:
+    """Report files Nix cannot even read.
+
+    The floor under every other rule. Without it the Validator passed a config
+    whose flake.nix did not parse, the build started, and `nixos-rebuild`
+    answered with a Python traceback: it runs nix with `--log-format
+    internal-json` and the readable message is gone by the time the exception
+    is raised. The user saw a stack trace where "syntax error in flake.nix,
+    line 113" belonged (Martins productive config, 2026-10-31 – a Nix brick
+    holding a bare `nixpkgs-unstable` without an assignment).
+
+    `--parse` reads the file and resolves its names, nothing more: no nixpkgs,
+    no flake machinery, no derivation, milliseconds per file. It therefore
+    catches two kinds of trouble, a syntax error and a name nothing binds
+    (`undefined variable`) – the second being how the same config failed next,
+    with `nixpkgs-unstable` used in a host entry but never declared as an
+    input. Function arguments count as bound, so an ordinary module beginning
+    `{ config, pkgs, ... }:` passes; measured against the 18 real-world
+    configs in testing/configs, which produce no finding at all.
+
+    One call for all files first, because that is the normal case; only when
+    it fails does each file get its own call, so the report names every broken
+    one instead of stopping at the first.
+    """
+    files = _config_nix_files(nixos_dir)
+    if not files:
+        return []
+
+    def _parse(paths: list[Path]) -> tuple[bool, str]:
+        try:
+            r = subprocess.run(
+                ["nix-instantiate", "--parse", *[str(p) for p in paths]],
+                capture_output=True, text=True, timeout=_PARSE_TIMEOUT,
+            )
+            return r.returncode == 0, (r.stderr or "").strip()
+        except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+            # No nix, or it took too long: the rule cannot speak. Staying
+            # silent is right – a finding here would block a build over a
+            # missing tool.
+            return True, ""
+
+    ok, _ = _parse(files)
+    if ok:
+        return []
+
+    findings: list[Finding] = []
+    for f in files:
+        ok, err = _parse([f])
+        if ok:
+            continue
+        rel = str(f.relative_to(Path(nixos_dir)))
+        findings.append(Finding(
+            rule_id="nix_parses",
+            severity="error",
+            message=f"Nix kann {rel} nicht lesen.",
+            message_key="validator.f.nix_parses", params=[rel],
+            # The Nix message carries file and line and is the actual help
+            # here, so it goes through unchanged and untranslated.
+            detail=err or "nix-instantiate --parse meldet einen Fehler.",
+        ))
     return findings
 
 
@@ -2996,6 +3124,7 @@ _RULE_FNS: dict[str, object] = {
     "group_gid_system":      _rule_group_gid_system,
     "hardware_matches":      _rule_hardware_matches,
     "duplicate_attrs":       _rule_duplicate_attrs,
+    "nix_parses":            _rule_nix_parses,
     "imports_exist":         _rule_imports_exist,
     "brix_redundant":        _rule_brix_redundant,
     "brix_nested":           _rule_brix_nested,
