@@ -70,6 +70,7 @@
 - The rule that warns about btrfs maintenance on a machine without btrfs asked NiCo's own model, so it was blind to everything that arrived inside a Nix-Brick – a brick has no entry there. It reads the written `.nix` files now, where a brick is ordinary Nix like anything else, and it looks for anything btrfs-only rather than just the two switches the form writes. Found on a VM that has no btrfs: a `btrfs-dynamic-reclaim` service inside an imported brick failed to start and took the rebuild down with it, with nothing warning beforehand
 - The check reported a missing hardware import for configs that keep their imports in a Nix brick, and for flake hosts whose import sits in flake.nix – it is therefore an error now instead of a warning
 - Package search: a failed request left "Searching …" on screen forever with no message, and a slow earlier search could overwrite the results of a newer one
+- The list of failed services from the previous rebuild stayed below the fresh log for the whole of the next run and only vanished when that one finished – a red report about services that had nothing to do with the build in progress. It is cleared when the monitor starts, like the log and the result line
 
 ## 0.13.0 (2026-10-18)
 

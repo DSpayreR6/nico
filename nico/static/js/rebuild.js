@@ -416,6 +416,10 @@ function attachRebuildMonitor(fromIndex = 0) {
     if (_logRafId) { cancelAnimationFrame(_logRafId); _logRafId = null; }
     _logBuffer = [];
     logEl.innerHTML        = '';
+    // Part of the monitor state like log and result line – without this the
+    // previous run's failed-unit report hangs below the fresh log and only
+    // vanishes when the new run reports done.
+    document.getElementById('rebuild-failed-units')?.remove();
     resultEl.className     = 'rebuild-result hidden';
     resultEl.textContent   = '';
     counterEl.textContent  = '';
