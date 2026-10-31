@@ -25,6 +25,23 @@ def _nested_reply(err_str: str, nested: list[dict], fname: str):
     }), 400
 
 
+def _refused(err_str: str, details: list[dict], fname: str):
+    """Response for a brick write the file would not survive.
+
+    Two refusals share this path, both from modify_brick_in_file: a nesting it
+    would introduce, and content that leaves the file unreadable for Nix. The
+    second carries the Nix message, which names the line – without it the user
+    only learns that something is wrong, not what.
+    """
+    if err_str == "ERR_BRICK_NESTED":
+        return _nested_reply(err_str, details, fname)
+    return jsonify({
+        "error":  err_str,
+        "file":   fname,
+        "detail": (details[0].get("detail") if details else "") or "",
+    }), 400
+
+
 def register(app, ctx):
     _check_csrf    = ctx["check_csrf"]
     _require_setup = ctx["require_setup"]
@@ -85,8 +102,8 @@ def register(app, ctx):
         ok, err_str, nested = _modify_brick_in_file(nixos_dir, fname, _add)
         if name_collision[0]:
             return jsonify({"error": "ERR_BRICK_NAME_EXISTS"}), 409
-        if err_str == "ERR_BRICK_NESTED":
-            return _nested_reply(err_str, nested, fname)
+        if err_str in ("ERR_BRICK_NESTED", "ERR_BRICK_BREAKS_FILE"):
+            return _refused(err_str, nested, fname)
         if not ok:
             return jsonify({"error": err_str}), 500
         return jsonify({"success": True, "brick_name": name,
@@ -106,8 +123,8 @@ def register(app, ctx):
             return blocks
 
         ok, err_str, nested = _modify_brick_in_file(nixos_dir, fname, _del)
-        if err_str == "ERR_BRICK_NESTED":
-            return _nested_reply(err_str, nested, fname)
+        if err_str in ("ERR_BRICK_NESTED", "ERR_BRICK_BREAKS_FILE"):
+            return _refused(err_str, nested, fname)
         if not ok:
             return jsonify({"error": err_str}), 500
         return jsonify({"success": True,
@@ -145,8 +162,8 @@ def register(app, ctx):
         ok, err_str, nested = _modify_brick_in_file(nixos_dir, fname, _update)
         if not_found[0]:
             return jsonify({"error": "ERR_BRICK_NOT_FOUND"}), 404
-        if err_str == "ERR_BRICK_NESTED":
-            return _nested_reply(err_str, nested, fname)
+        if err_str in ("ERR_BRICK_NESTED", "ERR_BRICK_BREAKS_FILE"):
+            return _refused(err_str, nested, fname)
         if not ok:
             return jsonify({"error": err_str}), 500
         return jsonify({"success": True,
@@ -191,8 +208,8 @@ def register(app, ctx):
                     for k, v in blocks.items()}
 
         ok, err_str, nested = _modify_brick_in_file(nixos_dir, fname, _rename)
-        if err_str == "ERR_BRICK_NESTED":
-            return _nested_reply(err_str, nested, fname)
+        if err_str in ("ERR_BRICK_NESTED", "ERR_BRICK_BREAKS_FILE"):
+            return _refused(err_str, nested, fname)
         if not ok:
             return jsonify({"error": err_str}), 500
         return jsonify({"success": True, "new_name": new_name,
@@ -242,8 +259,8 @@ def register(app, ctx):
         ok, err_str, nested = _modify_brick_in_file(nixos_dir, fname, _split)
         if errors[0]:
             return jsonify({"error": errors[0][0]}), errors[0][1]
-        if err_str == "ERR_BRICK_NESTED":
-            return _nested_reply(err_str, nested, fname)
+        if err_str in ("ERR_BRICK_NESTED", "ERR_BRICK_BREAKS_FILE"):
+            return _refused(err_str, nested, fname)
         if not ok:
             return jsonify({"error": err_str}), 500
         return jsonify({"success": True, "new_name": new_name,
@@ -284,8 +301,8 @@ def register(app, ctx):
         ok, err_str, nested = _modify_brick_in_file(nixos_dir, fname, _move)
         if not_found[0]:
             return jsonify({"error": "ERR_BRICK_NOT_FOUND"}), 404
-        if err_str == "ERR_BRICK_NESTED":
-            return _nested_reply(err_str, nested, fname)
+        if err_str in ("ERR_BRICK_NESTED", "ERR_BRICK_BREAKS_FILE"):
+            return _refused(err_str, nested, fname)
         if not ok:
             return jsonify({"error": err_str}), 500
         return jsonify({"success": True,

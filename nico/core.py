@@ -209,11 +209,13 @@ def modify_brick_in_file(
 ) -> tuple[bool, str, list[dict]]:
     """Read fname, apply modifier(blocks) → new_blocks, rewrite with updated hash.
 
-    Returns (success, error_key_or_empty, nested).  A write that *introduces* a
+    Returns (success, error_key_or_empty, details).  A write that *introduces* a
     nested brick is refused with ERR_BRICK_NESTED; a nesting that was already in
     the file is written through and returned as a hint instead.  Blocking on it
     would lock the user out of every brick action in that file – including the
-    one they need to repair it.
+    one they need to repair it.  A write that makes the file unreadable for Nix
+    is refused the same way, with ERR_BRICK_BREAKS_FILE and the Nix message in
+    `details`.
     """
     root  = Path(nixos_dir).resolve()
     fpath = (root / fname).resolve()
@@ -247,6 +249,18 @@ def modify_brick_in_file(
     introduced = new_nested_bricks(content, final)
     if introduced:
         return False, "ERR_BRICK_NESTED", introduced
+
+    # A brick is free Nix, and free Nix can be wrong. Until now the only check
+    # was bracket balance, which a bare word passes: `nixpkgs-unstable` alone
+    # in a brick made flake.nix unreadable, was saved without a word, and the
+    # config stayed unbuildable for a day before anyone noticed (Martins
+    # config, 2026-10-30). Refused the same way as a nesting – only when this
+    # write is what breaks it, so a file that is already broken can still be
+    # repaired through the same dialogs.
+    from . import validator as _val
+    broke = _val.breaks_parsing(content, final)
+    if broke:
+        return False, "ERR_BRICK_BREAKS_FILE", [{"file": fname, "detail": broke}]
 
     try:
         atomic.write_text(fpath, final)

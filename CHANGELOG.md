@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+### New Features
+
+- New validator rule: a `.nix` file Nix cannot read. It was the one thing the rule set did not check — 38 rules looked at state versions, uids and mountpoints, and none of them at whether the files parse. So the Validator passed a config whose `flake.nix` had a stray word in a Nix brick, the build started, and `nixos-rebuild` answered with a Python traceback: it runs nix with `--log-format internal-json`, and the readable message is gone by the time the exception is raised. The rule names the file and passes the Nix message through, with its line, before anything is built. It also catches a name nothing binds — an input used but never declared — because resolving names is part of reading the file
+
+### Bug Fixes
+
+- A flake input added through a Nix brick could be declared but never used. The argument list of `outputs` was written from the inputs NiCo manages itself and ended in `...`, which silently swallows everything else — so the input existed, no name pointed at it, and every use of it failed with `undefined variable`. The interface offered no way to fix that: the only place to put the name was another brick, and the section it lands in sits inside the outputs set rather than in its argument list, which turns the file into something Nix cannot read. The names are now read back out of the bricks, so declaring an input and using it is one step
+- A Nix brick whose content makes the file unreadable is refused instead of saved. Only bracket balance was checked, and a bare word passes that: a brick holding nothing but `nixpkgs-unstable` left a `flake.nix` that does not parse, was saved without a word, and the config stayed unbuildable for a day. Refused the same way as a nested brick — only when that write is what breaks it, so a file that is already damaged can still be repaired through the same dialogs. The Nix message, which names the line, comes along with the refusal
+- Searching in the raw editor typed into the file. The search ran on every keystroke and moved the focus into the text to show the match, so the second letter replaced the match it had just selected. The selection is shown without taking the focus now, and the focus only follows when the search bar is closed — at which point the user does want to carry on editing there
+
 ## 0.14.0 (2026-10-31)
 
 ### New Features

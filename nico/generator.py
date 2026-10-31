@@ -10,7 +10,7 @@ import re
 import shlex
 
 from .brix import (FILE_FORMAT, SECTION_HDR_SEP, format_brick, inject_brick_blocks,
-                   section_file_label)
+                   input_names_in_bricks, section_file_label)
 from .importer import flake_host_brick_name, flake_host_section
 
 _NIX_ATTR_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_'-]*$")
@@ -846,6 +846,15 @@ def generate_flake_nix(data: dict, nixos_dir: "str | Path | None" = None) -> str
             out_args.append("nixos-hardware")
         if pm_input:
             out_args.append("plasma-manager")
+        # Inputs the user added through a brick belong in the list too. The
+        # list used to hold only what NiCo manages itself, and the trailing
+        # `...` then swallowed everything else: the input existed, but no name
+        # pointed at it, so using it failed with `undefined variable` and the
+        # interface offered no way to fix that. Adding an input and using it
+        # is one step now, not an unreachable two.
+        for name in input_names_in_bricks(brix):
+            if name not in out_args:
+                out_args.append(name)
         out_args_str = ", ".join(out_args) + ", ..."
 
         def _host_header(name: str) -> str:

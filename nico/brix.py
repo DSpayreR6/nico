@@ -587,6 +587,53 @@ def format_brick(section: str, order: int, name: str, body: str) -> str:
     return f"# <brick: {section} / #{order} {name}>\n{body}\n# </brick: {name}>\n"
 
 
+_BRICK_MARKER_LINE = re.compile(r"^\s*#\s*</?bri[xc]k[: ].*>\s*$")
+
+# An input declaration inside the inputs block: the name, then either a dotted
+# path or an assignment. Covers `name.url = …`, `name = { … }` and
+# `name.inputs.nixpkgs.follows = …`; a hyphen is a valid Nix identifier
+# character, which is why nixpkgs-unstable works as a name at all.
+_INPUT_NAME = re.compile(r"^\s*([A-Za-z_][A-Za-z0-9_'-]*)\s*(?:\.[A-Za-z_]|=)")
+
+
+def brick_body(text: str) -> str:
+    """The content of a brick without its two marker lines."""
+    return "\n".join(l for l in (text or "").splitlines()
+                     if not _BRICK_MARKER_LINE.match(l))
+
+
+def input_names_in_bricks(blocks: dict[str, dict], section: str = "INPX") -> list[str]:
+    """Names of the flake inputs declared in the bricks of one section.
+
+    The generator writes the argument list of `outputs` from the inputs it
+    manages itself and ends it with `...`, so an input added through a brick
+    was accepted but never bound to a name: `...` swallows it silently and any
+    use of it failed with `undefined variable`. There was no way through the
+    interface to declare an input and then use it (measured on Martins config,
+    2026-10-31). Reading the names back out of the bricks closes that.
+
+    Order of first appearance, no duplicates.
+    """
+    out: list[str] = []
+    for block in blocks.values():
+        if block.get("section") != section:
+            continue
+        depth = 0
+        for line in brick_body(block.get("text", "")).splitlines():
+            # Comments and string contents must not take part: a name only
+            # counts at the outermost level, otherwise the `url` of
+            # `sops-nix = { url = …; }` is read as an input of its own.
+            bare = re.sub(r'"(?:[^"\\]|\\.)*"', '""', re.sub(r"#.*$", "", line))
+            if depth == 0:
+                m = _INPUT_NAME.match(bare)
+                if m and m.group(1) not in out:
+                    out.append(m.group(1))
+            depth += bare.count("{") + bare.count("[") + bare.count("(")
+            depth -= bare.count("}") + bare.count("]") + bare.count(")")
+            depth = max(0, depth)
+    return out
+
+
 def check_bracket_balance(body: str) -> list[str]:
     """Check if {}, [], () are balanced in Nix code, ignoring strings and comments.
     Returns a list of error strings; empty list means balanced."""
