@@ -10,6 +10,23 @@ Built by a non-developer using Claude Code and OpenAI Codex as an experiment in 
 
 Feedback and discussion: https://discourse.nixos.org/t/nico-nixos-configurator/77117
 
+![The NiCo editor: form fields for the recognised options on the left, the resulting configuration.nix on the right, with a Nix brick marked in the file](docs/images/editor.png)
+
+*Form fields on the left, the file they produce on the right — and a Nix brick in it, the part NiCo never touches.*
+
+<details>
+<summary>Two more screenshots: the Validator and a rebuild</summary>
+
+![The Validator result dialog listing three findings, among them a btrfs service on a machine without btrfs](docs/images/validator.png)
+
+*The Validator runs before every build. This one found a btrfs service on a machine that has no btrfs — the config builds, the service fails at start and takes the rebuild down with it.*
+
+![The rebuild monitor showing the five build phases completed and a successful rebuild, with a button to create a checkpoint](docs/images/rebuild.png)
+
+*`nixos-rebuild` from inside NiCo, with its phases and its live output — and the offer to create a checkpoint afterwards.*
+
+</details>
+
 ---
 
 ## The core idea: Nix-Brix
@@ -25,12 +42,14 @@ This has one important consequence: every time you write, NiCo regenerates the f
 - **Import existing configs** – from a directory or ZIP; recognized options become form fields, everything else is preserved as Nix bricks, with automatic backups
 - **Split-panel editor** – edit options on the left, see the resulting `.nix` file live on the right
 - **Nix-Brix** – free Nix sections NiCo never modifies: create, rename, move, split them across hosts and modules
-- **Dry-run & rebuild** – run `nixos-rebuild dry-build` / `switch` directly from NiCo with live streaming output
-- **Validator** – configurable rule set that checks your config for common pitfalls (orphaned hosts, architecture mismatch, untracked flake references, Snapper mountpoints, …)
-- **Git integration** – auto-commits, safety commit before every rebuild, rollback ("time machine"), remote push, and a guard that detects external changes before NiCo writes
+- **Hardware check** – a config that comes from somewhere else describes somebody else's disks, and a build from it looks for devices that do not exist. NiCo compares the `hardware-configuration.nix` against the devices actually present on this machine and asks before anything is built — after an import, after a restore, and at start, because a config brought in with `git clone` passes no dialog at all. On a multi-host config only the file of the host that *is* this machine is ever touched
+- **Validator** – 38 configurable rules, run by itself before every build on the state written to disk. Hints and warnings never interrupt; a critical error brings its findings up instead of starting the build. It catches what Nix only reports halfway through a rebuild, and some things Nix never reports at all: a `system.stateVersion` newer than the installed release, a user the rebuild would create without a password or an SSH key, uid and gid collisions with accounts that already exist, missing imports, duplicate attributes, btrfs maintenance on a machine without btrfs, a swapfile inside a snapshotted subvolume
+- **Dry-run & rebuild** – run `nixos-rebuild dry-build` / `switch` directly from NiCo with live streaming output, and a report of the services that failed afterwards, each with the last lines of its journal. Only services that were healthy before that build are listed, so what a desktop carries around anyway stays out of it
+- **Crash-safe writes** – every config file is written to a temporary file, flushed to the disk and then renamed into place. A reset or a power cut leaves either the complete old file or the complete new one, never a truncated `configuration.nix` that no longer parses
+- **Git integration** – a checkpoint after every write and before every rebuild, restore to any earlier checkpoint ("time machine"), remote push, a guard that detects changes made outside NiCo before writing, and a size guard that keeps an oversized file out of the history instead of blocking every future push
 - **Foreign-file guard** – files that don't belong to the config are detected; decide per file whether git tracks or ignores them
 - **Flake & Home Manager support** – multi-host flakes with channel and architecture selection; per-user Home Manager files
-- **Btrfs maintenance** – generate systemd timers for auto-scrub and auto-balance from the UI
+- **Maintenance & snapshots** – systemd timers for disk health (`smartd`) and `/tmp` cleanup on any machine, plus btrfs auto-scrub and auto-balance where btrfs is actually mounted
 - **Detach anytime** – one click removes all NiCo markers and leaves a plain Nix config (with a ZIP backup)
 - **Help system** – built-in help (German/English), tooltips, and wiki links
 - **Multi-language** – UI in EN, DE, ES, FR, JA, RU, ZH
@@ -145,9 +164,20 @@ It is not meant for everyday use — it may change or break at any time, and the
 
 ## Status
 
-NiCo started as a proof of concept and has grown into a working tool — but it is still early. Expect rough edges. Contributions, bug reports, and feedback are welcome.
+NiCo manages my own machines and is at version 0.14.0. Every change runs
+through a headless roundtrip over 18 real-world configurations taken from
+public repositories — imported, written back, and checked that nothing was
+lost — plus rule tests for the Validator, the git layer and the import paths.
+Releases are tried in a virtual machine first, by importing a config from
+another machine and booting the result.
 
-Please keep in mind I'm only one person, so responses may take some time.
+That said, it is still a young tool and the edges show. If something goes
+wrong, the config is what matters, not NiCo — which is why there is a backup
+before every import, a checkpoint before every write, and a one-click way out
+that leaves plain Nix behind.
+
+Contributions, bug reports, and feedback are welcome. Please keep in mind I'm
+only one person, so responses may take some time.
 
 ---
 
