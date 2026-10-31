@@ -27,6 +27,38 @@ from pathlib import Path
 from . import atomic
 
 
+def _park_unreadable(path: Path) -> Path | None:
+    """Move a settings file that cannot be parsed aside, keeping its content.
+
+    Falling back to the defaults is the only way to keep running, but the next
+    write then persists those defaults and everything stored is gone. Measured
+    on a config.json carrying `hosts_dir: maschinen` and `hm_dir: benutzer`:
+    after one unrelated settings change both stood at the defaults, and NiCo
+    looked for the hosts in a directory that holds nothing - while the file
+    itself was still there and repairable.
+
+    Both settings files travel differently, but neither is immune: config.json
+    is tracked and moves with the config, so a `git pull` can leave conflict
+    markers in it, and anything that writes a config directory from outside NiCo
+    can truncate either one.
+
+    Parking it rather than deleting it keeps two ways out: the content can be
+    read by hand, and in the config directory the parked file shows up as an
+    untracked foreign file, which the foreign-file dialog asks about by itself.
+    Returns the new path, or None when even the rename failed.
+    """
+    from datetime import datetime
+    stamp = datetime.now().strftime("%Y-%m-%d-%H%M%S")
+    parked = path.with_name(f"{path.name}.kaputt-{stamp}")
+    try:
+        if parked.exists():            # same second, second attempt
+            return parked
+        path.rename(parked)
+        return parked
+    except OSError:
+        return None
+
+
 def _xdg_config_home() -> Path:
     env = os.environ.get("XDG_CONFIG_HOME", "").strip()
     return Path(env) if env else Path.home() / ".config"
@@ -252,10 +284,21 @@ def get_app_settings() -> dict:
         try:
             with open(APP_SETTINGS_FILE, encoding="utf-8") as f:
                 stored = json.load(f)
+            if not isinstance(stored, dict):
+                raise ValueError("settings.json does not hold an object")
             defaults.update(stored)
             return _migrate_section_names(defaults)
-        except Exception:
+        except OSError:
+            # A write may be in flight – the retries exist for exactly that.
             if attempt == 2:
+                return defaults
+            time.sleep(0.02)
+        except Exception:
+            # Same reasoning as config.json (see _park_unreadable): without
+            # this, save_app_settings writes the defaults over it and
+            # nixos_config_dir is gone, which drops NiCo back into setup.
+            if attempt == 2:
+                _park_unreadable(APP_SETTINGS_FILE)
                 return defaults
             time.sleep(0.02)
     return defaults
@@ -290,11 +333,18 @@ def load_config_settings(nixos_dir: str) -> dict:
     if not f.exists():
         return defaults
     try:
-        with open(f) as fh:
+        with open(f, encoding="utf-8") as fh:
             stored = json.load(fh)
+        if not isinstance(stored, dict):
+            raise ValueError("config.json does not hold an object")
         defaults.update(stored)
         return defaults
+    except OSError:
+        # Unreadable for now (permissions, a vanishing mount) – not damaged, so
+        # the file stays where it is and the defaults carry this one call.
+        return defaults
     except Exception:
+        _park_unreadable(f)
         return defaults
 
 

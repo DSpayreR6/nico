@@ -310,31 +310,52 @@ def _brick_bodies(nix_content: str) -> str:
 
 
 def _extract_imports_with_lines(nix_content: str) -> list[tuple[str, int]]:
-    """Return (path, line_number) tuples from imports = [...] in nix_content.
+    """Return (path, line_number) tuples from the module lists in nix_content.
 
     Only plain relative paths (./foo) are returned.  Expression paths like
     (modulesPath + "...") and channel paths like <nixpkgs/...> are skipped –
     they cannot be resolved as plain filesystem paths.
+
+    Three things this used to miss, all in the same case – a host added to a
+    flake pointed at a hosts/<name>/ that did not exist yet, and the rule meant
+    to catch missing paths stayed silent:
+
+      * `modules = [...]`, the list a flake host carries, was not looked at;
+        only `imports = [...]` was.
+      * Brick content was stripped first, and a flake host body *is* a brick,
+        so the list was gone before the search began.
+      * re.search stopped after the first list in a file, leaving every
+        further one unchecked.
+
+    Bricks are searched now. That is sound because the paths stay list-scoped:
+    a `./configure` inside a script in a brick is not in an imports or modules
+    list and is never read as a path.
     """
-    from .brix import strip_brick_blocks
-    clean = strip_brick_blocks(nix_content)
-    m = re.search(r'imports\s*=\s*\[([^\]]*)\]', clean, re.DOTALL)
-    if not m:
-        return []
-    base_line = clean[:m.start(1)].count('\n') + 1
     results: list[tuple[str, int]] = []
-    for offset, line in enumerate(m.group(1).split('\n')):
-        # Remove comments
-        line_clean = re.sub(r'#[^\n]*', '', line)
-        line_no = base_line + offset
-        # Only match unquoted ./relative or quoted "./relative" – never absolute or
-        # expression paths.  This avoids false positives from (modulesPath + "...")
-        # patterns that hardware-configuration.nix commonly contains.
-        for path in re.findall(r'(?<!["\w])(\.\/[\w./\-]+)', line_clean):
-            results.append((path.strip(), line_no))
-        for path in re.findall(r'"(\./[^"]+)"', line_clean):
-            results.append((path.strip(), line_no))
-    return [(p, l) for p, l in results if p]
+    for m in re.finditer(r'(?:imports|modules)\s*=\s*\[([^\]]*)\]',
+                         nix_content, re.DOTALL):
+        base_line = nix_content[:m.start(1)].count('\n') + 1
+        for offset, line in enumerate(m.group(1).split('\n')):
+            # Remove comments
+            line_clean = re.sub(r'#[^\n]*', '', line)
+            line_no = base_line + offset
+            # Only match unquoted ./relative or quoted "./relative" – never absolute or
+            # expression paths.  This avoids false positives from (modulesPath + "...")
+            # patterns that hardware-configuration.nix commonly contains.
+            for path in re.findall(r'(?<!["\w])(\.\/[\w./\-]+)', line_clean):
+                results.append((path.strip(), line_no))
+            for path in re.findall(r'"(\./[^"]+)"', line_clean):
+                results.append((path.strip(), line_no))
+    # One path can sit in a brick and in the generated text around it; report
+    # the first occurrence only, so a finding is not raised twice.
+    seen: set[tuple[str, int]] = set()
+    out: list[tuple[str, int]] = []
+    for p, l in results:
+        if not p or (p, l) in seen:
+            continue
+        seen.add((p, l))
+        out.append((p, l))
+    return out
 
 
 # ── Rule implementations ───────────────────────────────────────────────────────

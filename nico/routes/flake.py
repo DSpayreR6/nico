@@ -15,8 +15,9 @@ from ..core import get_nico_type as _get_nico_type
 
 
 def register(app, ctx):
-    _check_csrf    = ctx["check_csrf"]
-    _require_setup = ctx["require_setup"]
+    _check_csrf     = ctx["check_csrf"]
+    _require_setup  = ctx["require_setup"]
+    _hosts_dir_name = ctx["hosts_dir_name"]
 
     @app.route("/api/flake/hosts")
     def flake_hosts():
@@ -82,6 +83,24 @@ def register(app, ctx):
             )
         except OSError as exc:
             return jsonify({"error": str(exc)}), 500
+
+        # The generated host entry references ./<hosts_dir>/<name> and the
+        # hardware config inside it. Nix resolves a directory through its
+        # default.nix, so without this file the flake stops evaluating for the
+        # host that was just added – and nothing said so: flake_host_exists
+        # finds the host in flake.nix, and imports_exist looked at `imports`
+        # lists outside bricks only, while a flake host body *is* a brick.
+        # The hardware config cannot be invented here; the Validator reports it
+        # as missing instead, and the hardware dialog offers this host as a
+        # destination. Leaving the import line out would be worse than a failed
+        # build: the host body is generated once and never again, so the line
+        # would never come back and the host would build without filesystems.
+        host_default = Path(nixos_dir) / _hosts_dir_name(nixos_dir) / name / "default.nix"
+        if not host_default.exists():
+            try:
+                config_manager.save_host_config(nixos_dir, name, {})
+            except OSError:
+                pass
 
         git_manager.auto_commit(nixos_dir)
         return jsonify({"success": True, "hosts": current_hosts})

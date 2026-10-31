@@ -758,18 +758,34 @@ def write_raw_config_file(
         # Left out of the commit for being oversized – never let that pass
         # unmentioned, the user would believe everything was saved to git.
         result["skipped_large"] = skipped_large
+    result.update(push_after_save(nixos_dir))
+    return result
+
+
+def push_after_save(nixos_dir: str) -> dict:
+    """Upload after a save, if both switches ask for it. Extra response fields.
+
+    One place for the decision, because it was written three times and the
+    copies drifted: the form write path checked `push_after_save` alone and
+    uploaded with "Git-Sync" switched off - a silent remote action against an
+    explicit setting, which vorgaben.txt rules out. The two switches sit on
+    different levels on purpose: `git_sync` belongs to this machine (app
+    settings), `push_after_save` travels with the config, so a config carrying
+    push_after_save=true reaches a machine that wants to be left alone.
+    """
+    out: dict = {}
     try:
         if not config_manager.get_app_settings().get("git_sync", True):
-            return result
-        cfg = config_manager.load_config_settings(nixos_dir)
-        if cfg.get("push_after_save"):
-            ok, msg, code = git_manager.git_push(nixos_dir)
-            result["pushed"] = ok
-            result["push_error"] = "" if ok else msg
-            result["push_error_code"] = "" if ok else code
+            return out
+        if not config_manager.load_config_settings(nixos_dir).get("push_after_save"):
+            return out
+        ok, msg, code = git_manager.git_push(nixos_dir)
+        out["pushed"] = ok
+        out["push_error"] = "" if ok else msg
+        out["push_error_code"] = "" if ok else code
     except Exception:
         pass
-    return result
+    return out
 
 
 # ── Config load / write orchestration ─────────────────────────────────────────
@@ -935,15 +951,7 @@ def write_config_files(
         # See write_raw_config_file: an oversized file that silently stays out
         # of the commit is exactly how the 2.1 GB log incident stayed unnoticed.
         result["skipped_large"] = skipped_large
-    try:
-        cfg = config_manager.load_config_settings(nixos_dir)
-        if cfg.get("push_after_save"):
-            ok, msg, code = git_manager.git_push(nixos_dir)
-            result["pushed"] = ok
-            result["push_error"] = "" if ok else msg
-            result["push_error_code"] = "" if ok else code
-    except Exception:
-        pass
+    result.update(push_after_save(nixos_dir))
     return result
 
 
