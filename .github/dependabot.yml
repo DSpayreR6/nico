@@ -1,9 +1,15 @@
 version: 2
 
+# target-branch: dev on both, because main is the published state. Without it
+# dependabot opens against the default branch, and merging such a pull request
+# moves main outside a release: every user fetches the new source, and the next
+# release can no longer fast-forward because main then carries a commit dev
+# does not know. Against dev the update travels with the next release instead.
 updates:
   # Python dependencies
   - package-ecosystem: "pip"
     directory: "/"
+    target-branch: "dev"
     schedule:
       interval: "weekly"
       day: "monday"
@@ -12,6 +18,7 @@ updates:
   # GitHub Actions
   - package-ecosystem: "github-actions"
     directory: "/"
+    target-branch: "dev"
     schedule:
       interval: "weekly"
       day: "monday"
