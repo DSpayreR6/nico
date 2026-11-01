@@ -146,46 +146,6 @@ async function _writeNix() {
   return true;
 }
 
-async function saveAndWrite() {
-  if (!_canSaveCurrentCoForm()) {
-    showToast(t('toast.error'), 'error');
-    return false;
-  }
-  const payload = getFormData();
-  const isHostMode = !!_activeHost;
-  if (isHostMode) delete payload._host;
-  const cfgUrl = isHostMode
-    ? `/api/host/${encodeURIComponent(_activeHost)}/config`
-    : '/api/config';
-  const writeUrl = isHostMode
-    ? `/api/host/${encodeURIComponent(_activeHost)}/write`
-    : '/api/write';
-
-  const cfgRes  = await csrfFetch(cfgUrl, {
-    method:  'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body:    JSON.stringify(payload),
-  });
-  const cfgData = await cfgRes.json();
-  if (!cfgData.success) {
-    showToast(tErr(cfgData.error) || t('toast.error'), 'error');
-    return false;
-  }
-  const writeRes  = await csrfFetch(writeUrl, {
-    method:  'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body:    JSON.stringify({ commit: false }),
-  });
-  const writeData = await writeRes.json();
-  showToast(writeData.success ? t('toast.saved') : (tErr(writeData.error) || t('toast.error')),
-            writeData.success ? 'success' : 'error');
-  if (writeData.success) {
-    document.dispatchEvent(new CustomEvent('nico:config-saved'));
-    return true;
-  }
-  return false;
-}
-
 // ── Write Nix files ────────────────────────────────────────────────────────
 function openWriteConfirm() {
   document.getElementById('write-label-input').value = '';

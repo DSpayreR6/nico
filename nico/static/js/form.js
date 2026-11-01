@@ -1,4 +1,4 @@
-/** NiCo frontend — config form: option toggles, snapper/flatpak cards, form data in/out, host switching, HM file list. Split from app.js; classic script sharing the global scope. */
+/** NiCo frontend — config form: option toggles, snapper/flatpak cards, form data in/out, HM file list. Split from app.js; classic script sharing the global scope. */
 'use strict';
 
 // ── Nix GC options toggle ──────────────────────────────────────────────────
@@ -562,61 +562,19 @@ function getFormData() {
 }
 
 // ── Multi-Host Support ────────────────────────────────────────────────────────
-
-
-async function switchHost(hostName) {
-  if (hostName === _activeHost) return;
-
-  if (_formDirty || _flakeFormDirty) {
-    const ok = await confirmHostSwitch();
-    if (!ok) return;
-  }
-
-  _activeHost = hostName;
-
-  if (hostName === '') {
-    _brixTargetFile  = 'configuration.nix';
-    _brixContextFile = 'configuration.nix';
-    await _populateCoFormFromFile('configuration.nix');
-    Sidebar.refreshPanelToggle('configuration.nix', 'co');
-    await updatePreview();
-  } else {
-    await loadHostConfig(hostName);
-  }
-  updateFsHint();
-}
-
-async function confirmHostSwitch() {
-  return new Promise(resolve => {
-    const overlay = document.createElement('div');
-    overlay.className = 'overlay';
-    overlay.innerHTML = `
-      <div class="dialog">
-        <h2 class="dialog-title">${t('host.switchTitle')}</h2>
-        <p>${t('host.switchInfo')}</p>
-        <div class="dialog-actions">
-          <button id="host-switch-save"     class="btn-primary">${t('host.switchSave')}</button>
-          <button id="host-switch-continue" class="btn-secondary">${t('host.switchContinue')}</button>
-          <button id="host-switch-cancel"   class="btn-danger">${t('host.switchCancel')}</button>
-        </div>
-      </div>`;
-    document.body.appendChild(overlay);
-
-    overlay.querySelector('#host-switch-save').addEventListener('click', async () => {
-      document.body.removeChild(overlay);
-      const ok = await saveAndWrite();
-      resolve(!!ok);
-    });
-    overlay.querySelector('#host-switch-continue').addEventListener('click', () => {
-      document.body.removeChild(overlay);
-      resolve(true);
-    });
-    overlay.querySelector('#host-switch-cancel').addEventListener('click', () => {
-      document.body.removeChild(overlay);
-      resolve(false);
-    });
-  });
-}
+//
+// switchHost() und confirmHostSwitch() sind am 2026-11-01 entfernt worden.
+// Beide hatten keinen Aufrufer, und der erste Zugriff lief in einen
+// ReferenceError: _formDirty und _flakeFormDirty liegen mit `let` im Closure
+// von Sidebar (sidebar.js) und sind damit nicht global, obwohl die uebrigen
+// Dateien im globalen Scope arbeiten. Der Weg des Nutzers in eine Host-Datei
+// ist Sidebar.selectFile(), das _activeHost selbst setzt; loadHostConfig()
+// unten laedt das Formular dazu.
+//
+// Mit ihnen fiel saveAndWrite() in save.js weg - confirmHostSwitch war ihr
+// einziger Aufrufer. Eine Abfrage "erst speichern, dann wechseln" ist am
+// 2026-10-30 ausdruecklich verworfen worden, weil sie dem Autosave-Fundament
+// widerspricht; damit hat die Funktion auch keine Zukunft.
 
 async function confirmClosePushPrompt() {
   return new Promise(resolve => {

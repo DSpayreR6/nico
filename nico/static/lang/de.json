@@ -1003,11 +1003,6 @@
 
   "host.label":          "Konfiguration:",
   "host.defaults":       "Defaults",
-  "host.switchTitle":    "Host wechseln",
-  "host.switchInfo":     "Die Hauptkonfiguration (Defaults) sollte zuerst gespeichert werden, bevor ein Host bearbeitet wird.",
-  "host.switchSave":     "Jetzt speichern",
-  "host.switchContinue": "Trotzdem wechseln",
-  "host.switchCancel":   "Abbrechen",
 
   "file.hwWarning": "Achtung: hardware-configuration.nix wird normalerweise von NixOS generiert. Manuelle Änderungen können beim nächsten nixos-generate-config überschrieben werden.",
   "file.saved":     "Datei gespeichert.",
