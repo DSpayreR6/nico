@@ -119,7 +119,7 @@ def register(app, ctx):
                 return jsonify({"error": "ERR_BACKUP_FAILED", "detail": str(exc)}), 500
 
         try:
-            git_manager.auto_commit(nixos_dir, label="NiCo: Sicherung vor ZIP-Import")
+            git_manager.auto_commit(nixos_dir, label="NiCo: backup before ZIP import")
         except Exception:
             pass
         _stash_hardware(nixos_dir)
@@ -271,7 +271,7 @@ def register(app, ctx):
             except OSError as exc:
                 return jsonify({"error": "ERR_BACKUP_FAILED", "detail": str(exc)}), 500
 
-        git_manager.auto_commit(nixos_dir, label="NiCo: Sicherung vor Import")
+        git_manager.auto_commit(nixos_dir, label="NiCo: backup before import")
         _stash_hardware(nixos_dir)
 
         if files_data:
@@ -431,7 +431,7 @@ def register(app, ctx):
                 return jsonify({"error": "ERR_BACKUP_FAILED", "detail": str(exc)}), 500
 
         try:
-            git_manager.auto_commit(nixos_dir, label="NiCo: Sicherung vor Import")
+            git_manager.auto_commit(nixos_dir, label="NiCo: backup before import")
         except Exception:
             pass
         _stash_hardware(nixos_dir)
@@ -503,7 +503,7 @@ def register(app, ctx):
         recognized = importer.parse_config(content)
         rest_brix  = importer.build_rest_brix(content, recognized)
 
-        git_manager.auto_commit(nixos_dir, label="NiCo: Sicherung vor Import")
+        git_manager.auto_commit(nixos_dir, label="NiCo: backup before import")
 
         data = config_manager.load_config(nixos_dir) or {}
         data.update(recognized)            # Datei gewinnt für erkannte Felder

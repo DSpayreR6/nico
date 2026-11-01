@@ -361,7 +361,7 @@ def create_app() -> Flask:
         if not nixos_dir:
             return jsonify({"success": False, "message": "ERR_NO_DIR"}), 400
         ok, message, skipped = git_manager.auto_commit(
-            nixos_dir, "Vor Bearbeitung mit älterer NiCo-Version")
+            nixos_dir, "NiCo: backup before editing with an older NiCo")
         return jsonify({"success": ok, "message": message, "skipped": skipped})
 
     @app.route("/api/sections")

@@ -17,8 +17,26 @@ from . import atomic
 
 # SSH-Optionen für alle Remote-Operationen: kein interaktiver Prompt,
 # neuer Host-Key wird automatisch akzeptiert, Verbindungs-Timeout 10s.
+# git is translated, and NiCo reads its output. Without a fixed language every
+# text comparison in this module depends on the user's locale - and every one
+# of them is written in English. Measured on nix-desktop (LANG=de_DE.UTF-8)
+# on 2026-11-01: git answers "Fehler: Fehler beim Versenden einiger
+# Referenzen", so classify_push_error() below matched nothing and returned
+# UNKNOWN for every push failure - no SSH key, file too large, not
+# fast-forward, authentication failed, all of them indistinguishable. The one
+# German variant someone had bolted onto a single comparison was the symptom;
+# this is the cause. (The literal German phrase is deliberately not quoted
+# anywhere in this file: test_git_states.py greps for it as a tripwire.)
+#
+# C instead of en_US: always available, no locale archive needed, and it is
+# what git's own test suite uses. The output also travels into error messages
+# the user may paste into a bug report, where English is the more useful of
+# the two.
+_GIT_LANG = {"LC_ALL": "C", "LANG": "C", "LC_MESSAGES": "C"}
+_BASE_ENV = {**os.environ, **_GIT_LANG}
+
 _SSH_ENV = {
-    **os.environ,
+    **_BASE_ENV,
     "GIT_TERMINAL_PROMPT": "0",
     "GIT_SSH_COMMAND": "ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10",
 }
@@ -93,7 +111,7 @@ def _run(args: list[str], cwd: str, timeout: int = 10, remote: bool = False,
             capture_output=True,
             text=True,
             timeout=timeout,
-            env=_SSH_ENV if remote else None,
+            env=_SSH_ENV if remote else _BASE_ENV,
             input=input,
         )
         return result.returncode, (result.stdout + result.stderr).strip()
@@ -219,7 +237,7 @@ def init_repo(nixos_dir: str) -> tuple[bool, str]:
     create_gitignore(nixos_dir)  # ensure .gitignore exists before first commit
 
     _run(["add", "-A"], cwd=nixos_dir)
-    rc, out = _run(["commit", "-m", "NiCo: Repository initialisiert"], cwd=nixos_dir)
+    rc, out = _run(["commit", "-m", "NiCo: repository initialised"], cwd=nixos_dir)
     if rc != 0 and "nothing to commit" not in out:
         return False, f"Initialer Commit fehlgeschlagen: {out}"
 
@@ -365,11 +383,20 @@ def auto_commit(nixos_dir: str, label: str = "") -> tuple[bool, str, list[str]]:
     if not status:
         return True, "", skipped  # Nothing changed – silent success
 
+    # Commit labels are English (decision Martin, 2026-11-01). They are not
+    # interface text: they land permanently in the user's repository, visible
+    # in `git log`, on a hosting site, and in NiCo's own checkpoint list.
+    # Translating them to the UI language would make two machines with
+    # different languages write a mixed-language history into one repository
+    # and break `git log --grep` across them - the same reason the section
+    # names in the .nix files are English (2026-10-18). Nothing in NiCo
+    # matches on these texts, so the change breaks nothing; only branch names
+    # (`nico-backup-*`) are matched on.
     ts = datetime.now().strftime("%Y-%m-%d %H:%M")
     if label and label.strip():
         msg = f"{label.strip()} ({ts})"
     else:
-        msg = f"NiCo: Konfiguration geschrieben ({ts})"
+        msg = f"NiCo: configuration written ({ts})"
 
     rc, out = _run(["commit", "-m", msg], cwd=nixos_dir)
     if rc != 0:
@@ -442,7 +469,7 @@ def untrack_foreign_files(nixos_dir: str, files: list[str]) -> tuple[bool, str]:
     _append_gitignore_entries(nixos_dir, chosen)
     _run(["add", "--", ".gitignore"], cwd=nixos_dir)
     ts = datetime.now().strftime("%Y-%m-%d %H:%M")
-    rc, out = _run(["commit", "-m", f"NiCo: Fremddateien aus Git entfernt ({ts})"], cwd=nixos_dir)
+    rc, out = _run(["commit", "-m", f"NiCo: foreign files removed from git ({ts})"], cwd=nixos_dir)
     if rc != 0:
         return False, f"Commit fehlgeschlagen: {out}"
     return True, ""
@@ -751,7 +778,7 @@ def clean_large_files(nixos_dir: str, paths: list[str], delete_from_disk: bool =
     rc, status = _run(["status", "--porcelain", "-uno"], cwd=nixos_dir)
     if status.strip():
         ts_msg = datetime.now().strftime("%Y-%m-%d %H:%M")
-        msg = f"NiCo: Zu große Dateien aus der Versionierung entfernt ({ts_msg})"
+        msg = f"NiCo: oversized files removed from version control ({ts_msg})"
         rc, out = _run(["commit", "-m", msg], cwd=nixos_dir)
         if rc != 0:
             return False, f"Commit fehlgeschlagen: {out}", result
@@ -859,7 +886,7 @@ def git_commit_push(nixos_dir: str, label: str = "") -> tuple[bool, str, str, di
     if not is_git_repo(nixos_dir):
         return False, ERR_NO_GIT_REPO, ERR_NO_GIT_REPO, {}
     _ensure_identity(nixos_dir)
-    ok_commit, msg_commit, _skipped = auto_commit(nixos_dir, label=label or "NiCo: Lokale Änderungen")
+    ok_commit, msg_commit, _skipped = auto_commit(nixos_dir, label=label or "NiCo: local changes")
     if not ok_commit and "nothing to commit" not in msg_commit:
         return False, msg_commit, "", {}   # commit failed, not a push error
     info = push_info(nixos_dir)
@@ -1136,7 +1163,7 @@ def git_commit_push_force(nixos_dir: str) -> tuple[bool, str, str, dict]:
     if not is_git_repo(nixos_dir):
         return False, ERR_NO_GIT_REPO, ERR_NO_GIT_REPO, {}
     _ensure_identity(nixos_dir)
-    ok_commit, msg_commit, _skipped = auto_commit(nixos_dir, label="NiCo: Lokale Änderungen")
+    ok_commit, msg_commit, _skipped = auto_commit(nixos_dir, label="NiCo: local changes")
     if not ok_commit and "nothing to commit" not in msg_commit:
         return False, msg_commit, "", {}   # commit failed, not a push error
     info = push_info(nixos_dir)
@@ -1249,12 +1276,15 @@ def rollback(nixos_dir: str, commit_hash: str) -> tuple[bool, str]:
                     removed.append(fname)
 
     short = commit_hash[:7]
-    parts = [f"{len(restored)} Datei(en)"]
+    parts = [f"{len(restored)} file(s)"]
     if removed:
-        parts.append(f"{len(removed)} entfernt")
-    msg   = f"NiCo: Rollback zu {short} ({', '.join(parts)})"
+        parts.append(f"{len(removed)} removed")
+    msg   = f"NiCo: rollback to {short} ({', '.join(parts)})"
     rc, out = _run(["commit", "-m", msg], cwd=nixos_dir)
-    _no_change = ("nothing to commit" in out or "nichts zu committen" in out
+    # One wording only: git runs under LC_ALL=C, so its output is fixed. The
+    # translated variant that used to sit here was the only comparison in this
+    # module that worked on a German system - every other one silently did not.
+    _no_change = ("nothing to commit" in out
                   or "nothing added to commit" in out)
     if rc != 0 and not _no_change:
         return False, f"Commit nach Rollback fehlgeschlagen: {out}"

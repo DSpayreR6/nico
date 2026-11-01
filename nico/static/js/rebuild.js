@@ -727,7 +727,7 @@ function attachRebuildMonitor(fromIndex = 0) {
             csrfFetch('/api/git/commit-push', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ label: 'NiCo: Rebuild erfolgreich' }),
+              body: JSON.stringify({ label: 'NiCo: rebuild succeeded' }),
             }).then(r => r.json()).then(async d => {
               if (d.success) {
                 pushInfoEl.textContent = t('rebuild.pushDone');
@@ -757,7 +757,7 @@ function attachRebuildMonitor(fromIndex = 0) {
               const res  = await csrfFetch(git.canPush ? '/api/git/commit-push' : '/api/git/commit', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ label: 'NiCo: Rebuild erfolgreich' }),
+                body: JSON.stringify({ label: 'NiCo: rebuild succeeded' }),
               });
               const data = await res.json();
               if (data.success) {

@@ -120,5 +120,57 @@ check("Push-Knopf nur mit Remote", "git.canPush" in rebuildjs)
 uijs = (ROOT / "nico" / "static" / "js" / "ui.js").read_text(encoding="utf-8")
 check("Fehlermodal kennt die neuen Codes", "ERR_NO_GIT_REPO:" in uijs)
 
+print("\n6. git antwortet in fester Sprache")
+# Gemessen am 2026-11-01 auf nix-desktop (LANG=de_DE.UTF-8): git sagte
+# "Fehler: Fehler beim Versenden einiger Referenzen", und jeder Textvergleich
+# in git_manager ist englisch geschrieben. classify_push_error lieferte damit
+# fuer JEDEN Push-Fehler UNKNOWN - kein SSH-Schluessel, Datei zu gross, nicht
+# fast-forward, Anmeldung gescheitert, alles nicht unterscheidbar.
+import os as _os
+import tempfile as _tempfile
+from nico import git_manager
+
+check("LC_ALL ist auf C festgelegt",
+      git_manager._GIT_LANG.get("LC_ALL") == "C", git_manager._GIT_LANG)
+check("auch LANG und LC_MESSAGES",
+      git_manager._GIT_LANG.get("LANG") == "C"
+      and git_manager._GIT_LANG.get("LC_MESSAGES") == "C", git_manager._GIT_LANG)
+check("die Umgebung wird auch ohne Remote mitgegeben",
+      'env=_SSH_ENV if remote else _BASE_ENV' in
+      (ROOT / "nico" / "git_manager.py").read_text(encoding="utf-8"))
+
+# Scharf: mit deutscher Systemsprache muss git trotzdem englisch antworten.
+_alt = _os.environ.get("LANG")
+try:
+    _os.environ["LANG"] = "de_DE.UTF-8"
+    _d = _tempfile.mkdtemp(prefix="nico-loc-")
+    _rc, _out = git_manager._run(["init", "."], cwd=_d)
+    check("git init antwortet englisch, nicht deutsch",
+          "Initialized empty Git repository" in _out and "Leeres Git-Repository" not in _out,
+          _out[:70])
+    _rc, _out = git_manager._run(["commit", "-m", "x"], cwd=_d)
+    check("'nothing to commit' kommt englisch zurueck",
+          "nothing to commit" in _out, _out[:70])
+    check("und wird damit erkannt", "nichts zu committen" not in _out)
+finally:
+    if _alt is None:
+        _os.environ.pop("LANG", None)
+    else:
+        _os.environ["LANG"] = _alt
+
+check("der deutsche Sonderfall ist aus dem Vergleich raus",
+      "nichts zu committen" not in (ROOT / "nico" / "git_manager.py").read_text(encoding="utf-8"))
+# Die neun Faelle von classify_push_error muessen auf englischer Ausgabe greifen.
+for roh, erwartet in (
+    ("Permission denied (publickey). could not read from remote repository", "NO_KEY"),
+    ("remote: GH001: Large files detected.", "FILE_TOO_LARGE"),
+    ("ERROR: Repository not found.", "NOT_FOUND"),
+    ("ssh: Could not resolve hostname github.com", "NO_NETWORK"),
+    ("! [rejected] main -> main (non-fast-forward)", "NOT_FAST_FORWARD"),
+    ("fatal: Authentication failed for 'https://example/'", "AUTH_FAILED"),
+):
+    check(f"erkannt: {erwartet}", git_manager.classify_push_error(roh) == erwartet,
+          git_manager.classify_push_error(roh))
+
 print("\n" + ("ALLE PRÜFUNGEN BESTANDEN" if not fails else f"FEHLGESCHLAGEN: {fails}"))
 sys.exit(1 if fails else 0)

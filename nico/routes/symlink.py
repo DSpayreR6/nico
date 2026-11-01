@@ -89,7 +89,7 @@ def register(app, ctx):
                 except OSError as exc:
                     return jsonify({"error": "ERR_BACKUP_FAILED", "detail": str(exc)}), 500
             try:
-                git_manager.auto_commit(nixos_dir, label="NiCo: Sicherung vor /etc/nixos-Kopie")
+                git_manager.auto_commit(nixos_dir, label="NiCo: backup before copying to /etc/nixos")
             except Exception:
                 pass
             try:
