@@ -172,5 +172,63 @@ for roh, erwartet in (
     check(f"erkannt: {erwartet}", git_manager.classify_push_error(roh) == erwartet,
           git_manager.classify_push_error(roh))
 
+print("\n7. Meldungen sind Codes, nicht deutsche Saetze")
+# Nachgezogen am 2026-11-01. Die i18n-Runde im Oktober hat 20 Meldungen
+# umgestellt und 23 stehengelassen, weil sie nicht wie uebersetzbarer Text
+# aussehen ("git push fehlgeschlagen"). 18 davon waren dieselbe Aussage mit
+# wechselndem Unterbefehl - ein Sammelcode mit Parameter deckt sie ab.
+import re as _re
+
+gm = (ROOT / "nico" / "git_manager.py").read_text(encoding="utf-8")
+DEUTSCH = ("fehlgeschlagen", "Kein NiCo", "Keine Dateien", "Teilweise",
+           "konnten nicht", "konnte nicht", "Zu groß für Git",
+           "Zu große Datei", "wurde angelegt")
+for wort in DEUTSCH:
+    # Kommentare ausgenommen - dort darf die Geschichte stehen
+    treffer = [z for z in gm.split("\n")
+               if wort in z and not z.lstrip().startswith("#")
+               and '"' in z]
+    check(f"kein deutscher Text mehr: {wort}", not treffer,
+          treffer[0].strip()[:60] if treffer else None)
+
+check("der Helfer _err existiert", hasattr(git_manager, "_err"))
+check("der Trenner ist der Unit Separator",
+      git_manager._P_SEP == "\x1f", repr(git_manager._P_SEP))
+check("Code ohne Daten bleibt der Code allein",
+      git_manager._err("ERR_X") == "ERR_X")
+check("Code mit Daten wird getrennt gepackt",
+      git_manager._err("ERR_X", "git push", "huch") == "ERR_X\x1fgit push\x1fhuch")
+check("Zahlen werden mitgewandelt",
+      git_manager._err("ERR_X", 50) == "ERR_X\x1f50")
+
+# Die Gegenseite: tErr muss am Trenner teilen.
+core = (ROOT / "nico" / "static" / "js" / "core.js").read_text(encoding="utf-8")
+check("tErr teilt am Unit Separator", "split('\\x1f')" in core, )
+check("tErr gibt die Teile als Parameter weiter",
+      "t(`errors.${code}`, ...params)" in core)
+
+# Und jede neue Kennung braucht ihren Text in allen sieben Sprachen.
+NEU = ["ERR_GIT_FAILED", "ERR_GIT_FAILED_OUT", "ERR_REMOTE_BRANCHES",
+       "ERR_UPSTREAM_SET_FAILED", "ERR_LOCAL_BRANCH_UNKNOWN",
+       "ERR_NOT_BACKUP_BRANCH", "ERR_NO_UPSTREAM", "ERR_NOTHING_RESTORED",
+       "ERR_PARTIALLY_RESTORED", "ERR_TOO_BIG_FOR_GIT",
+       "ERR_BLOB_TOO_BIG_TO_PUSH"]
+for code in NEU:
+    check(f"{code} ist im Modul definiert", hasattr(git_manager, code))
+for p_lang in sorted((ROOT / "nico" / "static" / "lang").glob("*.json")):
+    data = json.loads(p_lang.read_text(encoding="utf-8"))
+    fehlt = [c for c in NEU
+             if not data.get(f"errors.{c}") or data.get(f"errors.{c}") == "__TODO__"]
+    check(f"{p_lang.stem}: alle elf Texte da", not fehlt, fehlt)
+
+# Platzhalter muessen zur Zahl der Parameter passen, sonst steht {1} im Text.
+de = json.loads((ROOT / "nico" / "static" / "lang" / "de.json").read_text(encoding="utf-8"))
+ZWEI = ("ERR_GIT_FAILED_OUT", "ERR_TOO_BIG_FOR_GIT", "ERR_BLOB_TOO_BIG_TO_PUSH")
+for code in NEU:
+    txt = de[f"errors.{code}"]
+    erwartet = 2 if code in ZWEI else (1 if code in ("ERR_GIT_FAILED", "ERR_PARTIALLY_RESTORED") else 0)
+    gefunden = len(set(_re.findall(r"\{(\d)\}", txt)))
+    check(f"{code}: {erwartet} Platzhalter", gefunden == erwartet, gefunden)
+
 print("\n" + ("ALLE PRÜFUNGEN BESTANDEN" if not fails else f"FEHLGESCHLAGEN: {fails}"))
 sys.exit(1 if fails else 0)

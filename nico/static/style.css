@@ -1348,8 +1348,14 @@ mark.search-match-active {
 .code-section.collapsed .code-brix .brix-inline-editor {
   display: none;
 }
-/* Indicate the brick is inside a collapsed section */
-.code-section.collapsed .code-brix {
+/* Indicate the brick is inside a collapsed section.
+   On the label, not on the brick: opacity opens its own compositing context,
+   so dimming the brick dimmed everything in it - including the context menu,
+   which hangs below the head and outside the brick's box. With the sections
+   collapsed that is the normal state, so the menu was washed out over
+   whatever sat behind it (reported by Martin 2026-11-01). The body is
+   display:none while collapsed, so the label carries the hint by itself. */
+.code-section.collapsed .code-brix .code-brix-label {
   opacity: 0.7;
 }
 
@@ -1380,7 +1386,14 @@ mark.search-match-active {
    out rather than hidden - it has to stay findable, that is the whole point
    of not deleting it. The left border keeps its colour so the brick is still
    recognisable as one. */
-.code-brix.brix-inactive {
+/* Dimmed part by part, not with opacity on the whole brick. opacity opens its
+   own compositing context: everything inside becomes see-through, including
+   the context menu - which hangs below the head and therefore outside the
+   brick's own box - and no child can take that back. Reported by Martin on
+   2026-11-01: with the sections collapsed the menu sat over whatever moved
+   behind it and was hard to read. The action bar and the menu stay solid. */
+.code-brix.brix-inactive .code-brix-label,
+.code-brix.brix-inactive .brix-editable {
   opacity: 0.55;
 }
 
@@ -1459,7 +1472,10 @@ mark.search-match-active {
   right: 0;
   top: 100%;
   z-index: 200;
-  background: var(--surface0);
+  /* Never see-through: the menu floats over other bricks and over the code
+     below it. The fallback is there in case a theme forgets the variable -
+     a menu without a background is unreadable, not merely ugly. */
+  background: var(--surface0, #303030);
   border: 1px solid var(--surface2);
   border-radius: 6px;
   box-shadow: 0 4px 12px rgba(0,0,0,.25);

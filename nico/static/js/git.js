@@ -565,7 +565,7 @@ async function _doGitInit() {
     _updateGitStatusLabel({ git_installed: true, has_git: true });
     showToast(t('git.initSuccess'), 'success');
   } else {
-    showToast(d.message || t('git.initError'), 'error');
+    showToast(tErr(d.message) || t('git.initError'), 'error');
   }
 }
 
@@ -710,7 +710,7 @@ function showForeignFilesDialog(files, mode) {
         _close(true);
       } catch (e) {
         const err = overlay.querySelector('#ff-err');
-        err.textContent = e.message || t('toast.error');
+        err.textContent = tErr(e.message) || t('toast.error');
         err.style.display = '';
       }
     });
@@ -803,7 +803,7 @@ async function openLargeFileCleanup() {
         resolve();
       } catch (e) {
         const err = overlay.querySelector('#lf-err');
-        err.textContent = e.message || t('toast.error');
+        err.textContent = tErr(e.message) || t('toast.error');
         err.style.display = '';
         btn.disabled = false;
       }
@@ -851,7 +851,7 @@ function _showCleanupResult(data) {
           body:    JSON.stringify({ branch: data.backup_branch }),
         });
         const d = await res.json();
-        showToast(d.success ? t('git.large.dropped') : (d.message || t('toast.error')),
+        showToast(d.success ? t('git.large.dropped') : (tErr(d.message) || t('toast.error')),
                   d.success ? 'success' : 'error');
       } catch { showToast(t('toast.error'), 'error'); }
       overlay.remove();
@@ -945,7 +945,7 @@ async function checkGitHygiene() {
         resolve();
       } catch (e) {
         const err = overlay.querySelector('#hyg-err');
-        err.textContent = e.message || t('toast.error');
+        err.textContent = tErr(e.message) || t('toast.error');
         err.style.display = '';
         btn.disabled = false;
       }

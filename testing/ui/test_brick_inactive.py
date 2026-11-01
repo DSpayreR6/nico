@@ -14,6 +14,8 @@ Geprueft wird, was sich nur im Browser zeigt:
   * der Inhalt steht weiter in der Vorschau, nur auskommentiert
   * nach dem Aktivieren ist alles wie vorher
   * kein __TODO__ und kein roher Schluessel in den neuen Texten
+  * ein deaktivierter Brick ist abgeschwaecht, sein Menue aber nicht - sonst
+    liest man es nicht mehr, wenn etwas dahinter liegt
   * ein geoeffnetes Menue haelt seine Aktionsleiste selbst sichtbar, statt
     sie an :hover zu haengen. Gemeldet von Martin am 2026-11-01: bei
     eingeklappter Sektion verschwand das Menue, sobald man mit der Maus zum
@@ -184,6 +186,59 @@ try:
           lambda: "brix-menu-open" not in brick_wrap(NAME).get_attribute("class"))
     check("und die Leiste haengt wieder am Hover",
           lambda: disp('.brix-actions') == 'none')
+
+    print("\n5. Das Menue bleibt lesbar, auch am deaktivierten Brick")
+    # Gemeldet von Martin am 2026-11-01: Das Menue sah durchscheinend aus.
+    # Ursache war `.code-brix.brix-inactive { opacity: .55 }` - opacity
+    # spannt einen eigenen Kompositionskontext auf, also wurde alles im Brick
+    # durchscheinend, auch das Menue, das unterhalb der Kopfzeile aus dem
+    # Kasten herausragt. Ein Kind kann das nicht zuruecknehmen, deshalb wird
+    # jetzt pro Teil abgeschwaecht statt pauschal.
+    menu_labels(NAME)
+    check("erst wieder deaktivieren", lambda: click_menu(NAME, "Deaktivieren"))
+    check("der Brick ist deaktiviert",
+          lambda: "brix-inactive" in brick_wrap(NAME).get_attribute("class"))
+
+    wrap = brick_wrap(NAME)
+    d.execute_script("arguments[0].querySelector('.brix-menu-btn').click()", wrap)
+    time.sleep(0.4)
+
+    def stil(sel, eig):
+        return d.execute_script(
+            "return getComputedStyle(arguments[0]).getPropertyValue(arguments[1])",
+            brick_wrap(NAME).find_element(By.CSS_SELECTOR, sel), eig)
+
+    # Die eigene Opazitaet des Menues genuegt NICHT als Pruefung: opacity auf
+    # einem Vorfahren veraendert den berechneten Wert des Kindes nicht, es ist
+    # ein Darstellungseffekt. Der alte, fehlerhafte Stand besteht eine Pruefung
+    # auf `opacity == 1` am Menue selbst. Gemessen werden muss die Kette bis
+    # zum Brick hinauf.
+    def kette(sel):
+        return d.execute_script(
+            "let el = arguments[0], aus = [];"
+            "while (el && el !== document.body) {"
+            "  aus.push(getComputedStyle(el).opacity);"
+            "  if (el.classList.contains('code-brix')) break;"
+            "  el = el.parentElement;"
+            "} return aus;",
+            brick_wrap(NAME).find_element(By.CSS_SELECTOR, sel))
+
+    check("kein Vorfahre schwaecht das Menue ab",
+          lambda: all(float(o) == 1.0 for o in kette('.brix-context-menu')))
+    check("auch die Aktionsleiste nicht",
+          lambda: all(float(o) == 1.0 for o in kette('.brix-actions')))
+    check("und das Menue hat einen Hintergrund, nicht transparent",
+          lambda: stil('.brix-context-menu', 'background-color') not in
+                  ('rgba(0, 0, 0, 0)', 'transparent'))
+    # Kein fester Wert: an einem eingeklappten UND deaktivierten Brick greifen
+    # zwei Abschwaechungen (0.7 fuer "in eingeklappter Sektion", 0.55 fuer
+    # "deaktiviert"), und welche gewinnt, ist fuer die Aussage unerheblich.
+    # Geprueft wird der Vertrag: Kopfzeile und Koerper abgeschwaecht, Menue
+    # und Aktionsleiste nicht.
+    check("die Kopfzeile ist dafuer abgeschwaecht",
+          lambda: float(stil('.code-brix-label', 'opacity')) < 1.0)
+    check("der Brick-Koerper auch",
+          lambda: float(stil('.brix-editable', 'opacity')) < 1.0)
 
 finally:
     d.quit()

@@ -70,6 +70,35 @@ ERR_NO_REMOTE   = "ERR_NO_REMOTE"
 # 2026-11-01. The literal German sentence is deliberately not quoted here:
 # test_git_states.py greps this file for it as a tripwire.
 ERR_BAD_REMOTE_BRANCH    = "ERR_BAD_REMOTE_BRANCH"
+# A failed git call, with the command as a parameter. One code covers the
+# eighteen "<something> failed" sites: the sentence carried no information the
+# user did not already have from git's own output, and keeping eighteen
+# separate translations of "failed" would be work without a reader.
+ERR_GIT_FAILED           = "ERR_GIT_FAILED"
+ERR_GIT_FAILED_OUT       = "ERR_GIT_FAILED_OUT"
+ERR_REMOTE_BRANCHES      = "ERR_REMOTE_BRANCHES"
+ERR_UPSTREAM_SET_FAILED  = "ERR_UPSTREAM_SET_FAILED"
+ERR_LOCAL_BRANCH_UNKNOWN = "ERR_LOCAL_BRANCH_UNKNOWN"
+ERR_NOT_BACKUP_BRANCH    = "ERR_NOT_BACKUP_BRANCH"
+ERR_NO_UPSTREAM          = "ERR_NO_UPSTREAM"
+ERR_NOTHING_RESTORED     = "ERR_NOTHING_RESTORED"
+ERR_PARTIALLY_RESTORED   = "ERR_PARTIALLY_RESTORED"
+ERR_TOO_BIG_FOR_GIT      = "ERR_TOO_BIG_FOR_GIT"
+ERR_BLOB_TOO_BIG_TO_PUSH = "ERR_BLOB_TOO_BIG_TO_PUSH"
+
+# Unit separator. A code plus its data in one string, because that is the
+# channel these functions already have - they return (ok, message, …) and the
+# routes put the message into JSON. tErr() in the interface splits on it again
+# and fills the placeholders of the translation.
+#
+# \x1f and not a tab or a colon: it occurs in neither a file name nor git's
+# output, so nothing can be mistaken for a separator.
+_P_SEP = "\x1f"
+
+
+def _err(code: str, *params) -> str:
+    """An error code carrying its data, to be split again in the interface."""
+    return _P_SEP.join([code, *(str(p) for p in params)])
 ERR_BLOB_PUBLISHED       = "ERR_BLOB_PUBLISHED"
 ERR_BRANCH_DELETE_FAILED = "ERR_BRANCH_DELETE_FAILED"
 ERR_BAD_COMMIT_HASH      = "ERR_BAD_COMMIT_HASH"
@@ -231,7 +260,7 @@ def init_repo(nixos_dir: str) -> tuple[bool, str]:
     """
     rc, out = _run(["init"], cwd=nixos_dir)
     if rc != 0:
-        return False, f"git init fehlgeschlagen: {out}"
+        return False, _err(ERR_GIT_FAILED_OUT, "git init", out)
 
     _ensure_identity(nixos_dir)
     create_gitignore(nixos_dir)  # ensure .gitignore exists before first commit
@@ -239,9 +268,11 @@ def init_repo(nixos_dir: str) -> tuple[bool, str]:
     _run(["add", "-A"], cwd=nixos_dir)
     rc, out = _run(["commit", "-m", "NiCo: repository initialised"], cwd=nixos_dir)
     if rc != 0 and "nothing to commit" not in out:
-        return False, f"Initialer Commit fehlgeschlagen: {out}"
+        return False, _err(ERR_GIT_FAILED_OUT, "git commit", out)
 
-    return True, "Git-Repository wurde angelegt und initialer Commit erstellt."
+    # The interface shows git.initSuccess, not this string - silent like
+    # the other successful paths in this module.
+    return True, ""
 
 
 def list_untracked_foreign(nixos_dir: str) -> list[str]:
@@ -400,7 +431,7 @@ def auto_commit(nixos_dir: str, label: str = "") -> tuple[bool, str, list[str]]:
 
     rc, out = _run(["commit", "-m", msg], cwd=nixos_dir)
     if rc != 0:
-        return False, f"Commit fehlgeschlagen: {out}", skipped
+        return False, _err(ERR_GIT_FAILED_OUT, "git commit", out), skipped
 
     return True, msg, skipped
 
@@ -430,11 +461,7 @@ def include_foreign_files(nixos_dir: str, files: list[str]) -> tuple[bool, str]:
     too_big = oversized_files(nixos_dir, files)
     if too_big:
         limit_mb = MAX_STAGE_BYTES // (1024 * 1024)
-        return False, (
-            f"Zu groß für Git (über {limit_mb} MB): {', '.join(too_big)}. "
-            "Solche Dateien blockieren dauerhaft jeden Push und lassen sich "
-            "später nur durch Umschreiben der History wieder entfernen."
-        )
+        return False, _err(ERR_TOO_BIG_FOR_GIT, limit_mb, ", ".join(too_big))
     allowed = set(list_untracked_foreign(nixos_dir))
     for f in files:
         if f in allowed:
@@ -465,13 +492,13 @@ def untrack_foreign_files(nixos_dir: str, files: list[str]) -> tuple[bool, str]:
     _ensure_identity(nixos_dir)
     rc, out = _run(["rm", "--cached", "--"] + chosen, cwd=nixos_dir)
     if rc != 0:
-        return False, out or "git rm --cached fehlgeschlagen"
+        return False, out or _err(ERR_GIT_FAILED, "git rm --cached")
     _append_gitignore_entries(nixos_dir, chosen)
     _run(["add", "--", ".gitignore"], cwd=nixos_dir)
     ts = datetime.now().strftime("%Y-%m-%d %H:%M")
     rc, out = _run(["commit", "-m", f"NiCo: foreign files removed from git ({ts})"], cwd=nixos_dir)
     if rc != 0:
-        return False, f"Commit fehlgeschlagen: {out}"
+        return False, _err(ERR_GIT_FAILED_OUT, "git commit", out)
     return True, ""
 
 
@@ -519,7 +546,7 @@ def git_pull(nixos_dir: str) -> tuple[bool, str, dict]:
     before = before.strip() if rc == 0 else ""
     rc, out = _run(["pull"], cwd=nixos_dir, timeout=REMOTE_TRANSFER_TIMEOUT, remote=True)
     if rc != 0:
-        return False, out or "git pull fehlgeschlagen", {}
+        return False, out or _err(ERR_GIT_FAILED, "git pull"), {}
     return True, out, pull_info(nixos_dir, before)
 
 
@@ -532,7 +559,7 @@ def git_fetch_remote(nixos_dir: str) -> tuple[bool, str]:
         return False, ERR_NO_REMOTE
     rc, out = _run(["fetch", "--quiet", remote_name], cwd=nixos_dir, timeout=30, remote=True)
     if rc != 0:
-        return False, out or "git fetch fehlgeschlagen"
+        return False, out or _err(ERR_GIT_FAILED, "git fetch")
     return True, out
 
 
@@ -545,7 +572,7 @@ def list_remote_branches(nixos_dir: str) -> tuple[bool, list[str], str]:
         return False, [], ERR_NO_REMOTE
     rc, out = _run(["for-each-ref", "--format=%(refname:short)", f"refs/remotes/{remote_name}/*"], cwd=nixos_dir)
     if rc != 0:
-        return False, [], out or "Remote-Branches konnten nicht gelesen werden."
+        return False, [], out or ERR_REMOTE_BRANCHES
     branches = []
     for line in out.splitlines():
         branch = line.strip()
@@ -566,7 +593,7 @@ def set_upstream_branch(nixos_dir: str, remote_branch: str) -> tuple[bool, str]:
         return False, ERR_NO_GIT_REPO
     rc, local_branch = _run(["rev-parse", "--abbrev-ref", "HEAD"], cwd=nixos_dir)
     if rc != 0 or not local_branch or local_branch.strip() == "HEAD":
-        return False, "Lokaler Branch konnte nicht ermittelt werden."
+        return False, ERR_LOCAL_BRANCH_UNKNOWN
     local_branch = local_branch.strip()
     remote_branch = remote_branch.strip()
     remote_name = _get_primary_remote_name(nixos_dir)
@@ -576,7 +603,7 @@ def set_upstream_branch(nixos_dir: str, remote_branch: str) -> tuple[bool, str]:
         return False, ERR_BAD_REMOTE_BRANCH
     rc, out = _run(["branch", "--set-upstream-to", remote_branch, local_branch], cwd=nixos_dir)
     if rc != 0:
-        return False, out or "Remote-Branch konnte nicht zugeordnet werden."
+        return False, out or ERR_UPSTREAM_SET_FAILED
     return True, ""
 
 
@@ -746,7 +773,7 @@ def clean_large_files(nixos_dir: str, paths: list[str], delete_from_disk: bool =
         backup = f"nico-backup-{ts}"
         rc, out = _run(["branch", backup, "HEAD"], cwd=nixos_dir)
         if rc != 0:
-            return False, f"Sicherungszweig fehlgeschlagen: {out}", {}
+            return False, _err(ERR_GIT_FAILED_OUT, "git branch", out), {}
         result["backup_branch"] = backup
 
         target = report["base"] or ""
@@ -757,7 +784,7 @@ def clean_large_files(nixos_dir: str, paths: list[str], delete_from_disk: bool =
             # published history that could break.
             rc, out = _run(["update-ref", "-d", "HEAD"], cwd=nixos_dir)
         if rc != 0:
-            return False, f"Zurücksetzen fehlgeschlagen: {out}", {}
+            return False, _err(ERR_GIT_FAILED_OUT, "git reset", out), {}
 
         for rel in in_commits:
             _run(["rm", "--cached", "--force", "--quiet", "--", rel], cwd=nixos_dir)
@@ -781,7 +808,7 @@ def clean_large_files(nixos_dir: str, paths: list[str], delete_from_disk: bool =
         msg = f"NiCo: oversized files removed from version control ({ts_msg})"
         rc, out = _run(["commit", "-m", msg], cwd=nixos_dir)
         if rc != 0:
-            return False, f"Commit fehlgeschlagen: {out}", result
+            return False, _err(ERR_GIT_FAILED_OUT, "git commit", out), result
         rc, head = _run(["rev-parse", "--short", "HEAD"], cwd=nixos_dir)
         result["commit"] = head.strip() if rc == 0 else ""
 
@@ -791,7 +818,7 @@ def clean_large_files(nixos_dir: str, paths: list[str], delete_from_disk: bool =
 def drop_backup_branch(nixos_dir: str, branch: str) -> tuple[bool, str]:
     """Delete a nico-backup-* branch and reclaim the space its objects held."""
     if not branch.startswith("nico-backup-"):
-        return False, "Kein NiCo-Sicherungszweig."
+        return False, ERR_NOT_BACKUP_BRANCH
     rc, out = _run(["branch", "-D", branch], cwd=nixos_dir)
     if rc != 0:
         return False, out or ERR_BRANCH_DELETE_FAILED
@@ -804,12 +831,7 @@ def drop_backup_branch(nixos_dir: str, branch: str) -> tuple[bool, str]:
 def _oversized_push_message(blobs: list[tuple[str, int]]) -> str:
     limit_mb = REMOTE_BLOB_LIMIT // (1024 * 1024)
     listed = ", ".join(f"{p} ({s / (1024 * 1024):.0f} MB)" for p, s in blobs)
-    return (
-        f"Zu große Datei in einem noch nicht hochgeladenen Commit: {listed}. "
-        f"Der Server nimmt Dateien über {limit_mb} MB nicht an. Die Datei steckt "
-        "in der Git-Historie und muss dort entfernt werden – ein erneuter Push "
-        "ändert nichts."
-    )
+    return _err(ERR_BLOB_TOO_BIG_TO_PUSH, listed, limit_mb)
 
 
 def git_push(nixos_dir: str) -> tuple[bool, str, str]:
@@ -824,7 +846,7 @@ def git_push(nixos_dir: str) -> tuple[bool, str, str]:
         return False, _oversized_push_message(blobs), "FILE_TOO_LARGE"
     rc, out = _run(["push"], cwd=nixos_dir, timeout=REMOTE_TRANSFER_TIMEOUT, remote=True)
     if rc != 0:
-        return False, out or "git push fehlgeschlagen", classify_push_error(out)
+        return False, out or _err(ERR_GIT_FAILED, "git push"), classify_push_error(out)
     return True, out, ""
 
 
@@ -859,10 +881,10 @@ def git_reset_hard(nixos_dir: str) -> tuple[bool, str]:
         return False, ERR_NO_GIT_REPO
     rc, upstream = _run(["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"], cwd=nixos_dir)
     if rc != 0 or not upstream:
-        return False, "Kein Upstream-Branch konfiguriert."
+        return False, ERR_NO_UPSTREAM
     rc, out = _run(["reset", "--hard", upstream.strip()], cwd=nixos_dir)
     if rc != 0:
-        return False, out or "git reset fehlgeschlagen"
+        return False, out or _err(ERR_GIT_FAILED, "git reset")
     _run(["clean", "-fd"], cwd=nixos_dir)
     return True, out
 
@@ -873,7 +895,7 @@ def git_discard_changes(nixos_dir: str) -> tuple[bool, str]:
         return False, ERR_NO_GIT_REPO
     rc, out = _run(["reset", "--hard", "HEAD"], cwd=nixos_dir)
     if rc != 0:
-        return False, out or "git reset fehlgeschlagen"
+        return False, out or _err(ERR_GIT_FAILED, "git reset")
     _run(["clean", "-fd"], cwd=nixos_dir)
     return True, out
 
@@ -946,7 +968,7 @@ def check_remote_status(nixos_dir: str) -> dict:
     rc, fetch_out = _run(["fetch", "--quiet", remote_name], cwd=nixos_dir, timeout=15, remote=True)
     if rc != 0:
         return {"has_git": True, "has_remote": True, "remote_url": remote_url, "behind": 0,
-                "error": f"fetch fehlgeschlagen: {fetch_out}"}
+                "error": _err(ERR_GIT_FAILED_OUT, "git fetch", fetch_out)}
 
     rc, count_out = _run(["rev-list", "HEAD..@{u}", "--count"], cwd=nixos_dir)
     if rc != 0:
@@ -1153,7 +1175,7 @@ def git_push_force(nixos_dir: str) -> tuple[bool, str, str]:
         return False, _oversized_push_message(blobs), "FILE_TOO_LARGE"
     rc, out = _run(["push", "--force"], cwd=nixos_dir, timeout=REMOTE_TRANSFER_TIMEOUT, remote=True)
     if rc != 0:
-        return False, out or "git push --force fehlgeschlagen", classify_push_error(out)
+        return False, out or _err(ERR_GIT_FAILED, "git push --force"), classify_push_error(out)
     return True, out, ""
 
 
@@ -1255,14 +1277,13 @@ def rollback(nixos_dir: str, commit_hash: str) -> tuple[bool, str]:
             failed.append(fname)
 
     if not restored:
-        return False, "Keine Dateien wiederhergestellt."
+        return False, ERR_NOTHING_RESTORED
 
     # A file that could not be checked out stays on its newer content while
     # everything around it went back - the mixed state this function exists to
     # avoid. It must not pass as a successful restore.
     if failed:
-        return False, ("Teilweise wiederhergestellt – diese Dateien stehen noch "
-                       "auf dem neueren Stand: " + ", ".join(sorted(failed)[:10]))
+        return False, _err(ERR_PARTIALLY_RESTORED, ", ".join(sorted(failed)[:10]))
 
     # Tracked files that were added after the target commit must be removed,
     # otherwise the working tree is a mix of both states.
@@ -1287,7 +1308,7 @@ def rollback(nixos_dir: str, commit_hash: str) -> tuple[bool, str]:
     _no_change = ("nothing to commit" in out
                   or "nothing added to commit" in out)
     if rc != 0 and not _no_change:
-        return False, f"Commit nach Rollback fehlgeschlagen: {out}"
+        return False, _err(ERR_GIT_FAILED_OUT, "git commit", out)
 
     return True, f"Wiederhergestellt: {', '.join(parts)} → {short}"
 
@@ -1344,7 +1365,7 @@ def get_diff(nixos_dir: str, from_hash: str, to_hash: str = "HEAD") -> dict:
     rc, out = _run(["diff", "-w", "--name-status", from_hash, to_hash],
                    cwd=nixos_dir, timeout=30)
     if rc != 0:
-        return {"error": out or "git diff fehlgeschlagen"}
+        return {"error": out or _err(ERR_GIT_FAILED, "git diff")}
 
     _DIFF_EXTENSIONS = {".nix", ".lock"}  # only config-relevant files
 

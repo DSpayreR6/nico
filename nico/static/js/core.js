@@ -155,7 +155,13 @@ function tOr(key, fallback, ...args) {
 function tErr(codeOrText) {
   if (!codeOrText) return t('toast.error');
   if (!codeOrText.startsWith('ERR_')) return codeOrText;
-  return t(`errors.${codeOrText}`, codeOrText);
+  // A code may carry its data behind the unit separator:
+  // "ERR_GIT_FAILED_OUT\x1fgit push\x1f<output>" fills {0} and {1} of the
+  // translation. That separator appears in neither a file name nor git's
+  // output, so nothing can be mistaken for one. Without data the split
+  // yields a single element and this behaves exactly as before.
+  const [code, ...params] = codeOrText.split('\x1f');
+  return t(`errors.${code}`, ...params);
 }
 
 async function loadLang(code) {
