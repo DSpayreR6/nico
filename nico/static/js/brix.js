@@ -4,6 +4,10 @@
 // ── Brix-Kontextmenü ────────────────────────────────────────────────────────
 function closeAllBrixMenus() {
   document.querySelectorAll('.brix-context-menu').forEach(m => m.classList.add('hidden'));
+  // Hand the action bar back to :hover - see the comment at the menu button
+  // in preview.js for why an open menu holds it open itself.
+  document.querySelectorAll('.code-brix.brix-menu-open')
+          .forEach(w => w.classList.remove('brix-menu-open'));
 }
 document.addEventListener('click', closeAllBrixMenus);
 

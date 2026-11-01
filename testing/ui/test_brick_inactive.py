@@ -14,6 +14,10 @@ Geprueft wird, was sich nur im Browser zeigt:
   * der Inhalt steht weiter in der Vorschau, nur auskommentiert
   * nach dem Aktivieren ist alles wie vorher
   * kein __TODO__ und kein roher Schluessel in den neuen Texten
+  * ein geoeffnetes Menue haelt seine Aktionsleiste selbst sichtbar, statt
+    sie an :hover zu haengen. Gemeldet von Martin am 2026-11-01: bei
+    eingeklappter Sektion verschwand das Menue, sobald man mit der Maus zum
+    ersten Eintrag fuhr.
 
 Aufruf wie in testing/ui/README.md beschrieben.
 """
@@ -25,7 +29,7 @@ from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.service import Service
 
-PORT = 8795
+PORT = 8792
 app = create_app()
 threading.Thread(target=lambda: app.run(port=PORT, threaded=True), daemon=True).start()
 time.sleep(2)
@@ -129,6 +133,58 @@ try:
     check("der Inhalt ist wieder wie am Anfang",
           lambda: d.execute_script("return arguments[0].textContent",
                                    brick_wrap(NAME)) == inhalt_vorher)
+    print("\n4. Das Menue haengt nicht mehr am Mauszeiger")
+    # Der gemeldete Fehler (Martin, 2026-11-01): .brix-actions wird nur ueber
+    # .code-brix:hover eingeblendet, und das Menue klappt mit top:100% darunter
+    # auf. Bei eingeklappter Sektion ist der Brick eine Zeile hoch - wer mit
+    # der Maus zum ersten Eintrag faehrt, verlaesst den Brick, :hover greift
+    # nicht mehr, das Menue verschwindet, und der Kopf des naechsten Bricks
+    # bekommt den Hover.
+    #
+    # Geprueft wird der Vertrag des Fixes, nicht die Mausbahn: Ein geoeffnetes
+    # Menue haelt seine Aktionsleiste selbst sichtbar. Der Klick kommt hier
+    # aus JavaScript, der Zeiger hat den Brick also nie beruehrt - :hover ist
+    # garantiert nicht im Spiel. Vor dem Fix steht die Leiste damit auf
+    # display:none und das Menue ist unerreichbar. (Eine echte Mausbahn mit
+    # ActionChains scheitert daran, dass Selenium die Lage eines Elements mit
+    # display:none nicht bestimmen kann - "element not interactable".)
+    d.refresh()
+    time.sleep(5)
+
+    sec = d.find_element(By.CSS_SELECTOR, 'section[data-section="SERV"]')
+    check("die Sektion startet zugeklappt",
+          lambda: "collapsed" in (sec.get_attribute("class") or ""))
+
+    wrap = brick_wrap(NAME)
+    disp = lambda sel: d.execute_script(
+        "return getComputedStyle(arguments[0]).display",
+        wrap.find_element(By.CSS_SELECTOR, sel))
+
+    check("ohne Hover und ohne Menue ist die Leiste verborgen",
+          lambda: disp('.brix-actions') == 'none')
+
+    d.execute_script("arguments[0].querySelector('.brix-menu-btn').click()", wrap)
+    time.sleep(0.4)
+    check("die Klasse brix-menu-open sitzt am Brick",
+          lambda: "brix-menu-open" in brick_wrap(NAME).get_attribute("class"))
+    check("das Menue ist offen",
+          lambda: "hidden" not in wrap.find_element(
+              By.CSS_SELECTOR, '.brix-context-menu').get_attribute("class"))
+    # Das ist die Prüfung, die vor dem Fix umfällt.
+    check("die Aktionsleiste bleibt sichtbar, obwohl der Zeiger nie da war",
+          lambda: disp('.brix-actions') == 'flex')
+    check("und die Menüeinträge sind damit erreichbar",
+          lambda: all(e.is_displayed()
+                      for e in wrap.find_elements(By.CSS_SELECTOR, '.brix-menu-item')))
+
+    # Ein Klick woanders schliesst das Menue und gibt die Leiste wieder frei.
+    d.execute_script("document.body.click()")
+    time.sleep(0.4)
+    check("nach dem Schliessen ist die Klasse weg",
+          lambda: "brix-menu-open" not in brick_wrap(NAME).get_attribute("class"))
+    check("und die Leiste haengt wieder am Hover",
+          lambda: disp('.brix-actions') == 'none')
+
 finally:
     d.quit()
 

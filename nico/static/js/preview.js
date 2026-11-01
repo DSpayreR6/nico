@@ -375,7 +375,18 @@ function renderAnnotatedPreview(code, containerId = 'preview-configuration', fil
         e.stopPropagation();
         const wasHidden = menu.classList.contains('hidden');
         closeAllBrixMenus();
-        if (wasHidden) menu.classList.remove('hidden');
+        if (wasHidden) {
+          menu.classList.remove('hidden');
+          // The action bar is shown through .code-brix:hover, and the menu
+          // hangs below it with top:100%. With the section collapsed the
+          // brick is one line tall, so moving the mouse into the menu leaves
+          // the brick, :hover stops matching and the menu vanishes mid-
+          // motion - while the brick head underneath takes the hover and
+          // shows its own buttons. Reported by Martin 2026-11-01. An open
+          // menu therefore keeps its own bar visible, instead of relying on
+          // where the pointer happens to be.
+          wrap.classList.add('brix-menu-open');
+        }
       });
 
       actions.appendChild(menuBtn);

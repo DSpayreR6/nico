@@ -1369,6 +1369,13 @@ mark.search-match-active {
 
 .code-brix:hover .brix-actions { display: flex; }
 
+/* An open context menu keeps its own action bar visible. Without this the bar
+   is tied to :hover, and the menu - which hangs below the head with top:100% -
+   disappears as soon as the pointer leaves the brick. With the section
+   collapsed the brick is one line tall, so that happens on the way to the
+   first menu entry (reported 2026-11-01). */
+.code-brix.brix-menu-open .brix-actions { display: flex; }
+
 /* Deactivated brick: body commented out, content still in the file. Greyed
    out rather than hidden - it has to stay findable, that is the whole point
    of not deleting it. The left border keeps its colour so the brick is still
