@@ -10,6 +10,10 @@ Die Festlegung steht in `vorgaben.txt`, Abschnitt „Begriffe". Dieser Test häl
 sie durch: ohne Prüfung verwässert ein Begriffsverzeichnis genauso, wie es den
 `__TODO__`-Übersetzungen passiert ist.
 
+Seit 2026-11-01 auch: eine Config, die jemand zum Ausprobieren anlegt, heisst
+nach aussen `test config`. Intern darf sie weiter "Wegwerf-Config" heissen -
+geprueft wird deshalb nur, was der Nutzer zu sehen bekommt.
+
 `snapshot` ist dabei der wichtigste Fall: Das Wort ist für Snapper- und
 Btrfs-Snapshots reserviert. Im Git-Zusammenhang benennt es sonst zwei
 verschiedene Dinge gleich.
@@ -188,6 +192,37 @@ hits = [k for k, v in de.items() if isinstance(v, str) and plural_misuse.search(
 check("'Nix-Bricks' nicht als Plural verwendet", not hits, hits[:4])
 check("kein 'Nix-Brixe' (doppelter Plural)",
       not any("Nix-Brixe" in str(v) for v in de.values()))
+
+print("\n10. Eine Config zum Ausprobieren heisst nach aussen 'test config'")
+# Festlegung vom 2026-11-01 (Martin): "toy" und "throwaway" klingen
+# abwertend - was ein Nutzer sich zum Ausprobieren anlegt, soll nicht als
+# wertlos bezeichnet werden. Intern bleibt "Wegwerf-Config" erlaubt, deshalb
+# prueft dieser Abschnitt nur, was nach aussen geht: die Sprachdateien, die
+# README und die Hilfe.
+AUSSEN_VERBOTEN = ["toy config", "throwaway config", "dummy config",
+                   "Spielkonfiguration", "Wegwerf-Config"]
+
+for p_lang in sorted(LANG.glob("*.json")):
+    data = json.loads(p_lang.read_text(encoding="utf-8"))
+    for bad in AUSSEN_VERBOTEN:
+        hits = [k for k, v in data.items()
+                if isinstance(v, str) and re.search(re.escape(bad), v, re.IGNORECASE)]
+        check(f"{p_lang.stem}: kein '{bad}'", not hits, hits[:3])
+
+for rel in ("README.md", "nico/templates/help.html"):
+    f = ROOT / rel
+    if not f.exists():
+        continue
+    txt = f.read_text(encoding="utf-8")
+    for bad in AUSSEN_VERBOTEN:
+        check(f"{rel}: kein '{bad}'", not re.search(re.escape(bad), txt, re.IGNORECASE))
+
+# Und die Gegenprobe: in internen Dokumenten darf es stehen bleiben, der Test
+# soll dort nichts erzwingen.
+intern = (ROOT / "testing" / "ui" / "README.md")
+if intern.exists():
+    check("intern bleibt 'Wegwerf-Config' unangetastet erlaubt",
+          "Wegwerf-Config" in intern.read_text(encoding="utf-8"))
 
 print("\n" + ("ALLE PRÜFUNGEN BESTANDEN" if not fails else f"FEHLGESCHLAGEN: {fails}"))
 sys.exit(1 if fails else 0)
