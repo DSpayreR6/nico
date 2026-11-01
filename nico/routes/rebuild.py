@@ -71,6 +71,25 @@ _RE_BUILD_ERR = re.compile(r"(?:^|\s)(?:error|fatal error):|failed with exit cod
                            re.IGNORECASE)
 _RE_BUILD_ERR_CASED = re.compile(r"^(?:FAILED|ERROR)\b")
 
+# The activation phase writes plain text, not `@nix` JSON: switch-to-configuration
+# and systemd talk straight to stderr. Measured on Martins run of 2026-11-01,
+# where the one line that explained the failure read
+# `Failed to restart network-addresses-vboxnet0.service` and the box showed
+# two useless git warnings instead.
+#
+# Narrow on purpose. The same output carries four lines that look alike and
+# mean nothing is wrong: `stopping the following units: …`,
+# `NOT restarting the following changed units: …`,
+# `restarting the following units: …` and
+# `the following new units were started: …`. None of them may match.
+_RE_RAW_ERR = re.compile(
+    r"^Failed to \S+ \S+"                        # systemd: Failed to restart x.service
+    r"|the following units failed"                # switch-to-configuration summary
+    r"|activation script snippet '[^']*' failed"
+    r"|^Job for \S+ failed"
+    r"|(?:^|\s)error:",
+    re.IGNORECASE)
+
 # nix result types. Their own enum, so 101 here is not the file-transfer
 # activity type that also carries 101 – the overlap is nix's, not a typo.
 _RES_BUILD_LOG      = 101  # resBuildLogLine: a line the builder wrote
@@ -120,8 +139,25 @@ class _ErrorLines:
         self.lines.append(text)
 
     def consider_msg(self, level, line: str) -> bool:
-        """Keep a nix message of level error (0) or warning (1)."""
-        if not isinstance(level, int) or level > 1:
+        """Keep a nix message of level error (0).
+
+        Warnings (level 1) used to count too and that was wrong: a flake
+        rebuild out of a git tree with uncommitted changes warns every single
+        time, so on Martins run of 2026-11-01 the box held nothing but
+        `warning: Git tree … is dirty`, twice, while the line naming the
+        failure was missing. Warnings stay in the log, where they belong.
+        A block list of known always-on warnings would go stale; the level is
+        the honest boundary.
+        """
+        if not isinstance(level, int) or level > 0:
+            return False
+        self.add(line)
+        return True
+
+    def consider_raw(self, line: str) -> bool:
+        """Keep a plain stderr line that announces a failure."""
+        plain = _RE_ANSI.sub("", line).strip()
+        if not plain or not _RE_RAW_ERR.search(plain):
             return False
         self.add(line)
         return True
@@ -923,6 +959,9 @@ def register(app, ctx):
                     if line.startswith('@nix '):
                         yield from _parse_nix_line(line[5:])
                     else:
+                        # Everything outside the JSON stream: nixos-rebuild's
+                        # own messages and the whole activation phase.
+                        err_lines.consider_raw(line)
                         progress = _parse_bracket_progress(line)
                         if progress:
                             global_state['available'] = True

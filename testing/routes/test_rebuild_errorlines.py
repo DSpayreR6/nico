@@ -21,8 +21,12 @@ Geprüft wird:
    3. der Paketname steht davor (sonst nennt die Zeile das Paket nicht)
    4. harmlose Zeilen mit dem Wort "error" im Dateinamen zählen nicht
       (`femtools/errors.py` lief im echten Fall zehnmal durch)
-   5. nix-Meldungen: level 0 und 1 zählen, level 4 (das Verlinkungs-Rauschen
-      des echten Falls) nicht
+   5. nix-Meldungen: nur level 0 zählt. Stufe 1 zählte zunächst mit und war
+      falsch - `warning: Git tree … is dirty` kommt bei jedem Flake-Rebuild
+      und verdrängte die Ursache (gemessen 2026-11-01)
+  5b. die Aktivierungsphase schreibt reinen Text auf stderr, kein JSON; die
+      Zeile `Failed to restart …` muss erkannt werden, die vier harmlosen
+      "the following …"-Zeilen nicht
    6. die Fehlerzeilen stehen im Log **oberhalb** des gekappten Teils und
       überleben, wenn 5 MB Rauschen hinterherkommen
    7. mehr als 200 Fehlerzeilen: die ersten bleiben, der Rest wird gezählt –
@@ -75,6 +79,14 @@ def check(label, cond, got=None):
 # wirkungslose Attrappen ersetzt, damit der Rest durchlaeuft.
 import inspect
 
+if not hasattr(rb._ErrorLines, "consider_raw"):
+    check("_ErrorLines.consider_raw existiert", False)
+    rb._ErrorLines.consider_raw = lambda self, line: False
+if not hasattr(rb, "_RE_RAW_ERR"):
+    check("rb._RE_RAW_ERR existiert", False)
+    import re as _re_shim
+    rb._RE_RAW_ERR = _re_shim.compile(r"(?!)")
+
 if not hasattr(rb, "_build_log_text"):
     check("rb._build_log_text existiert", False)
     rb._build_log_text = lambda data: ""
@@ -93,6 +105,9 @@ if not hasattr(rb, "_ErrorLines"):
             return False
 
         def consider_build(self, line, pkg=""):
+            return False
+
+        def consider_raw(self, line):
             return False
 
         def header(self):
@@ -187,14 +202,56 @@ print("\n3) nix-Meldungen nach Loglevel")
 
 m = rb._ErrorLines()
 check("level 0 (error) zählt", m.consider_msg(0, NIX_ERROR))
-check("level 1 (warning) zählt",
-      m.consider_msg(1, "warning: system.stateVersion is not set"))
+# Geaendert am 2026-11-01 nach Martins echtem Lauf: Stufe 1 zaehlte mit, und
+# `warning: Git tree … is dirty` kommt bei jedem Flake-Rebuild zweimal. Im
+# Kasten stand damit nur diese Warnung, waehrend die Ursache fehlte.
+check("level 1 (warning) zählt NICHT mehr",
+      not m.consider_msg(1, "warning: system.stateVersion is not set"))
+check("der Dauerläufer 'Git tree is dirty' bleibt draußen",
+      not m.consider_msg(1, "warning: Git tree '/home/martin/.nixos-config' is dirty"))
 check("level 4 (talkative) zählt nicht – das war das Rauschen",
       not m.consider_msg(4, LINK_NOISE))
 check("level 7 zählt nicht", not m.consider_msg(7, "vomit"))
 check("fehlendes level zählt nicht", not m.consider_msg(None, NIX_ERROR))
 check("level 0 mehrzeilig behält beide Zeilen",
       "1 dependency failed" in line(m) and "Cannot build" in line(m))
+
+print("\n3b) Die Aktivierungsphase schreibt reinen Text, kein JSON")
+
+# Wörtlich aus Martins Lauf vom 2026-11-01, 12:53. Der Bau lief durch, die
+# Umstellung auch - eine Unit liess sich nur nicht neu starten und war zwei
+# Sekunden spaeter von selbst in Ordnung. Zu sehen bekam er einen
+# Python-Traceback, weil die Aktivierungsausgabe gar nicht nach Fehlern
+# durchsucht wurde.
+AKTIV_FEHLER = "Failed to restart network-addresses-vboxnet0.service"
+AKTIV_HARMLOS = [
+    "stopping the following units: accounts-daemon.service, avahi-daemon.service",
+    "NOT restarting the following changed units: display-manager.service",
+    "restarting the following units: home-manager-martin.service",
+    "the following new units were started: cups-browsed.service",
+    "stopping the following user units: pipewire.service",
+    "activating the configuration...",
+    "restarting systemd...",
+]
+
+r = rb._ErrorLines()
+check("die gescheiterte Unit wird erkannt", r.consider_raw(AKTIV_FEHLER))
+check("und steht wörtlich da", line(r) == AKTIV_FEHLER, line(r))
+for h in AKTIV_HARMLOS:
+    check(f"ignoriert: {h[:42]}", not r.consider_raw(h))
+check("nur die eine Zeile ist gelandet", len(r.lines) == 1, r.lines)
+
+check("Zusammenfassung von switch-to-configuration zählt",
+      rb._ErrorLines().consider_raw("warning: the following units failed: foo.service"))
+check("gescheitertes Aktivierungsskript zählt",
+      rb._ErrorLines().consider_raw("activation script snippet 'setupSecrets' failed (1)"))
+check("Job for … failed zählt",
+      rb._ErrorLines().consider_raw("Job for sshd.service failed because the control process exited"))
+check("eine Fehlermeldung mit error: zählt",
+      rb._ErrorLines().consider_raw("error: cannot coerce a set to a string"))
+check("eine Leerzeile zählt nicht", not rb._ErrorLines().consider_raw("   "))
+check("der eigene Log-Hinweis zählt nicht",
+      not rb._ErrorLines().consider_raw("── Log gespeichert: /home/x/.cache/nico/nixos-rebuild.log ──"))
 
 print("\n4) Die Fehlerzeilen überleben die Kappung")
 
