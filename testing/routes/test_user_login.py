@@ -36,7 +36,7 @@ def check(label, cond, got=None):
 
 
 def write_config(text: str, extra: "dict | None" = None) -> str:
-    """Write a throwaway config directory and return its path."""
+    """Write a test config directory and return its path."""
     tmp = tempfile.mkdtemp(prefix="nico-login-")
     (pathlib.Path(tmp) / "configuration.nix").write_text(text, encoding="utf-8")
     for name, content in (extra or {}).items():
