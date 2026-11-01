@@ -50,6 +50,9 @@
 
   "field.hostname":          "Hostname",
   "field.stateVersion":      "System-State-Version (system.stateVersion)",
+  "field.stateVersionPerHost": "Dieser Wert gehört in die Host-Dateien – die Basis-Config wird von jedem Host eingebunden und würde allen Rechnern dasselbe Installationsdatum zuschreiben. Eigener Wert: {0}. Ohne Wert: {1}. Achtung: Steht der Wert hier und in einer Host-Datei, lehnt Nix die Auswertung ab – der Host-Wert gewinnt nicht von selbst.",
+  "field.stateVersionPerHostPlaceholder": "leer – steht in den Host-Dateien",
+  "field.stateVersionHostOwn": "Gilt nur für den Host {0}.",
   "field.nixArgs":           "Modulargumente",
   "field.notSet":            "— nicht gesetzt —",
   "field.timezone":          "Zeitzone",

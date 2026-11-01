@@ -315,5 +315,104 @@ for rid in ("state_version_future", "state_version_missing",
     check(f"{rid} standardmäßig an",
           validator.default_validation_rules().get(rid) is True)
 
+print("\n10. Basis-Config: kein TODO-Kommentar, wo leer richtig ist")
+
+# Martins Frage vom 2026-11-01: Was bewirkt ein Eintrag in der
+# configuration.nix, wenn die Hosts eigene Werte haben? Antwort: Bei zwei
+# Definitionen bricht Nix ab, ein Host-Wert gewinnt nicht. Leer ist dort also
+# der richtige Zustand - und genau dafuer schrieb NiCo eine Zeile
+# "# TODO: set NixOS state version" in die Datei, die wie eine unfertige
+# Aufgabe aussieht.
+
+zwei_hosts = {"flakes": True,
+              "flake_hosts": [{"name": "nix-desktop"}, {"name": "nix-laptop"}]}
+ein_host = {"flakes": True, "flake_hosts": [{"name": "nix-desktop"}]}
+
+co_multi = generator.generate_configuration_nix(dict(zwei_hosts))
+check("zwei Hosts, kein Wert: kein TODO-Kommentar",
+      "TODO: set NixOS state version" not in co_multi,
+      [l for l in co_multi.split("\n") if "stateVersion" in l])
+check("zwei Hosts: auch keine stateVersion-Zeile",
+      "system.stateVersion" not in co_multi)
+check("der SYST-Abschnitt bleibt als Anker stehen", "SYST" in co_multi)
+
+co_single = generator.generate_configuration_nix(dict(ein_host))
+check("ein Host: TODO-Kommentar bleibt - dort ist die Basis der richtige Ort",
+      "TODO: set NixOS state version" in co_single)
+
+co_noflake = generator.generate_configuration_nix({})
+check("ohne Flake: TODO-Kommentar bleibt",
+      "TODO: set NixOS state version" in co_noflake)
+
+co_wert = generator.generate_configuration_nix(dict(zwei_hosts, state_version="25.11"))
+check("ein eingetragener Wert wird auch bei zwei Hosts geschrieben",
+      'system.stateVersion = "25.11";' in co_wert)
+check("und dann steht kein TODO daneben",
+      "TODO: set NixOS state version" not in co_wert)
+
+check("die Schwelle ist zwei Hosts, wie in der Regel",
+      generator._state_version_per_host(zwei_hosts) is True
+      and generator._state_version_per_host(ein_host) is False
+      and generator._state_version_per_host({"flakes": True}) is False
+      and generator._state_version_per_host({"flake_hosts": [1, 2]}) is False)
+
+print("\n11. Ueberblick fuer die Hinweiszeile im Formular")
+
+FLAKE = """{
+  outputs = { self, nixpkgs, ... }: {
+    nixosConfigurations = {
+      nix-desktop = nixpkgs.lib.nixosSystem { };
+      nix-laptop = nixpkgs.lib.nixosSystem { };
+    };
+  };
+}
+"""
+d = make({
+    "flake.nix": FLAKE,
+    "configuration.nix": "{ }\n",
+    "hosts/nix-desktop/default.nix": '{ system.stateVersion = "25.11"; }\n',
+    "hosts/nix-laptop/default.nix": "{ }\n",
+})
+ov = validator.state_version_overview(d)
+check("per_host bei zwei Hosts", ov["per_host"] is True, ov)
+check("beide Hosts sind aufgefuehrt",
+      [h["host"] for h in ov["hosts"]] == ["nix-desktop", "nix-laptop"], ov["hosts"])
+check("der Host mit Wert traegt ihn",
+      ov["hosts"][0]["value"] == "25.11", ov["hosts"][0])
+check("der Host ohne Wert traegt ''", ov["hosts"][1]["value"] == "", ov["hosts"][1])
+check("die Datei des Werts wird genannt",
+      ov["hosts"][0]["file"].endswith("nix-desktop/default.nix"), ov["hosts"][0])
+check("Basis ohne Wert", ov["base"] == "", ov["base"])
+
+# Der Fall, den Martin fuerchtete: Wert in der Basis UND im Host.
+d2 = make({
+    "flake.nix": FLAKE,
+    "configuration.nix": '{ system.stateVersion = "24.11"; }\n',
+    "hosts/nix-desktop/default.nix": '{ system.stateVersion = "25.11"; }\n',
+    "hosts/nix-laptop/default.nix": "{ }\n",
+})
+ov2 = validator.state_version_overview(d2)
+check("der Wert der Basis wird gemeldet", ov2["base"] == "24.11", ov2["base"])
+check("ohne Wrapper ist base_prio leer", ov2["base_prio"] == "", ov2["base_prio"])
+check("genau dieser Fall ist ein Fehler der Regel",
+      any(f.severity == "error" for f in run(validator._rule_state_version_per_host, d2)))
+
+d3 = make({
+    "flake.nix": FLAKE,
+    "configuration.nix": '{ system.stateVersion = lib.mkDefault "24.11"; }\n',
+    "hosts/nix-desktop/default.nix": '{ system.stateVersion = "25.11"; }\n',
+    "hosts/nix-laptop/default.nix": "{ }\n",
+})
+ov3 = validator.state_version_overview(d3)
+check("mkDefault in der Basis wird als Wrapper erkannt",
+      ov3["base_prio"] == "mkDefault", ov3["base_prio"])
+
+d4 = make({"configuration.nix": '{ system.stateVersion = "25.11"; }\n'})
+ov4 = validator.state_version_overview(d4)
+check("ohne flake.nix kein per_host", ov4["per_host"] is False, ov4)
+check("ohne flake.nix keine Hostliste", ov4["hosts"] == [], ov4["hosts"])
+check("der Basiswert wird trotzdem gelesen", ov4["base"] == "25.11", ov4["base"])
+
+
 print("\n" + ("ALLE PRÜFUNGEN BESTANDEN" if not fails else f"FEHLGESCHLAGEN: {len(fails)}"))
 sys.exit(1 if fails else 0)

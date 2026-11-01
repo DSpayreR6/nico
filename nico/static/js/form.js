@@ -46,6 +46,59 @@ async function updateFsHint() {
   }
 }
 
+// ── State-version hint ─────────────────────────────────────────────
+// The form has one field for a value that, in a flake with several hosts,
+// belongs in the host file. Nothing in the field said so, and the assumption
+// it invites is wrong in a way that costs a build: a host value does not win
+// over the base one, Nix refuses an option defined twice and stops the
+// evaluation. Martin asked exactly that on 2026-11-01.
+//
+// Read through the server from the files, not from the model - a value can
+// sit in a Nix brick, where the model has no entry for it.
+let _stateVersionPlaceholder = null;
+
+async function updateStateVersionHint() {
+  const hint  = document.getElementById('state-version-hint');
+  const field = document.getElementById('state_version');
+  if (!hint || !field) return;
+  if (_stateVersionPlaceholder === null) _stateVersionPlaceholder = field.placeholder;
+
+  const reset = () => {
+    hint.classList.add('hidden');
+    hint.textContent = '';
+    field.placeholder = _stateVersionPlaceholder;
+  };
+
+  try {
+    const data = await fetch('/api/state-version/hosts').then(r => r.json());
+    // Single host or no flake: the base config is the right place and the
+    // field needs no explaining.
+    if (!data || !data.per_host) { reset(); return; }
+
+    // A host is open, so the field holds that host's own value. Naming the
+    // machine is the whole hint here.
+    if (_activeHost) {
+      hint.textContent  = t('field.stateVersionHostOwn', _activeHost);
+      field.placeholder = _stateVersionPlaceholder;
+      hint.classList.remove('hidden');
+      return;
+    }
+
+    const hosts     = Array.isArray(data.hosts) ? data.hosts : [];
+    const withValue = hosts.filter(h => h.value).map(h => h.host + ' ' + h.value);
+    const without   = hosts.filter(h => !h.value).map(h => h.host);
+    // An empty group keeps its line and shows a dash: a group that vanishes
+    // reads as "there is no such case" instead of "none of them".
+    hint.textContent  = t('field.stateVersionPerHost',
+                          withValue.length ? withValue.join(', ') : '–',
+                          without.length   ? without.join(', ')   : '–');
+    field.placeholder = t('field.stateVersionPerHostPlaceholder');
+    hint.classList.remove('hidden');
+  } catch (_) {
+    reset();
+  }
+}
+
 // ── Home Manager CO-Form ──────────────────────────────────────────────────
 
 async function loadHmFileList() {
@@ -808,4 +861,7 @@ async function _populateCoFormFromFile(path, _content) {
     }
   } catch { /* non-fatal: leeres Formular ist besser als falsche Werte */ }
   _coFormReady = loaded;
+  // Here rather than at every caller: all four ways into the CO form run
+  // through this, and the hint has to match the file that is open now.
+  updateStateVersionHint();
 }

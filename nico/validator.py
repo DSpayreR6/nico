@@ -2043,6 +2043,49 @@ def _rule_state_version_future(nixos_dir: str, config: dict, is_flake: bool,
     return findings
 
 
+def state_version_overview(nixos_dir: str) -> dict:
+    """Where system.stateVersion stands in this config, per host.
+
+    For the form, which has one field for the base config and gives no hint
+    that the value belongs somewhere else. The assumption it invites is that
+    a host value simply wins; it does not - Nix refuses an option defined
+    twice. Martin asked exactly that on 2026-11-01.
+
+    Reads the files, not the model: a value can sit in a Nix brick, and the
+    model has no entry for that (the same blindness that made the btrfs rule
+    useless until 2026-10-30).
+
+    Returns:
+      per_host  - True when the value belongs in the host files: a flake with
+                  two hosts or more, the threshold of _rule_state_version_per_host
+      base      - the value in the base config, '' when there is none
+      base_prio - the wrapper used there ('mkDefault', …), '' for a plain one
+      hosts     - [{host, value, file}] for every host the flake declares,
+                  value '' for a host without one
+    """
+    out = {"per_host": False, "base": "", "base_prio": "", "hosts": []}
+    try:
+        content = (Path(nixos_dir) / "flake.nix").read_text(encoding="utf-8")
+    except OSError:
+        content = ""
+    hosts = sorted(_flake_defined_hosts(content)) if content else []
+    out["per_host"] = len(hosts) >= 2
+
+    hosts_dir = _hosts_dir_path(nixos_dir).name
+    own: dict = {}
+    for value, rel, line, prio in _state_version_sites(nixos_dir, None):
+        parts = rel.replace("\\", "/").split("/")
+        if len(parts) >= 2 and parts[0] == hosts_dir:
+            own.setdefault(parts[1], (value, rel, prio))
+        elif not out["base"]:
+            out["base"], out["base_prio"] = value, prio
+
+    for host in hosts:
+        value, rel, _prio = own.get(host, ("", "", ""))
+        out["hosts"].append({"host": host, "value": value, "file": rel})
+    return out
+
+
 def _rule_state_version_per_host(nixos_dir: str, config: dict, is_flake: bool,
                                  host: str | None = None) -> list[Finding]:
     """Report one shared stateVersion standing in for several machines.

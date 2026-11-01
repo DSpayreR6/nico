@@ -61,6 +61,19 @@ def register(app, ctx):
         config_manager.save_config(nixos_dir, incoming)
         return jsonify({"success": True})
 
+    @app.route("/api/state-version/hosts", methods=["GET"])
+    def get_state_version_hosts():
+        """Where system.stateVersion stands, per host – for the form hint.
+
+        Read-only on purpose, unlike GET /api/config, which regenerates files
+        on a hash mismatch (S9). Nothing here writes.
+        """
+        nixos_dir, err = _require_setup()
+        if err:
+            return err
+        from .. import validator as _validator
+        return jsonify(_validator.state_version_overview(nixos_dir))
+
     @app.route("/api/config/settings", methods=["GET"])
     def get_config_settings():
         """Return current config.json settings."""

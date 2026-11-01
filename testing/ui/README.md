@@ -65,3 +65,25 @@ Dialog – Hinweis zuerst, Karten in der Mitte (rot vor gelb vor blau), die
 Knöpfe als letztes Element –, dass derselbe Fund aus mehreren Hosts nur
 einmal erscheint, dass der Erzwingen-Knopf den Namen der Funktion trägt, die
 er startet, und dass im Menü aufgerufen keine Knöpfe erscheinen.
+
+## test_state_version_hint.py
+
+Hinweiszeile und Platzhalter am Feld System-State-Version, 23 Prüfungen.
+Aus Martins Frage vom 2026-11-01, was ein Eintrag in der `configuration.nix`
+bei mehreren Hosts bewirkt: Bei zwei Definitionen bricht Nix ab, ein
+Host-Wert gewinnt nicht von selbst. Geprüft wird, dass die Zeile die Hosts
+mit und ohne eigenen Wert nennt, dass sie genau diese Warnung ausspricht,
+dass der Platzhalter auf die Host-Dateien verweist, und dass die Zeile bei
+geöffneter Host-Datei auf den einen Host umschaltet. Gegen den Stand vor dem
+Fix fallen 14 davon.
+
+Zwei Dinge, die beim Bau des Tests aufgefallen sind und die ein Nachfolger
+nicht neu herleiten sollte:
+
+* Sektionen starten zugeklappt (Entscheidung 2026-10-17), und Selenium gibt
+  für ein Element darin einen leeren `.text` zurück. Ohne Aufklappen prüft
+  so ein Test nichts und ist trotzdem grün.
+* `switchHost()` in `form.js` ist **nicht** benutzbar: die Funktion hat
+  keinen Aufrufer und läuft in einen `ReferenceError`, weil `_formDirty` und
+  `_flakeFormDirty` im Closure von `Sidebar` liegen und nicht global sind.
+  Der Weg des Nutzers ist `Sidebar.selectFile(...)`, und so fährt der Test.

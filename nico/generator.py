@@ -179,6 +179,28 @@ def _sec_boot(data: dict, brix: dict) -> "list[str]":
     return lines
 
 
+def _state_version_per_host(data: dict) -> bool:
+    """True when system.stateVersion belongs in the host files, not the base.
+
+    A flake imports configuration.nix into every host, so a value there
+    claims one installation date for all of them. There is no precedence to
+    fall back on either: two definitions of one option make Nix refuse the
+    evaluation outright unless the base one steps back with lib.mkDefault -
+    a host value does not simply win, which is the assumption this guards
+    against.
+
+    Empty is therefore the correct state, and the TODO comment is left out:
+    it reads like an unfinished task where there is nothing to do, and it was
+    read that way on 2026-11-01.
+
+    The threshold is two hosts, matching validator rule
+    state_version_per_host. Drifting apart would mean NiCo writes a TODO the
+    Validator contradicts, or stays silent where the Validator asks for a
+    value.
+    """
+    return bool(data.get("flakes")) and len(data.get("flake_hosts") or []) >= 2
+
+
 def _sec_system(data: dict, *, host_mode: bool) -> "list[str]":
     hostname = (data.get("hostname") or "").strip()
     state_version = (data.get("state_version") or "").strip()
@@ -201,10 +223,10 @@ def _sec_system(data: dict, *, host_mode: bool) -> "list[str]":
     lines = [_section("SYST")]
     if hostname:
         lines += [f'  networking.hostName = "{nix_esc(hostname)}";']
-    lines += [
-        f'  system.stateVersion = "{nix_esc(state_version)}";' if state_version
-        else '  # system.stateVersion = "";  # TODO: set NixOS state version'
-    ]
+    if state_version:
+        lines += [f'  system.stateVersion = "{nix_esc(state_version)}";']
+    elif not _state_version_per_host(data):
+        lines += ['  # system.stateVersion = "";  # TODO: set NixOS state version']
     return lines
 
 
