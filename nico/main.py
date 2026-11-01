@@ -244,7 +244,7 @@ THEME_CSS
                         break
 
                 def _start_flask():
-                    print(f"Server läuft auf http://{HOST}:{preferred_port}")
+                    print(f"Server running at http://{HOST}:{preferred_port}")
                     print("Beenden mit Ctrl+C.")
                     create_app().run(host=HOST, port=preferred_port, debug=False)
 
@@ -281,7 +281,7 @@ def main():
         port = _find_free_port(PREFERRED_PORT + 1)
         print(f"Port {PREFERRED_PORT} belegt, verwende Port {port}.")
 
-    print(f"Server läuft auf http://{HOST}:{port}")
+    print(f"Server running at http://{HOST}:{port}")
     print("Beenden mit Ctrl+C.")
 
     t = threading.Thread(target=_open_browser, args=(port,), daemon=True)

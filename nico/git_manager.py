@@ -44,6 +44,18 @@ CONFIG_FILE_NAMES = frozenset({"flake.lock", "config.json", ".gitignore"})
 # translates anything starting with ERR_ and shows the rest verbatim.
 ERR_NO_GIT_REPO = "ERR_NO_GIT_REPO"
 ERR_NO_REMOTE   = "ERR_NO_REMOTE"
+# Codes instead of German sentences: these messages travel straight into the
+# interface, where tErr() turns a code into the user's language and passes
+# anything else through unchanged. Five German sentences were left here when
+# the twenty no-repository messages were converted on 2026-10-24 - they do not
+# read like translatable text, which is exactly why they were missed. Added
+# 2026-11-01. The literal German sentence is deliberately not quoted here:
+# test_git_states.py greps this file for it as a tripwire.
+ERR_BAD_REMOTE_BRANCH    = "ERR_BAD_REMOTE_BRANCH"
+ERR_BLOB_PUBLISHED       = "ERR_BLOB_PUBLISHED"
+ERR_BRANCH_DELETE_FAILED = "ERR_BRANCH_DELETE_FAILED"
+ERR_BAD_COMMIT_HASH      = "ERR_BAD_COMMIT_HASH"
+ERR_COMMIT_NOT_FOUND     = "ERR_COMMIT_NOT_FOUND"
 
 
 def is_config_file(relpath: str) -> bool:
@@ -534,7 +546,7 @@ def set_upstream_branch(nixos_dir: str, remote_branch: str) -> tuple[bool, str]:
     if not remote_name:
         return False, ERR_NO_REMOTE
     if not remote_branch.startswith(f"{remote_name}/"):
-        return False, "Ungültiger Remote-Branch."
+        return False, ERR_BAD_REMOTE_BRANCH
     rc, out = _run(["branch", "--set-upstream-to", remote_branch, local_branch], cwd=nixos_dir)
     if rc != 0:
         return False, out or "Remote-Branch konnte nicht zugeordnet werden."
@@ -696,10 +708,7 @@ def clean_large_files(nixos_dir: str, paths: list[str], delete_from_disk: bool =
         return False, ERR_NO_GIT_REPO, {}
     report = large_file_report(nixos_dir)
     if any(p in [x[0] for x in report["published"]] for p in paths):
-        return False, ("Die Datei liegt bereits auf dem Server. Das ließe sich nur durch "
-                       "Umschreiben der veröffentlichten Historie beheben – das macht die "
-                       "Kopien auf anderen Rechnern unbrauchbar und wird hier nicht "
-                       "angeboten."), {}
+        return False, ERR_BLOB_PUBLISHED, {}
 
     _ensure_identity(nixos_dir)
     result = {"backup_branch": "", "commit": "", "removed": [], "deleted": []}
@@ -758,7 +767,7 @@ def drop_backup_branch(nixos_dir: str, branch: str) -> tuple[bool, str]:
         return False, "Kein NiCo-Sicherungszweig."
     rc, out = _run(["branch", "-D", branch], cwd=nixos_dir)
     if rc != 0:
-        return False, out or "Zweig konnte nicht gelöscht werden."
+        return False, out or ERR_BRANCH_DELETE_FAILED
     _run(["reflog", "expire", "--expire=now", "--expire-unreachable=now", "--all"],
          cwd=nixos_dir, timeout=60)
     _run(["gc", "--prune=now", "--quiet"], cwd=nixos_dir, timeout=300)
@@ -1196,7 +1205,7 @@ def rollback(nixos_dir: str, commit_hash: str) -> tuple[bool, str]:
     """
     import re as _re
     if not _re.fullmatch(r"[0-9a-f]{7,40}", commit_hash):
-        return False, "Ungültiger Commit-Hash."
+        return False, ERR_BAD_COMMIT_HASH
     if not is_git_repo(nixos_dir):
         return False, ERR_NO_GIT_REPO
 
@@ -1205,7 +1214,7 @@ def rollback(nixos_dir: str, commit_hash: str) -> tuple[bool, str]:
     rc, target_list = _run_paths(["ls-tree", "-r", "--name-only", commit_hash],
                                  cwd=nixos_dir)
     if rc != 0 or not target_list:
-        return False, "Commit nicht gefunden oder enthält keine Dateien."
+        return False, ERR_COMMIT_NOT_FOUND
 
     target_files = set(target_list)
 
@@ -1298,7 +1307,7 @@ def get_diff(nixos_dir: str, from_hash: str, to_hash: str = "HEAD") -> dict:
         return bool(_re.fullmatch(r"[0-9a-f]{7,40}|HEAD|HEAD~\d+", h))
 
     if not _valid(from_hash) or not _valid(to_hash):
-        return {"error": "Ungültiger Commit-Hash"}
+        return {"error": ERR_BAD_COMMIT_HASH}
     if not is_git_repo(nixos_dir):
         return {"error": ERR_NO_GIT_REPO}
 

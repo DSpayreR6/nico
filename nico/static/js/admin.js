@@ -496,7 +496,10 @@ async function loadAdminSymlinkStatus() {
   const errDiv  = document.getElementById('admin-symlink-error');
   if (!label) return;
 
-  const baseHint = '/etc/nixos wird vorher nach /etc/nixos.bak gesichert.';
+  // Die sieben admin.symlink*-Schlüssel lagen seit Langem unbenutzt in allen
+  // Sprachdateien, während hier deutscher Text hartkodiert stand - ein
+  // englischsprachiger Nutzer las also Deutsch. Verdrahtet am 2026-11-01.
+  const baseHint = t('admin.symlinkBackupHint');
   errDiv.classList.add('hidden');
   btn.classList.add('hidden');
   label.textContent = '…';
@@ -505,17 +508,19 @@ async function loadAdminSymlinkStatus() {
     const res  = await csrfFetch('/api/symlink/status');
     const data = await res.json();
     if (data.status === 'symlink' && data.points_to_nico) {
-      label.innerHTML = niIcon('check-circle') + ' Symlink aktiv → ' + escHtml(data.target);
+      label.innerHTML = niIcon('check-circle') + ' '
+                      + escHtml(t('admin.symlinkActive', data.target || ''));
       hint.textContent  = baseHint;
     } else if (data.status === 'symlink') {
-      label.innerHTML = niIcon('alert-triangle') + ' Symlink zeigt auf ' + escHtml(data.target) + ' (nicht NiCo-Verzeichnis)';
+      label.innerHTML = niIcon('alert-triangle') + ' '
+                      + escHtml(t('admin.symlinkOther', data.target || ''));
       hint.textContent  = baseHint;
     } else if (data.status === 'dir') {
-      label.textContent = '';
-      hint.textContent  = baseHint + ' (aktuell noch kein Symlink angelegt)';
+      label.textContent = t('admin.symlinkIsDir');
+      hint.textContent  = baseHint;
       btn.classList.remove('hidden');
     } else if (data.status === 'missing') {
-      label.textContent = '/etc/nixos existiert nicht';
+      label.textContent = t('admin.symlinkMissing');
       hint.textContent  = baseHint;
     } else {
       label.textContent = '';
@@ -551,7 +556,7 @@ async function doAdminSymlink() {
       return;
     }
     await loadAdminSymlinkStatus();
-    showToast('Symlink angelegt ✅', 'success');
+    showToast(t('admin.symlinkCreated', '/etc/nixos.bak'), 'success');
   } catch (e) {
     errDiv.textContent = t('toast.error');
     errDiv.classList.remove('hidden');

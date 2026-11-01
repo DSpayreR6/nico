@@ -9,6 +9,9 @@ Ursache war ein früher Rücksprung in `_showRebuildOptions`, sobald
 Entschieden (Martin): Dialog immer zeigen, nur das Flake-Update ausgrauen statt
 verstecken – so sieht man die Möglichkeit, ohne davon gestört zu werden.
 
+Erweitert am 2026-11-01 um den Moduswähler (switch/boot/test): Das Backend
+kannte die drei Modi längst, die Oberfläche schickte aber immer `switch`.
+
 Der Test klickt den Rebuild **nicht** an: er prüft den Dialog und bricht dann
 ab. Ein scharfer Rebuild würde in das laufende System eingreifen
 (hinweisliste.txt: "Nie eine Route scharf aufrufen, die ins System eingreift").
@@ -94,13 +97,75 @@ try:
           d.execute_script("return window._rboResult;") is None)
 
     print("\n7. Mit Flakes ist der Schalter bedienbar")
-    d.execute_script("_showRebuildOptions({flake_mode: true}, {mode: 'switch', hostname: 'vm'});")
+    d.execute_script("window._rboResult = null;"
+                     "_showRebuildOptions({flake_mode: true}, {mode: 'switch', hostname: 'vm'})"
+                     "  .then(r => { window._rboResult = r; });")
     time.sleep(1)
     flake2 = d.find_elements(By.ID, "_rbo-flake-update")
     check("Schalter aktiv", bool(flake2) and flake2[0].is_enabled())
     cmd3 = d.execute_script("return document.getElementById('_rbo-cmd')?.textContent || '';")
     check("Befehl nennt --flake", "--flake" in cmd3, cmd3)
     d.execute_script("document.getElementById('_rbo-cancel').click();")
+
+    print("\n7b. Moduswähler switch / boot / test")
+    # Dazugekommen am 2026-11-01. Das Backend kannte die drei Modi laengst
+    # (routes/rebuild.py), die Oberflaeche schickte aber immer `switch`. Fuer
+    # jemanden, der NiCo auf seinem echten Rechner ausprobiert, ist `test` der
+    # Unterschied zwischen "ich riskiere mein bootfaehiges System" und "ich
+    # starte notfalls neu" - darauf verweist auch die README.
+    #
+    # Eigener Dialog: Abschnitt 7 schliesst seinen in der letzten Zeile.
+    d.execute_script("window._rboResult = null;"
+                     "_showRebuildOptions({flake_mode: false}, {mode: 'switch'})"
+                     "  .then(r => { window._rboResult = r; });")
+    time.sleep(1.2)
+    sel = d.find_elements(By.ID, "_rbo-mode")
+    check("das Auswahlfeld ist da", len(sel) > 0)
+    werte = d.execute_script(
+        "const s=document.getElementById('_rbo-mode');"
+        "return s ? [...s.options].map(o=>o.value) : [];")
+    check("drei Modi in dieser Reihenfolge",
+          werte == ["switch", "boot", "test"], werte)
+    check("Vorgabe ist switch",
+          d.execute_script("return document.getElementById('_rbo-mode')?.value;") == "switch")
+
+    beschriftungen = d.execute_script(
+        "const s=document.getElementById('_rbo-mode');"
+        "return s ? [...s.options].map(o=>o.textContent.trim()) : [];")
+    check("keine rohen Schlüssel in den Einträgen",
+          all(b and not b.startswith("rebuild.") for b in beschriftungen), beschriftungen)
+    check("kein __TODO__ in den Einträgen",
+          not any("__TODO__" in b for b in beschriftungen), beschriftungen)
+    check("jeder Eintrag nennt den Fachbegriff in Klammern",
+          all(f"({m})" in b for m, b in zip(werte, beschriftungen)), beschriftungen)
+
+    hinweis = d.execute_script(
+        "return document.getElementById('_rbo-mode-hint')?.textContent.trim() || '';")
+    check("unter dem Feld steht eine Erklärung",
+          bool(hinweis) and "__TODO__" not in hinweis, hinweis)
+
+    # Der Modus muss im kopierbaren Befehl ankommen - sonst zeigt NiCo etwas
+    # anderes, als es tut.
+    for modus in ("test", "boot", "switch"):
+        d.execute_script(
+            "const s=document.getElementById('_rbo-mode');"
+            "s.value=arguments[0]; s.dispatchEvent(new Event('change'));", modus)
+        time.sleep(0.3)
+        cmd_m = d.execute_script("return document.getElementById('_rbo-cmd')?.textContent || '';")
+        check(f"der Befehl nennt 'nixos-rebuild {modus}'",
+              f"nixos-rebuild {modus}" in cmd_m, cmd_m)
+        h = d.execute_script("return document.getElementById('_rbo-mode-hint')?.textContent.trim() || '';")
+        check(f"die Erklärung wechselt mit ({modus})", bool(h), h)
+
+    # Und der gewählte Modus muss aus dem Dialog herauskommen.
+    d.execute_script(
+        "const s=document.getElementById('_rbo-mode');"
+        "s.value='test'; s.dispatchEvent(new Event('change'));"
+        "document.getElementById('_rbo-ok').click();")
+    time.sleep(0.6)
+    ergebnis = d.execute_script("return window._rboResult;")
+    check("der Dialog gibt den gewählten Modus zurück",
+          isinstance(ergebnis, dict) and ergebnis.get("mode") == "test", ergebnis)
 
     print("\n8. Hinweistext in allen sieben Sprachen")
     for p in sorted((ROOT / "nico" / "static" / "lang").glob("*.json")):

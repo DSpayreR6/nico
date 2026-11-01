@@ -180,6 +180,11 @@ class _ErrorLines:
         return out
 
 
+# The prompts in the generated terminal script are English, like every other
+# text NiCo writes into a file. Translating them would mean sending a string
+# from the browser into a shell script - an injection path that vorgaben.txt
+# closes on purpose ("kein shell=True") - or teaching the backend to read the
+# language files, which it does nowhere else. Decided 2026-11-01.
 def _write_rebuild_log(log_path: Path, lines: list[str],
                        errors: "_ErrorLines | None" = None) -> bool:
     """Write the rebuild output, keeping at most _LOG_MAX_BYTES from the end.
@@ -475,7 +480,7 @@ def register(app, ctx):
                     '    sudo shutdown -h now',
                     'else',
                     '    echo',
-                    '    read -rp "Rebuild fehlgeschlagen. Drücke Enter zum Schließen..."',
+                    '    read -rp "Rebuild failed. Press Enter to close..."',
                     'fi',
                 ]
             else:
@@ -484,7 +489,7 @@ def register(app, ctx):
                     '    sudo shutdown -h now',
                     'else',
                     '    echo',
-                    '    read -rp "Drücke Enter zum Schließen..."',
+                    '    read -rp "Press Enter to close..."',
                     'fi',
                 ]
         else:
@@ -495,7 +500,7 @@ def register(app, ctx):
                 script_lines.append(rebuild_cmd)
             script_lines += [
                 'echo',
-                'read -rp "Drücke Enter zum Schließen..."',
+                'read -rp "Press Enter to close..."',
             ]
         script_lines.append('rm -f "$0"')
 
@@ -1257,7 +1262,11 @@ def register(app, ctx):
                     return jsonify({
                         "ok": True,
                         "mode": "semantic",
-                        "output": "✓ Semantische Prüfung erfolgreich – keine Fehler gefunden.",
+                        # Code statt Satz - das Feld laeuft im Frontend durch
+                        # tErr(), genau wie ERR_DRY_TIMEOUT_SEM zwei Zweige
+                        # weiter unten. Der deutsche Satz stand hier fuer alle
+                        # Sprachen (behoben 2026-11-01).
+                        "output": "ERR_DRY_OK_SEM",
                     })
                 raw_err = (result.stderr or result.stdout or "").strip()
                 nixpkgs_missing = (
@@ -1284,10 +1293,9 @@ def register(app, ctx):
                 return jsonify({
                     "ok": True,
                     "mode": "syntax",
-                    "output": "✓ Syntax korrekt – keine Fehler gefunden.\n"
-                              "(Hinweis: Nur Syntax-Prüfung; <nixpkgs/nixos> nicht verfügbar.)",
+                    "output": "ERR_DRY_OK_SYNTAX",
                 })
-            raw_err = (result.stderr or result.stdout or "Unbekannter Fehler.").strip()
+            raw_err = (result.stderr or result.stdout or "ERR_UNKNOWN").strip()
             return jsonify({"ok": False, "mode": "syntax", "output": _clean_nix_error(raw_err, tmpfile)})
 
         except FileNotFoundError:

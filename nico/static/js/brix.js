@@ -2,6 +2,22 @@
 'use strict';
 
 // ── Brix-Kontextmenü ────────────────────────────────────────────────────────
+/**
+ * Readable text for an unbalanced-bracket report.
+ *
+ * The server sends data, not prose: {kind, n, char}. It used to send German
+ * sentences, which the interface showed to everyone regardless of language -
+ * they do not look like translatable text, which is why they were missed in
+ * the i18n rounds. Same shape the Validator uses with detail_key/detail_params.
+ */
+function _bracketDetails(details) {
+  return details.map(d => {
+    if (typeof d === 'string') return d;        // älterer Server
+    const key = d.kind === 'extra' ? 'brix.bracketExtra' : 'brix.bracketUnclosed';
+    return t(key, d.n, d.char);
+  }).join(', ');
+}
+
 function closeAllBrixMenus() {
   document.querySelectorAll('.brix-context-menu').forEach(m => m.classList.add('hidden'));
   // Hand the action bar back to :hover - see the comment at the menu button
@@ -445,7 +461,7 @@ async function saveBrixInline(name, content, file = 'configuration.nix') {
   if (_handleNestedResponse(data)) return false;
   if (data.error) {
     let msg = tErr(data.error);
-    if (data.details?.length) msg += ': ' + data.details.join(', ');
+    if (data.details?.length) msg += ': ' + _bracketDetails(data.details);
     showToast(msg, 'error');
     return false;
   }

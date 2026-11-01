@@ -54,8 +54,11 @@ async function acquireSudoNonce() {
 
 // ── Rebuild ───────────────────────────────────────────────────────────────────
 //
-// Architecture: mode ("switch"|"boot"|"test") is already a URL param so the UI
-// can offer a mode selector later without touching server.py.
+// Architecture: mode ("switch"|"boot"|"test") travels as a parameter all the
+// way to the server, and the options dialog lets the user pick it (2026-11-01).
+// `test` is what makes trying NiCo on a real machine safe - it activates
+// without touching the bootloader default, so a reboot brings the old system
+// back. The README points at it for exactly that reason.
 // EventSource requires GET → CSRF token passed as query param.
 let _rebuildES = null;  // active EventSource, closed on modal close
 let _rebuildVisHandler = null;  // visibilitychange listener of the active monitor
@@ -151,9 +154,16 @@ async function _showRebuildOptions(hostInfo, { hostname = '', mode = 'switch' } 
   const isFlake = !!hostInfo.flake_mode;
   if (!isFlake) defaultFlakeUpdate = false;   // ohne Flake gibt es nichts zu aktualisieren
 
+  // Der Modus wird hier gewählt. Bewusst nicht gespeichert: `test` ist eine
+  // Entscheidung für diesen einen Lauf, und ein stillschweigend gemerktes
+  // `test` würde später jemanden rätseln lassen, warum seine Änderungen den
+  // Neustart nicht überleben. Vorgabe ist immer `switch`.
+  let selectedMode = ['switch', 'boot', 'test'].includes(mode) ? mode : 'switch';
+
   // Vollständiger Pfad statt '.#host': der kopierte Befehl muss aus jedem
   // Verzeichnis heraus funktionieren (manifest.md "nächste Ziele").
   const _buildCmd = (upd, safe) => {
+    const mode = selectedMode;      // der im Dialog gewählte, nicht der übergebene
     const safeArgs = safe ? ' --max-jobs 1 --cores 4' : '';
     const flakeDir = configDir || '.';
     if (!isFlake) {
@@ -173,6 +183,15 @@ async function _showRebuildOptions(hostInfo, { hostname = '', mode = 'switch' } 
     overlay.innerHTML = `
       <div class="dialog-box" style="min-width:360px">
         <h2 class="dialog-title">${t('rebuild.optionsTitle')}</h2>
+        <div style="margin:12px 0 10px">
+          <label for="_rbo-mode" style="display:block;margin-bottom:4px">${t('rebuild.optMode')}</label>
+          <select id="_rbo-mode" style="width:100%">
+            <option value="switch">${t('rebuild.modeSwitch')}</option>
+            <option value="boot">${t('rebuild.modeBoot')}</option>
+            <option value="test">${t('rebuild.modeTest')}</option>
+          </select>
+          <div id="_rbo-mode-hint" class="hint" style="margin-top:4px;padding-left:2px"></div>
+        </div>
         <label class="toggle-row${isFlake ? '' : ' row-inactive'}"
                style="margin:12px 0 ${isFlake ? '10' : '2'}px;cursor:${isFlake ? 'pointer' : 'default'}">
           <span>${t('rebuild.optFlakeUpdate')}</span>
@@ -234,8 +253,20 @@ async function _showRebuildOptions(hostInfo, { hostname = '', mode = 'switch' } 
     const termOptsEl    = overlay.querySelector('#_rbo-terminal-opts');
     const shutdownCb    = overlay.querySelector('#_rbo-shutdown');
     const pushShutCb    = overlay.querySelector('#_rbo-push-shutdown');
+    const modeSel       = overlay.querySelector('#_rbo-mode');
+    const modeHintEl    = overlay.querySelector('#_rbo-mode-hint');
     const updateCmd     = () => { cmdEl.textContent = _buildCmd(flakeToggle.checked, safeToggle.checked); };
-    updateCmd();
+    const MODE_HINTS    = { switch: 'rebuild.modeSwitchHint',
+                            boot:   'rebuild.modeBootHint',
+                            test:   'rebuild.modeTestHint' };
+    const updateMode    = () => {
+      selectedMode = modeSel.value;
+      modeHintEl.textContent = t(MODE_HINTS[selectedMode] || MODE_HINTS.switch);
+      updateCmd();
+    };
+    modeSel.value = selectedMode;
+    updateMode();
+    modeSel.addEventListener('change', updateMode);
     flakeToggle.addEventListener('change', updateCmd);
     safeToggle.addEventListener('change', updateCmd);
     termToggle.addEventListener('change', () => {
@@ -264,7 +295,8 @@ async function _showRebuildOptions(hostInfo, { hostname = '', mode = 'switch' } 
         body:    JSON.stringify({ rebuild_safe: safeMode }),
       }).catch(() => {});
       overlay.remove();
-      resolve({ updateFlake, safeMode, useTerminal, shutdownAfter, pushShutdownAfter });
+      resolve({ mode: selectedMode, updateFlake, safeMode, useTerminal,
+                shutdownAfter, pushShutdownAfter });
     });
     overlay.querySelector('#_rbo-cancel').addEventListener('click', () => {
       overlay.remove();
@@ -311,6 +343,10 @@ async function openRebuild(mode = 'switch') {
 
   const opts = await _showRebuildOptions(hostInfo, { hostname, mode });
   if (opts === null) return;  // abgebrochen
+  // Ab hier gilt der im Dialog gewählte Modus, nicht der an openRebuild
+  // übergebene: `test` baut und aktiviert, lässt den Bootloader aber in
+  // Ruhe, `boot` wirkt erst beim nächsten Start.
+  const effMode = opts.mode || mode;
 
   // Flake-Formular speichern falls dirty, dann alle Änderungen schreiben
   if (!await Sidebar.flakeSave()) return;
@@ -318,14 +354,14 @@ async function openRebuild(mode = 'switch') {
   if (!await _writeNix()) return;
 
   // Validator auf dem geschriebenen Stand – rote Funde halten hier auf
-  if (!await _validationGate(hostname ? [hostname] : [], mode)) return;
+  if (!await _validationGate(hostname ? [hostname] : [], effMode)) return;
 
   // Terminal-Modus: Befehl in externem Terminal ausführen
   if (opts.useTerminal) {
     const res = await csrfFetch('/api/rebuild/open-terminal', {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ hostname, mode, update_flake: opts.updateFlake, safe_mode: opts.safeMode, shutdown_after: opts.shutdownAfter, push_shutdown_after: opts.pushShutdownAfter }),
+      body:    JSON.stringify({ hostname, mode: effMode, update_flake: opts.updateFlake, safe_mode: opts.safeMode, shutdown_after: opts.shutdownAfter, push_shutdown_after: opts.pushShutdownAfter }),
     }).catch(() => null);
     if (!res || !res.ok) {
       const err = res ? (await res.json().catch(() => ({}))).error : null;
@@ -344,7 +380,7 @@ async function openRebuild(mode = 'switch') {
     method:  'POST',
     headers: { 'Content-Type': 'application/json' },
     body:    JSON.stringify({
-      mode,
+      mode: effMode,
       hostname,
       sudo_nonce:   sudoNonce,
       update_flake: !!opts.updateFlake,
@@ -505,7 +541,8 @@ function attachRebuildMonitor(fromIndex = 0) {
   function _setBuildProgress(done, total, pkg) {
     const stableTotal = Math.max(maxBuildTotal, total || 0);
     maxBuildTotal = stableTotal;
-    counterEl.textContent  = stableTotal > 0 ? `${done || 0} von ${stableTotal} gebaut` : '';
+    counterEl.textContent  = stableTotal > 0
+      ? t('rebuild.progBuilt', done || 0, stableTotal) : '';
     buildPkgEl.textContent = pkg || '';
   }
 
@@ -522,10 +559,12 @@ function attachRebuildMonitor(fromIndex = 0) {
     const remain = Math.max(0, stableExpected - (done || 0));
     const copiedRemain = Math.max(0, stableCopiedTotal - (copiedDone || 0));
 
-    fetchDoneEl.textContent   = stableExpected > 0 ? 'geladen ' + _fmtBytes(done || 0) : '';
-    fetchRemainEl.textContent = stableExpected > 0 ? 'noch ' + _fmtBytes(remain) : '';
+    fetchDoneEl.textContent   = stableExpected > 0
+      ? t('rebuild.progLoaded', _fmtBytes(done || 0)) : '';
+    fetchRemainEl.textContent = stableExpected > 0
+      ? t('rebuild.progRemain', _fmtBytes(remain)) : '';
     if (stableCopiedTotal > 0) {
-      let copiedText = `noch ${copiedRemain} von ${stableCopiedTotal}`;
+      let copiedText = t('rebuild.progCopyRemain', copiedRemain, stableCopiedTotal);
       if (stableCopiedExpected > 0) copiedText += ` (${_fmtBytes(Math.max(0, stableCopiedExpected - (done || 0)))})`;
       fetchCopyEl.textContent = copiedText;
     } else {

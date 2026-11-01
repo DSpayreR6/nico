@@ -734,7 +734,7 @@ def input_names_in_bricks(blocks: dict[str, dict], section: str = "INPX") -> lis
     return out
 
 
-def check_bracket_balance(body: str) -> list[str]:
+def check_bracket_balance(body: str) -> "list[dict]":
     """Check if {}, [], () are balanced in Nix code, ignoring strings and comments.
     Returns a list of error strings; empty list means balanced."""
     counts = {'{': 0, '[': 0, '(': 0}
@@ -788,9 +788,9 @@ def check_bracket_balance(body: str) -> list[str]:
     for opener, closer in [('{', '}'), ('[', ']'), ('(', ')')]:
         n = counts[opener]
         if n > 0:
-            errors.append(f"{n}× nicht geschlossene `{opener}`")
+            errors.append({"kind": "unclosed", "n": n, "char": opener})
         elif n < 0:
-            errors.append(f"{-n}× überschüssige `{closer}`")
+            errors.append({"kind": "extra", "n": -n, "char": closer})
     return errors
 
 

@@ -120,3 +120,18 @@ die beim Bau von `test_brick_inactive.py` aufgefallen sind:
   Für `test_collapse.py` also ohne `bestand.nix` fahren.
 
 Vor jedem Test die Fixture neu schreiben, nicht einmal für die ganze Suite.
+
+## Ports nicht doppelt belegen
+
+Jeder Test startet seinen eigenen Server. Zwei Tests auf demselben Port laufen
+einzeln, aber beim Nachstellen eines Fehlers greift man leicht zum falschen
+Prozess – am 2026-11-01 eine halbe Stunde Suche gekostet. Stand heute:
+
+    8792  test_brick_inactive      8796  test_validator_gate
+    8793  test_nested_dialogs      8797  test_brix_dialogs, test_state_version_hint,
+    8794  test_about_version             test_hardware_dialog
+    8795  test_rebuild_options     8798  test_i18n, test_fs_section
+                                   8799  test_collapse
+
+Die dreifache 8797 und die doppelte 8798 sind Altbestand; ein neuer Test nimmt
+einen freien Port.

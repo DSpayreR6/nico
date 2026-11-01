@@ -137,6 +137,49 @@ machines:
 Update it with `nix flake update nico` and a rebuild — NiCo can do that rebuild
 for you.
 
+### Try it on your own config, minimising the risk
+
+You do not have to choose between a toy config and your real one. NiCo writes
+only inside the directory you point it at, so you can work on a copy of your
+real config and keep the original untouched. (One exception, and it exists for
+your benefit: before an import NiCo copies this machine's
+`hardware-configuration.nix` to `~/.config/nico/hw-stash/`, so it can offer it
+back if the imported config brings a foreign one.)
+
+1. **Install nothing.** `nix run github:DSpayreR6/nico` leaves nothing behind.
+2. **Give NiCo a new, empty directory** — `~/nico-test`, say. Type the path in
+   the setup dialog; it does not have to exist yet.
+3. **Import your own config** from `/etc/nixos`, from a directory, or from a
+   ZIP. Your original is never written to. The *copy* is rewritten straight
+   away, though: comments and formatting outside a Nix-Brick are lost there —
+   your settings are not, anything NiCo does not recognise is kept as a
+   Nix-Brick.
+4. **Build with `test` instead of `switch`.** Pick it in the options dialog
+   that appears before the rebuild. `test` activates the new system right
+   away but leaves the bootloader alone, so **a reboot brings your old system
+   back**. That is the whole trick: you see the result without betting your
+   boot entry on it.
+5. **The way back** is a rebuild from your real config directory, or simply a
+   reboot after a `test` build.
+
+Three things a rebuild from the old config does *not* undo, because they are
+not part of a NixOS generation. Worth knowing before you start:
+
+- **User and group accounts.** A changed `uid`/`gid`, or a user who ends up
+  without a password or SSH key, lands in `/etc/passwd`, `/etc/shadow` and
+  `/etc/group` — mutable state that booting an older generation does not
+  restore. The Validator warns about all of these before a build.
+- **Service data after a migration.** If the build brings a newer Paperless or
+  PostgreSQL, their database migrates with it. Rolling the config back does
+  not roll the data back.
+- **The EFI partition, if you change `boot.loader.*` itself** — swapping
+  systemd-boot for GRUB, a different `efiSysMountPoint`. Leave that section
+  alone and you are safe: systemd-boot keeps your older generations as boot
+  entries, so you can always pick one at startup.
+
+Everything else is ordinary NixOS: the build is atomic, and a generation you
+do not like is one reboot or one rebuild away.
+
 ### From source
 
 For development, or to read the code before running it:

@@ -91,7 +91,12 @@ def register(app, ctx):
                 name_collision[0] = True
                 return blocks
             order     = next_order_for_section(blocks, section)
-            body_text = "  # Nix-Code hier einfügen"
+            # File text, so English - same rule as the section names
+            # (vorgaben.txt: "Kommentare im Code Englisch"). Not translated:
+            # the comment lands in the .nix and must not change with the UI
+            # language, or two machines with different languages would write
+            # alternating diffs on the same config.
+            body_text = "  # Put your Nix code here"
             blocks[name] = {
                 "section": section,
                 "order":   order,
