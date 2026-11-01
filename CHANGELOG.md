@@ -4,6 +4,7 @@
 
 ### New Features
 
+- A failed rebuild now shows the lines that say why, above the log, and keeps them in the saved log whatever else is dropped. Until now nix had the last word with `Cannot build … 1 dependency failed`, which names nothing: the line that does name something is written by the builder, and those were thrown away unread. The log was no help either – it is capped at 5 MB and keeps the tail, and with `--log-format internal-json -v` the tail is store-optimisation chatter. One failed run on 2026-11-01 dropped 2,540,770 lines and with them the only mention of the package whose test suite had failed, which made a working flake.nix look corrupted for days. The error lines are now collected apart from the log, so the cap cannot reach them, and the package that failed is named in front of its own output
 - New validator rule: a `.nix` file Nix cannot read. It was the one thing the rule set did not check — 38 rules looked at state versions, uids and mountpoints, and none of them at whether the files parse. So the Validator passed a config whose `flake.nix` had a stray word in a Nix brick, the build started, and `nixos-rebuild` answered with a Python traceback: it runs nix with `--log-format internal-json`, and the readable message is gone by the time the exception is raised. The rule names the file and passes the Nix message through, with its line, before anything is built. It also catches a name nothing binds — an input used but never declared — because resolving names is part of reading the file
 
 ### Bug Fixes

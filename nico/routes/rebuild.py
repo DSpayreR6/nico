@@ -46,13 +46,110 @@ _job = None
 
 # Upper bound for the written rebuild log. nixos-rebuild runs with
 # `--log-format internal-json -v`, which emits one JSON line per evaluated
-# file: a single failed run produced 2.1 GB here. Only the tail is of any use
-# when looking for the error, so everything above this is dropped.
+# file: a single failed run produced 2.1 GB here, so everything above this is
+# dropped.
+#
+# The tail is what is kept, and the tail is the wrong end: with `-v` a run
+# finishes on store-optimisation chatter. On 2026-11-01 a failed rebuild
+# dropped 2,540,770 lines and with them the only line naming the cause
+# (`python3.13-fpdf2` failing its test suite); what survived was the
+# `Cannot build … 1 dependency failed` cascade, which names nothing. The
+# lines that explain a failure are therefore collected separately, are not
+# subject to this cap, and are written above the log – see _ErrorLines.
 _LOG_MAX_BYTES = 5 * 1024 * 1024
 
+# Terminal escapes: nix colours its own errors and so do compilers and test
+# runners, so a match on `^FAILED` would miss `\x1b[31;1mFAILED\x1b[0m`.
+_RE_ANSI = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
 
-def _write_rebuild_log(log_path: Path, lines: list[str]) -> bool:
+# Builder output carries no log level, so the line itself has to decide.
+# Deliberately narrow: the plain word `error` travels in harmless file names
+# (`femtools/errors.py` scrolled past ten times in the run that prompted
+# this), so only the shapes a compiler, a test runner or nix itself uses to
+# announce a failure count.
+_RE_BUILD_ERR = re.compile(r"(?:^|\s)(?:error|fatal error):|failed with exit code",
+                           re.IGNORECASE)
+_RE_BUILD_ERR_CASED = re.compile(r"^(?:FAILED|ERROR)\b")
+
+# nix result types. Their own enum, so 101 here is not the file-transfer
+# activity type that also carries 101 – the overlap is nix's, not a typo.
+_RES_BUILD_LOG      = 101  # resBuildLogLine: a line the builder wrote
+_RES_POST_BUILD_LOG = 107  # resPostBuildLogLine: same, from a post-build hook
+
+
+def _build_log_text(data: dict) -> str:
+    """The builder output of a `@nix` result message, '' when it carries none.
+
+    Module level on purpose: the stream parser lives inside the job closure
+    and cannot be driven from a test, while this is the one decision that
+    went wrong – both result types were dropped unread until 0.15.0.
+    """
+    if data.get("action") != "result":
+        return ""
+    if data.get("type") not in (_RES_BUILD_LOG, _RES_POST_BUILD_LOG):
+        return ""
+    fields = data.get("fields") or []
+    text = fields[0] if fields else ""
+    return text if isinstance(text, str) else ""
+
+
+class _ErrorLines:
+    """The lines of one rebuild that say why it failed.
+
+    Kept apart from the log buffer because the size cap keeps the tail and
+    the cause is at the front: the first error is the one that stopped the
+    build, everything after it is the dependency cascade. So the first
+    _ERR_MAX lines are kept and later ones counted, not the other way round.
+    """
+
+    _ERR_MAX = 200
+
+    def __init__(self):
+        self.lines: list[str] = []
+        self.dropped = 0
+
+    def add(self, line: str, pkg: str = "") -> None:
+        text = _RE_ANSI.sub("", line).rstrip()
+        if not text:
+            return
+        if pkg:
+            text = f"{pkg}: {text}"
+        if len(self.lines) >= self._ERR_MAX:
+            self.dropped += 1
+            return
+        self.lines.append(text)
+
+    def consider_msg(self, level, line: str) -> bool:
+        """Keep a nix message of level error (0) or warning (1)."""
+        if not isinstance(level, int) or level > 1:
+            return False
+        self.add(line)
+        return True
+
+    def consider_build(self, line: str, pkg: str = "") -> bool:
+        """Keep a builder output line that announces a failure."""
+        plain = _RE_ANSI.sub("", line).strip()
+        if not (_RE_BUILD_ERR.search(plain) or _RE_BUILD_ERR_CASED.search(plain)):
+            return False
+        self.add(line, pkg)
+        return True
+
+    def header(self) -> list[str]:
+        if not self.lines:
+            return []
+        out = ["── Error lines of this run ──", *self.lines]
+        if self.dropped:
+            out.append(f"── {self.dropped} further error lines not kept ──")
+        out.append("── Full output below ──")
+        return out
+
+
+def _write_rebuild_log(log_path: Path, lines: list[str],
+                       errors: "_ErrorLines | None" = None) -> bool:
     """Write the rebuild output, keeping at most _LOG_MAX_BYTES from the end.
+
+    The error lines go in front of it, whole: they are the reason the file is
+    read at all, and the cap must not be able to swallow them.
 
     Returns True if the file was written.
     """
@@ -67,10 +164,12 @@ def _write_rebuild_log(log_path: Path, lines: list[str]) -> bool:
     try:
         log_path.parent.mkdir(parents=True, exist_ok=True)
         with open(log_path, "w", encoding="utf-8") as fh:
+            for line in (errors.header() if errors else []):
+                fh.write(line + "\n")
             if dropped:
                 fh.write(
-                    f"── Gekürzt: {dropped} ältere Zeilen entfernt, "
-                    f"die letzten {_LOG_MAX_BYTES // (1024 * 1024)} MB stehen unten ──\n"
+                    f"── Truncated: {dropped} older lines removed, "
+                    f"the last {_LOG_MAX_BYTES // (1024 * 1024)} MB follow ──\n"
                 )
             fh.write("\n".join(kept))
         return True
@@ -512,6 +611,8 @@ def register(app, ctx):
             }
             # Buffer for log output
             log_lines   = []
+            # Collected apart from it, never truncated – see _ErrorLines
+            err_lines   = _ErrorLines()
 
             # nix activity types
             ACT_BUILD         = 105  # individual derivation build
@@ -624,6 +725,7 @@ def register(app, ctx):
                 if action == 'msg':
                     msg_text = data.get('msg', '')
                     if msg_text:
+                        err_lines.consider_msg(data.get('level'), msg_text)
                         yield f"data: {_json.dumps({'type': 'output', 'line': msg_text})}\n\n"
 
                 elif action == 'start':
@@ -688,6 +790,28 @@ def register(app, ctx):
                     result_type = data.get('type')
                     act_id      = data.get('id')
                     fields      = data.get('fields', [])
+
+                    if result_type in (_RES_BUILD_LOG, _RES_POST_BUILD_LOG):
+                        # What the builder itself wrote. These were dropped
+                        # unread, which is why a failing test suite was
+                        # invisible in the monitor: nix only ever says
+                        # `1 dependency failed`, the package name and the
+                        # assertion live here.
+                        #
+                        # Only the lines that announce a failure are taken.
+                        # Forwarding all of them would mean the full compile
+                        # output of every package in the log – nix itself
+                        # shows these on the terminal only with `-L` – and
+                        # would push the one line that matters out of the
+                        # 5 MB all the faster.
+                        text = _build_log_text(data)
+                        if not text.strip():
+                            return
+                        pkg = (active_acts.get(act_id) or {}).get('pkg') or ''
+                        if err_lines.consider_build(text, pkg):
+                            label = f"{pkg}> " if pkg else "> "
+                            yield f"data: {_json.dumps({'type': 'output', 'line': label + _RE_ANSI.sub('', text).rstrip()})}\n\n"
+                        return
 
                     if result_type == 105:  # resProgress: [done, expected, running, failed]
                         act = active_acts.get(act_id)
@@ -828,13 +952,13 @@ def register(app, ctx):
                 success = proc.returncode == 0
                 log_written = False
                 if not success or rebuild_log_on:
-                    log_written = _write_rebuild_log(log_path, log_lines)
+                    log_written = _write_rebuild_log(log_path, log_lines, err_lines)
                 if not success:
                     yield f"data: {_json.dumps({'type': 'output', 'line': f'── Log gespeichert: {log_path} ──'})}\n\n"
                 # Asked in both outcomes: a unit that fails quietly after a
                 # successful rebuild is the one nobody notices.
                 units = failed_units(exclude=units_before)
-                yield f"data: {_json.dumps({'type': 'done', 'success': success, 'exit_code': proc.returncode, 'log_written': log_written, 'failed_units': units})}\n\n"
+                yield f"data: {_json.dumps({'type': 'done', 'success': success, 'exit_code': proc.returncode, 'log_written': log_written, 'failed_units': units, 'error_lines': err_lines.lines, 'error_lines_dropped': err_lines.dropped})}\n\n"
             except FileNotFoundError:
                 msg = "nixos-rebuild not found. Is NiCo running on a NixOS system?"
                 yield f"data: {_json.dumps({'type': 'error', 'message': msg})}\n\n"

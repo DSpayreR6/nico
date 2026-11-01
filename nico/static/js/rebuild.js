@@ -420,6 +420,7 @@ function attachRebuildMonitor(fromIndex = 0) {
     // previous run's failed-unit report hangs below the fresh log and only
     // vanishes when the new run reports done.
     document.getElementById('rebuild-failed-units')?.remove();
+    document.getElementById('rebuild-error-lines')?.remove();
     resultEl.className     = 'rebuild-result hidden';
     resultEl.textContent   = '';
     counterEl.textContent  = '';
@@ -567,6 +568,39 @@ function attachRebuildMonitor(fromIndex = 0) {
     resultEl.insertAdjacentElement('afterend', box);
   }
 
+  /**
+   * The lines that say why the build stopped.
+   *
+   * nix answers a failed build with `Cannot build … 1 dependency failed`,
+   * which names nothing, and the line that does name something is builder
+   * output – never forwarded before 0.15.0, and gone from the saved log
+   * because the 5 MB cap keeps the tail. On 2026-11-01 that left a failing
+   * `python3.13-fpdf2` test suite looking like a corrupted flake.nix for
+   * days. The server collects these apart from the log, so the cap cannot
+   * reach them.
+   *
+   * Only on failure: the collection keeps warnings too, and a flake rebuild
+   * out of a dirty git tree warns every single time.
+   */
+  function _showErrorLines(lines, dropped, success) {
+    document.getElementById('rebuild-error-lines')?.remove();
+    if (success || !Array.isArray(lines) || !lines.length) return;
+
+    const box = document.createElement('div');
+    box.id = 'rebuild-error-lines';
+    box.className = 'rebuild-failed-units';
+    const more = dropped
+      ? `<div style="margin-top:6px;opacity:0.8">${escHtml(t('rebuild.errorLinesDropped', String(dropped)))}</div>`
+      : '';
+    box.innerHTML = `<div style="color:var(--red);font-weight:600">${escHtml(
+                       t('rebuild.errorLines', String(lines.length)))}</div>
+                     <pre style="margin:4px 0 0 0;white-space:pre-wrap;overflow-wrap:anywhere;font-size:0.85em">${
+                       escHtml(lines.join('\n'))}</pre>
+                     ${more}
+                     <div style="margin-top:6px;opacity:0.8">${escHtml(t('rebuild.errorLinesHint'))}</div>`;
+    resultEl.insertAdjacentElement('afterend', box);
+  }
+
   function _finishMonitor(success, message) {
     isRunning = false;
     counterEl.textContent     = '';
@@ -622,7 +656,11 @@ function attachRebuildMonitor(fromIndex = 0) {
         ? niIcon('check-circle') + ' ' + t('rebuild.success')
         : niIcon('x-circle') + ' ' + t('rebuild.failed') + (firstErrorLine ? ': ' + firstErrorLine.substring(0, 80) : '');
       _finishMonitor(msg.success, label);
+      // Units first, error lines second: both insert right after the result
+      // line, so the later call ends up on top – and the cause belongs above
+      // the consequence.
       _showFailedUnits(msg.failed_units);
+      _showErrorLines(msg.error_lines, msg.error_lines_dropped, msg.success);
       if (msg.log_written) {
         logBtn.classList.remove('hidden');
         logBtn.onclick = async () => {
