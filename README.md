@@ -139,7 +139,7 @@ for you.
 
 ### Try it on your own config, minimising the risk
 
-You do not have to choose between a toy config and your real one. NiCo writes
+You do not have to choose between a test config and your real one. NiCo writes
 only inside the directory you point it at, so you can work on a copy of your
 real config and keep the original untouched. (One exception, and it exists for
 your benefit: before an import NiCo copies this machine's
