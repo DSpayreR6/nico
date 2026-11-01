@@ -89,6 +89,33 @@ async function confirmDeleteBrix(name, file = 'configuration.nix') {
 }
 
 /**
+ * Deactivate or activate a brick: its body is commented out in place.
+ *
+ * Deleting loses the content, and NiCo has nowhere else to keep it –
+ * vorgaben.txt wants NixOS data in the .nix file, so an archive in JSON is
+ * out. Commenting out keeps everything where it belongs and Nix never sees
+ * it. Reversible byte for byte.
+ *
+ * No confirmation dialog: nothing is lost, the step is undone from the same
+ * menu, and every write makes a checkpoint anyway.
+ */
+async function setBrixInactive(name, inactive, file = 'configuration.nix') {
+  const res = await csrfFetch(`/api/brick/${encodeURIComponent(name)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ file, inactive }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (_handleNestedResponse(data)) return;
+  if (data.error) {
+    showToast(tErr(data.error), 'error');
+    return;
+  }
+  showToast(t(inactive ? 'brix.deactivated' : 'brix.activated', name));
+  await _refreshPreviewForFile(file);
+}
+
+/**
  * Bricks of one file, read fresh from disk. Single source for every dialog –
  * the lists in /api/config only cover configuration.nix, flake.nix and a
  * legacy root home.nix, so host, module and HM files got the wrong bricks.

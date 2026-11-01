@@ -1369,6 +1369,18 @@ mark.search-match-active {
 
 .code-brix:hover .brix-actions { display: flex; }
 
+/* Deactivated brick: body commented out, content still in the file. Greyed
+   out rather than hidden - it has to stay findable, that is the whole point
+   of not deleting it. The left border keeps its colour so the brick is still
+   recognisable as one. */
+.code-brix.brix-inactive {
+  opacity: 0.55;
+}
+
+.code-brix.brix-inactive .code-brix-label {
+  font-style: italic;
+}
+
 .code-brix-head {
   display: flex;
   align-items: center;

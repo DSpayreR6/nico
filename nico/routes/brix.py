@@ -9,7 +9,7 @@ from pathlib import Path
 
 from flask import jsonify, request
 
-from ..brix import extract_brick_blocks, format_brick, next_order_for_section, check_bracket_balance
+from ..brix import extract_brick_blocks, format_brick, next_order_for_section, check_bracket_balance, deactivate_body, activate_body
 from ..core import (
     brick_body as _brick_body,
     brick_blocks_for_file as _brick_blocks_for_file,
@@ -140,22 +140,57 @@ def register(app, ctx):
         body      = request.get_json(silent=True) or {}
         content   = body.get("content", "")
         fname     = body.get("file", "configuration.nix")
+        # None = leave the flag as it is. Deactivating goes through this route
+        # instead of its own, so it passes the same guards as every other
+        # brick write: nesting, bracket balance, and the refusal when the
+        # result would stop Nix from reading the file.
+        want_inactive = body.get("inactive")
 
-        balance_errors = check_bracket_balance(content)
-        if balance_errors:
-            return jsonify({"error": "ERR_UNBALANCED_BRACKETS", "details": balance_errors}), 400
+        # Only for a real content edit. A deactivate request carries no body of
+        # its own - it works on what is on disk, which also makes it idempotent.
+        if want_inactive is None:
+            balance_errors = check_bracket_balance(content)
+            if balance_errors:
+                return jsonify({"error": "ERR_UNBALANCED_BRACKETS", "details": balance_errors}), 400
+        elif not want_inactive:
+            # Activating: check before touching the file, the way renaming
+            # does. A refused operation must leave the file alone - running
+            # the check inside the modifier meant the writer rewrote the file
+            # anyway, and the result differed in whitespace from what was
+            # there before.
+            fpath = Path(nixos_dir) / fname
+            if fpath.exists():
+                on_disk = extract_brick_blocks(fpath.read_text(encoding="utf-8"))
+                b = on_disk.get(name)
+                if b is not None and b.get("inactive", False):
+                    errs = check_bracket_balance(activate_body(_brick_body(b["text"])))
+                    if errs:
+                        return jsonify({"error": "ERR_UNBALANCED_BRACKETS",
+                                        "details": errs}), 400
 
-        not_found = [False]
+        not_found  = [False]
 
         def _update(blocks):
             if name not in blocks:
                 not_found[0] = True
                 return blocks
-            b = blocks[name]
+            b    = blocks[name]
+            was  = bool(b.get("inactive", False))
+            flag = was if want_inactive is None else bool(want_inactive)
+            if want_inactive is None:
+                new_body = content
+            elif flag == was:
+                new_body = _brick_body(b["text"])      # nothing to do
+            elif flag:
+                new_body = deactivate_body(_brick_body(b["text"]))
+            else:
+                # Balance already checked above, before anything was written.
+                new_body = activate_body(_brick_body(b["text"]))
             blocks[name] = {
-                "section": b["section"],
-                "order":   b["order"],
-                "text":    format_brick(b["section"], b["order"], name, content),
+                "section":  b["section"],
+                "order":    b["order"],
+                "text":     format_brick(b["section"], b["order"], name, new_body, flag),
+                "inactive": flag,
             }
             return blocks
 
@@ -199,10 +234,12 @@ def register(app, ctx):
                 return blocks
             b = blocks[old_name]
             new_block = {
-                "section": b["section"],
-                "order":   b["order"],
-                "text":    format_brick(b["section"], b["order"], new_name,
-                                        _brick_body(b["text"])),
+                "section":  b["section"],
+                "order":    b["order"],
+                "text":     format_brick(b["section"], b["order"], new_name,
+                                         _brick_body(b["text"]),
+                                         b.get("inactive", False)),
+                "inactive": b.get("inactive", False),
             }
             return {(new_name if k == old_name else k): (new_block if k == old_name else v)
                     for k, v in blocks.items()}
@@ -246,10 +283,15 @@ def register(app, ctx):
                 return blocks
             body1  = "".join(body_lines[:split_line])
             body2  = "".join(body_lines[split_line:])
-            block1 = {"section": b["section"], "order": b["order"],
-                      "text": format_brick(b["section"], b["order"], name, body1)}
-            block2 = {"section": b["section"], "order": b["order"] + 1,
-                      "text": format_brick(b["section"], b["order"] + 1, new_name, body2)}
+            # Both halves keep the state of the original. Splitting does not
+            # judge what the content does, so it must not switch anything on -
+            # the user activates what they want (decision Martin 2026-11-01).
+            inact  = b.get("inactive", False)
+            block1 = {"section": b["section"], "order": b["order"], "inactive": inact,
+                      "text": format_brick(b["section"], b["order"], name, body1, inact)}
+            block2 = {"section": b["section"], "order": b["order"] + 1, "inactive": inact,
+                      "text": format_brick(b["section"], b["order"] + 1, new_name,
+                                           body2, inact)}
             items = list(blocks.items())
             idx   = next(i for i, (k, _) in enumerate(items) if k == name)
             items[idx] = (name, block1)
@@ -292,9 +334,11 @@ def register(app, ctx):
                 return blocks
             b = blocks[name]
             blocks[name] = {
-                "section": section,
-                "order":   order,
-                "text":    format_brick(section, order, name, _brick_body(b["text"])),
+                "section":  section,
+                "order":    order,
+                "text":     format_brick(section, order, name, _brick_body(b["text"]),
+                                         b.get("inactive", False)),
+                "inactive": b.get("inactive", False),
             }
             return blocks
 

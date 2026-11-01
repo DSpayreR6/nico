@@ -87,3 +87,36 @@ nicht neu herleiten sollte:
   keinen Aufrufer und läuft in einen `ReferenceError`, weil `_formDirty` und
   `_flakeFormDirty` im Closure von `Sidebar` liegen und nicht global sind.
   Der Weg des Nutzers ist `Sidebar.selectFile(...)`, und so fährt der Test.
+
+## test_brick_inactive.py
+
+Nix-Brick deaktivieren und wieder aktivieren, 22 Prüfungen. Aus Martins
+Wunsch vom 2026-11-01: Ein gelöschter Brick ist weg, obwohl man ihn später
+wieder braucht. Geprüft wird, dass der Menüeintrag zwischen „Deaktivieren"
+und „Aktivieren" wechselt, dass die Zeile ausgegraut wird und den Zusatz
+„deaktiviert" trägt, dass der Brick **in der Liste bleibt** – würde der
+Marker mit der Flagge nicht erkannt, wäre er verschwunden – und dass nach
+dem Aktivieren alles wieder wie vorher ist. Gegen den Stand vor dem Fix
+fallen 8 davon.
+
+Braucht in der Wegwerf-Config den Brick `basis-brick` in
+`configuration.nix`, wie oben beschrieben.
+
+## Die Wegwerf-Config ist pro Test verschieden (gemessen 2026-11-01)
+
+Die Struktur oben deckt **nicht** alle Tests gleichzeitig ab. Drei Konflikte,
+die beim Bau von `test_brick_inactive.py` aufgefallen sind:
+
+* `test_brix_dialogs.py` erwartet in `configuration.nix` **genau einen** Brick
+  (`basis-brick`) und zählt Listen ab. `test_nested_dialogs.py` braucht dort
+  zusätzlich einen Brick namens `aussen`. Beide zusammen gehen nicht.
+* `test_nested_dialogs.py` **verändert seine Fixture**: es benennt `huelle`
+  nach `huelle2` und `huelle3` um. Ein zweiter Lauf auf derselben Config
+  scheitert mit `ERR_BRICK_NOT_FOUND` – die Datei muss vor jedem Lauf neu
+  geschrieben werden.
+* Liegt `bestand.nix` mit seiner Verschachtelung im Verzeichnis, öffnet NiCo
+  beim Seitenladen den Verschachtelungs-Hinweis. Dessen Overlay fängt Klicks
+  ab und `test_collapse.py` bricht mit `ElementClickInterceptedException` ab.
+  Für `test_collapse.py` also ohne `bestand.nix` fahren.
+
+Vor jedem Test die Fixture neu schreiben, nicht einmal für die ganze Suite.

@@ -104,8 +104,11 @@ async function togglePlainCodeView() {
 const SECTION_RE    = /^\s*# ── (.+?) [─]+\s*$/;
 // New brick format: # <brick: SectionName / #N brick-name>
 // \s* handles legacy files where markers were indented (e.g. "  # <brick: ...>")
-const BRICK_START_RE = /^\s*# <brick:\s*([^/]+?)\s*\/\s*#(\d+)\s+([\w\-]+)\s*>/;
-const BRICK_END_RE   = /^\s*# <\/brick:\s*([\w\-]+)\s*>/;
+// The trailing "inactive" marks a brick whose body is commented out. It has
+// to be in this regex too: without it the marker line does not match, the
+// brick is rendered as ordinary text and disappears from the panel.
+const BRICK_START_RE = /^\s*# <brick:\s*([^/]+?)\s*\/\s*#(\d+)\s+([\w\-]+)(\s+inactive)?\s*>/;
+const BRICK_END_RE   = /^\s*# <\/brick:\s*([\w\-]+)(?:\s+inactive)?\s*>/;
 
 // Canonical list of NiCo sections (mirrors brix.py SECTION_ORDER)
 const BRICK_SECTIONS = [
@@ -123,7 +126,7 @@ const HM_PREVIEW_SECTIONS = ['__header__', 'HEAD', 'HOME', 'SHEL', 'HPKG', 'TAIL
  * Split raw code into typed segments:
  *   { type: 'preamble', lines }
  *   { type: 'section',  name, header, lines }
- *   { type: 'brick',    name, section, order, lines }
+ *   { type: 'brick',    name, section, order, inactive, lines }
  */
 function parseCodeSections(code) {
   const segments = [];
@@ -156,6 +159,7 @@ function parseCodeSections(code) {
       current  = {
         type: 'brick', name: brickMatch[3],
         section: normalizeSection(brickMatch[1]), order: parseInt(brickMatch[2], 10),
+        inactive: !!brickMatch[4],
         lines: [rawLine], startLine: lineNum,
       };
     } else {
@@ -316,6 +320,7 @@ function renderAnnotatedPreview(code, containerId = 'preview-configuration', fil
       wrap.className = 'code-brix';
       wrap.dataset.brickName = seg.name;  // for post-insert scroll-to
       if (collapsedBrix.has(seg.name)) wrap.classList.add('collapsed');
+      if (seg.inactive) wrap.classList.add('brix-inactive');
 
       const headBar = document.createElement('div');
       headBar.className = 'code-brix-head';
@@ -335,7 +340,8 @@ function renderAnnotatedPreview(code, containerId = 'preview-configuration', fil
 
       const label = document.createElement('span');
       label.className   = 'code-brix-label';
-      label.textContent = `# Brick: ${secLabel(seg.section)} / #${seg.order} · ${seg.name}`;
+      label.textContent = `# Brick: ${secLabel(seg.section)} / #${seg.order} · ${seg.name}`
+                        + (seg.inactive ? ` · ${t('brix.inactiveTag')}` : '');
 
       const actions = document.createElement('div');
       actions.className = 'brix-actions';
@@ -353,6 +359,8 @@ function renderAnnotatedPreview(code, containerId = 'preview-configuration', fil
         { key: 'brix.menuRename', action: () => { _brixContextFile = file; _brixContextFtype = _brixTargetFtype; openBrixRename(seg.name); } },
         { key: 'brix.menuMove',   action: () => { _brixContextFile = file; _brixContextFtype = _brixTargetFtype; openBrixMoveFor(seg.name); } },
         { key: 'brix.menuSplit',  action: () => { _brixContextFile = file; _brixContextFtype = _brixTargetFtype; openBrixSplit(seg.name); } },
+        { key: seg.inactive ? 'brix.menuActivate' : 'brix.menuDeactivate',
+          action: () => setBrixInactive(seg.name, !seg.inactive, file) },
         { key: 'brix.menuDelete', action: () => confirmDeleteBrix(seg.name, file), cls: 'menu-item-danger' },
       ];
       for (const item of menuItems) {

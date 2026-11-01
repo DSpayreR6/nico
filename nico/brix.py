@@ -20,8 +20,14 @@ Rules:
 
 import re
 
-_START     = re.compile(r"#\s*<brick:\s*([^/]+?)\s*/\s*#(\d+)\s+([\w\-]+)\s*>")
-_END       = re.compile(r"#\s*</brick:\s*([\w\-]+)\s*>")
+# The trailing "inactive" marks a brick whose body is commented out: the
+# content stays in the file, Nix never sees it. Spelled as a word, not a
+# symbol, because a person reading the .nix has to understand it without a
+# legend - and because nix_parser.py already used this spelling for the
+# legacy marker. The name group cannot swallow it: it is separated by
+# whitespace, which [\w\-] does not match.
+_START     = re.compile(r"#\s*<brick:\s*([^/]+?)\s*/\s*#(\d+)\s+([\w\-]+)(\s+inactive)?\s*>")
+_END       = re.compile(r"#\s*</brick:\s*([\w\-]+)(?:\s+inactive)?\s*>")
 # Legacy format (automatically migrated to new format on first read/write)
 _START_OLD = re.compile(r"#\s*<brix:\s*([\w\-]+)\s*>")
 _END_OLD   = re.compile(r"#\s*</brix:\s*([\w\-]+)\s*>")
@@ -33,8 +39,13 @@ _END_OLD   = re.compile(r"#\s*</brix:\s*([\w\-]+)\s*>")
 #
 #   1  (implicit, no marker)  German section names in markers and headers
 #   2                         four-character section codes, "CODE · Name" headers
-FILE_FORMAT = 2
-SUPPORTED_FORMATS = frozenset({1, 2})
+#   3                         brick markers may carry the "inactive" flag
+#
+# A file only reaches 3 once it actually holds a deactivated brick: without
+# one it stays 2 and an older NiCo keeps working on it normally. That is the
+# point of deriving the number from the content instead of the release.
+FILE_FORMAT = 3
+SUPPORTED_FORMATS = frozenset({1, 2, 3})
 
 # ── Sections ──────────────────────────────────────────────────────────────────
 # The single source for sections: code -> (name written into the .nix, i18n key
@@ -213,8 +224,15 @@ def detect_content_format(content: str) -> int:
 
       1  at least one German section name or `Host: name`
       2  every marker carries a section code
+      3  at least one brick is flagged inactive
       FILE_FORMAT  no NiCo markers at all – nothing that could be stale
     """
+    # Checked first and wins over the legacy test below: a number must never
+    # be stamped down. A file carrying both a German section name and an
+    # inactive flag is format 3; the German markers still get migrated,
+    # because extract_brick_blocks decides that per brick, not per file.
+    if any(m.group(4) for m in _START.finditer(content)):
+        return 3
     raw = [m.group(1).strip() for m in _START.finditer(content)]
     for line in content.splitlines():
         m = _SECTION_HDR.search(line)
@@ -284,9 +302,10 @@ def expand_nested_legacy(blocks: dict[str, dict]) -> dict[str, dict]:
                 if m_end and m_end.group(1) == cur_name:
                     sub_body = "".join(cur_lines).rstrip("\n")
                     result[cur_name] = {
-                        "section": "TAIL",
-                        "order":   sub_order,
-                        "text":    format_brick("TAIL", sub_order, cur_name, sub_body),
+                        "section":  "TAIL",
+                        "order":    sub_order,
+                        "text":     format_brick("TAIL", sub_order, cur_name, sub_body),
+                        "inactive": False,
                     }
                     sub_order += 1
                     cur_name  = None
@@ -297,9 +316,11 @@ def expand_nested_legacy(blocks: dict[str, dict]) -> dict[str, dict]:
         remaining = "".join(non_brix).strip()
         if remaining:
             result[bname] = {
-                "section": bblock["section"],
-                "order":   bblock["order"],
-                "text":    format_brick(bblock["section"], bblock["order"], bname, remaining),
+                "section":  bblock["section"],
+                "order":    bblock["order"],
+                "text":     format_brick(bblock["section"], bblock["order"], bname,
+                                         remaining, bblock.get("inactive", False)),
+                "inactive": bblock.get("inactive", False),
             }
         # else: wrapper was only legacy sub-blocks → drop it entirely
 
@@ -374,7 +395,8 @@ def new_nested_bricks(before: str, after: str) -> list[dict]:
 def extract_brick_blocks(nix_content: str) -> dict[str, dict]:
     """
     Parse nix_content and return all Brick blocks as:
-      {name: {"section": str, "order": int, "text": full_text_with_markers}}
+      {name: {"section": str, "order": int, "text": full_text_with_markers,
+              "inactive": bool}}
     Supports both new format (# <brick: Section / #N name>) and legacy format
     (# <brix: name>). Legacy blocks are automatically converted to new format
     so they get migrated on the next write-back.
@@ -389,6 +411,7 @@ def extract_brick_blocks(nix_content: str) -> dict[str, dict]:
     current_section: str = "TAIL"
     current_order: int = 1
     current_lines: list[str] = []
+    current_inactive: bool = False
     is_legacy: bool = False
     legacy_auto_order: int = 1  # used for migrating legacy blocks
 
@@ -400,6 +423,7 @@ def extract_brick_blocks(nix_content: str) -> dict[str, dict]:
                 current_section = normalize_section(raw_section)
                 current_order   = int(m.group(2))
                 current_name    = m.group(3)
+                current_inactive = bool(m.group(4))
                 current_lines   = [line]
                 # A German section name from an older NiCo counts as legacy too:
                 # rebuilding the text rewrites the marker with the section code
@@ -410,6 +434,7 @@ def extract_brick_blocks(nix_content: str) -> dict[str, dict]:
                     current_name    = m_old.group(1)
                     current_section = "TAIL"
                     current_order   = legacy_auto_order
+                    current_inactive = False
                     current_lines   = [line]
                     is_legacy       = True
         else:
@@ -422,19 +447,22 @@ def extract_brick_blocks(nix_content: str) -> dict[str, dict]:
                 if is_legacy:
                     # Migrate: reconstruct body without old markers, store in new format
                     body = "".join(current_lines[1:-1]).rstrip("\n")
-                    text = format_brick(current_section, current_order, current_name, body)
+                    text = format_brick(current_section, current_order, current_name,
+                                        body, current_inactive)
                     legacy_auto_order += 1
                 else:
                     text = "".join(current_lines)
 
                 blocks[current_name] = {
-                    "section": current_section,
-                    "order":   current_order,
-                    "text":    text,
+                    "section":  current_section,
+                    "order":    current_order,
+                    "text":     text,
+                    "inactive": current_inactive,
                 }
-                current_name  = None
-                current_lines = []
-                is_legacy     = False
+                current_name     = None
+                current_lines    = []
+                current_inactive = False
+                is_legacy        = False
 
     return expand_nested_legacy(blocks)
 
@@ -443,15 +471,28 @@ def strip_brick_blocks(nix_content: str) -> str:
     """Remove all brick blocks (including their marker lines) from nix_content.
     Handles both new format (# <brick:) and legacy format (# <brix:).
     Only exits a block when the matching end marker (same format + same name) is found.
-    Orphaned end markers (no matching start) are also stripped."""
+    Orphaned end markers (no matching start) are also stripped.
+
+    The blank line that follows a block goes with it. inject_brick_blocks
+    writes one as a separator behind every brick, so leaving it here made
+    each take-apart-and-reassemble cycle (rename, move, split, deactivate)
+    add one more: Martins flake.nix collected 48 of them in blocks of 8 to 13
+    on 2026-10-30 and it looked like NiCo scribbling in the file. Stripping
+    and injecting have to be symmetrical, or the file never settles.
+    Found 2026-11-01."""
     lines = nix_content.splitlines(keepends=True)
     result: list[str] = []
     in_brick   = False
     brick_fmt  = None   # 'new' or 'old'
     brick_name = None
+    eat_blank  = False  # the separator right after a block we just removed
 
     for line in lines:
         if not in_brick:
+            if eat_blank:
+                eat_blank = False
+                if not line.strip():
+                    continue
             m = _START.search(line)
             if m:
                 in_brick   = True
@@ -474,10 +515,12 @@ def strip_brick_blocks(nix_content: str) -> str:
                 m_end = _END.search(line)
                 if m_end and m_end.group(1) == brick_name:
                     in_brick = brick_fmt = brick_name = None
+                    eat_blank = True
             else:
                 m_end = _END_OLD.search(line)
                 if m_end and m_end.group(1) == brick_name:
                     in_brick = brick_fmt = brick_name = None
+                    eat_blank = True
             # All lines inside a block are skipped (continue implied by else branch)
     return "".join(result)
 
@@ -582,9 +625,66 @@ def inject_brick_blocks(nix_content: str, blocks: dict[str, dict]) -> str:
     return "".join(result)
 
 
-def format_brick(section: str, order: int, name: str, body: str) -> str:
-    """Format a complete brick block with markers."""
-    return f"# <brick: {section} / #{order} {name}>\n{body}\n# </brick: {name}>\n"
+def format_brick(section: str, order: int, name: str, body: str,
+                 inactive: bool = False) -> str:
+    """Assemble a brick with its marker lines.
+
+    inactive defaults to False so the eleven call sites that create a fresh
+    brick stay as they are - a new brick is always active. Only the seven
+    that rebuild the marker of an existing brick have to pass the flag on,
+    or deactivating a brick and then renaming it would switch it back on.
+    """
+    # rstrip is not cosmetic. core.brick_body() returns the body *with* its
+    # trailing newline, and this function adds one of its own - so every
+    # operation that takes a brick apart and puts it back together (rename,
+    # move, split, deactivate) used to add one blank line before the end
+    # marker. It compounds: Martins flake.nix picked up 48 blank lines in
+    # blocks of 8 to 13 on 2026-10-30 (commit 1394f45 of his config), which
+    # looked like NiCo scribbling in the file. Found 2026-11-01 while making
+    # deactivating byte-exact; normalising here fixes it for every caller at
+    # once, and no caller can tell the difference for well-formed input.
+    flag = " inactive" if inactive else ""
+    return (f"# <brick: {section} / #{order} {name}{flag}>\n"
+            f"{body.rstrip(chr(10))}\n# </brick: {name}>\n")
+
+
+# ── Deactivating a brick ────────────────────────────────────────────────────
+# Commenting out beats deleting: the content stays in the file, which is where
+# vorgaben.txt wants NixOS data - an archive in JSON would break that rule.
+_INACTIVE_PREFIX = "# "
+
+
+def deactivate_body(body: str) -> str:
+    """Comment out every non-empty line of a brick body.
+
+    The prefix goes at column 0, not behind the indentation. That is what
+    makes the step reversible byte for byte: removing exactly one prefix
+    restores the line whatever it looked like, indentation included, and a
+    line that already was a comment becomes "# # foo" and comes back as
+    "# foo". Blank lines stay blank - commenting them would add noise that
+    activating could not tell from content.
+    """
+    return "\n".join(line if not line.strip() else _INACTIVE_PREFIX + line
+                      for line in body.split("\n"))
+
+
+def activate_body(body: str) -> str:
+    """Undo deactivate_body: strip exactly one comment prefix per line.
+
+    The second branch is for a body somebody edited by hand while it was
+    deactivated ("#foo" without the space). Best effort - if the result does
+    not parse, the write is refused by the same guard that catches a brick
+    breaking the file, so a half-commented body cannot be saved.
+    """
+    out = []
+    for line in body.split("\n"):
+        if line.startswith(_INACTIVE_PREFIX):
+            out.append(line[len(_INACTIVE_PREFIX):])
+        elif line.startswith("#"):
+            out.append(line[1:])
+        else:
+            out.append(line)
+    return "\n".join(out)
 
 
 _BRICK_MARKER_LINE = re.compile(r"^\s*#\s*</?bri[xc]k[: ].*>\s*$")
