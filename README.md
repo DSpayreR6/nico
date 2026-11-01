@@ -207,10 +207,11 @@ It is not meant for everyday use — it may change or break at any time, and the
 
 ## Status
 
-NiCo manages my own machines and is at version 0.14.0. Every change runs
+NiCo manages my own machines and is at version 0.15.0. Every change runs
 through a headless roundtrip over 18 real-world configurations taken from
 public repositories — imported, written back, and checked that nothing was
-lost — plus rule tests for the Validator, the git layer and the import paths.
+lost — plus 23 rule tests for the Validator, the git layer and the import
+paths, and browser tests for the parts that only show in a real browser.
 Releases are tried in a virtual machine first, by importing a config from
 another machine and booting the result.
 
