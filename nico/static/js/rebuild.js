@@ -780,7 +780,8 @@ function attachRebuildMonitor(fromIndex = 0) {
         }).catch(() => {});
       }
     } else if (msg.type === 'error') {
-      const errText = msg.message || t('rebuild.error');
+      // Codes (ERR_…) are translated; an exception text passes through as is.
+      const errText = msg.message ? tErr(msg.message) : t('rebuild.error');
       const span = document.createElement('span');
       span.className   = 'log-error';
       span.textContent = '\n[!] ' + errText + '\n';

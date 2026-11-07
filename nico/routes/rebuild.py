@@ -893,7 +893,11 @@ def register(app, ctx):
                 if staged_with_git:
                     yield f"data: {_json.dumps({'type': 'output', 'line': '── git add -A ──'})}\n\n"
                 elif stage_msg:
-                    yield f"data: {_json.dumps({'type': 'output', 'line': f'Git-Hinweis: {stage_msg}'})}\n\n"
+                    # Log lines are tool output and stay English, like the
+                    # ── nixos-rebuild ── headers around them and nix's own
+                    # lines. stage_all only fails this way when there is no
+                    # repository; the raw error code used to land here.
+                    yield f"data: {_json.dumps({'type': 'output', 'line': '── git add skipped: not a git repository ──'})}\n\n"
 
                 if update_flake:
                     yield f"data: {_json.dumps({'type': 'output', 'line': '── nix flake update ──'})}\n\n"
@@ -909,7 +913,7 @@ def register(app, ctx):
                         yield f"data: {_json.dumps({'type': 'output', 'line': raw_line.rstrip()})}\n\n"
                     upd.wait()
                     if upd.returncode != 0:
-                        yield f"data: {_json.dumps({'type': 'error', 'message': f'nix flake update fehlgeschlagen (Exit {upd.returncode})'})}\n\n"
+                        yield f"data: {_json.dumps({'type': 'error', 'message': chr(0x1f).join(['ERR_FLAKE_UPDATE_FAILED', str(upd.returncode)])})}\n\n"
                         return
                     yield f"data: {_json.dumps({'type': 'output', 'line': '── nixos-rebuild ──'})}\n\n"
 
@@ -998,13 +1002,13 @@ def register(app, ctx):
                 if not success or rebuild_log_on:
                     log_written = _write_rebuild_log(log_path, log_lines, err_lines)
                 if not success:
-                    yield f"data: {_json.dumps({'type': 'output', 'line': f'── Log gespeichert: {log_path} ──'})}\n\n"
+                    yield f"data: {_json.dumps({'type': 'output', 'line': f'── log saved: {log_path} ──'})}\n\n"
                 # Asked in both outcomes: a unit that fails quietly after a
                 # successful rebuild is the one nobody notices.
                 units = failed_units(exclude=units_before)
                 yield f"data: {_json.dumps({'type': 'done', 'success': success, 'exit_code': proc.returncode, 'log_written': log_written, 'failed_units': units, 'error_lines': err_lines.lines, 'error_lines_dropped': err_lines.dropped})}\n\n"
             except FileNotFoundError:
-                msg = "nixos-rebuild not found. Is NiCo running on a NixOS system?"
+                msg = "ERR_NO_NIXOS_REBUILD"   # translated in the interface
                 yield f"data: {_json.dumps({'type': 'error', 'message': msg})}\n\n"
             except Exception as exc:
                 yield f"data: {_json.dumps({'type': 'error', 'message': str(exc)})}\n\n"

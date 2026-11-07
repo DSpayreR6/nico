@@ -9,6 +9,15 @@ import json
 import subprocess
 import urllib.parse
 
+# Errors travel as codes, data behind the unit separator (same as
+# git_manager._err); the interface translates them. These used to be German
+# sentences, shown to every user regardless of language.
+_P_SEP = "\x1f"
+
+
+def _err(code: str, *params) -> str:
+    return _P_SEP.join([code, *(str(p) for p in params)])
+
 
 def search_nixpkgs(query: str, channel: str = "unstable") -> list[dict]:
     try:
@@ -22,24 +31,21 @@ def search_nixpkgs(query: str, channel: str = "unstable") -> list[dict]:
             timeout=60,
         )
     except FileNotFoundError:
-        raise RuntimeError("'nix' nicht gefunden. Ist NixOS korrekt installiert?")
+        raise RuntimeError(_err("ERR_PKG_NO_NIX"))
     except subprocess.TimeoutExpired:
-        raise RuntimeError(
-            "Suche hat zu lange gedauert (60s). Beim ersten Aufruf muss nixpkgs "
-            "ggf. heruntergeladen werden – danach ist der Cache warm. Nochmal versuchen."
-        )
+        raise RuntimeError(_err("ERR_PKG_TIMEOUT", 60))
 
     stdout = result.stdout.strip()
     if not stdout:
         # nix search returns empty JSON {} when nothing matches, not an error
         if result.returncode == 0:
             return []
-        raise RuntimeError(f"nix search fehlgeschlagen: {result.stderr[:300]}")
+        raise RuntimeError(_err("ERR_PKG_SEARCH", result.stderr[:300].strip()))
 
     try:
         data = json.loads(stdout)
     except json.JSONDecodeError as e:
-        raise RuntimeError(f"Unerwartete Ausgabe von nix search: {e}")
+        raise RuntimeError(_err("ERR_PKG_BAD_OUTPUT", e))
 
     results = []
     for key, info in data.items():

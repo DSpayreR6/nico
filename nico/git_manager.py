@@ -1002,7 +1002,7 @@ def check_start_guard(nixos_dir: str) -> dict:
             "ahead": 0,
             "behind": 0,
             "remote_url": "",
-            "detail": "git not found",
+            "detail": "ERR_GIT_NOT_FOUND",
         }
 
     if not is_git_repo(nixos_dir):

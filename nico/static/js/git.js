@@ -55,7 +55,7 @@ function _gitGuardMessage(check) {
   }
   return {
     title: t('git.startGuardErrorTitle'),
-    body: t('git.startGuardErrorBody', check.detail || 'git fetch'),
+    body: t('git.startGuardErrorBody', check.detail ? tErr(check.detail) : 'git fetch'),
     recommendation: t('git.startGuardErrorRecommendation'),
   };
 }
@@ -355,7 +355,8 @@ function showGitStartGuard(check, configDir) {
             btn.textContent     = origText;
           }
         } catch (e) {
-          errEl.textContent   = String(e);
+          // The routes answer with codes (ERR_…); a network error has its own text.
+          errEl.textContent   = e.message ? tErr(e.message) : String(e);
           errEl.style.display = '';
           btn.disabled        = false;
           btn.textContent     = origText;

@@ -1343,8 +1343,10 @@ def _rule_duplicate_attrs(nixos_dir: str, config: dict, is_flake: bool,
 
         dupes = {k: lines for k, lines in seen.items() if len(lines) > 1}
         if dupes:
+            # Data lines ("'name': 3, 7"); the sentence around them is the
+            # detail_key's, so it can be translated.
             parts = [
-                f"'{k}' mehrfach: " + ", ".join(f"Zeile {l}" for l in lines)
+                f"'{k}': " + ", ".join(str(l) for l in lines)
                 for k, lines in sorted(dupes.items())
             ]
             try:
@@ -1355,7 +1357,9 @@ def _rule_duplicate_attrs(nixos_dir: str, config: dict, is_flake: bool,
                 rule_id="duplicate_attrs",
                 severity="error",
                 message=f"{label}: Doppelte Attribute gefunden.", message_key="validator.f.duplicate_attrs", params=[label],
-                detail="\n".join(parts),
+                detail="Mehrfach definiert (Attribut: Zeilen):\n" + "\n".join(parts),
+                detail_key="validator.d.duplicate_attrs",
+                detail_params=["\n".join(parts)],
             ))
     return findings
 
@@ -1385,7 +1389,10 @@ def nix_parse_error(content: str) -> str | None:
                            capture_output=True, text=True, timeout=_PARSE_TIMEOUT)
         if r.returncode == 0:
             return None
-        return (r.stderr or "").replace(tmp, "").strip() or "Nix kann die Datei nicht lesen."
+        # No message from Nix: report the exit code as data, not a sentence –
+        # a German fallback here reached every user untranslated.
+        return ((r.stderr or "").replace(tmp, "").strip()
+                or f"nix-instantiate --parse: exit {r.returncode}")
     except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
         return None
     finally:
@@ -1453,7 +1460,8 @@ def _rule_nix_parses(nixos_dir: str, config: dict, is_flake: bool,
                 ["nix-instantiate", "--parse", *[str(p) for p in paths]],
                 capture_output=True, text=True, timeout=_PARSE_TIMEOUT,
             )
-            return r.returncode == 0, (r.stderr or "").strip()
+            return r.returncode == 0, ((r.stderr or "").strip()
+                                       or f"nix-instantiate --parse: exit {r.returncode}")
         except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
             # No nix, or it took too long: the rule cannot speak. Staying
             # silent is right – a finding here would block a build over a
@@ -1477,7 +1485,7 @@ def _rule_nix_parses(nixos_dir: str, config: dict, is_flake: bool,
             message_key="validator.f.nix_parses", params=[rel],
             # The Nix message carries file and line and is the actual help
             # here, so it goes through unchanged and untranslated.
-            detail=err or "nix-instantiate --parse meldet einen Fehler.",
+            detail=err,
         ))
     return findings
 
@@ -1752,6 +1760,8 @@ def _rule_flake_hm_branch(nixos_dir: str, config: dict, is_flake: bool,
                 "Ohne Branch (release-XX.YY) wird 'master' verwendet – "
                 "kann bei stabilen nixpkgs-Releases zu Inkompatibilitäten führen."
             ),
+            detail_key="validator.d.flake_hm_branch.no_branch",
+            detail_params=[hm_line, hm_url],
         ))
 
     lock_refs = _load_flake_lock_refs(nixos_dir)
@@ -2709,6 +2719,11 @@ def _rule_git_foreign_files(nixos_dir: str, config: dict, is_flake: bool,
         severity="info",
         message=f"{len(foreign)} Dateien, die nicht zur Config gehören, werden in Git getrackt und hochgeladen.", message_key="validator.f.git_foreign_files", params=[len(foreign)],
         detail="\n".join(detail_lines),
+        # The file list is data; the sentences come from the key. Two keys
+        # because the config.json sentence only applies when it is tracked.
+        detail_key=("validator.d.git_foreign_files.cfg" if config_json_tracked
+                    else "validator.d.git_foreign_files"),
+        detail_params=["\n".join(foreign)],
     )]
 
 
@@ -2762,6 +2777,8 @@ def _rule_flake_untracked_reference(nixos_dir: str, config: dict, is_flake: bool
         severity="warning",
         message=f"{len(missing)} referenzierte Dateien sind nicht in Git erfasst – der Flake-Build wird fehlschlagen.", message_key="validator.f.flake_untracked_reference", params=[len(missing)],
         detail="\n".join(detail_lines),
+        detail_key="validator.d.flake_untracked_reference",
+        detail_params=["\n".join(detail_lines[:len(missing)])],
     )]
 
 

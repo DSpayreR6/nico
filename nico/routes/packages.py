@@ -36,7 +36,10 @@ def register(app, ctx):
             results = pkg_mod.search_nixpkgs(query, channel=channel)
             return jsonify({"results": results})
         except RuntimeError as e:
-            return jsonify({"error": "ERR_PKG_SEARCH", "detail": str(e)}), 502
+            # The message is a code with its data (packages._err); the
+            # interface splits and translates it. The old `detail` field was
+            # never read, so the search failed with a literal "{0}".
+            return jsonify({"error": str(e)}), 502
 
     @app.route("/api/packages/add", methods=["POST"])
     def packages_add():

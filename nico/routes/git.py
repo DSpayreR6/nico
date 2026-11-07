@@ -49,7 +49,7 @@ def register(app, ctx):
                 "ahead": 0,
                 "behind": 0,
                 "remote_url": "",
-                "detail": "not setup",
+                "detail": "ERR_NOT_SETUP",
             })
         return jsonify(git_manager.check_start_guard(nixos_dir))
 
@@ -91,7 +91,7 @@ def register(app, ctx):
     def git_remote_branches():
         nixos_dir, err = _require_setup()
         if err:
-            return jsonify({"success": False, "branches": [], "message": "Setup fehlt."}), 400
+            return jsonify({"success": False, "branches": [], "message": "ERR_NOT_SETUP"}), 400
         ok, branches, msg = git_manager.list_remote_branches(nixos_dir)
         return jsonify({"success": ok, "branches": branches, "message": msg})
 
@@ -104,7 +104,7 @@ def register(app, ctx):
         body = request.get_json(silent=True) or {}
         branch = (body.get("branch") or "").strip()
         if not branch:
-            return jsonify({"success": False, "message": "Kein Remote-Branch angegeben."}), 400
+            return jsonify({"success": False, "message": "ERR_NO_REMOTE_BRANCH"}), 400
         ok, msg = git_manager.set_upstream_branch(nixos_dir, branch)
         return jsonify({"success": ok, "message": msg})
 
@@ -130,7 +130,7 @@ def register(app, ctx):
         body = request.get_json(silent=True) or {}
         url  = (body.get("url") or "").strip()
         if not url:
-            return jsonify({"success": False, "message": "Keine URL angegeben."}), 400
+            return jsonify({"success": False, "message": "ERR_NO_URL"}), 400
         ok, msg = git_manager.set_remote(nixos_dir, url)
         if not ok:
             return jsonify({"success": False, "message": msg}), 500
@@ -404,7 +404,7 @@ def register(app, ctx):
         paths  = [p for p in body.get("paths", []) if isinstance(p, str)]
         delete = bool(body.get("delete", True))
         if not paths:
-            return jsonify({"success": False, "message": "Keine Datei angegeben."}), 400
+            return jsonify({"success": False, "message": "ERR_NO_FILE"}), 400
         ok, msg, result = git_manager.clean_large_files(nixos_dir, paths, delete_from_disk=delete)
         return jsonify({"success": ok, "message": msg, **result})
 
