@@ -305,6 +305,87 @@ async function _showRebuildOptions(hostInfo, { hostname = '', mode = 'switch' } 
   });
 }
 
+/**
+ * Forecast before the start: what will be compiled on this machine.
+ *
+ * Runs after writing and the Validator, so it looks at the written state.
+ * Packages without a binary-cache copy are built from source – bambu-studio
+ * has an unfree part, Hydra never builds it, and compiling it on every
+ * nixpkgs update ran the machine out of memory (Martin, 2026-11-07). The
+ * rebuild itself cannot be stopped once it runs under sudo, so the question
+ * has to come before.
+ *
+ * Returns null when cancelled, otherwise { safeMode, fetchMib } – fetchMib is
+ * handed to /start so the dry build does not run a second time (null when no
+ * forecast is available).
+ */
+async function _rebuildPrecheck(hostname, opts) {
+  const overlay = document.createElement('div');
+  overlay.className = 'overlay';
+  overlay.innerHTML = `
+    <div class="dialog-box" style="min-width:360px">
+      <p id="_rpc-status" style="margin:6px 0 14px"></p>
+      <div class="dialog-actions">
+        <button id="_rpc-skip" class="btn-secondary">${escHtml(t('rebuild.precheck.skip'))}</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  const statusEl = overlay.querySelector('#_rpc-status');
+  const started  = Date.now();
+  const tick = () => {
+    statusEl.textContent = t('rebuild.precheck.running', Math.round((Date.now() - started) / 1000));
+  };
+  tick();
+  const timer = setInterval(tick, 1000);
+
+  // Skipping does not abort the server side (it ends on its own); the
+  // answer is simply ignored.
+  let skipped = false;
+  const skipPromise = new Promise(res => {
+    overlay.querySelector('#_rpc-skip').addEventListener('click', () => { skipped = true; res(null); });
+  });
+  const fetchPromise = csrfFetch('/api/rebuild/precheck', {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify({ hostname, update_flake: !!opts.updateFlake }),
+  }).then(r => r.json()).catch(() => null);
+
+  const data = await Promise.race([fetchPromise, skipPromise]);
+  clearInterval(timer);
+  overlay.remove();
+
+  const plain = { safeMode: !!opts.safeMode, fetchMib: null };
+  if (skipped || !data || data.skipped || !data.ok) return plain;
+  const fetchMib = typeof data.fetch_mib === 'number' ? data.fetch_mib : null;
+  const heavy = Array.isArray(data.heavy) ? data.heavy : [];
+  if (!heavy.length) return { safeMode: !!opts.safeMode, fetchMib };
+
+  return new Promise(resolve => {
+    const dlg = document.createElement('div');
+    dlg.className = 'overlay';
+    const list = heavy.map(h => `<li><code>${escHtml(h.name)}</code> ${escHtml(h.version || '')}</li>`).join('');
+    dlg.innerHTML = `
+      <div class="dialog-box" style="min-width:380px;max-width:560px">
+        <h2 class="dialog-title">${escHtml(t('rebuild.precheck.heavyTitle'))}</h2>
+        <p style="margin:8px 0 6px">${escHtml(t('rebuild.precheck.heavyBody'))}</p>
+        <ul style="margin:0 0 10px 18px;max-height:180px;overflow-y:auto">${list}</ul>
+        <p class="hint" style="margin:0 0 14px">${escHtml(t(opts.safeMode
+            ? 'rebuild.precheck.heavySafeOn' : 'rebuild.precheck.heavyHint'))}</p>
+        <div class="dialog-actions">
+          ${opts.safeMode ? '' : `<button id="_rpc-safe" class="btn-primary">${escHtml(t('rebuild.precheck.btnSafe'))}</button>`}
+          <button id="_rpc-go" class="${opts.safeMode ? 'btn-primary' : 'btn-secondary'}">${escHtml(t(opts.safeMode
+              ? 'rebuild.precheck.btnContinue' : 'rebuild.precheck.btnAnyway'))}</button>
+          <button id="_rpc-cancel" class="btn-secondary">${escHtml(t('unsaved.cancel'))}</button>
+        </div>
+      </div>`;
+    document.body.appendChild(dlg);
+    const done = val => { dlg.remove(); resolve(val); };
+    dlg.querySelector('#_rpc-safe')?.addEventListener('click', () => done({ safeMode: true, fetchMib }));
+    dlg.querySelector('#_rpc-go').addEventListener('click', () => done({ safeMode: !!opts.safeMode, fetchMib }));
+    dlg.querySelector('#_rpc-cancel').addEventListener('click', () => done(null));
+  });
+}
+
 async function openRebuild(mode = 'switch') {
   // Foreign-file guard: pending foreign files need a decision before the
   // rebuild stages/commits anything
@@ -356,6 +437,11 @@ async function openRebuild(mode = 'switch') {
   // Validator auf dem geschriebenen Stand – rote Funde halten hier auf
   if (!await _validationGate(hostname ? [hostname] : [], effMode)) return;
 
+  // Vorschau: was wird kompiliert? Kann den Schonmodus einschalten.
+  const pre = await _rebuildPrecheck(hostname, opts);
+  if (pre === null) return;  // abgebrochen
+  opts.safeMode = pre.safeMode;
+
   // Terminal-Modus: Befehl in externem Terminal ausführen
   if (opts.useTerminal) {
     const res = await csrfFetch('/api/rebuild/open-terminal', {
@@ -385,6 +471,7 @@ async function openRebuild(mode = 'switch') {
       sudo_nonce:   sudoNonce,
       update_flake: !!opts.updateFlake,
       safe_mode:    !!opts.safeMode,
+      ...(pre.fetchMib !== null ? { prefetch_mib: pre.fetchMib } : {}),
     }),
   }).catch(() => null);
   const startData = startRes ? await startRes.json().catch(() => null) : null;

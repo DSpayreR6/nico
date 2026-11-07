@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### New Features
+
+- Before a rebuild starts, NiCo says which packages will be compiled on this machine and offers the safe rebuild. Packages without a binary-cache copy are built from source — anything with an unfree part, for instance, because Hydra never builds those. bambu-studio is such a package, and compiling it on every nixpkgs update ran a machine out of memory. The forecast runs after writing and the Validator, on the written state; the glue every rebuild builds (unit files, /etc, the system path) is not reported, only real packages. The dialog offers building safely (one job at a time), building normally anyway, or cancelling — a running rebuild cannot be stopped, so the question has to come first. With "update flake" switched on, the forecast resolves the inputs afresh in memory and leaves flake.lock alone. Controlled by the existing pre-rebuild analysis switch in the admin area, on by default
+
 ### Bug Fixes
 
 - A flake input added through the brick dialog is now usable right away. The argument list of `outputs` is derived from the input bricks, but only the generator wrote it, and the generator runs on a panel or form change, not on a brick write — so the new input stayed unbound until some unrelated field was touched, and a host brick using it (`{ environment.systemPackages = [ solidcraft.packages.x86_64-linux.default ]; }`) was refused as unreadable. Every brick write in `flake.nix` now brings the list in line: new input names are added, names whose brick was deleted, renamed or deactivated are removed, the ones NiCo manages and any added by hand stay
@@ -9,6 +13,7 @@
 - A failed package search showed a literal `{0}`. The cause was sent in a field the interface never read, and the texts behind it were German for everyone. The search now reports its cause in the interface language, including the hint that the first call may have to download nixpkgs
 - Messages from the backend reach every user in their own language. Twenty-one places sent fixed German or English sentences: package search, the rebuild monitor (failed `nix flake update`, missing `nixos-rebuild`), four checks in the git routes, the start-up git check, and the details of four Validator rules (duplicate attributes, home-manager without a branch, foreign files in git, untracked referenced files). They travel as codes with data now, translated in all seven languages. The two status lines in the rebuild log are English like the tool output around them (`── log saved: … ──`), and a parse check without a Nix message reports the exit code instead of a German sentence. A new test keeps fixed sentences out of exceptions, responses and Validator details
 - The time machine section carries its own name in every language. Below the tab "Time machine", five languages titled the section "Git history & rollback" — the other concept: the time machine is the tool for going back, the history is git's data structure. The section is "Git / Time machine" everywhere now, the German text no longer mixes in the English "History", and an error that spoke of the "Git log" now says the checkpoints could not be loaded
+- The download size before a rebuild is shown again. The analysis called `nixos-rebuild build --dry-run`, which the Python rewrite of nixos-rebuild rejects, so it failed without a word and the progress bar never had a total. It also only understood sizes in MiB, while nix writes KiB or GiB depending on the amount. Now `dry-build`, all units, and the result is reused for the build instead of evaluating the config a second time
 
 ## 0.15.0 (2026-11-01)
 

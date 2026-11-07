@@ -16,7 +16,7 @@ from pathlib import Path
 
 from flask import Response, jsonify, request
 
-from .. import config_manager, git_manager
+from .. import config_manager, git_manager, prebuild
 from ..core import (
     clean_nix_error as _clean_nix_error,
     get_flake_hosts as _get_flake_hosts,
@@ -608,13 +608,18 @@ def register(app, ctx):
         update_flake = bool(payload.get('update_flake')) and use_flake
         safe_mode    = bool(payload.get('safe_mode'))
 
+        # Download size from /api/rebuild/precheck, when the interface ran it
+        # just before. Then the dry build is not repeated here – evaluating
+        # the config twice in a row costs time and gives the same answer.
+        prefetch_mib = payload.get('prefetch_mib')
+        prefetch_mib = (float(prefetch_mib)
+                        if isinstance(prefetch_mib, (int, float)) and prefetch_mib >= 0
+                        else None)
+
+        flake_arg = ""
         if use_flake:
-            # Without git nix would try to copy via the git index and fail.
-            # Use path: prefix so nix reads directly from the filesystem.
-            if git_manager.is_git_repo(nixos_dir):
-                flake_arg = f".#{hostname}"
-            else:
-                flake_arg = f"path:{Path(nixos_dir).resolve().as_posix()}#{hostname}"
+            flake_arg = prebuild.flake_ref(nixos_dir, hostname,
+                                           git_manager.is_git_repo(nixos_dir))
             cmd = ["sudo", "-S", "nixos-rebuild", mode, "--flake", flake_arg,
                    "--log-format", "internal-json", "-v"]
         else:
@@ -917,32 +922,20 @@ def register(app, ctx):
                         return
                     yield f"data: {_json.dumps({'type': 'output', 'line': '── nixos-rebuild ──'})}\n\n"
 
-                # Pre-fetch dry-run: evaluate dependency graph to get stable total download size
-                if prefetch_dry_run_on:
-                    if use_flake:
-                        dr_cmd = ["nixos-rebuild", "build", "--dry-run", "--flake", flake_arg]
-                    else:
-                        dr_cmd = ["nixos-rebuild", "build", "--dry-run",
-                                  "-I", f"nixos-config={conf_path}"]
+                # Pre-fetch dry-run: evaluate dependency graph to get stable
+                # total download size. Skipped when the precheck already did.
+                if prefetch_mib is not None:
+                    if prefetch_mib > 0:
+                        yield f"data: {_json.dumps({'type': 'prefetch_total', 'mib': prefetch_mib})}\n\n"
+                elif prefetch_dry_run_on:
+                    # Runs after `nix flake update`, so no lock-file trick here.
+                    dr_cmd = prebuild.dry_build_cmd(nixos_dir, use_flake, flake_arg)
                     try:
                         yield _emit_phase('analysing', True)
-                        dr = _sp.Popen(
-                            dr_cmd,
-                            cwd=nixos_dir,
-                            stdout=_sp.PIPE,
-                            stderr=_sp.STDOUT,
-                            text=True,
-                            bufsize=1,
-                        )
-                        total_mib = 0.0
-                        for dr_line in dr.stdout:
-                            m = _re.search(
-                                r'these \d+ paths will be fetched \(([0-9.]+)\s+MiB download',
-                                dr_line,
-                            )
-                            if m:
-                                total_mib += float(m.group(1))
-                        dr.wait()
+                        dr = _sp.run(dr_cmd, cwd=nixos_dir, capture_output=True,
+                                     text=True, timeout=prebuild.DRY_BUILD_TIMEOUT)
+                        _, total_mib = prebuild.parse_dry_build(
+                            (dr.stdout or "") + "\n" + (dr.stderr or ""))
                         yield _emit_phase('analysing', False)
                         if total_mib > 0:
                             yield f"data: {_json.dumps({'type': 'prefetch_total', 'mib': total_mib})}\n\n"
@@ -1042,6 +1035,50 @@ def register(app, ctx):
         threading.Thread(target=_run_job, name=f"rebuild-{job_id[:8]}",
                          daemon=True).start()
         return jsonify({"success": True, "job_id": job_id})
+
+    @app.route("/api/rebuild/precheck", methods=["POST"])
+    def rebuild_precheck():
+        """Forecast for the rebuild about to start: download size and the
+        packages that will be compiled locally (see prebuild.py).
+
+        Called by the interface after writing and the Validator, so it looks
+        at the written state like every dry run (vorgaben.txt). Answers
+        {"skipped": true} when the pre-rebuild analysis is switched off in
+        the admin area.
+
+        JSON body: hostname, update_flake – the same as for /start.
+        """
+        if err := _check_csrf(): return err
+        nixos_dir, err = _require_setup()
+        if err:
+            return err
+        if not bool(config_manager.get_app_settings().get("prefetch_dry_run", True)):
+            return jsonify({"skipped": True})
+
+        payload   = request.get_json(silent=True) or {}
+        data      = config_manager.load_config(nixos_dir) or {}
+        use_flake = bool(data.get("flakes", False))
+        hostname_param = str(payload.get('hostname') or '').strip()
+        if hostname_param and re.fullmatch(r'[\w.-]+', hostname_param):
+            hostname = hostname_param
+        else:
+            hostname = (data.get("hostname") or "nixos").strip() or "nixos"
+
+        flake_arg = ""
+        if use_flake:
+            is_repo = git_manager.is_git_repo(nixos_dir)
+            if is_repo:
+                # The flake only sees tracked files; /start stages the same
+                # way right after, so this changes nothing it would not.
+                try:
+                    git_manager.stage_all(nixos_dir)
+                except Exception:
+                    pass
+            flake_arg = prebuild.flake_ref(nixos_dir, hostname, is_repo)
+
+        result = prebuild.precheck(nixos_dir, use_flake, flake_arg,
+                                   update_flake=bool(payload.get('update_flake')) and use_flake)
+        return jsonify(result)
 
     @app.route("/api/rebuild/status")
     def rebuild_status():
