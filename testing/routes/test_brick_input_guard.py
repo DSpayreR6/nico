@@ -25,6 +25,11 @@ Geprüft wird:
   5. Eine bereits kaputte Datei bleibt bearbeitbar – sonst sperrt der Schutz
      genau die Reparatur aus, für die man ihn braucht.
   6. Ein gültiger Brick geht weiterhin durch.
+  7. Brick-Schreiben in flake.nix zieht die outputs-Zeile nach: neuer Input
+     kommt hinein, gelöschter fällt heraus, ein veralteter Stand heilt
+     (solidcraft, 2026-11-07).
+  8. sync_outputs_args direkt: @inputs-Form, Standardwerte, verwaltete und
+     von Hand eingetragene Namen.
 
 Lauf: nix-shell shell.nix --run "python testing/routes/test_brick_input_guard.py"
 """
@@ -175,6 +180,107 @@ else:
     check("geht durch", r.status_code == 200, (r.status_code, r.get_json()))
     check("steht in der Datei",
           "services.avahi.enable" in (cfg / "configuration.nix").read_text(encoding="utf-8"))
+
+    # ── 7. Brick-Schreiben zieht die outputs-Zeile nach ──────────────────────
+    # Martins Config, 2026-11-07: Input `solidcraft` per Brick-Dialog angelegt,
+    # die outputs-Zeile blieb ohne ihn (der Generator lief erst beim nächsten
+    # Panel-Autosave), und das Host-Brick, das ihn verwendet, wurde als
+    # unlesbar abgelehnt.
+    print("\n7. Brick-Schreiben zieht die outputs-Zeile nach")
+    from nico.core import set_type_in_content  # noqa: E402
+    fdata = config_manager.get_defaults()
+    fdata.update({
+        "flakes": True, "hostname": "nix-vm",
+        "flake_hosts": [{"name": "nix-vm"}],
+        "flake_brick_blocks": {
+            "yandex": brick("INPX", 1, "yandex",
+                            'yandex-browser.url = "github:Teu5us/nix-yandex-browser";'),
+        },
+    })
+    fpath = cfg / "flake.nix"
+    fpath.write_text(set_type_in_content(
+        generator.generate_flake_nix(fdata, nixos_dir=str(cfg)), "fl"), encoding="utf-8")
+    before = out_args(fpath.read_text(encoding="utf-8"))
+    check("Ausgangslage: yandex-browser gebunden", "yandex-browser" in before, before)
+
+    def patch(name, content):
+        return client.patch(f"/api/brick/{name}", headers=hdr, data=json.dumps(
+            {"content": content, "file": "flake.nix"}))
+
+    host_with_sc = ('      system = "x86_64-linux";\n'
+                    '      modules = [\n'
+                    '        ./configuration.nix\n'
+                    '        { environment.systemPackages = '
+                    '[ solidcraft.packages.x86_64-linux.default ]; }\n'
+                    '      ];')
+    host_plain = ('      system = "x86_64-linux";\n'
+                  '      modules = [ ./configuration.nix ];')
+
+    r = client.post("/api/brick", headers=hdr, data=json.dumps(
+        {"name": "SolidCraft", "section": "INPX", "file": "flake.nix"}))
+    check("INPX-Brick anlegen geht", r.status_code == 200, (r.status_code, r.get_json()))
+    r = patch("SolidCraft", 'solidcraft.url = "github:tangency-labs/solidcraft";')
+    check("Input eintragen geht", r.status_code == 200, (r.status_code, r.get_json()))
+    args = out_args(fpath.read_text(encoding="utf-8"))
+    check("solidcraft steht danach in der outputs-Zeile", "solidcraft" in args, args)
+    check("solidcraft vor dem `...`", args and args[-1] == "...", args)
+    check("die übrigen Argumente bleiben",
+          all(a in args for a in before), (before, args))
+
+    r = patch("host-nix-vm", host_with_sc)
+    check("Host-Brick mit Inline-Modul wird angenommen", r.status_code == 200,
+          (r.status_code, r.get_json()))
+
+    # Martins Stand: Brick da, outputs-Zeile ohne den Namen. Jedes Schreiben
+    # eines Bricks in flake.nix muss das heilen.
+    stale = fpath.read_text(encoding="utf-8").replace("solidcraft, ", "", 1)
+    fpath.write_text(stale, encoding="utf-8")
+    check("veralteter Stand hergestellt",
+          "solidcraft" not in out_args(stale), out_args(stale))
+    r = patch("host-nix-vm", host_with_sc)
+    check("veralteter Stand wird beim Schreiben geheilt", r.status_code == 200
+          and "solidcraft" in out_args(fpath.read_text(encoding="utf-8")),
+          (r.status_code, r.get_json()))
+
+    r = patch("host-nix-vm", host_plain)
+    check("Host-Brick ohne solidcraft geht", r.status_code == 200,
+          (r.status_code, r.get_json()))
+    r = client.delete("/api/brick/SolidCraft?file=flake.nix", headers=hdr)
+    check("INPX-Brick löschen geht", r.status_code == 200, (r.status_code, r.get_json()))
+    args = out_args(fpath.read_text(encoding="utf-8"))
+    check("solidcraft ist aus der outputs-Zeile verschwunden",
+          "solidcraft" not in args, args)
+    check("die Ausgangslage ist wiederhergestellt", args == before, (before, args))
+
+    r = patch("host-nix-vm", host_with_sc)
+    check("Verwendung ohne Input wird abgelehnt", r.status_code == 400, r.status_code)
+    detail = (r.get_json() or {}).get("detail") or ""
+    check("die Antwort nennt die Nix-Meldung",
+          "undefined variable 'solidcraft'" in detail, detail)
+
+# ── 8. sync_outputs_args ohne Server ─────────────────────────────────────────
+print("\n8. sync_outputs_args direkt")
+from nico.brix import sync_outputs_args  # noqa: E402
+inp = {"x": brick("INPX", 1, "x", 'foo.url = "github:a/b";')}
+src = "  outputs = { self, nixpkgs, ... }: {\n"
+check("fehlender Name wird ergänzt",
+      sync_outputs_args(src, {}, inp) == "  outputs = { self, nixpkgs, foo, ... }: {\n",
+      sync_outputs_args(src, {}, inp))
+check("nichts zu tun: Text bleibt byte-gleich",
+      sync_outputs_args("  outputs = {self,nixpkgs,foo,...}: {\n", inp, inp)
+      == "  outputs = {self,nixpkgs,foo,...}: {\n")
+check("Zeile mit Standardwerten bleibt unberührt",
+      sync_outputs_args("outputs = { self, x ? null, ... }:", {}, inp)
+      == "outputs = { self, x ? null, ... }:")
+check("@inputs-Form wird unterstützt",
+      sync_outputs_args("outputs = { self, ... }@inputs:", {}, inp)
+      == "outputs = { self, foo, ... }@inputs:",
+      sync_outputs_args("outputs = { self, ... }@inputs:", {}, inp))
+nh = {"h": brick("INPX", 1, "h", 'home-manager.url = "github:a/b";')}
+check("von NiCo verwaltete Namen werden nie entfernt",
+      "home-manager" in sync_outputs_args("outputs = { self, home-manager, ... }:", nh, {}))
+check("von Hand eingetragene Namen bleiben",
+      "eigenes" in sync_outputs_args("outputs = { self, eigenes, ... }:", inp, inp))
 
 print()
 if fails:

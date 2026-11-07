@@ -18,6 +18,26 @@ function _bracketDetails(details) {
   }).join(', ');
 }
 
+/**
+ * Error text for a refused brick write.
+ *
+ * ERR_BRICK_BREAKS_FILE carries Nix's own message in `detail`. The interface
+ * used to show only the generic sentence, so the user learned that the file
+ * would break but not why (solidcraft, 2026-11-07). Nix's message is several
+ * lines with a code excerpt; the first line and the position are enough for
+ * a toast. It stays English – it is Nix speaking, not NiCo.
+ */
+function _brickErrText(data) {
+  let msg = tErr(data.error);
+  if (data.error === 'ERR_BRICK_BREAKS_FILE' && data.detail) {
+    const lines = String(data.detail).split('\n');
+    const first = lines[0].replace(/^error:\s*/, '').trim();
+    const pos   = String(data.detail).match(/\bat\s*\S*?:(\d+):(\d+)/);
+    msg += ' ' + first + (pos ? ` (${pos[1]}:${pos[2]})` : '');
+  }
+  return msg;
+}
+
 function closeAllBrixMenus() {
   document.querySelectorAll('.brix-context-menu').forEach(m => m.classList.add('hidden'));
   // Hand the action bar back to :hover - see the comment at the menu button
@@ -78,7 +98,7 @@ async function insertBrix() {
   const data = await res.json();
   if (_handleNestedResponse(data)) return;
   if (data.error) {
-    errorEl.textContent = tErr(data.error);
+    errorEl.textContent = _brickErrText(data);
     errorEl.classList.remove('hidden');
     return;
   }
@@ -101,7 +121,7 @@ async function confirmDeleteBrix(name, file = 'configuration.nix') {
   const data = await res.json().catch(() => ({}));
   if (_handleNestedResponse(data)) return;
   if (data.error) {
-    showToast(tErr(data.error), 'error');
+    showToast(_brickErrText(data), 'error');
     return;
   }
   showToast(t('brix.deleted', name));
@@ -128,7 +148,7 @@ async function setBrixInactive(name, inactive, file = 'configuration.nix') {
   const data = await res.json().catch(() => ({}));
   if (_handleNestedResponse(data)) return;
   if (data.error) {
-    showToast(tErr(data.error), 'error');
+    showToast(_brickErrText(data), 'error');
     return;
   }
   showToast(t(inactive ? 'brix.deactivated' : 'brix.activated', name));
@@ -290,7 +310,7 @@ async function moveBrix() {
   const data = await res.json();
   if (_handleNestedResponse(data)) return;
   if (data.error) {
-    showToast(tErr(data.error), 'error');
+    showToast(_brickErrText(data), 'error');
     return;
   }
 
@@ -350,7 +370,7 @@ async function renameBrix() {
   const data = await res.json();
   if (_handleNestedResponse(data)) { closeBrixRename(); return; }
   if (data.error) {
-    errorEl.textContent = tErr(data.error);
+    errorEl.textContent = _brickErrText(data);
     errorEl.classList.remove('hidden');
     return;
   }
@@ -395,7 +415,7 @@ async function splitBrix() {
   const data = await res.json();
   if (_handleNestedResponse(data)) { closeBrixSplit(); return; }
   if (data.error) {
-    errorEl.textContent = tErr(data.error);
+    errorEl.textContent = _brickErrText(data);
     errorEl.classList.remove('hidden');
     return;
   }
@@ -460,7 +480,7 @@ async function saveBrixInline(name, content, file = 'configuration.nix') {
   const data = await res.json();
   if (_handleNestedResponse(data)) return false;
   if (data.error) {
-    let msg = tErr(data.error);
+    let msg = _brickErrText(data);
     if (data.details?.length) msg += ': ' + _bracketDetails(data.details);
     showToast(msg, 'error');
     return false;

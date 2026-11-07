@@ -21,6 +21,7 @@ from .brix import (
     inject_brick_blocks,
     new_nested_bricks,
     strip_brick_blocks,
+    sync_outputs_args,
 )
 
 
@@ -241,8 +242,14 @@ def modify_brick_in_file(
             blocks = extract_brick_blocks(content)
     else:
         blocks = extract_brick_blocks(content)
+    # Modifiers change the dict in place; keep the state before for the diff.
+    old_blocks = {k: dict(v) for k, v in blocks.items()}
     new_blocks = modifier(blocks)
     clean      = strip_brick_blocks(content)
+    if ftype == "fl":
+        # The outputs argument list is derived from the INPX bricks, but only
+        # the generator wrote it – a brick write left it stale.
+        clean = sync_outputs_args(clean, old_blocks, new_blocks)
     with_brick = inject_brick_blocks(clean, new_blocks)
     final      = set_type_in_content(with_brick, ftype)
 

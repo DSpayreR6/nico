@@ -1,5 +1,12 @@
 # NiCo – Changelog
 
+## Unreleased
+
+### Bug Fixes
+
+- A flake input added through the brick dialog is now usable right away. The argument list of `outputs` is derived from the input bricks, but only the generator wrote it, and the generator runs on a panel or form change, not on a brick write — so the new input stayed unbound until some unrelated field was touched, and a host brick using it (`{ environment.systemPackages = [ solidcraft.packages.x86_64-linux.default ]; }`) was refused as unreadable. Every brick write in `flake.nix` now brings the list in line: new input names are added, names whose brick was deleted, renamed or deactivated are removed, the ones NiCo manages and any added by hand stay
+- A brick refused as unreadable now says why. The server sent the Nix message as `detail`, the interface looked for `details`, so the reason never arrived and only the generic sentence was shown. The first line of the Nix message and its position are appended now, for example `undefined variable 'solidcraft' (4:38)`
+
 ## 0.15.0 (2026-11-01)
 
 ### New Features

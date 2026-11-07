@@ -734,6 +734,55 @@ def input_names_in_bricks(blocks: dict[str, dict], section: str = "INPX") -> lis
     return out
 
 
+# The argument set of `outputs` outside any brick: `outputs = { a, b, ... }`,
+# optionally followed by `@inputs`. Defaults (`x ? …`) are not handled – such a
+# line is left alone.
+_OUTPUTS_ARGS = re.compile(r"(\boutputs\s*=\s*\{)([^{}]*)(\})")
+
+# Arguments NiCo writes from its own panel fields; never removed here.
+_MANAGED_OUTPUT_ARGS = frozenset(
+    {"self", "nixpkgs", "home-manager", "nixos-hardware", "plasma-manager"})
+
+
+def sync_outputs_args(clean: str, old_blocks: dict[str, dict],
+                      new_blocks: dict[str, dict]) -> str:
+    """Bring the `outputs` argument list in line with the INPX bricks.
+
+    `clean` is flake.nix with the bricks stripped. The generator derives the
+    list from the INPX bricks, but it only runs on a panel or form change; a
+    brick write only swaps brick texts. An input added through the brick
+    dialog therefore stayed unbound until some unrelated panel field changed,
+    and every use of it was refused as `undefined variable` (Martins config,
+    solidcraft, 2026-11-07).
+
+    Names of the new bricks that are missing get added before `...`; names
+    whose brick is gone (deleted, renamed, deactivated) get removed, except
+    the ones NiCo manages itself. Everything else in the list stays as it is.
+    Returns `clean` unchanged when the line is not found exactly once, carries
+    defaults, or needs no change.
+    """
+    matches = list(_OUTPUTS_ARGS.finditer(clean))
+    if len(matches) != 1:
+        return clean
+    m = matches[0]
+    raw = m.group(2)
+    if "?" in raw:
+        return clean
+    args = [a.strip() for a in raw.split(",") if a.strip()]
+    has_ellipsis = "..." in args
+    names = [a for a in args if a != "..."]
+
+    new_names = input_names_in_bricks(new_blocks)
+    gone = set(input_names_in_bricks(old_blocks)) - set(new_names) - _MANAGED_OUTPUT_ARGS
+    wanted = [n for n in names if n not in gone]
+    wanted += [n for n in new_names if n not in wanted]
+    if wanted == names:
+        return clean
+
+    inner = ", ".join(wanted + (["..."] if has_ellipsis else []))
+    return clean[:m.start(2)] + f" {inner} " + clean[m.end(2):]
+
+
 def check_bracket_balance(body: str) -> "list[dict]":
     """Check if {}, [], () are balanced in Nix code, ignoring strings and comments.
     Returns a list of error strings; empty list means balanced."""
