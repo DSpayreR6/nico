@@ -224,5 +224,26 @@ if intern.exists():
     check("intern bleibt 'Wegwerf-Config' unangetastet erlaubt",
           "Wegwerf-Config" in intern.read_text(encoding="utf-8"))
 
+print("\n11. Zeitmaschine ist das Werkzeug, Historie die Datenstruktur")
+# Festlegung vom 2026-11-07 (vorgaben.txt, Begriffe). Bis dahin hieß der
+# Bereich unter dem Tab "Zeitmaschine" in fünf Sprachen "Git-Historie &
+# Rollback", und im deutschen Text stand dreimal das englische "History".
+ZEITMASCHINE = {"de": "Zeitmaschine", "en": "Time machine", "es": "Máquina del tiempo",
+                "fr": "Machine à remonter le temps", "ja": "タイムマシン",
+                "ru": "Машина времени", "zh": "时间机器"}
+for lang, term in ZEITMASCHINE.items():
+    data = json.loads((LANG / f"{lang}.json").read_text(encoding="utf-8"))
+    tab = data.get("admin.tab.zeitmaschine", "")
+    title = data.get("admin.gitTitle", "")
+    check(f"{lang}: Tab heißt '{term}'", tab == term, tab)
+    check(f"{lang}: Bereichstitel nennt die Zeitmaschine",
+          term.lower() in title.lower(), title)
+    check(f"{lang}: Bereichstitel ohne 'rollback'", "rollback" not in title.lower(), title)
+hits = [k for k, v in de.items()
+        if isinstance(v, str) and re.search(r"History|Git-Log", v)]
+check("de: kein 'History'/'Git-Log' (→ Historie bzw. Sicherungspunkte)", not hits, hits[:4])
+idx = (ROOT / "nico" / "templates" / "index.html").read_text(encoding="utf-8")
+check("index.html: Ersatztext ohne 'Git-History'", "Git-History" not in idx)
+
 print("\n" + ("ALLE PRÜFUNGEN BESTANDEN" if not fails else f"FEHLGESCHLAGEN: {fails}"))
 sys.exit(1 if fails else 0)
