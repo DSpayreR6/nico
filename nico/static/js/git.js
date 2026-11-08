@@ -531,6 +531,12 @@ async function checkGitRemoteStatus() {
     if (data.behind > 0) {
       showGitRemoteBanner(data.behind);
     }
+    // Set here, at start-up. Until now only the admin panel revealed push and
+    // pull, and without a remote they were simply missing with no word why.
+    const hasRemote = !!(data.has_git && data.has_remote);
+    document.getElementById('nixos-git-push-btn')?.classList.toggle('hidden', !hasRemote);
+    document.getElementById('nixos-git-pull-btn')?.classList.toggle('hidden', !hasRemote);
+    document.getElementById('nixos-git-noremote')?.classList.toggle('hidden', !(data.has_git && !data.has_remote));
   } catch (e) {
     console.error('checkGitRemoteStatus:', e);
   }

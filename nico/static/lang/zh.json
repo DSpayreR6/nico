@@ -1230,6 +1230,7 @@
   "git.skippedLarge.body": "此文件对版本控制来说过大，未被收录到检查点中。它在磁盘上保持不变。原因：这类文件会长期阻断向服务器的所有传输，日后也几乎无法再从历史记录中移除。",
   "git.pushSuccess":        "上传成功。",
   "header.nixosGitPull": "Git Pull",
+  "header.nixosGitNoRemote": "Git push/pull：未设置 remote",
   "git.pushNothing": "没有需要上传的内容——服务器已是相同状态。",
   "git.pullNothing": "没有新内容——你的版本已是最新。",
   "git.transfer.pushTitle": "已上传",

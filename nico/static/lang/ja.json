@@ -1230,6 +1230,7 @@
   "git.skippedLarge.body": "このファイルはバージョン管理には大きすぎるため、チェックポイントに含めませんでした。ディスク上にはそのまま残っています。理由: この種のファイルはサーバーへの転送を恒久的に妨げ、後から履歴より取り除くのがほぼ不可能になるためです。",
   "git.pushSuccess":        "アップロードしました。",
   "header.nixosGitPull": "Git Pull",
+  "header.nixosGitNoRemote": "Git push/pull: remote が未設定",
   "git.pushNothing": "アップロードするものはありません。サーバーは同じ状態です。",
   "git.pullNothing": "新しい変更はありません。すでに最新の状態です。",
   "git.transfer.pushTitle": "アップロードしました",

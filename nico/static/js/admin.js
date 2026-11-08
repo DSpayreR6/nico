@@ -337,6 +337,7 @@ function _loadAdminSettings() {
             if (rs.has_git) {
               document.getElementById('nixos-git-push-btn')?.classList.remove('hidden');
               document.getElementById('nixos-git-pull-btn')?.classList.remove('hidden');
+              document.getElementById('nixos-git-noremote')?.classList.add('hidden');
             }
             document.getElementById('git-push-settings-row')?.classList.remove('hidden');
           });
