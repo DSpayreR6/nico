@@ -1,5 +1,11 @@
 # NiCo – Changelog
 
+## Unreleased
+
+### New Features
+
+### Bug Fixes
+
 ## 0.16.0 (2026-11-08)
 
 ### New Features
