@@ -31,6 +31,9 @@ def register(app, ctx):
 
     @app.route("/api/config", methods=["GET"])
     def get_config():
+        # A GET, but it rewrites externally changed .nix files. Any web page can
+        # trigger a GET against 127.0.0.1, so this one needs the token.
+        if err := _check_csrf(): return err
         nixos_dir, err = _require_setup()
         if err:
             return err

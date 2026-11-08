@@ -9,6 +9,7 @@
 
 ### Bug Fixes
 
+- Loading the configuration now requires the CSRF token. The request can rewrite externally changed files, and any web page open in the browser could trigger it
 - NiCo writes the current option names for GNOME, GDM and graphics. The old names still built, but only through aliases that nixpkgs drops sooner or later; older configs using them are still recognised on import
 - NiCo no longer writes `boot.initrd.systemd.enable`. On nixos-unstable and from 26.11 the option stops the build, and enabling Plymouth used to switch it on without asking. The switch is gone: systemd in the initrd has been the default since 26.05, and Plymouth does not need the option. An imported `= true` is dropped, an imported `= false` now stays in the file as a brick instead of being lost
 - A flake input added through the brick dialog is now usable right away. The argument list of `outputs` is derived from the input bricks, but only the generator wrote it, and the generator runs on a panel or form change, not on a brick write — so the new input stayed unbound until some unrelated field was touched, and a host brick using it (`{ environment.systemPackages = [ solidcraft.packages.x86_64-linux.default ]; }`) was refused as unreadable. Every brick write in `flake.nix` now brings the list in line: new input names are added, names whose brick was deleted, renamed or deactivated are removed, the ones NiCo manages and any added by hand stay
