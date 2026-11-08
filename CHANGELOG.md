@@ -9,6 +9,7 @@
 
 ### Bug Fixes
 
+- When NiCo is already running, the start page says so if a different version is running than the one you started, and restarting switches to the new one
 - The NixOS menu says when no remote is set up, and shows Git push and pull right after start instead of only after the admin area was opened
 - Choosing install in the menu now replaces an existing installation; before, Nix kept the old version and reported success. The menu shows the installed version and commit
 - A rebuild now reacts at once: a window names the current step until the forecast appears, and a second click no longer starts a second run

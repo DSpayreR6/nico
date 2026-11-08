@@ -579,6 +579,7 @@
 
   "header.nixosGitPush": "Git Push",
   "header.nixosGitPull": "Git Pull",
+  "running.versionDiffers": "Es läuft {0}, gestartet wurde {1}. Mit „Neu starten“ läuft die gestartete Version.",
   "header.nixosGitNoRemote": "Git Push/Pull: kein Remote eingerichtet",
 
   "admin.settings.pushSection": "Git-Synchronisation",

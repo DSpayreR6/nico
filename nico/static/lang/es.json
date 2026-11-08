@@ -1230,6 +1230,7 @@
   "git.skippedLarge.body": "Este archivo es demasiado grande para el control de versiones y no se ha incluido en el punto de control. En el disco permanece intacto. El motivo: estos archivos bloquean de forma permanente cualquier transferencia al servidor y después apenas se pueden quitar del historial.",
   "git.pushSuccess":        "Subido correctamente.",
   "header.nixosGitPull": "Git Pull",
+  "running.versionDiffers": "Se está ejecutando {0} y has iniciado {1}. «Reiniciar» cambia a la versión que has iniciado.",
   "header.nixosGitNoRemote": "Git push/pull: no hay remote configurado",
   "git.pushNothing": "Nada que subir: el servidor está en el mismo estado.",
   "git.pullNothing": "Nada nuevo: tu versión ya está actualizada.",

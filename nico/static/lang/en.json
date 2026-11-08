@@ -1234,6 +1234,7 @@
   "git.skippedLarge.body": "This file is too large for version control and was not included in the checkpoint. It stays on disk unchanged. The reason: files like this permanently block every transfer to the server and are hard to remove from the history afterwards.",
   "git.pushSuccess":        "Uploaded successfully.",
   "header.nixosGitPull": "Git Pull",
+  "running.versionDiffers": "{0} is running, you started {1}. “Restart” switches to the version you started.",
   "header.nixosGitNoRemote": "Git push/pull: no remote set up",
   "git.pushNothing": "Nothing to upload – the server is at the same state.",
   "git.pullNothing": "Nothing new – you are already up to date.",

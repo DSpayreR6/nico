@@ -1230,6 +1230,7 @@
   "git.skippedLarge.body": "Ce fichier est trop volumineux pour le suivi de versions et n'a pas été intégré au point de contrôle. Il reste inchangé sur le disque. La raison : de tels fichiers bloquent durablement tout transfert vers le serveur et ne peuvent plus guère être retirés de l'historique ensuite.",
   "git.pushSuccess":        "Envoyé avec succès.",
   "header.nixosGitPull": "Git Pull",
+  "running.versionDiffers": "{0} est en cours d'exécution, vous avez lancé {1}. « Redémarrer » passe à la version lancée.",
   "header.nixosGitNoRemote": "Git push/pull : aucun remote configuré",
   "git.pushNothing": "Rien à envoyer : le serveur est au même état.",
   "git.pullNothing": "Rien de nouveau : votre version est déjà à jour.",

@@ -15,8 +15,13 @@ import time
 import urllib.request
 import urllib.error
 import webbrowser
+from pathlib import Path
+import html
+import json
 
+from nico import config_manager
 from nico.server import create_app
+from nico.version import get_revision, get_version
 
 PREFERRED_PORT = 8421
 HOST = "127.0.0.1"
@@ -100,6 +105,47 @@ def _load_theme_css() -> str:
         return ""
 
 
+def _instance_label(version: str, revision: str) -> str:
+    return f"{version or '?'} ({revision or '?'})"
+
+
+def _version_note(running: tuple, started: tuple, lang: str) -> str:
+    """Warning for the page below when the running NiCo is not the started one.
+
+    A second start ends on this page, so whoever just fetched a new version
+    keeps working with the old one and nothing says so. Empty when both match
+    or when this copy cannot say what it is. The trailing + only marks a
+    changed working tree.
+    """
+    run_v, run_r = running
+    own_v, own_r = started
+    if not own_v or (run_v, (run_r or "").rstrip("+")) == (own_v, (own_r or "").rstrip("+")):
+        return ""
+    lang_dir = Path(__file__).resolve().parent / "static" / "lang"
+    for name in (lang, "en"):
+        try:
+            text = json.loads((lang_dir / f"{name}.json").read_text(encoding="utf-8"))[
+                "running.versionDiffers"]
+            break
+        except (OSError, ValueError, KeyError):
+            text = ""
+    if not text:
+        return ""
+    text = text.replace("{0}", _instance_label(run_v, run_r)).replace(
+        "{1}", _instance_label(own_v, own_r))
+    return f'<p id="version-note">{html.escape(text)}</p>'
+
+
+def _running_identity(port: int) -> tuple:
+    """(version, revision) of the instance on `port`; empty strings if unknown."""
+    try:
+        with urllib.request.urlopen(f"http://{HOST}:{port}/api/status", timeout=1) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+    except Exception:
+        return "", ""
+    return str(data.get("version") or ""), str(data.get("revision") or "")
+
+
 def _serve_already_running_page(preferred_port: int) -> None:
     """Open a browser page offering restart when NiCo is already running."""
     import http.server
@@ -157,6 +203,7 @@ THEME_CSS
     #btn-restart { background: var(--red); }
     button:hover { opacity: 0.85; }
     button:disabled { opacity: 0.45; cursor: default; }
+    #version-note { color: var(--yellow); font-weight: 600; }
     #msg { margin-top: 1rem; font-size: 0.82rem; color: var(--text-muted, var(--overlay0)); min-height: 1.2em; }
   </style>
 </head>
@@ -167,6 +214,7 @@ THEME_CSS
     <p>NiCo l&auml;uft bereits in einem anderen Fenster &ndash;
        oder das Tab wurde nur geschlossen.<br>
        Die laufende Instanz &ouml;ffnen, oder NiCo neu starten:</p>
+    VERSION_NOTE
     <div class="buttons">
       <button id="btn-open" onclick="openRunning()">Laufende Instanz &ouml;ffnen</button>
       <button id="btn-restart" onclick="doRestart()">Neu starten</button>
@@ -200,8 +248,11 @@ THEME_CSS
 </body>
 </html>"""
 
-    html = (_HTML
+    note = _version_note(_running_identity(preferred_port), (get_version(), get_revision()),
+                         str(config_manager.get_app_settings().get("language") or "en"))
+    page = (_HTML
             .replace("THEME_CSS", theme_css)
+            .replace("VERSION_NOTE", note)
             .replace("MINI_PORT", str(mini_port))
             .replace("PREF_PORT", str(preferred_port))
             .replace("RESTART_TOKEN", restart_token))
@@ -227,7 +278,7 @@ THEME_CSS
                 body = f'{{"running":{str(running).lower()}}}'.encode()
                 self._reply(200, "application/json", body)
             else:
-                self._reply(200, "text/html; charset=utf-8", html.encode())
+                self._reply(200, "text/html; charset=utf-8", page.encode())
 
         def do_POST(self):
             if not self._host_ok():
