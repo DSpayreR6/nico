@@ -9,6 +9,7 @@
 
 ### Bug Fixes
 
+- A rebuild now reacts at once: a window names the current step until the forecast appears, and a second click no longer starts a second run
 - The refusal to write a duplicate attribute now also covers `flake.nix` and host files, as it was announced to. When a save is refused, no file is touched
 - The hardware stash keeps files from earlier imports selectable, and a file NiCo could not judge no longer replaces one confirmed as this machine's
 - Replacing a hardware configuration no longer overwrites an earlier backup; each replaced file is kept under its own name

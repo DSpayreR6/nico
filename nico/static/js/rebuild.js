@@ -386,7 +386,67 @@ async function _rebuildPrecheck(hostname, opts) {
   });
 }
 
+/**
+ * Visible from the moment of the click until the forecast dialog takes over.
+ * Saving, writing and the Validator can take a while and used to show nothing,
+ * which read as "the click did not work". Names the current step, so a slow one
+ * can be told apart. Dialogs opened in between are appended later and sit on top.
+ */
+function _rebuildPreparing() {
+  const overlay = document.createElement('div');
+  overlay.className = 'overlay';
+  overlay.id = 'rebuild-preparing';
+  overlay.innerHTML = `
+    <div class="dialog-box" style="min-width:360px">
+      <p id="_rpr-status" style="margin:6px 0"></p>
+    </div>`;
+  document.body.appendChild(overlay);
+  const statusEl = overlay.querySelector('#_rpr-status');
+  let key = 'rebuild.preparing.check';
+  let started = Date.now();
+  const tick = () => {
+    statusEl.textContent = t(key, Math.round((Date.now() - started) / 1000));
+  };
+  tick();
+  const timer = setInterval(tick, 1000);
+  return {
+    step(next) { key = next; started = Date.now(); tick(); overlay.classList.remove('hidden'); },
+    hide() { overlay.classList.add('hidden'); },
+    close() { clearInterval(timer); overlay.remove(); },
+  };
+}
+
+// True from the click until the monitor is open or the run was abandoned. The
+// server only refuses a second rebuild at /start, which is far too late: two
+// runs would save and write the same files side by side until then.
+let _rebuildFlowActive = false;
+
 async function openRebuild(mode = 'switch') {
+  if (_rebuildFlowActive) {
+    showToast(t('rebuild.preparing.busy'), 'error');
+    return;
+  }
+  _rebuildFlowActive = true;
+  const preparing = _rebuildPreparing();
+  try {
+    await _rebuildFlow(mode, preparing);
+  } finally {
+    preparing.close();
+    _rebuildFlowActive = false;
+  }
+}
+
+async function _rebuildFlow(mode, preparing) {
+  // A rebuild that already runs (another tab, an earlier start) is shown right
+  // away instead of after all the steps below.
+  const current = await fetch('/api/rebuild/status').then(r => r.json()).catch(() => null);
+  if (current?.job?.running) {
+    showToast(t('rebuild.alreadyRunning'), 'error');
+    preparing.close();
+    attachRebuildMonitor();
+    return;
+  }
+
   // Foreign-file guard: pending foreign files need a decision before the
   // rebuild stages/commits anything
   if (!await checkForeignFilesBeforeCommit()) return;
@@ -407,6 +467,7 @@ async function openRebuild(mode = 'switch') {
         const dh = await csrfFetch('/api/rebuild/default-host').then(r => r.json());
         defaultHost = dh.default_host || null;
       } catch { /* kein Default */ }
+      preparing.hide();
       hostname = await _showHostPicker(hostInfo.hosts, {
         allowAll: false,
         title: t('rebuild.title'),
@@ -422,6 +483,7 @@ async function openRebuild(mode = 'switch') {
     }).catch(() => {});
   }
 
+  preparing.hide();
   const opts = await _showRebuildOptions(hostInfo, { hostname, mode });
   if (opts === null) return;  // abgebrochen
   // Ab hier gilt der im Dialog gewählte Modus, nicht der an openRebuild
@@ -430,14 +492,17 @@ async function openRebuild(mode = 'switch') {
   const effMode = opts.mode || mode;
 
   // Flake-Formular speichern falls dirty, dann alle Änderungen schreiben
+  preparing.step('rebuild.preparing.save');
   if (!await Sidebar.flakeSave()) return;
   if (!await _autoSave()) return;
   if (!await _writeNix()) return;
 
   // Validator auf dem geschriebenen Stand – rote Funde halten hier auf
+  preparing.step('rebuild.preparing.validate');
   if (!await _validationGate(hostname ? [hostname] : [], effMode)) return;
 
   // Vorschau: was wird kompiliert? Kann den Schonmodus einschalten.
+  preparing.close();
   const pre = await _rebuildPrecheck(hostname, opts);
   if (pre === null) return;  // abgebrochen
   opts.safeMode = pre.safeMode;
