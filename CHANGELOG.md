@@ -9,6 +9,7 @@
 
 ### Bug Fixes
 
+- The hardware stash keeps files from earlier imports selectable, and a file NiCo could not judge no longer replaces one confirmed as this machine's
 - Replacing a hardware configuration no longer overwrites an earlier backup; each replaced file is kept under its own name
 - Loading the configuration now requires the CSRF token. The request can rewrite externally changed files, and any web page open in the browser could trigger it
 - NiCo writes the current option names for GNOME, GDM and graphics. The old names still built, but only through aliases that nixpkgs drops sooner or later; older configs using them are still recognised on import

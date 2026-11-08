@@ -433,10 +433,12 @@ def stash_hw_files(nixos_dir: str) -> list[dict]:
     describe *this* machine are worth keeping - another host's file is in the
     git history and in the pre-import ZIP anyway, and offering it later as
     "this machine's" would be the mistake the whole check is about. MATCH and
-    UNKNOWN are kept, MISMATCH is not.
+    UNKNOWN are kept, MISMATCH is not. A file confirmed as this machine's is
+    never replaced by one that could not be judged.
     """
     import json
 
+    previous = {str(e["file"]): e for e in _stash_entries()}
     kept: list[dict] = []
     for f in find_hw_files(nixos_dir):
         if f.verdict == MISMATCH:
@@ -446,6 +448,9 @@ def stash_hw_files(nixos_dir: str) -> list[dict]:
         except OSError:
             continue
         dest = _stash_dir() / _stash_name(f.host)
+        if (f.verdict == UNKNOWN and dest.is_file()
+                and previous.get(dest.name, {}).get("verdict") == MATCH):
+            continue
         try:
             dest.parent.mkdir(parents=True, exist_ok=True)
             atomic.write_bytes(dest, payload)
@@ -462,32 +467,36 @@ def stash_hw_files(nixos_dir: str) -> list[dict]:
 
     if not kept:
         return []
+    # Files from earlier imports stay on disk, so they stay listed as well.
+    fresh = {e["file"] for e in kept}
+    merged = kept + [e for name, e in previous.items() if name not in fresh]
     try:
         atomic.write_text(
             _stash_dir() / _STASH_META,
-            json.dumps(kept, indent=2, ensure_ascii=False),
+            json.dumps(merged, indent=2, ensure_ascii=False),
         )
     except OSError:
         pass
     return kept
 
 
-def stashed_files() -> list[dict]:
-    """The parked files that still exist, newest stash first."""
+def _stash_entries() -> list[dict]:
+    """The valid entries of the stash metadata, [] when it is missing or broken."""
     import json
 
-    meta_file = _stash_dir() / _STASH_META
     try:
-        entries = json.loads(meta_file.read_text(encoding="utf-8"))
+        entries = json.loads((_stash_dir() / _STASH_META).read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return []
     if not isinstance(entries, list):
         return []
+    return [e for e in entries if isinstance(e, dict) and e.get("file")]
 
+
+def stashed_files() -> list[dict]:
+    """The parked files that still exist, newest stash first."""
     out = []
-    for e in entries:
-        if not isinstance(e, dict) or not e.get("file"):
-            continue
+    for e in _stash_entries():
         path = _stash_dir() / str(e["file"])
         if not path.is_file():
             continue
