@@ -9,6 +9,8 @@ rules check the host's own files; otherwise the root config files are used.
 """
 from __future__ import annotations
 
+import base64
+import binascii
 import hashlib
 import json
 import os
@@ -3203,6 +3205,36 @@ _NIXPKGS_LOOKUP_TIMEOUT = 20
 _removed_options_cache: dict[str, dict] = {}
 
 
+_NIX_BASE32 = "0123456789abcdfghijklmnpqrsvwxyz"
+
+
+def _store_path_for_nar_hash(nar_hash: str) -> "Path | None":
+    """Store path of a flake input, derived from its narHash in flake.lock.
+
+    Follows Nix's rule for fixed-output sources named "source": SHA-256 over a
+    fingerprint, folded to 20 bytes, written in Nix's base32.
+    """
+    if not isinstance(nar_hash, str) or not nar_hash.startswith("sha256-"):
+        return None
+    try:
+        digest = base64.b64decode(nar_hash[len("sha256-"):], validate=True)
+    except (binascii.Error, ValueError):
+        return None
+    if len(digest) != 32:
+        return None
+    fingerprint = f"source:sha256:{digest.hex()}:/nix/store:source"
+    folded = bytearray(20)
+    for i, byte in enumerate(hashlib.sha256(fingerprint.encode()).digest()):
+        folded[i % 20] ^= byte
+    chars = []
+    for n in range(31, -1, -1):
+        bit = n * 5
+        i, j = bit // 8, bit % 8
+        value = (folded[i] >> j) | (0 if i >= 19 else folded[i + 1] << (8 - j))
+        chars.append(_NIX_BASE32[value & 31])
+    return Path("/nix/store") / f"{''.join(chars)}-source"
+
+
 def _nixpkgs_source(nixos_dir: str, is_flake: bool) -> "Path | None":
     """Local source tree of the nixpkgs this config builds against.
 
@@ -3214,16 +3246,17 @@ def _nixpkgs_source(nixos_dir: str, is_flake: bool) -> "Path | None":
             lock = json.loads((Path(nixos_dir) / "flake.lock").read_text(encoding="utf-8"))
             nodes = lock["nodes"]
             name = nodes[lock["root"]]["inputs"]["nixpkgs"]
-            locked = nodes[name]["locked"]   # a list here (follows) raises TypeError
+            nar_hash = nodes[name]["locked"]["narHash"]   # a list (follows) raises TypeError
         except (OSError, ValueError, KeyError, TypeError):
             return None
-        literal = json.dumps(json.dumps(locked)).replace("$", "\\$")
-        cmd = ["nix", "--offline", "--extra-experimental-features", "nix-command flakes",
-               "eval", "--raw", "--expr", f"(builtins.fetchTree (builtins.fromJSON {literal})).outPath"]
-    else:
-        cmd = ["nix-instantiate", "--find-file", "nixpkgs"]
+        # Computed, not asked for: `nix --offline eval` with fetchTree downloads
+        # the whole of nixpkgs from GitHub when its fetcher cache is empty, even
+        # though the source sits in the store (measured 2026-11-08).
+        path = _store_path_for_nar_hash(nar_hash)
+        return path if path is not None and path.is_dir() else None
     try:
-        r = subprocess.run(cmd, capture_output=True, text=True,
+        r = subprocess.run(["nix-instantiate", "--find-file", "nixpkgs"],
+                           capture_output=True, text=True,
                            timeout=_NIXPKGS_LOOKUP_TIMEOUT)
     except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
         return None

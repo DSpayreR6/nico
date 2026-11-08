@@ -101,6 +101,35 @@ check("defektes lock", validator._nixpkgs_source(d, True) is None)
 d = tree({"flake.lock": '{"root":"r","nodes":{"r":{"inputs":{"nixpkgs":["a","b"]}}}}'})
 check("follows im lock", validator._nixpkgs_source(d, True) is None)
 
+print("Store-Pfad wird berechnet, nicht bei Nix erfragt")
+# Bekanntes Paar aus einer echten flake.lock (nixpkgs f9a75f4, 2026-11-08).
+KNOWN = "sha256-Wojg9lIH/hDH91iDVH2/EPw8oDSpxjxhXONbU1yf4Zg="
+expected = "/nix/store/4rwf9a42lpij7vhpwxjz8nzb3cpkf4zx-source"
+got = validator._store_path_for_nar_hash(KNOWN)
+check("bekannter Hash ergibt den bekannten Pfad", str(got) == expected, got)
+for bad in ("", None, "md5-abc", "sha256-kein*base64", "sha256-AAAA"):
+    check(f"unbrauchbar: {bad!r}", validator._store_path_for_nar_hash(bad) is None)
+
+
+def lock_with(nar):
+    return tree({"flake.lock": '{"root":"r","nodes":{"r":{"inputs":{"nixpkgs":"n"}},'
+                 '"n":{"locked":{"type":"github","narHash":"' + nar + '"}}}}'})
+
+
+def forbidden(*a, **k):
+    raise AssertionError("Flake-Weg darf keinen Prozess starten")
+
+
+orig_run, orig_path = validator.subprocess.run, validator._store_path_for_nar_hash
+validator.subprocess.run = forbidden
+try:
+    validator._store_path_for_nar_hash = lambda _h: SOURCE
+    check("vorhandene Quelle wird gefunden", validator._nixpkgs_source(lock_with(KNOWN), True) == SOURCE)
+    validator._store_path_for_nar_hash = lambda _h: pathlib.Path("/nix/store/gibt-es-nicht-source")
+    check("fehlende Quelle ergibt nichts", validator._nixpkgs_source(lock_with(KNOWN), True) is None)
+finally:
+    validator.subprocess.run, validator._store_path_for_nar_hash = orig_run, orig_path
+
 print("NiCo selbst schreibt die Option nicht mehr")
 from nico import config_manager, generator, importer
 data = dict(config_manager.DEFAULT_NIXOS_CONFIG)
