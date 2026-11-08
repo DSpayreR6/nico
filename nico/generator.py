@@ -146,10 +146,9 @@ _SHELL_PKGS = {"zsh": "zsh", "fish": "fish", "nushell": "nushell"}
 def _sec_boot(data: dict, brix: dict) -> "list[str]":
     boot_loader         = data.get("boot_loader", "none") or "none"
     boot_kernel_params  = (data.get("boot_kernel_params", "") or "").strip()
-    boot_initrd_systemd = data.get("boot_initrd_systemd", False)
     plymouth_enabled    = data.get("plymouth_enabled", False)
     plymouth_theme      = (data.get("plymouth_theme", "") or "").strip()
-    if not (boot_loader != "none" or boot_kernel_params or boot_initrd_systemd
+    if not (boot_loader != "none" or boot_kernel_params
             or plymouth_enabled or _has_section_brix(brix, "BOOT")):
         return []
     boot_efi_can_touch = data.get("boot_efi_can_touch", False)
@@ -170,8 +169,6 @@ def _sec_boot(data: dict, brix: dict) -> "list[str]":
     if boot_kernel_params:
         params = " ".join(f'"{nix_esc(p)}"' for p in boot_kernel_params.split())
         lines += [f"  boot.kernelParams = [ {params} ];"]
-    if boot_initrd_systemd:
-        lines += ["  boot.initrd.systemd.enable = true;"]
     if plymouth_enabled:
         lines += ["  boot.plymouth.enable = true;"]
         if plymouth_theme:

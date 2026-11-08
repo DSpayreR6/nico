@@ -463,7 +463,6 @@ function getFormData() {
     boot_config_limit:   parseInt(v('boot_config_limit') || '5', 10),
     boot_kernel_params:  v('boot_kernel_params'),
     plymouth_enabled:    ch('plymouth_enabled'),
-    boot_initrd_systemd: ch('boot_initrd_systemd'),
     plymouth_theme:      v('plymouth_theme'),
     printing:            ch('printing'),
     avahi:               ch('avahi'),
@@ -651,7 +650,6 @@ function populateFormFromData(data) {
     ch('plymouth_enabled', data.plymouth_enabled);
     togglePlymouthOptions(!!data.plymouth_enabled);
   }
-  if ('boot_initrd_systemd' in data) ch('boot_initrd_systemd', data.boot_initrd_systemd);
   if ('plymouth_theme'      in data) v('plymouth_theme',        data.plymouth_theme || '');
   if ('printing'           in data) ch('printing',            data.printing);
   if ('avahi'              in data) ch('avahi',               data.avahi);

@@ -121,6 +121,10 @@ ALL_RULES: list[Rule] = [
          "Doppelte Attribute",
          "Meldet doppelte Top-Level-Attribute die Nix nicht akzeptiert.",
          "error"),
+    Rule("removed_options",
+         "Entfernte NixOS-Optionen",
+         "Meldet Optionen, die das nixpkgs dieser Config nicht mehr kennt – Nix bricht den Bau dann ab.",
+         "warning"),
     Rule("imports_exist",
          "Import-Pfade vorhanden",
          "Prüft ob alle in imports referenzierten Dateipfade auf Platte existieren.",
@@ -3168,6 +3172,131 @@ def _rule_host_checks_pending(nixos_dir: str, config: dict, is_flake: bool,
 
 # ── Rule function registry ─────────────────────────────────────────────────────
 
+# ── Options removed from nixpkgs ───────────────────────────────────────────────
+#
+# nixpkgs marks every option it drops with mkRemovedOptionModule, and setting
+# one makes the evaluation fail. The list is read from the very nixpkgs this
+# config builds against, so it needs no upkeep and follows future releases.
+# Entries nixpkgs computes (a variable inside the list) cannot be read this way
+# and stay Nix's own business at build time.
+
+_RE_REMOVED_OPTION = re.compile(
+    r"""mkRemovedOptionModule\s*\[([^\]]*)\]\s*(?:''(.*?)''|"((?:[^"\\]|\\.)*)")?""",
+    re.S,
+)
+_RE_ATTR_SEGMENT = re.compile(r'"[^"]*"|[^.]+')
+_NIXPKGS_LOOKUP_TIMEOUT = 20
+
+# Parsing is cheap but runs on every validation; a source path never changes.
+_removed_options_cache: dict[str, dict] = {}
+
+
+def _nixpkgs_source(nixos_dir: str, is_flake: bool) -> "Path | None":
+    """Local source tree of the nixpkgs this config builds against.
+
+    Never touches the network. None when it is not available here – not
+    knowing is not a finding.
+    """
+    if is_flake:
+        try:
+            lock = json.loads((Path(nixos_dir) / "flake.lock").read_text(encoding="utf-8"))
+            nodes = lock["nodes"]
+            name = nodes[lock["root"]]["inputs"]["nixpkgs"]
+            locked = nodes[name]["locked"]   # a list here (follows) raises TypeError
+        except (OSError, ValueError, KeyError, TypeError):
+            return None
+        literal = json.dumps(json.dumps(locked)).replace("$", "\\$")
+        cmd = ["nix", "--offline", "--extra-experimental-features", "nix-command flakes",
+               "eval", "--raw", "--expr", f"(builtins.fetchTree (builtins.fromJSON {literal})).outPath"]
+    else:
+        cmd = ["nix-instantiate", "--find-file", "nixpkgs"]
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True,
+                           timeout=_NIXPKGS_LOOKUP_TIMEOUT)
+    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+        return None
+    path = Path(r.stdout.strip())
+    return path if r.returncode == 0 and r.stdout.strip() and path.is_dir() else None
+
+
+def _removed_options(source: Path) -> dict:
+    """{option path as tuple: reason} for one nixpkgs source tree."""
+    key = str(source)
+    if key in _removed_options_cache:
+        return _removed_options_cache[key]
+    removed: dict = {}
+    for module in (source / "nixos" / "modules").rglob("*.nix"):
+        try:
+            text = module.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        if "mkRemovedOptionModule" not in text:
+            continue
+        for m in _RE_REMOVED_OPTION.finditer(text):
+            if re.sub(r'"[^"]*"', "", m.group(1)).strip():
+                continue                     # computed entry
+            path = tuple(re.findall(r'"([^"]*)"', m.group(1)))
+            if not path:
+                continue
+            reason = next((ln.strip() for ln in (m.group(2) or m.group(3) or "").splitlines()
+                           if ln.strip()), "")
+            removed[path] = reason
+    _removed_options_cache[key] = removed
+    return removed
+
+
+def _attr_segments(path: str) -> tuple:
+    parts = [p.strip('"') for p in _RE_ATTR_SEGMENT.findall(path)]
+    return tuple(parts[1:] if parts[:1] == ["config"] else parts)
+
+
+def _is_home_manager_file(nix_file: Path, hm_dir: Path, content: str) -> bool:
+    """Home Manager has its own option tree; `programs.x` there is not NixOS's."""
+    return (nix_file.name == "home.nix"
+            or (hm_dir.exists() and nix_file.is_relative_to(hm_dir))
+            or "home.stateVersion" in content or "home.username" in content)
+
+
+def _rule_removed_options(nixos_dir: str, config: dict, is_flake: bool,
+                          host: str | None = None) -> list[Finding]:
+    from .importer import content_leaf_paths
+
+    source = _nixpkgs_source(nixos_dir, is_flake)
+    if source is None:
+        return []
+    removed = _removed_options(source)
+    if not removed:
+        return []
+    hm_dir = _hm_dir_path(nixos_dir)
+    findings = []
+    for nix_file, rel, content in _scoped_nix_files(nixos_dir, host):
+        if nix_file.name == "flake.nix" or _is_home_manager_file(nix_file, hm_dir, content):
+            continue
+        for leaf in sorted(content_leaf_paths(content)):
+            segments = _attr_segments(leaf)
+            # A removed option can be a whole subtree: setting anything below
+            # it counts as defining it.
+            hit = next((segments[:n] for n in range(1, len(segments) + 1)
+                        if segments[:n] in removed), None)
+            if hit is None:
+                continue
+            option = ".".join(hit)
+            line = next((i for i, text in enumerate(content.split("\n"), 1)
+                         if option in text.split("#", 1)[0]), 0)
+            where = f"{rel}:{line}" if line else rel
+            reason = removed[hit]
+            findings.append(Finding(
+                rule_id="removed_options",
+                severity="warning",
+                message=f"{where}: Die Option {option} wurde aus nixpkgs entfernt – der Bau bricht ab.",
+                message_key="validator.f.removed_options", params=[where, option],
+                detail=f"Begründung von nixpkgs: {reason}" if reason else "",
+                detail_key="validator.d.removed_options" if reason else "",
+                detail_params=[reason] if reason else [],
+            ))
+    return findings
+
+
 _RULE_FNS: dict[str, object] = {
     "user_in_config":        _rule_user_in_config,
     "flake_host_exists":     _rule_flake_host_exists,
@@ -3184,6 +3313,7 @@ _RULE_FNS: dict[str, object] = {
     "group_gid_system":      _rule_group_gid_system,
     "hardware_matches":      _rule_hardware_matches,
     "duplicate_attrs":       _rule_duplicate_attrs,
+    "removed_options":       _rule_removed_options,
     "nix_parses":            _rule_nix_parses,
     "imports_exist":         _rule_imports_exist,
     "brix_redundant":        _rule_brix_redundant,

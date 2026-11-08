@@ -561,12 +561,7 @@ function bindUI() {
   on('opengl',       'change', e => toggleOpenglOptions(e.target.checked));
   on('boot_loader',      'change', e => { toggleBootEfiOptions(e.target.value !== 'none'); schedulePreviewUpdate(); });
   on('plymouth_enabled', 'change', e => {
-    const checked = e.target.checked;
-    togglePlymouthOptions(checked);
-    if (checked) {
-      const cb = document.getElementById('boot_initrd_systemd');
-      if (cb && !cb.checked) cb.checked = true;
-    }
+    togglePlymouthOptions(e.target.checked);
     schedulePreviewUpdate();
   });
   on('pipewire',  'change', e => { togglePipewireOptions(e.target.checked); schedulePreviewUpdate(); });

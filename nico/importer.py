@@ -507,7 +507,12 @@ def _extract_fields(kv: 'dict[str, str]', clean: str) -> 'tuple[dict, set[str]]'
             if params:
                 r['boot_kernel_params'] = ' '.join(params); _mark('boot.kernelParams')
 
-    b('boot_initrd_systemd', 'boot.initrd.systemd.enable')
+    # `true` is the default since 26.05 and a build error since 26.11, so it is
+    # consumed and not written back. Only `true`: an explicit `false` says
+    # something else and stays in the file as a brick.
+    vt = _vt('boot.initrd.systemd.enable')
+    if vt is not None and _np.extract_bool(vt) is True:
+        _mark('boot.initrd.systemd.enable')
     b('plymouth_enabled',    'boot.plymouth.enable')
     s('plymouth_theme',      'boot.plymouth.theme')
 
