@@ -146,6 +146,20 @@ nico_profile_entry() {
              /^Original flake URL:/ && $4 ~ /DSpayreR6\/nico/ { print n, $4; exit }'
 }
 
+# "<version> <short commit>" of an installed NiCo, empty if there is none. The
+# profile pins one commit, whatever branch it came from, so "installed from dev"
+# says nothing about how old it is - this does.
+
+nico_profile_version() {
+    eval "$NIX profile list" 2>/dev/null \
+      | sed "s/$(printf '\033')\[[0-9;]*m//g" \
+      | awk '/^Original flake URL:/ { ours = ($4 ~ /DSpayreR6\/nico/) }
+             ours && /^Locked flake URL:/ {
+                 rev = $4; sub(/\?.*/, "", rev); sub(/.*\//, "", rev); rev = substr(rev, 1, 7) }
+             ours && /^Store paths:/ {
+                 v = $3; sub(/.*-nico-/, "", v); print v, rev; exit }'
+}
+
 # ── Running a command ────────────────────────────────────────────────────────
 # Shown, confirmed, then executed through eval so that the line on screen is
 # literally the line that runs – no second, hidden variant.
@@ -202,6 +216,12 @@ run_cmd() {
 install_cmd() {
     ask_cmd "$1" || return
     if [ "$LAST_STATUS" -ne 0 ]; then
+        # Only when the removal went through: rolling back after a failed
+        # removal would step back past the version that is still installed.
+        if [ "$REPLACING" = 1 ] && [ -z "$(nico_profile_entry)" ]; then
+            printf '%sThe old version was removed, the new one did not install.%s\n' "$C_DIM" "$C_OFF"
+            ask_cmd "$NIX profile rollback"
+        fi
         pause
         return
     fi
@@ -219,6 +239,31 @@ install_cmd() {
     pause
 }
 
+# `nix profile add` on a NiCo that is already installed changes nothing, warns
+# "'nico' is already added" and exits 0 (measured in the VM, 2026-11-08). The
+# install then looked successful and "Start NiCo now?" ran the old version. So
+# an existing install is removed first, in the one line shown on screen. It also
+# makes switching between main and dev possible, which an upgrade cannot do.
+
+REPLACING=0
+
+install_from() {
+    src=$1
+    if [ -z "$PROFILE_NAME" ]; then
+        install_cmd "$NIX $PROFILE_ADD $src"
+        return
+    fi
+    case "$src" in
+        *--refresh*) ;;
+        *) src="$src --refresh" ;;
+    esac
+    printf '%sNiCo is already installed, from %s.\n' "$C_DIM" "$PROFILE_URL"
+    printf 'Nix would keep that version, so it is replaced.%s\n' "$C_OFF"
+    REPLACING=1
+    install_cmd "$NIX profile remove $PROFILE_NAME && $NIX $PROFILE_ADD $src"
+    REPLACING=0
+}
+
 # ── Menu ─────────────────────────────────────────────────────────────────────
 # Green is the released state, red the development branch. The colour is never
 # the only signal – every line says so in words as well, because red/green is
@@ -232,11 +277,16 @@ menu() {
     PROFILE_URL=${entry#* }
     [ "$entry" = "" ] && PROFILE_NAME='' && PROFILE_URL=''
 
-    # Plain, not green: the script cannot tell whether the installed NiCo came
-    # from main or from dev, and it should not claim what it has not checked.
-    # NiCo's own info dialog answers that, with version and commit.
+    # Plain, not green: the installed version may be from either branch. The
+    # version and commit are shown because starting it fetches nothing.
     if [ -n "$(nico_bin)" ]; then
-        printf '%s  1  Start             the installed NiCo%s\n' "$C_PLAIN" "$C_OFF"
+        installed=$(nico_profile_version)
+        if [ -n "$installed" ]; then
+            printf '%s  1  Start             the installed NiCo (%s, %s)%s\n' \
+                "$C_PLAIN" "${installed%% *}" "${installed#* }" "$C_OFF"
+        else
+            printf '%s  1  Start             the installed NiCo%s\n' "$C_PLAIN" "$C_OFF"
+        fi
     else
         # Greyed out, never hidden: hiding it would renumber everything below
         # depending on the machine's state
@@ -279,7 +329,7 @@ while :; do
             fi
             ;;
         2) run_cmd     "$NIX run $REPO_MAIN" ;;
-        3) install_cmd "$NIX $PROFILE_ADD $REPO_MAIN" ;;
+        3) install_from "$REPO_MAIN" ;;
         4)
             if [ -z "$(nico_bin)" ]; then
                 printf '%sNothing installed to update – pick 3 for the released\n' "$C_DIM"
@@ -294,7 +344,7 @@ while :; do
         # --refresh on every dev command: without it Nix serves a cached copy
         # of the branch, which is how you end up testing yesterday's fix
         5) run_cmd     "$NIX run $REPO_DEV --refresh" ;;
-        6) install_cmd "$NIX $PROFILE_ADD $REPO_DEV --refresh" ;;
+        6) install_from "$REPO_DEV --refresh" ;;
         0|q|Q) exit 0 ;;
         *) printf '%sPick 1-6 or 0.%s\n\n' "$C_DIM" "$C_OFF" ;;
     esac
