@@ -19,6 +19,7 @@ from .brix import (
     extract_brick_blocks,
     find_nested_bricks,
     inject_brick_blocks,
+    input_still_used,
     new_nested_bricks,
     strip_brick_blocks,
     sync_outputs_args,
@@ -267,7 +268,9 @@ def modify_brick_in_file(
     from . import validator as _val
     broke = _val.breaks_parsing(content, final)
     if broke:
-        return False, "ERR_BRICK_BREAKS_FILE", [{"file": fname, "detail": broke}]
+        used = input_still_used(broke, final, old_blocks, new_blocks)
+        info = {"input": used[0], "brick": used[1]} if used else {}
+        return False, "ERR_BRICK_BREAKS_FILE", [{"file": fname, "detail": broke, **info}]
 
     try:
         atomic.write_text(fpath, final)

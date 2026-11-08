@@ -35,6 +35,10 @@ def _refused(err_str: str, details: list[dict], fname: str):
     """
     if err_str == "ERR_BRICK_NESTED":
         return _nested_reply(err_str, details, fname)
+    # An input still in use gets a sentence that says what to do; the name of
+    # the input and of the brick travel behind the separator tErr() splits on.
+    if details and details[0].get("input"):
+        err_str = f"ERR_INPUT_STILL_USED\x1f{details[0]['input']}\x1f{details[0]['brick']}"
     return jsonify({
         "error":  err_str,
         "file":   fname,

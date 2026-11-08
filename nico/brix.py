@@ -744,6 +744,37 @@ _MANAGED_OUTPUT_ARGS = frozenset(
     {"self", "nixpkgs", "home-manager", "nixos-hardware", "plasma-manager"})
 
 
+_UNDEFINED_AT = re.compile(r"undefined variable '([^']+)'\s+at\s*\S*?:(\d+):\d+")
+
+
+def input_still_used(message: str, final: str, old_blocks: dict[str, dict],
+                     new_blocks: dict[str, dict]) -> tuple[str, str] | None:
+    """(input, brick) if a write was refused because an input it drops is in use.
+
+    Removing an INPX brick also removes the name from `outputs`, so a brick
+    still using it fails as `undefined variable`. Nix's message is correct but
+    does not tell the user what to do, and its line number counts in the file
+    as it would be after the write, not the one on disk (yandex-browser,
+    2026-11-08) - so the brick is named instead of the line.
+
+    None when the message is about something else, or the use sits outside any
+    brick: then there is no brick to send the user to.
+    """
+    m = _UNDEFINED_AT.search(message)
+    if not m:
+        return None
+    name = m.group(1)
+    if name not in set(input_names_in_bricks(old_blocks)) - set(input_names_in_bricks(new_blocks)):
+        return None
+    current = None
+    for line in final.splitlines()[:int(m.group(2))]:
+        if start := _START.search(line):
+            current = start.group(3)
+        elif _END.search(line):
+            current = None
+    return (name, current) if current else None
+
+
 def sync_outputs_args(clean: str, old_blocks: dict[str, dict],
                       new_blocks: dict[str, dict]) -> str:
     """Bring the `outputs` argument list in line with the INPX bricks.

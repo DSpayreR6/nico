@@ -6,6 +6,8 @@
 
 ### Bug Fixes
 
+- Removing a flake input that is still in use now names the Nix-Brick using it
+
 ## 0.16.0 (2026-11-08)
 
 ### New Features

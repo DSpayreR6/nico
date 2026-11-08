@@ -242,6 +242,23 @@ else:
           and "solidcraft" in out_args(fpath.read_text(encoding="utf-8")),
           (r.status_code, r.get_json()))
 
+    # Martins Config, 2026-11-08: Input-Brick löschen, während ein Host-Brick
+    # ihn noch benutzt. Die Ablehnung stimmt, muss aber sagen, was zu tun ist.
+    still_used = "ERR_INPUT_STILL_USED\x1fsolidcraft\x1fhost-nix-vm"
+    unchanged = fpath.read_text(encoding="utf-8")
+    r = client.delete("/api/brick/SolidCraft?file=flake.nix", headers=hdr)
+    check("Löschen eines benutzten Inputs wird abgelehnt", r.status_code == 400,
+          (r.status_code, r.get_json()))
+    check("Meldung nennt Input und Nix-Brick", r.get_json().get("error") == still_used,
+          r.get_json())
+    r = client.patch("/api/brick/SolidCraft", headers=hdr, data=json.dumps(
+        {"inactive": True, "file": "flake.nix"}))
+    check("Deaktivieren bekommt dieselbe Meldung",
+          r.status_code == 400 and r.get_json().get("error") == still_used,
+          (r.status_code, r.get_json()))
+    check("flake.nix bleibt unverändert",
+          fpath.read_text(encoding="utf-8") == unchanged)
+
     r = patch("host-nix-vm", host_plain)
     check("Host-Brick ohne solidcraft geht", r.status_code == 200,
           (r.status_code, r.get_json()))

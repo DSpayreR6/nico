@@ -615,6 +615,7 @@
   "errors.ERR_UNBALANCED_BRACKETS": "括弧が対応していません",
   "errors.ERR_BRICK_NESTED": "内容に Nix-Brickのマーカーが含まれています。入れ子の Nix-Brickには対応していません。",
   "errors.ERR_BRICK_BREAKS_FILE": "この内容では Nix がファイルを読めなくなります。保存していません。",
+  "errors.ERR_INPUT_STILL_USED": "input「{0}」は Nix-Brick「{1}」でまだ使われています。保存していません。先にそこから削除してください。",
   "errors.ERR_INVALID_SPLIT_LINE": "無効な行番号。",
   "errors.ERR_SPLIT_OUT_OF_RANGE": "ブロックの内容の外の行番号。",
   "errors.ERR_NO_BRICK_NAME": "Nix-Brick名が指定されていません。",

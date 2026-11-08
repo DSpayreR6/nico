@@ -615,6 +615,7 @@
   "errors.ERR_UNBALANCED_BRACKETS": "Parenthèses non équilibrées",
   "errors.ERR_BRICK_NESTED": "Le contenu comporte des marqueurs de Nix-Brick : les Nix-Brix imbriqués ne sont pas pris en charge.",
   "errors.ERR_BRICK_BREAKS_FILE": "Nix ne pourrait plus lire le fichier : non enregistré.",
+  "errors.ERR_INPUT_STILL_USED": "L’input « {0} » est encore utilisé dans le Nix-Brick « {1} » : non enregistré. Retirez-le d’abord à cet endroit.",
   "errors.ERR_INVALID_SPLIT_LINE": "Numéro de ligne invalide.",
   "errors.ERR_SPLIT_OUT_OF_RANGE": "Numéro de ligne hors du contenu de la brique.",
   "errors.ERR_NO_BRICK_NAME": "Aucun nom de Nix-Brick fourni.",
