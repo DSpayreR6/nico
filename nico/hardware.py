@@ -377,13 +377,29 @@ def replace_with_local(target: Path, source: Path | None = None) -> Path:
 
     target.parent.mkdir(parents=True, exist_ok=True)
     if target.exists():
-        bak = target.with_name(target.name + IMPORT_BAK_SUFFIX)
-        if bak.exists():
-            bak.unlink()
-        target.replace(bak)
+        _keep_replaced(target)
 
     atomic.write_bytes(target, payload)
     return target
+
+
+def _keep_replaced(target: Path) -> None:
+    """Move `target` to the first free backup name; no backup is ever overwritten.
+
+    A file identical to an existing backup is already kept, so it is left where
+    it is and the caller's write replaces it.
+    """
+    content = target.read_bytes()
+    number = 1
+    while True:
+        suffix = IMPORT_BAK_SUFFIX if number == 1 else f"{IMPORT_BAK_SUFFIX}.{number}"
+        bak = target.with_name(target.name + suffix)
+        if not bak.exists():
+            target.replace(bak)
+            return
+        if bak.read_bytes() == content:
+            return
+        number += 1
 
 
 # ── Parking this machine's file across an import ─────────────────────────────

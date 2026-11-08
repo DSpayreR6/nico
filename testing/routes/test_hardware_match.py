@@ -275,6 +275,28 @@ with Machine("nix-vm", etc_nixos_hw=good):
     dec = hw.inspect(str(d))
 check("danach keine Frage mehr", dec.action == hw.OK, dec.action)
 
+# B26: no backup is ever overwritten.
+target = d / "hosts" / "nix-vm" / hw.HW_NAME
+first_bak = target.with_name(hw.HW_NAME + hw.IMPORT_BAK_SUFFIX)
+first_content = first_bak.read_bytes()
+second_import = hw_text(THERE_UUID) + "# second import\n"
+target.write_text(second_import, encoding="utf-8")
+with Machine("nix-vm", etc_nixos_hw=good):
+    hw.replace_with_local(target, good)
+second_bak = target.with_name(hw.HW_NAME + hw.IMPORT_BAK_SUFFIX + ".2")
+check("erste Sicherung bleibt beim zweiten Ersetzen", first_bak.read_bytes() == first_content)
+check("zweite Sicherung unter neuem Namen",
+      second_bak.is_file() and second_bak.read_text(encoding="utf-8") == second_import)
+check("eigene Datei auch beim zweiten Mal ersetzt",
+      HERE_UUID in target.read_text(encoding="utf-8"))
+target.write_text(second_import, encoding="utf-8")
+with Machine("nix-vm", etc_nixos_hw=good):
+    hw.replace_with_local(target, good)
+check("identische Datei legt keine weitere Sicherung an",
+      not target.with_name(hw.HW_NAME + hw.IMPORT_BAK_SUFFIX + ".3").exists())
+check("eigene Datei trotz vorhandener Sicherung ersetzt",
+      HERE_UUID in target.read_text(encoding="utf-8"))
+
 
 # ── 6 Bestätigung pro Host ───────────────────────────────────────────────────
 

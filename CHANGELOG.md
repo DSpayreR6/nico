@@ -9,6 +9,7 @@
 
 ### Bug Fixes
 
+- Replacing a hardware configuration no longer overwrites an earlier backup; each replaced file is kept under its own name
 - Loading the configuration now requires the CSRF token. The request can rewrite externally changed files, and any web page open in the browser could trigger it
 - NiCo writes the current option names for GNOME, GDM and graphics. The old names still built, but only through aliases that nixpkgs drops sooner or later; older configs using them are still recognised on import
 - NiCo no longer writes `boot.initrd.systemd.enable`. On nixos-unstable and from 26.11 the option stops the build, and enabling Plymouth used to switch it on without asking. The switch is gone: systemd in the initrd has been the default since 26.05, and Plymouth does not need the option. An imported `= true` is dropped, an imported `= false` now stays in the file as a brick instead of being lost
