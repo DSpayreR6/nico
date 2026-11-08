@@ -507,10 +507,21 @@ def load_host_config(nixos_dir: str, host_name: str) -> dict | None:
         return None
 
 
+class DuplicateAttrError(Exception):
+    """The generated file defines an attribute twice; Nix would refuse it."""
+
+    def __init__(self, names: list):
+        super().__init__(", ".join(names))
+        self.names = names
+
+
 def save_host_config(nixos_dir: str, host_name: str, data: dict) -> None:
-    """Generate and write {hosts_dir}/<host_name>/default.nix."""
+    """Generate and write {hosts_dir}/<host_name>/default.nix.
+
+    Raises DuplicateAttrError instead of writing a file Nix would refuse.
+    """
     import copy
-    from . import generator as _gen
+    from . import generator as _gen, validator as _validator
     from .brix import extract_brick_blocks
 
     cfg = load_config_settings(nixos_dir)
@@ -531,8 +542,9 @@ def save_host_config(nixos_dir: str, host_name: str, data: dict) -> None:
         host_dir / "hardware-configuration.nix"
     ).is_file()
 
+    content = _gen.generate_host_nix(data, host_name, hw_config)
+    duplicates = _validator.duplicate_attrs_in(content)
+    if duplicates:
+        raise DuplicateAttrError(duplicates)
     host_dir.mkdir(parents=True, exist_ok=True)
-    atomic.write_text(
-        nix_file,
-        _gen.generate_host_nix(data, host_name, hw_config)
-    )
+    atomic.write_text(nix_file, content)

@@ -9,7 +9,7 @@ from pathlib import Path
 
 from flask import jsonify, request
 
-from .. import atomic, config_manager, generator, git_manager, importer
+from .. import atomic, config_manager, generator, git_manager, importer, validator
 from ..brix import extract_brick_blocks, brix_content_to_bricks
 from ..core import (
     NestedBricksError as _NestedBricksError,
@@ -208,11 +208,12 @@ def register(app, ctx):
             if key.startswith("flake_"):
                 data[key] = val
 
+        flake_text = generator.generate_flake_nix(data, nixos_dir=str(nixos_path))
+        duplicates = validator.duplicate_attrs_in(flake_text)
+        if duplicates:
+            return jsonify({"error": "ERR_DUPLICATE_ATTR", "duplicates": duplicates}), 409
         try:
-            atomic.write_text(
-                flake_file,
-                generator.generate_flake_nix(data, nixos_dir=str(nixos_path))
-            )
+            atomic.write_text(flake_file, flake_text)
         except OSError as exc:
             return jsonify({"error": str(exc)}), 500
 
@@ -401,7 +402,10 @@ def register(app, ctx):
             return jsonify({"error": "ERR_STALE_FORM"}), 409
         data.pop("_co_path", None)
         data.pop("_co_ready", None)
-        config_manager.save_host_config(nixos_dir, host_name, data)
+        try:
+            config_manager.save_host_config(nixos_dir, host_name, data)
+        except config_manager.DuplicateAttrError as exc:
+            return jsonify({"error": "ERR_DUPLICATE_ATTR", "duplicates": exc.names}), 409
         return jsonify({"success": True})
 
     # One implementation for every save path – see core.push_after_save for why
@@ -436,7 +440,11 @@ def register(app, ctx):
 
         hw_config = (host_dir / "hardware-configuration.nix").exists()
         host_dir.mkdir(parents=True, exist_ok=True)
-        atomic.write_text(host_nix, generator.generate_host_nix(host_data, host_name, hw_config))
+        host_text = generator.generate_host_nix(host_data, host_name, hw_config)
+        duplicates = validator.duplicate_attrs_in(host_text)
+        if duplicates:
+            return jsonify({"error": "ERR_DUPLICATE_ATTR", "duplicates": duplicates}), 409
+        atomic.write_text(host_nix, host_text)
 
         if do_commit:
             try:

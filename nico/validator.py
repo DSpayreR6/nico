@@ -1407,6 +1407,18 @@ def nix_parse_error(content: str) -> str | None:
                 pass
 
 
+def duplicate_attrs_in(content: str) -> list:
+    """Attributes Nix reports as defined twice in `content`, [] if none.
+
+    Asks Nix instead of walking the text: a flake's `outputs = { self, ... }: {`
+    head looks like an attribute set to a text walker. Nix stops at the first
+    duplicate, so the list holds at most one name.
+    """
+    message = nix_parse_error(content) or ""
+    m = re.search(r"attribute '([^']+)' already defined", message)
+    return [m.group(1)] if m else []
+
+
 def breaks_parsing(before: str, after: str) -> str | None:
     """The message if `after` cannot be read but `before` could.
 

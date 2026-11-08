@@ -10,7 +10,7 @@ import re
 from datetime import datetime
 from pathlib import Path
 
-from . import atomic, config_manager, generator, git_manager, hm_generator, importer
+from . import atomic, config_manager, generator, git_manager, hm_generator, importer, validator
 from .brix import (
     FILE_FORMAT,
     SUPPORTED_FORMATS,
@@ -928,9 +928,7 @@ def write_config_files(
             "duplicates": duplicates[:10],
         }
 
-    atomic.write_text(conf_file, generated)
-    written = ["configuration.nix"]
-
+    flake_file, flake_text = None, None
     if data.get("flakes"):
         flake_file = nixos_path / "flake.nix"
         _flake_content = flake_file.read_text(encoding="utf-8") if flake_file.exists() else None
@@ -942,8 +940,22 @@ def write_config_files(
                 flake_brix = importer.ensure_flake_host_bricks(_flake_content, flake_brix)
                 if flake_brix:
                     data["flake_brick_blocks"] = flake_brix
-            atomic.write_text(flake_file, generator.generate_flake_nix(data, nixos_dir=str(nixos_path)))
-            written.append("flake.nix")
+            flake_text = generator.generate_flake_nix(data, nixos_dir=str(nixos_path))
+            # Checked before anything is written: one new file next to one old
+            # one would be worse than either.
+            duplicates = validator.duplicate_attrs_in(flake_text)
+            if duplicates:
+                return {
+                    "success":    False,
+                    "error":      "ERR_DUPLICATE_ATTR",
+                    "duplicates": duplicates,
+                }
+
+    atomic.write_text(conf_file, generated)
+    written = ["configuration.nix"]
+    if flake_text is not None:
+        atomic.write_text(flake_file, flake_text)
+        written.append("flake.nix")
 
     # Root home.nix is legacy (pre HM-refactor) and never written anymore;
     # HM files are managed separately in hm_dir/<username>.nix.
