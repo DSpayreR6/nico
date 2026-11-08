@@ -736,7 +736,7 @@
   "admin.settings.rubrikDirs": "Directorios",
   "admin.settings.rubrikGit": "Git",
   "admin.settings.rubrikEditor": "Editor",
-  "admin.settings.gitSync": "Sincronización Git activada",
+  "admin.settings.gitSync": "Sincronizar con remote (pull, push)",
   "admin.settings.gitStatusOnly": "Comprobar el estado de Git de todos modos",
   "preview.configTab": "Mostrar configuration.nix",
   "preview.flakeTab": "Mostrar flake.nix",

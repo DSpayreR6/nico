@@ -854,7 +854,7 @@
   "admin.settings.rubrikDirs":      "Verzeichnisse",
   "admin.settings.rubrikGit":       "Git",
   "admin.settings.rubrikEditor":    "Editor",
-  "admin.settings.gitSync":         "Git-Sync aktiviert",
+  "admin.settings.gitSync":         "Mit Remote abgleichen (Pull, Push)",
   "admin.settings.gitStatusOnly":   "Git-Status trotzdem prüfen",
   "admin.settings.theme":          "Theme",
   "admin.settings.codeViewPlain":  "Code-Ansicht beim Start: Plain (ohne Nix-Brix-Annotationen)",

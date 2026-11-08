@@ -730,7 +730,7 @@
   "admin.settings.rubrikGeneral": "General",
   "admin.settings.rubrikAppearance": "Appearance",
   "admin.settings.rubrikRebuild": "Rebuild",
-  "admin.settings.gitSync": "Git sync enabled",
+  "admin.settings.gitSync": "Sync with remote (pull, push)",
   "admin.settings.gitStatusOnly": "Check Git status anyway",
   "admin.settings.theme": "Theme",
   "admin.settings.codeViewPlain": "Code view on start: plain (without Nix-Brix annotations)",

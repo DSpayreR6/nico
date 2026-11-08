@@ -736,7 +736,7 @@
   "admin.settings.rubrikDirs": "目录",
   "admin.settings.rubrikGit": "Git",
   "admin.settings.rubrikEditor": "编辑器",
-  "admin.settings.gitSync": "启用 Git 同步",
+  "admin.settings.gitSync": "与 remote 同步（pull、push）",
   "admin.settings.gitStatusOnly": "仍然检查 Git 状态",
   "preview.configTab": "显示 configuration.nix",
   "preview.flakeTab": "显示 flake.nix",

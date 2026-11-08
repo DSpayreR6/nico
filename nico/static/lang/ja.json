@@ -736,7 +736,7 @@
   "admin.settings.rubrikDirs": "ディレクトリ",
   "admin.settings.rubrikGit": "Git",
   "admin.settings.rubrikEditor": "エディタ",
-  "admin.settings.gitSync": "Git同期を有効化",
+  "admin.settings.gitSync": "remote と同期（pull、push）",
   "admin.settings.gitStatusOnly": "Gitステータスを常に確認",
   "preview.configTab": "configuration.nixを表示",
   "preview.flakeTab": "flake.nixを表示",
