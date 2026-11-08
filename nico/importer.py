@@ -553,7 +553,8 @@ def _extract_fields(kv: 'dict[str, str]', clean: str) -> 'tuple[dict, set[str]]'
 
     # ── Desktop ───────────────────────────────────────────────────────────────
     desktop_extra_keys = {
-        'gnome':   ['services.xserver.enable', 'services.xserver.displayManager.gdm.enable'],
+        'gnome':   ['services.xserver.enable', 'services.displayManager.gdm.enable',
+                    'services.xserver.displayManager.gdm.enable'],
         'kde':     ['services.xserver.enable', 'services.displayManager.sddm.enable'],
         'plasma5': ['services.xserver.enable'],
         'xfce':    ['services.xserver.enable', 'services.xserver.displayManager.lightdm.enable'],
@@ -564,6 +565,7 @@ def _extract_fields(kv: 'dict[str, str]', clean: str) -> 'tuple[dict, set[str]]'
         'hyprland': [],
     }
     for de_name, de_key in [
+        ('gnome',    'services.desktopManager.gnome.enable'),
         ('gnome',    'services.xserver.desktopManager.gnome.enable'),
         ('kde',      'services.desktopManager.plasma6.enable'),
         ('plasma5',  'services.xserver.desktopManager.plasma5.enable'),

@@ -117,8 +117,8 @@ _DE_SNIPPETS: dict[str, str] = {
     "none": "",
     "gnome": """\
   services.xserver.enable = true;
-  services.xserver.displayManager.gdm.enable = true;
-  services.xserver.desktopManager.gnome.enable = true;""",
+  services.displayManager.gdm.enable = true;
+  services.desktopManager.gnome.enable = true;""",
     "kde": """\
   services.xserver.enable = true;
   services.displayManager.sddm.enable = true;
@@ -558,9 +558,9 @@ def _sec_hardware(data: dict, brix: dict) -> "list[str]":
     elif cpu_microcode == "amd":
         hw_lines += ["  hardware.cpu.amd.updateMicrocode = true;"]
     if data.get("opengl"):
-        hw_lines += ["  hardware.opengl.enable = true;"]
+        hw_lines += ["  hardware.graphics.enable = true;"]
         if data.get("opengl_32bit"):
-            hw_lines += ["  hardware.opengl.driSupport32Bit = true;"]
+            hw_lines += ["  hardware.graphics.enable32Bit = true;"]
     if data.get("zram_swap"):
         hw_lines += ["  zramSwap.enable = true;"]
     if data.get("openrgb"):
