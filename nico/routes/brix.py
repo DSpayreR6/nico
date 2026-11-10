@@ -9,7 +9,8 @@ from pathlib import Path
 
 from flask import jsonify, request
 
-from ..brix import extract_brick_blocks, format_brick, next_order_for_section, check_bracket_balance, deactivate_body, activate_body
+from ..brix import (extract_brick_blocks, format_brick, next_order_for_section,
+                    check_bracket_balance, deactivate_body, activate_body, valid_section)
 from ..core import (
     brick_body as _brick_body,
     brick_blocks_for_file as _brick_blocks_for_file,
@@ -88,6 +89,10 @@ def register(app, ctx):
             return jsonify({"error": "ERR_NO_BRICK_NAME"}), 400
         if not re.fullmatch(r'[\w\-]+', name):
             return jsonify({"error": "ERR_INVALID_NAME"}), 400
+        # The section ends up in the marker line - see brix.valid_section.
+        section = valid_section(section)
+        if section is None:
+            return jsonify({"error": "ERR_NO_SECTION"}), 400
         name_collision = [False]
 
         def _add(blocks):
@@ -331,7 +336,8 @@ def register(app, ctx):
         fname   = body.get("file", "configuration.nix")
         if not name:
             return jsonify({"error": "ERR_NO_BRICK_NAME"}), 400
-        if not section:
+        section = valid_section(section) if section else None
+        if section is None:
             return jsonify({"error": "ERR_NO_SECTION"}), 400
         if not isinstance(order, int) or order < 1:
             return jsonify({"error": "ERR_INVALID_ORDER"}), 400

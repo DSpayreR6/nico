@@ -7,6 +7,11 @@
 ### Bug Fixes
 
 - Removing a flake input that is still in use now names the Nix-Brick using it
+- A Nix-Brick whose end marker is missing or misspelt no longer takes the rest of the file with it. Its content stays in the file as ordinary text and the Nix-Brix behind it are found again; before, the next load reduced the file to its skeleton
+- A Nix-Brick in a zone the file does not have (a host that is gone, outputs extra in a file without outputs) is placed in front of the closing brace instead of disappearing
+- Loading no longer creates a `configuration.nix` next to a `flake.nix` that has none, and an externally changed file is written once instead of twice
+- The time machine takes a checkpoint before it goes back, so a state that was not saved yet is no longer lost
+- Cleaning up oversized files only deletes files the report itself lists; a path from outside the config directory or a small file is refused
 
 ## 0.16.0 (2026-11-08)
 

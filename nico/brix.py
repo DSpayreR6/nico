@@ -196,6 +196,17 @@ def normalize_section(name: str) -> str:
     return LEGACY_SECTIONS.get(name, name)
 
 
+def valid_section(name: str) -> str | None:
+    """The section code for a name that came in from outside, None if unusable.
+
+    A section travels from the browser into a marker line. Anything is
+    accepted that normalises to a code; a line break or a slash would tear the
+    marker apart, and the brick behind it would stop being one.
+    """
+    code = normalize_section(name if isinstance(name, str) else "")
+    return code if _CODE_RE.fullmatch(code) else None
+
+
 def section_file_label(code: str) -> str:
     """English text written after the code into the .nix section header."""
     code = normalize_section(code)
@@ -343,34 +354,42 @@ def find_nested_bricks(nix_content: str) -> list[dict]:
     """
     findings: list[dict] = []
     current_name: str | None = None
+    start_idx = 0       # line index of the start marker of the open brick
+    mark = 0            # len(findings) when that brick was opened
 
-    for lineno, line in enumerate(nix_content.splitlines(), start=1):
+    lines = nix_content.splitlines()
+    i = 0
+    while i < len(lines):
+        line = lines[i]
         if current_name is None:
             m = _START.search(line)
-            if m:
-                current_name = m.group(3)
-                continue
-            m_old = _START_OLD.search(line)
-            if m_old:
-                current_name = m_old.group(1)
-            continue
-
-        m_inner = _START.search(line)
-        if m_inner:
-            findings.append({
-                "outer": current_name,
-                "inner": m_inner.group(3),
-                "line":  lineno,
-            })
-            continue
-
-        # Same closing condition as extract_brick_blocks: only the matching
-        # name ends the block, regardless of marker format.
-        m_end     = _END.search(line)
-        m_end_old = _END_OLD.search(line)
-        end_name  = (m_end and m_end.group(1)) or (m_end_old and m_end_old.group(1))
-        if end_name == current_name:
+            m_old = None if m else _START_OLD.search(line)
+            if m or m_old:
+                current_name = m.group(3) if m else m_old.group(1)
+                start_idx, mark = i, len(findings)
+        else:
+            m_inner = _START.search(line)
+            if m_inner:
+                findings.append({
+                    "outer": current_name,
+                    "inner": m_inner.group(3),
+                    "line":  i + 1,
+                })
+            else:
+                # Same closing condition as extract_brick_blocks: only the
+                # matching name ends the block, regardless of marker format.
+                m_end     = _END.search(line)
+                m_end_old = _END_OLD.search(line)
+                end_name  = (m_end and m_end.group(1)) or (m_end_old and m_end_old.group(1))
+                if end_name == current_name:
+                    current_name = None
+        i += 1
+        if i == len(lines) and current_name is not None:
+            # Never closed: not a brick, so nothing sat "inside" it either.
+            # Same rule as extract_brick_blocks.
+            del findings[mark:]
             current_name = None
+            i = start_idx + 1
 
     return findings
 
@@ -402,7 +421,12 @@ def extract_brick_blocks(nix_content: str) -> dict[str, dict]:
     so they get migrated on the next write-back.
     New-format bricks whose body contains nested legacy sub-blocks are
     expanded into individual bricks (see expand_nested_legacy).
-    Malformed or unclosed blocks are silently ignored.
+    A start marker that is never closed is not a brick: it is skipped and the
+    search goes on right behind it. Its content is plain file text then –
+    strip_brick_blocks leaves it in place by the same rule. The parser used
+    to stay "inside" such a block until the end of the file, so one typo in
+    an end marker hid every brick behind it, and the stripping counterpart
+    dropped everything behind it (revision 2026-11-10, B32).
     """
     blocks: dict[str, dict] = {}
     lines = nix_content.splitlines(keepends=True)
@@ -414,8 +438,12 @@ def extract_brick_blocks(nix_content: str) -> dict[str, dict]:
     current_inactive: bool = False
     is_legacy: bool = False
     legacy_auto_order: int = 1  # used for migrating legacy blocks
+    start_idx = 0               # line index of the start marker of the open block
 
-    for line in lines:
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        i += 1
         if current_name is None:
             m = _START.search(line)
             if m:
@@ -425,6 +453,7 @@ def extract_brick_blocks(nix_content: str) -> dict[str, dict]:
                 current_name    = m.group(3)
                 current_inactive = bool(m.group(4))
                 current_lines   = [line]
+                start_idx       = i - 1
                 # A German section name from an older NiCo counts as legacy too:
                 # rebuilding the text rewrites the marker with the section code
                 is_legacy       = current_section != raw_section
@@ -436,6 +465,7 @@ def extract_brick_blocks(nix_content: str) -> dict[str, dict]:
                     current_order   = legacy_auto_order
                     current_inactive = False
                     current_lines   = [line]
+                    start_idx       = i - 1
                     is_legacy       = True
         else:
             current_lines.append(line)
@@ -464,13 +494,22 @@ def extract_brick_blocks(nix_content: str) -> dict[str, dict]:
                 current_inactive = False
                 is_legacy        = False
 
+        if i == len(lines) and current_name is not None:
+            # Reached the end inside a block: its start marker has no partner.
+            # Forget it and look again from the line behind it.
+            current_name     = None
+            current_lines    = []
+            current_inactive = False
+            is_legacy        = False
+            i = start_idx + 1
+
     return expand_nested_legacy(blocks)
 
 
 def strip_brick_blocks(nix_content: str) -> str:
     """Remove all brick blocks (including their marker lines) from nix_content.
     Handles both new format (# <brick:) and legacy format (# <brix:).
-    Only exits a block when the matching end marker (same format + same name) is found.
+    Only exits a block when the end marker with the same name is found.
     Orphaned end markers (no matching start) are also stripped.
 
     The blank line that follows a block goes with it. inject_brick_blocks
@@ -479,49 +518,61 @@ def strip_brick_blocks(nix_content: str) -> str:
     add one more: Martins flake.nix collected 48 of them in blocks of 8 to 13
     on 2026-10-30 and it looked like NiCo scribbling in the file. Stripping
     and injecting have to be symmetrical, or the file never settles.
-    Found 2026-11-01."""
+    Found 2026-11-01.
+
+    A start marker that is never closed takes only itself away, never what
+    follows it. Skipping "until the matching end marker" meant skipping to the
+    end of the file when that marker was missing or misspelt, and every write
+    path that regenerates a file from the stripped text then made the loss
+    permanent: a typo in one end marker left a configuration.nix with nothing
+    but its skeleton (revision 2026-11-10, B32). The marker line goes like any
+    orphaned marker, the lines behind it are read again as ordinary text."""
     lines = nix_content.splitlines(keepends=True)
     result: list[str] = []
     in_brick   = False
-    brick_fmt  = None   # 'new' or 'old'
     brick_name = None
     eat_blank  = False  # the separator right after a block we just removed
+    start_idx  = 0      # line index of the start marker of the open block
 
-    for line in lines:
-        if not in_brick:
-            if eat_blank:
-                eat_blank = False
-                if not line.strip():
+    i = 0
+    while True:
+        while i < len(lines):
+            line = lines[i]
+            i += 1
+            if not in_brick:
+                if eat_blank:
+                    eat_blank = False
+                    if not line.strip():
+                        continue
+                m = _START.search(line)
+                m_old = None if m else _START_OLD.search(line)
+                if m or m_old:
+                    in_brick   = True
+                    brick_name = m.group(3) if m else m_old.group(1)
+                    start_idx  = i - 1
                     continue
-            m = _START.search(line)
-            if m:
-                in_brick   = True
-                brick_fmt  = 'new'
-                brick_name = m.group(3)
-                continue
-            m_old = _START_OLD.search(line)
-            if m_old:
-                in_brick   = True
-                brick_fmt  = 'old'
-                brick_name = m_old.group(1)
-                continue
-            # Strip orphaned end markers that have no matching start
-            if _END.search(line) or _END_OLD.search(line):
-                continue
-            result.append(line)
-        else:
-            # Inside a block: only exit on the matching format AND name
-            if brick_fmt == 'new':
-                m_end = _END.search(line)
-                if m_end and m_end.group(1) == brick_name:
-                    in_brick = brick_fmt = brick_name = None
-                    eat_blank = True
+                # Strip orphaned end markers that have no matching start
+                if _END.search(line) or _END_OLD.search(line):
+                    continue
+                result.append(line)
             else:
-                m_end = _END_OLD.search(line)
-                if m_end and m_end.group(1) == brick_name:
-                    in_brick = brick_fmt = brick_name = None
+                # Inside a block: only the matching name ends it, in either
+                # marker format - the same condition extract_brick_blocks
+                # uses. The two must agree on where a block ends, or one
+                # keeps as text what the other returns as a brick.
+                m_end     = _END.search(line)
+                m_end_old = _END_OLD.search(line)
+                end_name  = (m_end and m_end.group(1)) or (m_end_old and m_end_old.group(1))
+                if end_name == brick_name:
+                    in_brick, brick_name = False, None
                     eat_blank = True
-            # All lines inside a block are skipped (continue implied by else branch)
+                # All other lines inside a block are skipped
+        if not in_brick:
+            break
+        # End of file inside a block: its start marker has no partner. Nothing
+        # was appended since that marker, so only the scan position moves back.
+        in_brick, brick_name = False, None
+        i = start_idx + 1
     return "".join(result)
 
 
@@ -559,13 +610,26 @@ def inject_brick_blocks(nix_content: str, blocks: dict[str, dict]) -> str:
     if not blocks:
         return nix_content
 
+    # A zone brick is placed at its section header and nowhere else. Without
+    # that header in the file it used to be left out of the result without a
+    # word - a host brick whose host is not in the outputs, a brick moved to
+    # OUTX in a file that has no such zone (revision 2026-11-10, B38). Such a
+    # brick is treated like one with an unknown section instead: it goes in
+    # front of the closing brace, marker and section unchanged, so it finds
+    # its zone again as soon as the header is back.
+    zones_present = set()
+    for line in nix_content.splitlines():
+        m = _SECTION_HDR.search(line)
+        if m:
+            zones_present.add(section_of_header(m.group(1)))
+
     # Separate zone bricks (immediate injection) from regular bricks
     zone_bricks: dict[str, list[dict]] = {}
     regular_blocks: dict[str, dict] = {}
     for name, block in blocks.items():
         sec = normalize_section(block.get("section", ""))
         block = {**block, "section": sec}
-        if _is_zone_section(sec):
+        if _is_zone_section(sec) and sec in zones_present:
             zone_bricks.setdefault(sec, []).append(block)
         else:
             regular_blocks[name] = block

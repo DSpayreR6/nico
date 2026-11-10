@@ -764,6 +764,16 @@ def clean_large_files(nixos_dir: str, paths: list[str], delete_from_disk: bool =
     if any(p in [x[0] for x in report["published"]] for p in paths):
         return False, ERR_BLOB_PUBLISHED, {}
 
+    # Only what the report itself lists. The paths arrive from the browser and
+    # every one of them was deleted below - `../other/file` just as well as a
+    # 12-byte configuration.nix (revision 2026-11-10, S10). The report holds
+    # repo-relative names of files that really are oversized, so membership
+    # is path validation and size check in one.
+    reported = {p for p, _ in report["worktree"]} | {p for p, _ in report["local"]}
+    paths = [p for p in paths if p in reported]
+    if not paths:
+        return False, "ERR_NO_FILE", {}
+
     _ensure_identity(nixos_dir)
     result = {"backup_branch": "", "commit": "", "removed": [], "deleted": []}
 
@@ -1264,6 +1274,16 @@ def rollback(nixos_dir: str, commit_hash: str) -> tuple[bool, str]:
                                  cwd=nixos_dir)
     if rc != 0 or not target_list:
         return False, ERR_COMMIT_NOT_FOUND
+
+    # Checkpoint first. `git checkout <hash> -- <file>` overwrites whatever is
+    # in the working tree without asking, so anything not committed yet would
+    # be in no checkpoint afterwards - the time machine destroying the one
+    # state it cannot bring back (revision 2026-11-10, B40). A clean tree
+    # yields no commit. If the checkpoint fails, nothing is restored: going on
+    # would trade a visible error for a silent loss.
+    ok_backup, msg_backup, _skipped = auto_commit(nixos_dir, label="NiCo: backup before rollback")
+    if not ok_backup:
+        return False, msg_backup
 
     target_files = set(target_list)
 
