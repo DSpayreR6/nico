@@ -13,7 +13,7 @@ from .. import atomic, config_manager, generator, git_manager, importer, validat
 from ..brix import extract_brick_blocks, brix_content_to_bricks
 from ..core import (
     NestedBricksError as _NestedBricksError,
-    get_nico_type as _get_nico_type,
+    flake_is_managed as _flake_is_managed,
     read_config_file as _read_config_file,
     write_raw_config_file as _write_raw_config_file,
     load_and_normalize_config as _load_and_normalize_config,
@@ -193,8 +193,9 @@ def register(app, ctx):
 
         # Only touch nico-managed flake.nix files
         _flake_content = flake_file.read_text(encoding="utf-8") if flake_file.exists() else None
-        if _flake_content is not None and _get_nico_type(_flake_content) is None:
-            return jsonify({"success": True})  # external flake.nix – never overwrite
+        if _flake_content is not None and not _flake_is_managed(_flake_content):
+            # external flake.nix, or one NiCo cannot represent – never overwrite
+            return jsonify({"success": True})
 
         # Build data: base from configuration.nix, then overlay flake.nix, then incoming
         data = config_manager.load_config(nixos_dir) or {}

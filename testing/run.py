@@ -120,8 +120,19 @@ def _managed_fields_from_original(config_dir: Path) -> dict[str, Any]:
 def _write_nico_roundtrip(config_dir: Path) -> None:
     data = config_manager.load_config(str(config_dir))
 
+    # The same guard the product applies (revision 2026-11-10, package 5a): a
+    # file NiCo cannot represent is not regenerated. The runner called the
+    # generators directly and so kept producing the damage the product no
+    # longer does – 12 of 13 result/flake.nix had lost their outputs block.
     cfg_path = config_dir / "configuration.nix"
-    if cfg_path.exists():
+    flake_path = config_dir / "flake.nix"
+    home_path = config_dir / "home.nix"
+    keep_cfg = cfg_path.exists() and importer.config_unmappable(_read_text(cfg_path))
+    keep_flake = flake_path.exists() and \
+        importer.flake_unmappable(_read_text(flake_path)) is not None
+    keep_home = home_path.exists() and importer.config_unmappable(_read_text(home_path))
+
+    if cfg_path.exists() and not keep_cfg:
         content = _read_text(cfg_path)
         clean = strip_brick_blocks(content)
         recognized = importer.parse_config(clean)
@@ -138,15 +149,14 @@ def _write_nico_roundtrip(config_dir: Path) -> None:
     if (config_dir / "hardware-configuration.nix").exists():
         data["hardware_config"] = True
 
-    flake_path = config_dir / "flake.nix"
     if flake_path.exists():
         data["flakes"] = True
         flake_content = _read_text(flake_path)
         data.update(importer.parse_flake_nix(flake_content))
-        data["flake_brick_blocks"] = importer.build_flake_brix(flake_content)
+        if not keep_flake:
+            data["flake_brick_blocks"] = importer.build_flake_brix(flake_content)
 
-    home_path = config_dir / "home.nix"
-    if home_path.exists():
+    if home_path.exists() and not keep_home:
         home_content = _read_text(home_path)
         clean_home = strip_brick_blocks(home_content)
         hm = importer.parse_home_config(clean_home)
@@ -158,16 +168,17 @@ def _write_nico_roundtrip(config_dir: Path) -> None:
         data["home_manager"] = hm
         data["hm_brick_blocks"] = hm_blocks
 
-    cfg_path.write_text(generator.generate_configuration_nix(data), encoding="utf-8")
+    if not keep_cfg:
+        cfg_path.write_text(generator.generate_configuration_nix(data), encoding="utf-8")
 
-    if data.get("flakes"):
+    if data.get("flakes") and not keep_flake:
         flake_path.write_text(
             generator.generate_flake_nix(data, nixos_dir=str(config_dir)),
             encoding="utf-8",
         )
 
     hm = dict(data.get("home_manager") or {})
-    if hm.get("enabled") or home_path.exists():
+    if (hm.get("enabled") or home_path.exists()) and not keep_home:
         hm["hm_brick_blocks"] = data.get("hm_brick_blocks", {})
         home_path.write_text(hm_generator.generate_home_nix(hm), encoding="utf-8")
 

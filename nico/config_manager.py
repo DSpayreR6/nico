@@ -448,14 +448,42 @@ def load_config(nixos_config_dir: str) -> dict:
     return data
 
 
+class NotMappableError(Exception):
+    """The file on disk has a form NiCo cannot write back; it stays as it is.
+
+    Raised by the two functions that regenerate a module file from the form
+    model. The server turns it into ERR_NOT_MAPPABLE, so no route has to
+    remember the check on its own – the one that forgot would be the one
+    that overwrites a `let … in` config with defaults.
+    """
+
+    def __init__(self, rel_path: str):
+        super().__init__(rel_path)
+        self.rel_path = rel_path
+
+
+def _refuse_unmappable(nix_file: Path, rel_path: str) -> None:
+    from . import importer as _imp
+    try:
+        if nix_file.is_file() and _imp.config_unmappable(
+                nix_file.read_text(encoding="utf-8")):
+            raise NotMappableError(rel_path)
+    except OSError:
+        pass
+
+
 def save_config(nixos_config_dir: str, data: dict) -> None:
-    """Generate configuration.nix and write it to nixos_config_dir."""
+    """Generate configuration.nix and write it to nixos_config_dir.
+
+    Raises NotMappableError instead of replacing a file NiCo cannot represent.
+    """
     import copy
     from . import generator as _gen
     from .brix import extract_brick_blocks
 
     data = copy.copy(data)
     nix_file  = Path(nixos_config_dir) / "configuration.nix"
+    _refuse_unmappable(nix_file, "configuration.nix")
 
     # Preserve brick_blocks from the existing file when not supplied
     if not data.get("brick_blocks") and nix_file.exists():
@@ -518,7 +546,8 @@ class DuplicateAttrError(Exception):
 def save_host_config(nixos_dir: str, host_name: str, data: dict) -> None:
     """Generate and write {hosts_dir}/<host_name>/default.nix.
 
-    Raises DuplicateAttrError instead of writing a file Nix would refuse.
+    Raises DuplicateAttrError instead of writing a file Nix would refuse, and
+    NotMappableError instead of replacing a file NiCo cannot represent.
     """
     import copy
     from . import generator as _gen, validator as _validator
@@ -529,6 +558,7 @@ def save_host_config(nixos_dir: str, host_name: str, data: dict) -> None:
     host_dir = Path(nixos_dir) / hosts_dir_name / host_name
     nix_file = host_dir / "default.nix"
     data     = copy.copy(data)
+    _refuse_unmappable(nix_file, f"{hosts_dir_name}/{host_name}/default.nix")
 
     if not data.get("brick_blocks") and nix_file.exists():
         try:

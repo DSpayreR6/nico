@@ -57,6 +57,15 @@ Ausgrauen von "/tmp beim Booten leeren" ohne Wertverlust, und das Zahnrad
 als Umschalter – inklusive der Regel, dass ein offener Unterdialog Vorrang
 hat.
 
+## test_unmappable.py
+
+Nicht abbildbare Dateien, 19 Prüfungen: eine `configuration.nix` mit
+`let … in` und eine `flake.nix` mit `@inputs` erscheinen im Raw-Editor statt
+im Formular, mit Hinweis und ohne Panel-Schalter; Speichern schreibt genau
+den Editor-Text; eine abbildbare Host-Datei daneben zeigt weiter ihr
+Formular. Legt Wegwerf-Config und XDG_CONFIG_HOME selbst an. Das Gegenstück
+ohne Browser ist `testing/routes/test_rev1110_guard.py` (84 Prüfungen).
+
 ## test_validator_gate.py
 
 Der Validator vor dem Bauen, 27 Prüfungen: rote Funde öffnen die Ausgabe,

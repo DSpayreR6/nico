@@ -11,6 +11,14 @@ async function loadConfig() {
   _brixContextFtype = 'co';
   hideIntegrityWarning();
   await _populateCoFormFromFile('configuration.nix');
+  // A configuration.nix NiCo cannot represent: the form stays empty and
+  // locked (_coFormReady is false after the call above), the raw editor
+  // takes its place. No preview either – it would show a config generated
+  // from defaults, which is not what is on disk.
+  if (await Sidebar.showIfUnmappable('configuration.nix')) {
+    loadHmFileList();
+    return;
+  }
   Sidebar.refreshPanelToggle('configuration.nix', 'co');
 
   // Collapse everything on (re)load

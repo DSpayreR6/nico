@@ -11,7 +11,7 @@ from flask import jsonify, request
 
 from .. import atomic, config_manager, generator, git_manager, importer
 from ..brix import extract_brick_blocks
-from ..core import get_nico_type as _get_nico_type
+from ..core import flake_is_managed as _flake_is_managed
 
 
 def register(app, ctx):
@@ -59,7 +59,7 @@ def register(app, ctx):
         flake_path = Path(nixos_dir) / "flake.nix"
         if not flake_path.exists():
             return jsonify({"error": "ERR_NO_FLAKE"}), 400
-        if _get_nico_type(flake_path.read_text(encoding="utf-8")) is None:
+        if not _flake_is_managed(flake_path.read_text(encoding="utf-8")):
             return jsonify({"error": "ERR_EXTERNAL_FLAKE"}), 400
 
         data = config_manager.load_config(nixos_dir) or {}
@@ -122,7 +122,7 @@ def register(app, ctx):
         flake_path = Path(nixos_dir) / "flake.nix"
         if not flake_path.exists():
             return jsonify({"error": "ERR_NO_FLAKE"}), 400
-        if _get_nico_type(flake_path.read_text(encoding="utf-8")) is None:
+        if not _flake_is_managed(flake_path.read_text(encoding="utf-8")):
             return jsonify({"error": "ERR_EXTERNAL_FLAKE"}), 400
 
         data = config_manager.load_config(nixos_dir) or {}

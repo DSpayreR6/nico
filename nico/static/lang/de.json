@@ -722,6 +722,7 @@
   "errors.ERR_DETACH_FAILED":    "Config konnte nicht aus NiCo gelöst werden.",
   "errors.ERR_FILE_WRITE":       "Datei konnte nicht geschrieben werden.",
   "errors.ERR_MANAGED_FILE":     "Diese Datei wird von NiCo verwaltet.",
+  "errors.ERR_NOT_MAPPABLE":     "NiCo kann diese Datei nicht als Formular darstellen. Sie bleibt unverändert und lässt sich nur direkt als Text bearbeiten.",
   "errors.ERR_NOT_HM_FILE":     "Keine Home-Manager-Datei – nur .nix-Dateien im HM-Verzeichnis können hier bearbeitet werden.",
   "errors.ERR_NO_FILES":         "Keine Dateien zum Speichern.",
   "errors.ERR_BRICK_NAME_EXISTS": "Ein Nix-Brick mit diesem Namen existiert bereits.",
@@ -952,6 +953,7 @@
 
   "sidebar.rawPanelHint":   "Diese Datei wird nicht von NiCo verwaltet. Du kannst sie rechts direkt bearbeiten.",
   "sidebar.panelOffHint":   "Panel deaktiviert. Die Datei kann rechts direkt bearbeitet werden.",
+  "sidebar.unmappableHint": "NiCo kann diese Datei nicht als Formular darstellen, weil sie anders aufgebaut ist als die Dateien, die NiCo selbst schreibt. Sie bleibt deshalb unverändert und kann rechts direkt bearbeitet werden.",
   "panelToggle.panel":       "Panel ein",
   "panelToggle.off":         "Panels aus",
   "panelToggle.brixError":   "Nix-Brix unvollständig – bitte alle Blöcke schließen bevor das Panel aktiviert wird.",

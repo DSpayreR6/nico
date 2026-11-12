@@ -189,6 +189,48 @@ def parse(content: str) -> ParseResult:
     _walk_binding_set(binding_set, src_bytes, result)
     return result
 
+def body_shape(content: str) -> str | None:
+    """How a module file is built: 'plain', 'other', or None without tree-sitter.
+
+    'plain' is the one form NiCo can write back: an attribute set, optionally
+    behind a `{ formals }:` head. Everything else changes its meaning when the
+    file is regenerated, because the generator always writes `{ args }: {`:
+
+      { … }: let x = 1; in { … }   the let bindings are gone, `x` is undefined
+      { … }: lib.mkIf c { … }      the condition is gone
+      { … }: with lib; { … }       `mkDefault` and friends are undefined
+      { … }@args: { … }            `args` is undefined
+      { … }: rec { … }             self references are undefined
+
+    parse() took the first binding set anywhere in the tree, which for `let`
+    is the helper bindings and not the config (revision 2026-11-10, B33).
+
+    Only the form is judged. A syntax error inside an otherwise plain body
+    still gives 'plain'; a file broken so badly that no form is visible gives
+    'other', because regenerating from a parse that failed loses whatever the
+    parser could not place.
+    """
+    lang = _load_language()
+    if lang is None:
+        return None
+    try:
+        import tree_sitter
+        tree = tree_sitter.Parser(lang).parse(content.encode("utf-8"))
+    except Exception:
+        return None
+
+    node = tree.root_node.child_by_field_name("expression")
+    if node is None:
+        return "plain"
+    if node.type == "function_expression":
+        if node.child_by_field_name("universal") is not None:
+            return "other"
+        node = node.child_by_field_name("body")
+        if node is None:
+            return "plain"
+    return "plain" if node.type == "attrset_expression" else "other"
+
+
 # ── Tree walking helpers ───────────────────────────────────────────────────────
 
 def _find_first(node, node_type: str):

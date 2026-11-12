@@ -17,6 +17,7 @@ from flask import Flask, jsonify, render_template, request
 
 from . import atomic, config_manager, generator, git_manager, importer, routes, validator
 from .brix import brix_content_to_bricks
+from .core import reimport_flake as _reimport_flake_core
 from .core import validate_user_path as _validate_user_path
 from .version import get_revision, get_version
 
@@ -109,6 +110,12 @@ def create_app() -> Flask:
         if hostname not in _ALLOWED_HOST_NAMES:
             return jsonify({"error": "ERR_HOST_HEADER"}), 403
 
+    # One answer for every route that would regenerate a file NiCo cannot
+    # represent: save_config/save_host_config raise, nothing was written.
+    @app.errorhandler(config_manager.NotMappableError)
+    def _not_mappable(exc):
+        return jsonify({"error": "ERR_NOT_MAPPABLE", "file": exc.rel_path}), 409
+
     # Sudo-Passwort-Nonces: nonce → (password, expiry_timestamp)
     # POST /api/sudo/acquire speichert, rebuild_stream/symlink lesen einmalig.
     import time as _time_mod
@@ -168,29 +175,18 @@ def create_app() -> Flask:
             importer.rescue_into_bricks(data, original_content)
         if (Path(nixos_dir) / "hardware-configuration.nix").exists():
             data["hardware_config"] = True
-        config_manager.save_config(nixos_dir, data)
+        try:
+            config_manager.save_config(nixos_dir, data)
+        except config_manager.NotMappableError:
+            # The imported configuration.nix has a form NiCo cannot write
+            # back. It is already in place, exactly as it came, and stays so.
+            pass
         return data
 
     def _reimport_flake(nixos_dir: str, data: dict) -> None:
-        """Parse an imported flake.nix, merge its fields, regenerate it cleanly."""
-        flake_path = Path(nixos_dir) / "flake.nix"
-        if not flake_path.exists():
-            return
-        data["flakes"] = True
-        try:
-            flake_content = flake_path.read_text(encoding="utf-8")
-            flake_fields  = importer.parse_flake_nix(flake_content)
-            flake_brix    = importer.flake_brix_for(flake_content)
-            flake_brix    = importer.ensure_flake_host_bricks(flake_content, flake_brix)
-            data.update(flake_fields)
-            config_manager.save_config(nixos_dir, data)
-            data["flake_brick_blocks"] = flake_brix
-            atomic.write_text(
-                flake_path,
-                generator.generate_flake_nix(data, nixos_dir=nixos_dir)
-            )
-        except OSError:
-            pass
+        """Parse an imported flake.nix, merge its fields, regenerate it cleanly.
+        A flake.nix NiCo cannot represent is left untouched (core.reimport_flake)."""
+        _reimport_flake_core(nixos_dir, data)
 
     def _safe_import_dest(root: Path, rel_name: str) -> "Path | None":
         """Resolve rel_name below root; None when it would escape (zip-slip)

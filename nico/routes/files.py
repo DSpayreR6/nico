@@ -15,6 +15,7 @@ from ..core import (
     _SAFE_NAME_RE,
     _VALID_FILE_TYPES,
     classify_filename as _classify_filename,
+    file_unmappable as _file_unmappable,
     get_nico_type as _get_nico_type,
     list_config_tree as _list_config_tree,
     read_config_file as _read_config_file,
@@ -388,6 +389,11 @@ def register(app, ctx):
         except OSError:
             return jsonify({"error": "ERR_FILE_READ"}), 500
 
+        # An empty form for a file NiCo cannot represent would look like a
+        # config without settings – and invite saving one.
+        if importer.config_unmappable(content):
+            return jsonify({"error": "ERR_NOT_MAPPABLE", "file": rel})
+
         parsed = importer.parse_config(content)
         return jsonify(parsed)
 
@@ -469,13 +475,16 @@ def register(app, ctx):
             if target.suffix != '.nix':
                 return jsonify({"error": "ERR_NOT_NIX"}), 400
             try:
-                # Refuse to overwrite NiCo-managed files unless explicitly in raw mode
+                # Refuse to overwrite NiCo-managed files unless explicitly in raw mode.
+                # A file NiCo cannot represent has no other mode: there the
+                # raw editor is the only way to change it at all.
                 if target.name in ('configuration.nix', 'flake.nix'):
                     try:
                         existing = target.read_text(encoding='utf-8')
                     except OSError:
                         existing = ''
-                    if _get_panel_mode(existing) != 'r':
+                    if _get_panel_mode(existing) != 'r' and \
+                            not _file_unmappable(nixos_dir, rel, existing):
                         return jsonify({"error": "ERR_MANAGED_FILE"}), 400
 
                 _cfg_s   = config_manager.load_config_settings(nixos_dir)
@@ -594,6 +603,9 @@ def register(app, ctx):
             # When switching to panel mode, verify brix markers are intact
             if mode == 'p' and not _check_brix_integrity(base):
                 return jsonify({"error": "ERR_BRIX_INCOMPLETE"}), 400
+            # … and that there is a panel this file fits into at all
+            if mode == 'p' and _file_unmappable(nixos_dir, rel, base, _get_nico_type(base)):
+                return jsonify({"error": "ERR_NOT_MAPPABLE", "file": rel}), 400
 
             updated = _set_panel_mode(base, mode)
 

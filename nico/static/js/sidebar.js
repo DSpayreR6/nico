@@ -833,6 +833,19 @@ const Sidebar = (() => {
     const fileName = path.split('/').pop();
     const ftype    = data.file_type || 'unknown';
 
+    // A file NiCo cannot represent (let … in, mkIf, a flake with its own
+    // outputs layout) has no form to show. The form would be empty, and
+    // saving it would replace the file with defaults – so there is only the
+    // raw editor, with the reason next to it. No panel switch either: there
+    // is no panel to switch to.
+    if (data.unmappable) {
+      _updatePanelToggle('unmappable', '');
+      _showRawView(data.content || '', fileName, path);
+      _showLeftPanel('panel-off', fileName, { panelOff: true, unmappable: true });
+      _setRawModeUI(true);
+      return;
+    }
+
     _updatePanelToggle(ftype, data.content || '');
 
     // Panel-capable files respect the #p/#r flag
@@ -912,7 +925,7 @@ const Sidebar = (() => {
     }
   }
 
-  function _showLeftPanel(mode, fileName, { panelOff = false, flagSource = null } = {}) {
+  function _showLeftPanel(mode, fileName, { panelOff = false, flagSource = null, unmappable = false } = {}) {
     // Hide all panels
     document.getElementById('config-form')?.classList.add('hidden');
     document.getElementById('flake-form')?.classList.add('hidden');
@@ -932,9 +945,10 @@ const Sidebar = (() => {
       const offSource    = document.getElementById('panel-off-source');
       hwWarn?.classList.toggle('hidden', panelOff || fileName !== 'hardware-configuration.nix');
       regularHint?.classList.toggle('hidden', panelOff);
-      offHint?.classList.toggle('hidden', !panelOff);
+      offHint?.classList.toggle('hidden', !panelOff || unmappable);
+      document.getElementById('unmappable-hint')?.classList.toggle('hidden', !unmappable);
       if (offSource) {
-        offSource.classList.toggle('hidden', !panelOff);
+        offSource.classList.toggle('hidden', !panelOff || unmappable);
         if (panelOff && flagSource) {
           offSource.textContent = flagSource === 'file' ? t('panelToggle.sourceFile') : t('panelToggle.sourceSettings');
         }
@@ -1816,6 +1830,20 @@ const Sidebar = (() => {
     _showLeftPanel('none');
   }
 
+  /** Shows `path` in the raw editor when NiCo cannot represent it, and says
+   *  so by returning true. For the ways into the form that do not come
+   *  through selectFile() – the start of the program, above all. */
+  async function _showIfUnmappable(path) {
+    try {
+      const r = await csrfFetch(`/api/file?path=${encodeURIComponent(path)}`);
+      const d = await r.json();
+      if (d.error || !d.unmappable) return false;
+      setActiveFile(path, path.split('/').pop());
+      await _renderFileIntoView(path, d, { skipTypeDialog: true });
+      return true;
+    } catch { return false; }
+  }
+
   async function _refreshPanelToggle(path, ftype) {
     try {
       const r = await csrfFetch(`/api/file?path=${encodeURIComponent(path)}`);
@@ -1837,5 +1865,6 @@ const Sidebar = (() => {
     loadTree,
     clearFlkIfActive,
     refreshPanelToggle: _refreshPanelToggle,
+    showIfUnmappable: _showIfUnmappable,
   };
 })();

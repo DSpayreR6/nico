@@ -12,6 +12,10 @@
 - Loading no longer creates a `configuration.nix` next to a `flake.nix` that has none, and an externally changed file is written once instead of twice
 - The time machine takes a checkpoint before it goes back, so a state that was not saved yet is no longer lost
 - Cleaning up oversized files only deletes files the report itself lists; a path from outside the config directory or a small file is refused
+- A config file NiCo cannot show as a form is no longer rewritten. Files built as `let … in`, `lib.mkIf`, `with lib;`, `{ … }@args:` or `rec { … }` lost that part on the first load; they now stay byte for byte as they are and open in the raw editor, with a note saying why. The same holds for host files and Home Manager files
+- Importing a foreign `flake.nix` no longer replaces its `outputs` block with a single default host. A flake NiCo cannot represent – `outputs` with `@inputs` or `let`, flat `inputs.x.url`, `nixConfig`, hosts from another nixpkgs, a pinned or forked home-manager – is left untouched and edited in the raw editor
+- The nixpkgs channel is read from `github:nixos/nixpkgs/…` in lower case too; before, such a flake silently moved to `nixos-unstable`
+- With both home-manager and plasma-manager as inputs, switching off "follows" for home-manager now stays off
 
 ## 0.16.0 (2026-11-08)
 

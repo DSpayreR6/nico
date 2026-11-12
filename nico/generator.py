@@ -780,38 +780,19 @@ def _home_manager_ref_for_nixpkgs_channel(channel: str) -> str | None:
     return None
 
 
-def generate_flake_nix(data: dict, nixos_dir: "str | Path | None" = None) -> str:
-    """Generate flake.nix from panel data.
+def flake_known_input_lines(data: dict) -> "list[str]":
+    """The lines NiCo writes for the inputs it manages through panel fields.
 
-    nixos_dir: used to resolve the configured hosts_dir (config.json).
-    Host data comes exclusively from data["flake_hosts"].
+    Its own function because importer.flake_unmappable asks the same question
+    from the other side: does a foreign flake.nix declare these inputs the way
+    NiCo would write them? One source, so the two cannot drift apart.
     """
-    hosts_dir = "hosts"
-    if nixos_dir:
-        from . import config_manager as _cm
-        hosts_dir = (_cm.load_config_settings(str(nixos_dir)).get("hosts_dir") or "hosts").strip() or "hosts"
+    channel    = data.get("flake_nixpkgs_channel") or "nixos-unstable"
+    hm_input   = bool(data.get("flake_hm_input"))
+    hm_follows = bool(data.get("flake_hm_follows", True))
+    hw_input   = bool(data.get("flake_nixos_hardware"))
+    pm_input   = bool(data.get("flake_plasma_manager"))
 
-    hostname    = data.get("hostname", "nixos") or "nixos"
-    description = data.get("flake_description") or f"NixOS configuration for {hostname}"
-    channel     = data.get("flake_nixpkgs_channel") or "nixos-unstable"
-    arch        = data.get("flake_arch") or "x86_64-linux"
-    hm_input    = bool(data.get("flake_hm_input"))
-    hm_follows  = bool(data.get("flake_hm_follows", True))
-    hm_module   = bool(data.get("flake_hm_module", True))
-    hw_input    = bool(data.get("flake_nixos_hardware"))
-    pm_input    = bool(data.get("flake_plasma_manager"))
-
-    flake_hosts: list[dict] = data.get("flake_hosts") or []
-    brix = dict(data.get("flake_brick_blocks", {}))
-
-    # Legacy: if "outputs-declaration" Brix in "Outputs" section exists, the
-    # entire outputs block is managed by that Brix.
-    has_outputs_declaration = (
-        "outputs-declaration" in brix
-        and brix["outputs-declaration"].get("section") == "Outputs"
-    )
-
-    # ── inputs block ──────────────────────────────────────────────────────────
     inp: list[str] = [f'    nixpkgs.url = "github:NixOS/nixpkgs/{channel}";']
     if hm_input:
         hm_ref = _home_manager_ref_for_nixpkgs_channel(channel)
@@ -837,8 +818,39 @@ def generate_flake_nix(data: dict, nixos_dir: "str | Path | None" = None) -> str
             '      inputs.home-manager.follows = "home-manager";',
             '    };',
         ]
+    return inp
 
-    inputs_block = "\n".join(inp)
+
+def generate_flake_nix(data: dict, nixos_dir: "str | Path | None" = None) -> str:
+    """Generate flake.nix from panel data.
+
+    nixos_dir: used to resolve the configured hosts_dir (config.json).
+    Host data comes exclusively from data["flake_hosts"].
+    """
+    hosts_dir = "hosts"
+    if nixos_dir:
+        from . import config_manager as _cm
+        hosts_dir = (_cm.load_config_settings(str(nixos_dir)).get("hosts_dir") or "hosts").strip() or "hosts"
+
+    hostname    = data.get("hostname", "nixos") or "nixos"
+    description = data.get("flake_description") or f"NixOS configuration for {hostname}"
+    arch        = data.get("flake_arch") or "x86_64-linux"
+    hm_input    = bool(data.get("flake_hm_input"))
+    hm_module   = bool(data.get("flake_hm_module", True))
+    hw_input    = bool(data.get("flake_nixos_hardware"))
+    pm_input    = bool(data.get("flake_plasma_manager"))
+
+    flake_hosts: list[dict] = data.get("flake_hosts") or []
+    brix = dict(data.get("flake_brick_blocks", {}))
+
+    # Legacy: if "outputs-declaration" Brix in "Outputs" section exists, the
+    # entire outputs block is managed by that Brix.
+    has_outputs_declaration = (
+        "outputs-declaration" in brix
+        and brix["outputs-declaration"].get("section") == "Outputs"
+    )
+
+    inputs_block = "\n".join(flake_known_input_lines(data))
 
     # ── build content ─────────────────────────────────────────────────────────
     content = (

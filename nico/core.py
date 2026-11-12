@@ -236,6 +236,12 @@ def modify_brick_in_file(
     if ftype is None or ftype == "":
         ftype = "nd"
 
+    # Brick actions take the file apart and put it together again around the
+    # section markers. A file NiCo cannot represent has none of them where
+    # they are expected; it is edited as text.
+    if file_unmappable(nixos_dir, fname, content, ftype):
+        return False, "ERR_NOT_MAPPABLE", []
+
     if ftype == "hm":
         try:
             content, blocks = normalize_hm_content(content)
@@ -379,8 +385,15 @@ def hm_update_hash(content: str) -> str:
 
 
 def normalize_hm_content(content: str) -> tuple[str, dict]:
-    """Return normalized HM content plus extracted/derived brick blocks."""
+    """Return normalized HM content plus extracted/derived brick blocks.
+
+    A file NiCo cannot represent (importer.config_unmappable) comes back
+    untouched – `let … in` is the usual way to write a Home Manager file, and
+    regenerating it would drop the bindings the body refers to.
+    """
     existing_bricks = extract_brick_blocks(content)
+    if importer.config_unmappable(content):
+        return content, existing_bricks
     clean_content   = strip_brick_blocks(content)
     hm              = importer.parse_home_config(clean_content)
     blocks          = dict(existing_bricks)
@@ -391,6 +404,102 @@ def normalize_hm_content(content: str) -> tuple[str, dict]:
     hm_data                  = dict(hm)
     hm_data["hm_brick_blocks"] = blocks
     return hm_generator.generate_home_nix(hm_data), blocks
+
+
+# ── Files NiCo cannot represent ────────────────────────────────────────────────
+
+def flake_is_managed(content: str) -> bool:
+    """True when NiCo may regenerate this flake.nix.
+
+    Two conditions, and until revision 2026-11-10 only the first was asked:
+    the file carries a nico stamp, and its content has the shape the generator
+    produces. The stamp alone says little – every file gets one the first time
+    it is opened in the interface.
+    """
+    return get_nico_type(content) is not None and \
+        importer.flake_unmappable(content) is None
+
+
+def file_unmappable(nixos_dir: str, rel_path: str, content: str,
+                    ftype: "str | None" = None) -> bool:
+    """True when the file at rel_path is one NiCo would regenerate, and cannot.
+
+    Covers the files with a form behind them: the root flake.nix, the root
+    configuration.nix, host files, Home Manager files and anything typed 'co'
+    or 'hm'. Every other file is raw anyway.
+    """
+    parts = Path(rel_path).parts
+    if not parts:
+        return False
+    settings = config_manager.load_config_settings(nixos_dir)
+    hosts_dir = (settings.get("hosts_dir") or "hosts").strip() or "hosts"
+    hm_dir = (settings.get("hm_dir") or "home").strip() or "home"
+
+    if rel_path == "flake.nix":
+        return importer.flake_unmappable(content) is not None
+    if ftype == "fl":
+        return False        # a flake.nix elsewhere is never regenerated
+    is_module = (
+        rel_path == "configuration.nix"
+        or ftype in ("co", "hm")
+        or (len(parts) == 3 and parts[0] == hosts_dir and parts[2] == "default.nix")
+        or (len(parts) >= 2 and parts[0] == hm_dir)
+    )
+    return is_module and importer.config_unmappable(content)
+
+
+def unmappable_files(nixos_dir: str) -> list[str]:
+    """The root files with a form behind them that NiCo has to leave alone."""
+    found: list[str] = []
+    for rel in ("configuration.nix", "flake.nix"):
+        path = Path(nixos_dir) / rel
+        try:
+            if path.is_file() and file_unmappable(
+                    nixos_dir, rel, path.read_text(encoding="utf-8")):
+                found.append(rel)
+        except OSError:
+            pass
+    return found
+
+
+def reimport_flake(nixos_dir: str, data: dict) -> bool:
+    """Take over an imported flake.nix: merge its fields, regenerate it.
+
+    Returns False and leaves the file exactly as it is when NiCo cannot
+    represent it (importer.flake_unmappable). It then carries no "Generated
+    by NiCo" line and is edited in the raw editor.
+    """
+    flake_path = Path(nixos_dir) / "flake.nix"
+    if not flake_path.exists():
+        return False
+    data["flakes"] = True
+    try:
+        flake_content = flake_path.read_text(encoding="utf-8")
+        if importer.flake_unmappable(flake_content) is not None:
+            # The `flakes` field still decides whether NiCo builds with
+            # --flake (B34, open), so it is stored as before; only the
+            # flake.nix itself is not touched.
+            try:
+                config_manager.save_config(nixos_dir, data)
+            except config_manager.NotMappableError:
+                pass
+            return False
+        flake_fields  = importer.parse_flake_nix(flake_content)
+        flake_brix    = importer.flake_brix_for(flake_content)
+        flake_brix    = importer.ensure_flake_host_bricks(flake_content, flake_brix)
+        data.update(flake_fields)
+        try:
+            config_manager.save_config(nixos_dir, data)
+        except config_manager.NotMappableError:
+            pass            # configuration.nix stays as it is, the flake is fine
+        data["flake_brick_blocks"] = flake_brix
+        atomic.write_text(
+            flake_path,
+            generator.generate_flake_nix(data, nixos_dir=nixos_dir)
+        )
+        return True
+    except OSError:
+        return False
 
 
 # ── Flake host management ──────────────────────────────────────────────────────
@@ -716,6 +825,8 @@ def read_config_file(nixos_dir: str, rel_path: str, *, persist_stamp: bool = Tru
         "path": rel,
         "file_type": ftype,
         "writable": target.suffix in _WRITABLE_SUFFIXES,
+        # The interface shows such a file in the raw editor instead of a form.
+        "unmappable": file_unmappable(nixos_dir, rel, content, ftype or path_type),
     }
 
 
@@ -828,7 +939,11 @@ def load_and_normalize_config(nixos_dir: str) -> dict:
             hash_status = generator.check_version_hash(nix_content)
             if data is None:
                 data = config_manager.get_defaults()
-            if hash_status in ("modified", "no_hash"):
+            if importer.config_unmappable(nix_content):
+                # Not parsed, not rewritten: the model keeps its defaults and
+                # the file stays byte for byte (revision 2026-11-10, B33).
+                data["brick_blocks"] = extract_brick_blocks(nix_content)
+            elif hash_status in ("modified", "no_hash"):
                 existing_bricks = extract_brick_blocks(nix_content)
                 nix_without_bricks = strip_brick_blocks(nix_content)
                 recognized = importer.parse_config(nix_without_bricks)
@@ -869,7 +984,7 @@ def load_and_normalize_config(nixos_dir: str) -> dict:
             # in configuration.nix, so there is nothing to persist - and the
             # call created a configuration.nix from defaults next to a flake
             # that has none (revision 2026-11-10, B39).
-            if get_nico_type(flake_content) is not None and \
+            if flake_is_managed(flake_content) and \
                     "# Generated by NiCo" not in flake_content:
                 flake_brix = importer.build_flake_brix(flake_content)
                 flake_brix = importer.ensure_flake_host_bricks(flake_content, flake_brix)
@@ -904,6 +1019,7 @@ def load_and_normalize_config(nixos_dir: str) -> dict:
             if generator.check_version_hash(p.read_text(encoding="utf-8")) == "modified":
                 modified.append(fname)
     data["_modified_files"] = modified
+    data["_unmappable"] = unmappable_files(nixos_dir)
     return data
 
 
@@ -922,7 +1038,16 @@ def write_config_files(
     conf_file = nixos_path / "configuration.nix"
 
     if conf_file.exists():
-        data["brick_blocks"] = extract_brick_blocks(conf_file.read_text(encoding="utf-8"))
+        conf_text = conf_file.read_text(encoding="utf-8")
+        if importer.config_unmappable(conf_text):
+            # Nothing is written, flake.nix included: the form model was never
+            # filled from this file, so everything in it is a default.
+            return {
+                "success": False,
+                "error":   "ERR_NOT_MAPPABLE",
+                "file":    "configuration.nix",
+            }
+        data["brick_blocks"] = extract_brick_blocks(conf_text)
 
     # Refuse to write a file Nix would reject. The same leaf defined twice –
     # typically a brick carrying an attribute the form writes as well – stops
@@ -942,7 +1067,7 @@ def write_config_files(
     if data.get("flakes"):
         flake_file = nixos_path / "flake.nix"
         _flake_content = flake_file.read_text(encoding="utf-8") if flake_file.exists() else None
-        _flake_nico = _flake_content is None or get_nico_type(_flake_content) is not None
+        _flake_nico = _flake_content is None or flake_is_managed(_flake_content)
         if _flake_nico:
             if _flake_content:
                 data.update(importer.parse_flake_nix(_flake_content))

@@ -88,6 +88,52 @@ def _mask_literals(content: str) -> str:
     return ''.join(out)
 
 
+def _rx_plain_body(content: str) -> bool:
+    """Regex stand-in for nix_parser.body_shape() == 'plain'.
+
+    Only used without tree-sitter. It asks the same question with less sight:
+    after an optional `{ formals }:` head the file must open an attribute set
+    whose closing brace is the last thing in it.
+    """
+    masked = re.sub(r'/\*.*?\*/', lambda m: ' ' * len(m.group(0)),
+                    _mask_literals(content), flags=re.DOTALL).strip()
+    if not masked:
+        return True
+    m = re.match(r'(?:\{[^{}]*\}\s*:\s*)?\{', masked)
+    if not m:
+        return False
+    depth = 0
+    for i in range(m.end() - 1, len(masked)):
+        if masked[i] == '{':
+            depth += 1
+        elif masked[i] == '}':
+            depth -= 1
+            if depth == 0:
+                return i == len(masked) - 1
+    return True         # unbalanced: a syntax problem, not a question of form
+
+
+def config_unmappable(content: str) -> bool:
+    """True when regenerating this module file would change what it means.
+
+    The generator always writes `{ args }: { … }`. A file built any other way
+    – `let … in`, `lib.mkIf c { … }`, `with lib;`, `{ … }@args:`, `rec { … }` –
+    loses exactly the part that is not an attribute set, and what is left then
+    refers to names that no longer exist. Such a file is left alone: not
+    parsed into the form, not normalised, not rewritten; the raw editor is the
+    only way to change it (decision 2026-11-10, revision B33).
+
+    Judged by content, never by the nico stamp: the stamp appears the first
+    time a file is opened in the interface, so a lock tied to its absence
+    holds exactly until then.
+    """
+    from . import nix_parser as _np
+    shape = _np.body_shape(content)
+    if shape is None:
+        return not _rx_plain_body(content)
+    return shape != 'plain'
+
+
 def _split_top_level_stmts(content: str) -> list[str]:
     # A depth-0 semicolon usually ends a statement – except when it closes a
     # pending 'with expr;' / 'assert cond;' inside the current value
@@ -308,6 +354,9 @@ def rescue_lost_bindings(original: str, data: dict) -> 'list[tuple[str, str]]':
     """
     from . import generator as _gen
     from .brix import section_for_attrpath
+
+    if config_unmappable(original):
+        return []                         # nothing was taken, nothing to rescue
 
     try:
         written = content_leaf_paths(_gen.generate_configuration_nix(data))
@@ -986,7 +1035,11 @@ def parse_config(nix_content: str) -> dict:
     Gibt ein flaches Dict zurück das direkt in nico.json gemergt werden kann.
     Nur gefundene Schlüssel sind enthalten (keine Defaults).
     Tree-sitter wird bevorzugt; Regex-Fallback wenn nicht verfügbar.
+    Eine nicht abbildbare Datei (config_unmappable) liefert nichts: was hier
+    erkannt würde, käme aus dem falschen Attribut-Set.
     """
+    if config_unmappable(nix_content):
+        return {}
     ts = _ts_parse_config(nix_content)
     if ts is not None:
         return ts[0]
@@ -1004,6 +1057,8 @@ def build_rest_brix(nix_content: str, recognized: dict) -> str:
     recognized wird nicht mehr benötigt (die konsumierten Bindings werden aus
     demselben Inhalt neu bestimmt); Parameter bleibt für API-Kompatibilität.
     """
+    if config_unmappable(nix_content):
+        return ''
     ts = _ts_parse_config(nix_content)
     if ts is not None:
         result = _ts_build_rest_brix(nix_content, ts[1])
@@ -1275,8 +1330,13 @@ def parse_flake_nix(content: str) -> dict:
     if m:
         r['flake_description'] = m.group(1)
 
-    # nixpkgs channel (z.B. github:NixOS/nixpkgs/nixos-unstable)
-    m = re.search(r'nixpkgs\.url\s*=\s*"github:NixOS/nixpkgs/([^"]+)"', content)
+    # nixpkgs channel (z.B. github:NixOS/nixpkgs/nixos-unstable). GitHub does
+    # not care about the case of owner and repository, and `github:nixos/…`
+    # is common; read case-sensitively, such a file fell back to the default
+    # `nixos-unstable` and a stable system moved channels on the next rebuild
+    # (revision 2026-11-10, B31).
+    m = re.search(r'(?<![\w-])nixpkgs\.url\s*=\s*"github:nixos/nixpkgs/([^"]+)"',
+                  content, re.IGNORECASE)
     if m:
         r['flake_nixpkgs_channel'] = m.group(1)
 
@@ -1289,7 +1349,20 @@ def parse_flake_nix(content: str) -> dict:
     hm_url = bool(re.search(r'home-manager\s*[=.]', content))
     r['flake_hm_input'] = hm_url
     if hm_url:
-        r['flake_hm_follows'] = bool(re.search(r'inputs\.nixpkgs\.follows', content))
+        # Asked of the home-manager input itself where the inputs block can be
+        # read. Searching the whole file found plasma-manager's `follows` and
+        # switched it on for home-manager too – with both inputs present, the
+        # panel switch "follows" could not be turned off and stay off.
+        hm_leaves: dict = {}
+        inputs_block = _flake_extract_block(_blank_comments(content), 'inputs')
+        if inputs_block:
+            hm_leaves = _flake_input_leaves(
+                inputs_block[inputs_block.index('{') + 1:inputs_block.rindex('}')],
+                'home-manager')
+        if hm_leaves:
+            r['flake_hm_follows'] = 'inputs.nixpkgs.follows' in hm_leaves
+        else:
+            r['flake_hm_follows'] = bool(re.search(r'inputs\.nixpkgs\.follows', content))
         r['flake_hm_module']  = bool(re.search(r'home-manager\.nixosModules', content))
 
     # nixos-hardware input
@@ -1626,6 +1699,213 @@ def build_flake_brix(content: str) -> dict:
             order_outputs_extra += 1
 
     return brix
+
+
+# ── flake.nix: can NiCo write this file back? ─────────────────────────────────
+
+def _blank_comments(content: str) -> str:
+    """Blank out `#` and `/* */` comments, keeping strings, length and lines.
+
+    _strip_nix_comments cuts at every `#`, also inside a string – a colour
+    value or a URL fragment ends the line there. This one walks the text and
+    skips string bodies, so what is left is still the same Nix.
+    """
+    out = list(content)
+    i, n = 0, len(content)
+    while i < n:
+        ch = content[i]
+        if ch == '#':
+            while i < n and content[i] != '\n':
+                out[i] = ' '
+                i += 1
+        elif content.startswith('/*', i):
+            end = content.find('*/', i + 2)
+            end = n if end == -1 else end + 2
+            for j in range(i, end):
+                if content[j] != '\n':
+                    out[j] = ' '
+            i = end
+        elif content.startswith("''", i):
+            end = content.find("''", i + 2)
+            i = n if end == -1 else end + 2
+        elif ch == '"':
+            i += 1
+            while i < n and content[i] != '"':
+                i += 2 if content[i] == '\\' else 1
+            i += 1
+        else:
+            i += 1
+    return ''.join(out)
+
+
+def _closes_at_end(stmt: str, open_pos: int) -> bool:
+    """True when the brace at open_pos closes as the last thing in stmt,
+    a trailing `;` aside. Says that the value is that one set and nothing
+    more – no `// other`, no function applied to it."""
+    masked = _mask_literals(stmt)
+    depth = 0
+    for i in range(open_pos, len(masked)):
+        if masked[i] == '{':
+            depth += 1
+        elif masked[i] == '}':
+            depth -= 1
+            if depth == 0:
+                return masked[i + 1:].strip() in ('', ';')
+    return False
+
+
+def _flake_input_leaves(inputs_body: str, name: str) -> 'dict[str, str]':
+    """Everything one input declares, flattened to {path: value}.
+
+    `foo.url = "x";` and `foo = { url = "x"; };` say the same and come out the
+    same, so two spellings of one input compare equal.
+    """
+    leaves: dict[str, str] = {}
+
+    def walk(prefix: str, body: str) -> None:
+        for stmt in _flake_split_attrs(body):
+            text = stmt.strip()
+            if text.endswith(';'):
+                text = text[:-1].rstrip()
+            m = re.match(r'([\w."\-]+)\s*=\s*(.*)$', text, re.DOTALL)
+            if not m:
+                if text:
+                    leaves[f'{prefix}?{len(leaves)}'] = re.sub(r'\s+', ' ', text)
+                continue
+            path = prefix + m.group(1).replace('"', '')
+            value = m.group(2).strip()
+            if value.startswith('{') and value.endswith('}'):
+                walk(path + '.', value[1:-1])
+            else:
+                leaves[path] = re.sub(r'\s+', ' ', value)
+
+    walk('', inputs_body)
+    own = name + '.'
+    return {k[len(own):]: v for k, v in leaves.items() if k.startswith(own)}
+
+
+_FLAKE_TOP_KEYS = ("description", "inputs", "outputs")
+_OUTPUTS_HEAD_RE = re.compile(r'outputs\s*=\s*\{([^{}]*)\}\s*:\s*\{')
+_HOST_ENTRY_RE = re.compile(r'[A-Za-z_][\w-]*\s*=\s*nixpkgs\.lib\.nixosSystem\s*\{')
+
+
+def flake_unmappable(content: str) -> 'str | None':
+    """Why NiCo must not regenerate this flake.nix, or None when it may.
+
+    NiCo does not edit a flake.nix, it writes a new one from what it read: a
+    description, a channel, three known inputs, a list of host names, and
+    Nix-Brix for the rest. Whatever the reading misses is gone after the
+    first write. Measured on 14 foreign configs (revision 2026-11-10, B30 and
+    B31): 13 lost their whole `outputs` block to a single default host
+    `nixos`, three moved from a stable channel to `nixos-unstable`.
+
+    So the file is checked against the one shape the generator produces, and
+    anything else is left alone (decision 2026-11-10): not regenerated, not
+    stamped as generated, editable in the raw editor only. The returned word
+    names the first part that does not fit; it is for logs and tests, the
+    interface only needs to know that there is one.
+
+      top          something beside description, inputs and outputs
+      description  not a plain string
+      inputs       no single `inputs = { … };` block (flat `inputs.x.url`)
+      input:NAME   a panel-managed input NiCo would write differently
+      outputs      no single `outputs = { names… }: { … };`
+      hosts        nixosConfigurations is not a set of
+                   `name = nixpkgs.lib.nixosSystem { … };` entries
+
+    Judged by content, never by the nico stamp – see config_unmappable.
+    """
+    from .brix import extract_brick_blocks
+    from . import generator as _gen
+
+    plain = _blank_comments(content)
+    body = plain.strip()
+    if not (body.startswith('{') and body.endswith('}')):
+        return 'top'
+    if not _closes_at_end(body, 0):
+        return 'top'
+
+    by_name: dict[str, list[str]] = {}
+    for stmt in _flake_split_attrs(body[1:-1]):
+        by_name.setdefault(_flake_attr_name(stmt), []).append(stmt.strip())
+    if any(name not in _FLAKE_TOP_KEYS for name in by_name):
+        return 'top'
+
+    for stmt in by_name.get('description', []):
+        if not re.fullmatch(r'description\s*=\s*"[^"\\$]*"\s*;', stmt):
+            return 'description'
+    if len(by_name.get('description', [])) > 1:
+        return 'description'
+
+    # ── inputs ────────────────────────────────────────────────────────────────
+    inputs = by_name.get('inputs', [])
+    if len(inputs) != 1:
+        return 'inputs'
+    m = re.match(r'inputs\s*=\s*\{', inputs[0])
+    if not m or not _closes_at_end(inputs[0], m.end() - 1):
+        return 'inputs'
+    inputs_body = inputs[0][m.end():inputs[0].rindex('}')]
+
+    # What would NiCo write for the inputs it manages itself? Asked of the
+    # generator rather than rebuilt here, so the two cannot drift apart.
+    gen_body = '\n'.join(_gen.flake_known_input_lines(parse_flake_nix(content)))
+    # A file NiCo generated itself is NiCo's to regenerate: its other inputs
+    # were written by an earlier version of the same generator, and where that
+    # differs today (home-manager without a branch, before the branch was
+    # derived from the channel) the difference is the intended update. Locking
+    # such a file would take the panel away from every existing config.
+    own_file = '# Generated by NiCo' in content
+    for name in sorted(_KNOWN_INPUTS):
+        if own_file and name != 'nixpkgs':
+            continue
+        have = _flake_input_leaves(inputs_body, name)
+        want = _flake_input_leaves(gen_body, name)
+        if name == 'nixpkgs':
+            # owner and repository are case-insensitive on GitHub
+            have = {k: v.lower() for k, v in have.items()}
+            want = {k: v.lower() for k, v in want.items()}
+        if name == 'home-manager':
+            # no branch and the default branch are the same input
+            have, want = ({k: re.sub(r'/master"$', '"', v) for k, v in d.items()}
+                          for d in (have, want))
+        if have != want:
+            return f'input:{name}'
+
+    # ── outputs ───────────────────────────────────────────────────────────────
+    bricks = extract_brick_blocks(content)
+    legacy = bricks.get('outputs-declaration')
+    if legacy and legacy.get('section') == 'Outputs':
+        return None         # the whole block lives in one brick, kept verbatim
+
+    outputs = by_name.get('outputs', [])
+    if len(outputs) != 1:
+        return 'outputs'
+    m = _OUTPUTS_HEAD_RE.match(outputs[0])
+    if not m or not _closes_at_end(outputs[0], m.end() - 1):
+        return 'outputs'
+    if not re.fullmatch(r"[\w\s,.'\-]*", m.group(1)):
+        return 'outputs'    # default values in the formals would be dropped
+    outputs_body = outputs[0][m.end():outputs[0].rindex('}')]
+
+    cfgs = [s.strip() for s in _flake_split_attrs(outputs_body)
+            if _flake_attr_name(s) == 'nixosConfigurations']
+    if len(cfgs) != 1:
+        return 'hosts'
+    m = re.match(r'nixosConfigurations\s*=\s*\{', cfgs[0])
+    if not m or not _closes_at_end(cfgs[0], m.end() - 1):
+        return 'hosts'
+    entries = [e.strip() for e in
+               _flake_split_attrs(cfgs[0][m.end():cfgs[0].rindex('}')]) if e.strip()]
+    if not entries:
+        return 'hosts'
+    for entry in entries:
+        m = _HOST_ENTRY_RE.match(entry)
+        if not m or not _closes_at_end(entry, m.end() - 1):
+            return 'hosts'
+    if len(_iter_flake_hosts(content)) != len(entries):
+        return 'hosts'
+
+    return None
 
 
 def ensure_flake_host_bricks(content: str, existing_blocks: dict[str, dict] | None = None) -> dict[str, dict]:
