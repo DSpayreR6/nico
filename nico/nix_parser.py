@@ -326,10 +326,113 @@ def _node_source(node, src_bytes: bytes) -> str:
 
 # ── Value extraction helpers (operate on raw value_text strings) ───────────────
 
+# A string the generator can write back unchanged: no escapes and no `${…}`.
+# An interpolation used to pass, and generator.nix_esc then escaped it –
+# `"${prefix}-pc"` came back as `"\${prefix}-pc"`, a different value
+# (revision 2026-11-10, B36).
+PLAIN_STRING = r'"((?:[^"\\$]|\$(?!\{))*)"'
+_PLAIN_STRING_RE = re.compile(r'^\s*' + PLAIN_STRING + r'\s*$')
+_SIMPLE_NAME_RE = re.compile(r"[A-Za-z_][\w.'+-]*")
+
+
 def extract_string(value_text: str) -> str | None:
-    """'\"foo\"' → 'foo', None if not a plain string."""
-    m = re.match(r'^\s*"([^"\\]*)"\s*$', value_text.strip())
+    """'\"foo\"' → 'foo', None if not a plain string (escapes, `${…}`)."""
+    m = _PLAIN_STRING_RE.match(value_text.strip())
     return m.group(1) if m else None
+
+
+def extract_string_list(value_text: str) -> list[str] | None:
+    """'[ "a" "b" ]' → ['a', 'b']; None unless it is exactly a list of plain
+    strings. `[ "a" ] ++ more`, comments and interpolations all yield None."""
+    v = value_text.strip()
+    if not re.fullmatch(r'\[\s*(?:' + PLAIN_STRING + r'\s*)*\]', v):
+        return None
+    return [m.group(1) for m in re.finditer(PLAIN_STRING, v)]
+
+
+def extract_simple_list(value_text: str, with_name: str | None = "pkgs") -> list[str] | None:
+    """Entries of '[ a b.c ]' or 'with pkgs; [ a b ]' when every entry is a
+    simple name; None otherwise.
+
+    The predecessor (extract_identifier_list) took every word it found:
+    `(python3.withPackages (ps: with ps; [ requests ]))` became the packages
+    `python3.withPackages`, `ps`, `with`, `requests`, and the list written
+    back was not even valid Nix. A list that holds anything but simple names
+    is not this function's business – the caller leaves the binding alone and
+    it survives as a Nix-Brick (revision 2026-11-10, B36).
+
+    with_name: the only `with X;` prefix accepted (the generator writes
+    `with pkgs;`); None accepts no prefix at all.
+    """
+    v = value_text.strip()
+    m = re.match(r'with\s+([\w.]+)\s*;\s*(\[.*\])\s*$', v, re.DOTALL)
+    if m:
+        if with_name is None or m.group(1) != with_name:
+            return None
+        v = m.group(2)
+    if not (v.startswith('[') and v.endswith(']')):
+        return None
+    inner = re.sub(r'/\*.*?\*/', ' ', v[1:-1], flags=re.DOTALL)
+    inner = re.sub(r'#[^\n]*', ' ', inner)
+    tokens = inner.split()
+    if any(not _SIMPLE_NAME_RE.fullmatch(t) for t in tokens):
+        return None
+    return tokens
+
+
+def split_list_elements(value_text: str) -> list[str] | None:
+    """Top-level elements of '[ a (b c) ./d.nix ]', each verbatim.
+
+    None when the value is not one plain list (`++`, a `with` prefix), holds
+    a comment, or its brackets do not balance.
+    """
+    v = value_text.strip()
+    if not (v.startswith('[') and v.endswith(']')):
+        return None
+    inner = v[1:-1]
+    elems, depth, start, i, n = [], 0, None, 0, len(inner)
+    while i < n:
+        ch = inner[i]
+        if ch == '#' or inner.startswith('/*', i):
+            return None
+        if ch == '"':
+            if start is None:
+                start = i
+            i += 1
+            while i < n and inner[i] != '"':
+                i += 2 if inner[i] == '\\' else 1
+            if i >= n:
+                return None
+        elif inner.startswith("''", i):
+            if start is None:
+                start = i
+            end = inner.find("''", i + 2)
+            if end < 0:
+                return None
+            i = end + 1
+        elif ch in '([{':
+            if start is None:
+                start = i
+            depth += 1
+        elif ch in ')]}':
+            depth -= 1
+            if depth < 0:
+                return None
+        elif ch.isspace():
+            if depth == 0 and start is not None:
+                elems.append(inner[start:i])
+                start = None
+        elif start is None:
+            start = i
+        i += 1
+    if depth != 0:
+        return None
+    if start is not None:
+        elems.append(inner[start:])
+    # `a ++ b` inside the brackets is one expression, not two elements.
+    if any(e in ('++', '//') for e in elems):
+        return None
+    return elems
 
 
 def extract_bool(value_text: str) -> bool | None:

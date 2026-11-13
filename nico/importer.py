@@ -33,10 +33,52 @@ _NICO_COMMENT_LINE_RE = re.compile(
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 
+_RE_BRICK_MARKER = re.compile(r'#\s*</?bri(?:x|ck):')
+
+
 def _strip_nix_comments(text: str) -> str:
-    text = re.sub(r'/\*.*?\*/', '', text, flags=re.DOTALL)
-    text = re.sub(r'#(?!\s*</?bri(?:x|ck):)[^\n]*', '', text)
-    return text
+    """Remove `# …` and `/* … */` comments, brick markers excepted.
+
+    Walks the text instead of using a regex: the regex cut at every `#` and
+    every `/*`, inside strings too. `background = "#1e1e2e";` came out as
+    `background = "` and the file was no longer valid Nix (revision
+    2026-11-10, B37).
+    """
+    out, i, n = [], 0, len(text)
+    while i < n:
+        ch = text[i]
+        if ch == '"':
+            j = i + 1
+            while j < n and text[j] != '"':
+                j += 2 if text[j] == '\\' else 1
+            out.append(text[i:j + 1])
+            i = j + 1
+        elif text.startswith("''", i):
+            j = i + 2
+            while j < n:
+                # ''' , ''$ and ''\ are escapes inside an indented string
+                if text.startswith("'''", j) or text.startswith("''$", j) \
+                        or text.startswith("''\\", j):
+                    j += 3
+                elif text.startswith("''", j):
+                    break
+                else:
+                    j += 1
+            out.append(text[i:j + 2])
+            i = j + 2
+        elif ch == '#':
+            j = text.find('\n', i)
+            j = n if j < 0 else j
+            if _RE_BRICK_MARKER.match(text, i):
+                out.append(text[i:j])
+            i = j
+        elif text.startswith('/*', i):
+            j = text.find('*/', i + 2)
+            i = n if j < 0 else j + 2
+        else:
+            out.append(ch)
+            i += 1
+    return ''.join(out)
 
 
 def _mask_literals(content: str) -> str:
@@ -431,6 +473,75 @@ def _user_rest_text(inner: str) -> str:
 
 # ── shared field map ──────────────────────────────────────────────────────────
 
+# Desktops the form can hold: exactly those generator._DE_SNIPPETS writes.
+# plasma5, mate and lxqt stood here as well. They were recognised, consumed
+# together with `services.xserver.enable` – and never written, because the
+# generator has no snippet for them: the desktop was gone after the import
+# (revision 2026-11-10, B35). What is not listed stays a Nix-Brick.
+_DE_KEYS = [
+    ('gnome',    'services.desktopManager.gnome.enable'),
+    ('gnome',    'services.xserver.desktopManager.gnome.enable'),
+    ('kde',      'services.desktopManager.plasma6.enable'),
+    ('xfce',     'services.xserver.desktopManager.xfce.enable'),
+    ('i3',       'services.xserver.windowManager.i3.enable'),
+    ('sway',     'programs.sway.enable'),
+    ('hyprland', 'programs.hyprland.enable'),
+]
+_DE_EXTRA_KEYS = {
+    'gnome':   ['services.xserver.enable', 'services.displayManager.gdm.enable',
+                'services.xserver.displayManager.gdm.enable'],
+    'kde':     ['services.xserver.enable', 'services.displayManager.sddm.enable'],
+    'xfce':    ['services.xserver.enable', 'services.xserver.displayManager.lightdm.enable'],
+    'i3':      ['services.xserver.enable'],
+}
+_DE_RECOGNISED = tuple(dict.fromkeys(name for name, _ in _DE_KEYS))
+
+# The fields generator._sec_backup writes into a snapper config, all of them.
+_SNAPPER_LIMITS = [
+    ('hourly',  'TIMELINE_LIMIT_HOURLY'),
+    ('daily',   'TIMELINE_LIMIT_DAILY'),
+    ('weekly',  'TIMELINE_LIMIT_WEEKLY'),
+    ('monthly', 'TIMELINE_LIMIT_MONTHLY'),
+    ('yearly',  'TIMELINE_LIMIT_YEARLY'),
+]
+
+
+def _snapper_entry(cfg_name: str, value_text: str) -> 'dict | None':
+    """A snapper config as a form entry – only when it is exactly the block
+    the generator writes: SUBVOLUME, TIMELINE_CREATE/CLEANUP = true and the
+    five limits, nothing else. Anything more (ALLOW_USERS …) or less (a
+    missing limit, where NiCo would write its own default instead of
+    snapper's) would change on the way back, so the block stays a Nix-Brick.
+    """
+    from . import nix_parser as _np
+    if '.' in cfg_name:
+        return None                    # flat form: configs.root.SUBVOLUME = …
+    inner = _np.extract_inner_block(value_text)
+    if inner is None:
+        return None
+    fields: dict[str, str] = {}
+    for stmt in _split_top_level_stmts(inner):
+        m = re.fullmatch(r'(\w+)\s*=\s*(.+?)\s*;', stmt.strip(), re.DOTALL)
+        if not m or m.group(1) in fields:
+            return None
+        fields[m.group(1)] = m.group(2)
+    wanted = {'SUBVOLUME', 'TIMELINE_CREATE', 'TIMELINE_CLEANUP',
+              *(key for _, key in _SNAPPER_LIMITS)}
+    if set(fields) != wanted:
+        return None
+    mountpoint = _np.extract_string(fields['SUBVOLUME'])
+    if not mountpoint:
+        return None
+    if fields['TIMELINE_CREATE'] != 'true' or fields['TIMELINE_CLEANUP'] != 'true':
+        return None
+    entry = {"name": cfg_name, "mountpoint": mountpoint}
+    for fld, key in _SNAPPER_LIMITS:
+        if not fields[key].isdigit():
+            return None
+        entry[fld] = int(fields[key])
+    return entry
+
+
 def _extract_fields(kv: 'dict[str, str]', clean: str) -> 'tuple[dict, set[str]]':
     """
     Single source of truth for the Nix-option → NiCo-field mapping.
@@ -548,13 +659,14 @@ def _extract_fields(kv: 'dict[str, str]', clean: str) -> 'tuple[dict, set[str]]'
         if v is not None:
             r['boot_config_limit'] = v; _mark('boot.loader.systemd-boot.configurationLimit')
 
+    # Only a plain list of strings without blanks: the form holds the
+    # parameters blank-separated, so `[ "a" ] ++ more` lost its tail and
+    # `"acpi_osi=Windows 2020"` came back as two parameters.
     vt = _vt('boot.kernelParams')
     if vt:
-        inner = vt.strip()
-        if inner.startswith('[') and inner.endswith(']'):
-            params = re.findall(r'"([^"]*)"', inner)
-            if params:
-                r['boot_kernel_params'] = ' '.join(params); _mark('boot.kernelParams')
+        params = _np.extract_string_list(vt)
+        if params and all(p and not re.search(r'\s', p) for p in params):
+            r['boot_kernel_params'] = ' '.join(params); _mark('boot.kernelParams')
 
     # `true` is the default since 26.05 and a build error since 26.11, so it is
     # consumed and not written back. Only `true`: an explicit `false` says
@@ -580,11 +692,14 @@ def _extract_fields(kv: 'dict[str, str]', clean: str) -> 'tuple[dict, set[str]]'
         ports_nico, enable_nico = nico_tcp_udp
         vt = kv.get(fw_key)
         if vt is not None:
-            nums = re.findall(r'\d+', re.sub(r'#[^\n]*', '', vt))
-            ports = ' '.join(nums)
-            if ports:
-                r[ports_nico] = ports; r[enable_nico] = True
-                consumed.add(fw_key)
+            # Numbers only. `[ 22 config.services.jellyfin.port ]` used to
+            # come back as `[ 22 ]`.
+            plain = re.sub(r'#[^\n]*', '', vt).strip()
+            if re.fullmatch(r'\[\s*(?:\d+\s*)*\]', plain):
+                ports = ' '.join(re.findall(r'\d+', plain))
+                if ports:
+                    r[ports_nico] = ports; r[enable_nico] = True
+                    consumed.add(fw_key)
 
     # ── Services ──────────────────────────────────────────────────────────────
     b('printing', 'services.printing.enable')
@@ -601,35 +716,12 @@ def _extract_fields(kv: 'dict[str, str]', clean: str) -> 'tuple[dict, set[str]]'
     b('pipewire_32bit', 'services.pipewire.alsa.support32Bit')
 
     # ── Desktop ───────────────────────────────────────────────────────────────
-    desktop_extra_keys = {
-        'gnome':   ['services.xserver.enable', 'services.displayManager.gdm.enable',
-                    'services.xserver.displayManager.gdm.enable'],
-        'kde':     ['services.xserver.enable', 'services.displayManager.sddm.enable'],
-        'plasma5': ['services.xserver.enable'],
-        'xfce':    ['services.xserver.enable', 'services.xserver.displayManager.lightdm.enable'],
-        'mate':    ['services.xserver.enable'],
-        'lxqt':    ['services.xserver.enable'],
-        'i3':      ['services.xserver.enable'],
-        'sway':    [],
-        'hyprland': [],
-    }
-    for de_name, de_key in [
-        ('gnome',    'services.desktopManager.gnome.enable'),
-        ('gnome',    'services.xserver.desktopManager.gnome.enable'),
-        ('kde',      'services.desktopManager.plasma6.enable'),
-        ('plasma5',  'services.xserver.desktopManager.plasma5.enable'),
-        ('xfce',     'services.xserver.desktopManager.xfce.enable'),
-        ('mate',     'services.xserver.desktopManager.mate.enable'),
-        ('lxqt',     'services.xserver.desktopManager.lxqt.enable'),
-        ('i3',       'services.xserver.windowManager.i3.enable'),
-        ('sway',     'programs.sway.enable'),
-        ('hyprland', 'programs.hyprland.enable'),
-    ]:
+    for de_name, de_key in _DE_KEYS:
         vt = _vt(de_key)
         if vt and _np.extract_bool(vt):
             r['desktop_environment'] = de_name
             _mark(de_key)
-            for extra_key in desktop_extra_keys.get(de_name, []):
+            for extra_key in _DE_EXTRA_KEYS.get(de_name, []):
                 _mark(extra_key)
             break
 
@@ -688,23 +780,32 @@ def _extract_fields(kv: 'dict[str, str]', clean: str) -> 'tuple[dict, set[str]]'
                 _mark('systemd.services.flatpak-repo')
 
     # ── Pakete ────────────────────────────────────────────────────────────────
+    # Only a list of simple names, and only a non-empty one – everything
+    # else stays a Nix-Brick as a whole (decision Martin 2026-11-10, B36,
+    # provisional: the form list is then empty, and adding a package there
+    # collides with the brick).
     if 'environment.systemPackages' in kv:
-        pkgs_list = _np.extract_identifier_list(kv['environment.systemPackages']) or []
-        r['packages'] = [{"attr": p, "enabled": True} for p in sorted(set(pkgs_list))]
-        consumed.add('environment.systemPackages')
+        pkgs_list = _np.extract_simple_list(kv['environment.systemPackages'])
+        if pkgs_list:
+            r['packages'] = [{"attr": p, "enabled": True} for p in sorted(set(pkgs_list))]
+            consumed.add('environment.systemPackages')
 
     # ── Schriftarten ──────────────────────────────────────────────────────────
     if 'fonts.packages' in kv:
-        fonts_list = _np.extract_identifier_list(kv['fonts.packages']) or []
+        fonts_list = _np.extract_simple_list(kv['fonts.packages'])
         if fonts_list:
             r['fonts'] = sorted(set(fonts_list))
-        consumed.add('fonts.packages')
+            consumed.add('fonts.packages')
 
     # ── Nix & System ──────────────────────────────────────────────────────────
     b('nix_optimize_store', 'nix.settings.auto-optimise-store')
 
+    # Exactly the two entries the generator writes. With a third one
+    # (`pipe-operators`) the line stays a Nix-Brick and the switch off –
+    # consuming it dropped the third entry.
     vt = _vt('nix.settings.experimental-features')
-    if vt and 'flakes' in vt:
+    feats = _np.extract_string_list(vt) if vt else None
+    if feats is not None and sorted(feats) == ['flakes', 'nix-command']:
         r['flakes'] = True; _mark('nix.settings.experimental-features')
 
     gc_vt = _vt('nix.gc')
@@ -797,22 +898,9 @@ def _extract_fields(kv: 'dict[str, str]', clean: str) -> 'tuple[dict, set[str]]'
     for key in list(kv.keys()):
         if not key.startswith(_sn_prefix):
             continue
-        cfg_name = key[len(_sn_prefix):]
-        inner = _np.extract_inner_block(kv[key]) or kv[key]
-        m_sub = re.search(r'SUBVOLUME\s*=\s*"([^"]*)"', inner)
-        mountpoint = m_sub.group(1) if m_sub else ''
-        sn_entry = {"name": cfg_name, "mountpoint": mountpoint,
-                    "hourly": 5, "daily": 7, "weekly": 0, "monthly": 1, "yearly": 0}
-        for fld, limit_key in [
-            ('hourly',  'TIMELINE_LIMIT_HOURLY'),
-            ('daily',   'TIMELINE_LIMIT_DAILY'),
-            ('weekly',  'TIMELINE_LIMIT_WEEKLY'),
-            ('monthly', 'TIMELINE_LIMIT_MONTHLY'),
-            ('yearly',  'TIMELINE_LIMIT_YEARLY'),
-        ]:
-            m2 = re.search(rf'{limit_key}\s*=\s*(\d+)', inner)
-            if m2:
-                sn_entry[fld] = int(m2.group(1))
+        sn_entry = _snapper_entry(key[len(_sn_prefix):], kv[key])
+        if sn_entry is None:
+            continue                   # not NiCo's own form: stays a Nix-Brick
         _sn_cfgs.append(sn_entry)
         consumed.add(key)
     if _sn_cfgs:
@@ -885,7 +973,7 @@ def _extract_fields(kv: 'dict[str, str]', clean: str) -> 'tuple[dict, set[str]]'
                 _mark(f"programs.{r['user_shell']}.enable")
             m = re.search(r'extraGroups\s*=\s*\[([^\]]*)\]', inner)
             if m:
-                groups = re.findall(r'"(\w+)"', m.group(1))
+                groups = re.findall(r'"([^"\\$]+)"', m.group(1))
                 if groups: r['user_groups'] = groups
             if rest_nix: r['user_extra_nix'] = rest_nix
         else:
@@ -900,7 +988,7 @@ def _extract_fields(kv: 'dict[str, str]', clean: str) -> 'tuple[dict, set[str]]'
             if v: eu['shell'] = _SHELLS.get(v, 'bash')
             m = re.search(r'extraGroups\s*=\s*\[([^\]]*)\]', inner)
             if m:
-                groups = re.findall(r'"(\w+)"', m.group(1))
+                groups = re.findall(r'"([^"\\$]+)"', m.group(1))
                 if groups: eu['groups'] = groups
             if rest_nix: eu['extra_nix'] = rest_nix
             extra_users.append(eu)
@@ -908,16 +996,25 @@ def _extract_fields(kv: 'dict[str, str]', clean: str) -> 'tuple[dict, set[str]]'
     if extra_users:
         r['extra_users'] = extra_users
 
-    if 'users.users.gast' in kv:
-        r['guest_user'] = True; consumed.add('users.users.gast')
+    # Only the stub the generator writes is the guest switch. A real account
+    # that happens to be called `gast` used to be replaced by that stub –
+    # description, groups and all gone, the password set to empty.
+    gast_inner = _np.extract_inner_block(kv.get('users.users.gast') or '')
+    if gast_inner is not None:
+        gast_stmts = sorted(re.sub(r'\s+', ' ', st.strip())
+                            for st in _split_top_level_stmts(gast_inner))
+        if gast_stmts == ['initialPassword = "";', 'isNormalUser = true;']:
+            r['guest_user'] = True; consumed.add('users.users.gast')
 
     # ── Home Manager ──────────────────────────────────────────────────────────
     b('hm_use_global_pkgs',   'home-manager.useGlobalPkgs')
     b('hm_use_user_packages', 'home-manager.useUserPackages')
 
     if 'home-manager.sharedModules' in kv:
-        vt = kv['home-manager.sharedModules']
-        entries = re.findall(r'(\S+)', re.sub(r'[\[\]]', '', vt))
+        # Element by element, each verbatim. Splitting at blanks and dropping
+        # every bracket tore `(import ./x.nix)` into `(import` and `./x.nix)`.
+        # A value that is not one plain list (`++`, comments) is left alone.
+        entries = _np.split_list_elements(kv['home-manager.sharedModules'])
         if entries:
             plasma = 'plasma-manager.homeModules.plasma-manager'
             if plasma in entries:
@@ -926,8 +1023,9 @@ def _extract_fields(kv: 'dict[str, str]', clean: str) -> 'tuple[dict, set[str]]'
             else:
                 extras = entries
             if extras:
-                r['hm_shared_modules_extra'] = '\n'.join(extras)
-        consumed.add('home-manager.sharedModules')
+                r['hm_shared_modules_extra'] = '\n'.join(
+                    ' '.join(e.split()) for e in extras)
+            consumed.add('home-manager.sharedModules')
 
     return r, consumed
 
@@ -1073,6 +1171,107 @@ def build_rest_brix(nix_content: str, recognized: dict) -> str:
     return _wrap_brix(unclaimed)
 
 
+# ── Home Manager: what the form can hold ───────────────────────────────────
+# Each pattern matches a statement only in the shape hm_generator writes it.
+# parse_home_config takes a value over when it matches, and
+# build_home_rest_brix removes exactly these statements – whatever does not
+# match stays in the file as a Nix-Brick. Before revision 2026-11-10 (B37)
+# the two sides used different, looser patterns: a `programs.git` block was
+# removed whole and three of its fields written back, so `aliases` and
+# `signing` were gone on the first save.
+_HM_PLAIN = r'"((?:[^"\\$]|\$(?!\{))*)"'            # no escapes, no ${…}
+_HM_BLOCK = r'\{((?:[^{}]|\{[^{}]*\})*)\}'            # one nesting level
+_HM_RE_USERNAME = re.compile(r'home\.username\s*=\s*' + _HM_PLAIN + r'\s*;')
+_HM_RE_HOMEDIR  = re.compile(r'home\.homeDirectory\s*=\s*' + _HM_PLAIN + r'\s*;')
+_HM_RE_STATEVER = re.compile(r'home\.stateVersion\s*=\s*' + _HM_PLAIN + r'\s*;')
+_HM_RE_PACKAGES = re.compile(r'home\.packages\s*=\s*\[([^\[\]]*)\]\s*;')
+_HM_RE_PKG      = re.compile(r"pkgs\.([A-Za-z_][\w'+-]*(?:\.[A-Za-z_][\w'+-]*)*)")
+_HM_RE_GIT      = re.compile(r'programs\.git\s*=\s*' + _HM_BLOCK + r'\s*;')
+_HM_RE_XDG      = re.compile(r'xdg\.userDirs\s*=\s*' + _HM_BLOCK + r'\s*;')
+_HM_XDG_KEYS = [
+    ("xdg_download",    "download"),
+    ("xdg_documents",   "documents"),
+    ("xdg_pictures",    "pictures"),
+    ("xdg_music",       "music"),
+    ("xdg_videos",      "videos"),
+    ("xdg_desktop",     "desktop"),
+    ("xdg_templates",   "templates"),
+    ("xdg_publicshare", "publicShare"),
+]
+
+
+def _hm_packages(nix_content: str) -> 'list[str] | None':
+    """Names of `home.packages = [ pkgs.a pkgs.b.c ];`, None when the list
+    holds anything else (an expression, a comment) or is empty."""
+    m = _HM_RE_PACKAGES.search(nix_content)
+    if not m:
+        return None
+    names = []
+    for token in m.group(1).split():
+        pm = _HM_RE_PKG.fullmatch(token)
+        if not pm:
+            return None
+        names.append(pm.group(1))
+    return names or None
+
+
+def _hm_git(nix_content: str) -> 'dict | None':
+    """Fields of a `programs.git` block made only of what the form writes."""
+    m = _HM_RE_GIT.search(nix_content)
+    if not m:
+        return None
+    out = {"git_enable": False}
+    for stmt in _split_top_level_stmts(m.group(1)):
+        flat = re.sub(r'\s+', ' ', stmt.strip())
+        if flat == 'enable = true;':
+            out["git_enable"] = True
+            continue
+        for key, pat in (
+            ("git_name",  r'userName = ' + _HM_PLAIN + r';'),
+            ("git_email", r'userEmail = ' + _HM_PLAIN + r';'),
+            ("git_default_branch",
+             r'extraConfig = \{ init\.defaultBranch = ' + _HM_PLAIN + r'; \};'),
+            ("git_default_branch",
+             r'extraConfig\.init\.defaultBranch = ' + _HM_PLAIN + r';'),
+        ):
+            fm = re.fullmatch(pat, flat)
+            if fm and key not in out:
+                out[key] = fm.group(1)
+                break
+        else:
+            return None                 # a field the form does not have
+    return out if out["git_enable"] else None
+
+
+def _hm_xdg(nix_content: str) -> 'dict | None':
+    """Fields of an `xdg.userDirs` block exactly as the form writes it:
+    enable and createDirectories on, every directory below the home
+    directory. A missing createDirectories is not "close enough" – the
+    generator would add it and switch directory creation on."""
+    m = _HM_RE_XDG.search(nix_content)
+    if not m:
+        return None
+    out: dict = {}
+    seen = set()
+    for stmt in _split_top_level_stmts(m.group(1)):
+        flat = re.sub(r'\s+', ' ', stmt.strip())
+        if flat in ('enable = true;', 'createDirectories = true;'):
+            seen.add(flat.split(' ', 1)[0])
+            continue
+        for key, nix_key in _HM_XDG_KEYS:
+            fm = re.fullmatch(
+                re.escape(nix_key) + r' = "\$\{config\.home\.homeDirectory\}/([^"\\$]+)";', flat)
+            if fm and key not in out:
+                out[key] = fm.group(1)
+                break
+        else:
+            return None
+    if seen != {'enable', 'createDirectories'}:
+        return None
+    out["xdg_user_dirs"] = True
+    return out
+
+
 def parse_home_config(nix_content: str) -> dict:
     """Parse a NiCo-generated home.nix and return a home_manager dict.
     Only handles the fields that hm_generator.generate_home_nix writes."""
@@ -1093,25 +1292,16 @@ def parse_home_config(nix_content: str) -> dict:
         ]
         r["args_explicit"] = True
 
-    def _s(pat: str) -> str | None:
-        m = re.search(pat, nix_content, re.DOTALL | re.MULTILINE)
-        return m.group(1).strip() if m else None
+    for key, rx in (("username", _HM_RE_USERNAME), ("home_dir", _HM_RE_HOMEDIR),
+                    ("state_version", _HM_RE_STATEVER)):
+        m = rx.search(nix_content)
+        if m and m.group(1).strip():
+            r[key] = m.group(1).strip()
 
-    v = _s(r'home\.username\s*=\s*"([^"]*)"')
-    if v: r["username"] = v
-
-    v = _s(r'home\.homeDirectory\s*=\s*"([^"]*)"')
-    if v: r["home_dir"] = v
-
-    v = _s(r'home\.stateVersion\s*=\s*"([^"]*)"')
-    if v: r["state_version"] = v
-
-    # Git
-    if re.search(r'programs\.git\s*=\s*\{', nix_content):
-        r["git_enable"] = True
-        v = _s(r'userName\s*=\s*"([^"]*)"');        r["git_name"]           = v or r["git_name"]
-        v = _s(r'userEmail\s*=\s*"([^"]*)"');       r["git_email"]          = v or r["git_email"]
-        v = _s(r'defaultBranch\s*=\s*"([^"]*)"');   r["git_default_branch"] = v or r["git_default_branch"]
+    # Git – only a block the form can hold completely (see _hm_git)
+    git = _hm_git(nix_content)
+    if git:
+        r.update(git)
 
     # Shell (first match wins)
     for shell in ("bash", "zsh", "fish"):
@@ -1130,26 +1320,15 @@ def parse_home_config(nix_content: str) -> dict:
     if re.search(r'programs\.firefox\.enable\s*=\s*true', nix_content):
         r["firefox"] = True
 
-    # XDG user dirs
-    if re.search(r'xdg\.userDirs\s*=\s*\{', nix_content):
-        r["xdg_user_dirs"] = True
-        for key, nix_key in [
-            ("xdg_download",    "download"),
-            ("xdg_documents",   "documents"),
-            ("xdg_pictures",    "pictures"),
-            ("xdg_music",       "music"),
-            ("xdg_videos",      "videos"),
-            ("xdg_desktop",     "desktop"),
-            ("xdg_templates",   "templates"),
-            ("xdg_publicshare", "publicShare"),
-        ]:
-            m2 = re.search(rf'{nix_key}\s*=\s*"\${{[^}}]*}}/([^"]+)"', nix_content)
-            if m2: r[key] = m2.group(1)
+    # XDG user dirs – only a block exactly as the form writes it (see _hm_xdg)
+    xdg = _hm_xdg(nix_content)
+    if xdg:
+        r.update(xdg)
 
-    # Packages (pkgs.attrname)
-    m_pkg = re.search(r'home\.packages\s*=\s*\[(.*?)\]', nix_content, re.DOTALL)
-    if m_pkg:
-        r["packages"] = re.findall(r'pkgs\.([\w_\-]+)', m_pkg.group(1))
+    # Packages – only a plain list of pkgs.<name> (see _hm_packages)
+    pkgs_list = _hm_packages(nix_content)
+    if pkgs_list:
+        r["packages"] = pkgs_list
 
     return r
 
@@ -1181,14 +1360,17 @@ def build_home_rest_brix(nix_content: str, recognized: dict) -> str:
         nonlocal content
         content = re.sub(pat, '', content, flags=re.DOTALL | re.MULTILINE)
 
-    rm(r'\s*home\.username\s*=\s*"[^"]*"\s*;')
-    rm(r'\s*home\.homeDirectory\s*=\s*"[^"]*"\s*;')
-    rm(r'\s*home\.stateVersion\s*=\s*"[^"]*"\s*;')
+    # The same patterns parse_home_config read the values with: a statement
+    # is removed only when its value went into the form.
+    for key, rx in (("username", _HM_RE_USERNAME), ("home_dir", _HM_RE_HOMEDIR),
+                    ("state_version", _HM_RE_STATEVER)):
+        if recognized.get(key):
+            rm(r'\s*' + rx.pattern)
 
-    if recognized.get("packages"):
-        rm(r'\s*home\.packages\s*=\s*\[(?:[^\]]|\](?=\s*;))*\]\s*;')
-    if recognized.get("git_enable"):
-        rm(r'\s*programs\.git\s*=\s*\{(?:[^{}]|\{[^{}]*\})*\}\s*;')
+    if recognized.get("packages") and _hm_packages(content):
+        rm(r'\s*' + _HM_RE_PACKAGES.pattern)
+    if recognized.get("git_enable") and _hm_git(content):
+        rm(r'\s*' + _HM_RE_GIT.pattern)
     shell = recognized.get("shell")
     if shell in ("bash", "zsh", "fish"):
         extra_key = {"bash": "initExtra", "zsh": "initExtra", "fish": "shellInit"}[shell]
@@ -1214,8 +1396,8 @@ def build_home_rest_brix(nix_content: str, recognized: dict) -> str:
             rm(rf'\s*programs\.{re.escape(shell)}\s*=\s*\{{(?:[^{{}}]|\{{[^{{}}]*\}})*\}}\s*;')
     if recognized.get("firefox"):
         rm(r'\s*programs\.firefox\.enable\s*=\s*true\s*;')
-    if recognized.get("xdg_user_dirs"):
-        rm(r'\s*xdg\.userDirs\s*=\s*\{(?:[^{}]|\{[^{}]*\})*\}\s*;')
+    if recognized.get("xdg_user_dirs") and _hm_xdg(content):
+        rm(r'\s*' + _HM_RE_XDG.pattern)
 
     content = _strip_nix_comments(content)
     content = re.sub(r'\n{3,}', '\n\n', content).strip()

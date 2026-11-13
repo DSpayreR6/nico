@@ -15,6 +15,9 @@
 - A flake config without that line is built with `--flake` instead of the classic way
 - Rebuild and dry-run find the hosts of a `flake.nix` NiCo cannot show as a form, instead of stopping at "no hosts found"
 - Importing a flake config no longer adds the `experimental-features` line on its own and no longer creates a `configuration.nix` next to a `flake.nix` that has none
+- Import no longer changes or drops values it cannot hold in the form; they stay in the file as a Nix-Brick instead: groups with a hyphen (`systemd-journal`), firewall ports given as an expression, a third `experimental-features` entry, `${…}` in the host name, `boot.kernelParams` with `++`, package and font lists with expressions (`python3.withPackages (…)`), a real user named `gast`, `home-manager.sharedModules` with expressions
+- Desktops NiCo has no form entry for (MATE, LXQt, Plasma 5) and snapper configs with further fields are kept instead of disappearing
+- Home Manager files: a `programs.git` block with `aliases` or `signing`, own `xdg.userDirs` paths, packages with a dot in the name (`pkgs.kdePackages.kate`) and `${…}` in the home directory survive saving; a `#` inside a string (`"#1e1e2e"`) no longer cuts the line and leaves invalid Nix
 - Removing a flake input that is still in use now names the Nix-Brick using it
 - A Nix-Brick whose end marker is missing or misspelt no longer takes the rest of the file with it. Its content stays in the file as ordinary text and the Nix-Brix behind it are found again; before, the next load reduced the file to its skeleton
 - A Nix-Brick in a zone the file does not have (a host that is gone, outputs extra in a file without outputs) is placed in front of the closing brace instead of disappearing

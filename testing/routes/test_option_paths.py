@@ -41,7 +41,9 @@ LEGACY_READ_ONLY = {
     "hardware.opengl.driSupport32Bit",
     "hardware.opengl.enable",
     "services.xserver.desktopManager.gnome.enable",
-    "services.xserver.desktopManager.plasma5.enable",
+    # plasma5 stood here until revision 2026-11-10 (B35): read, consumed and
+    # never written – the desktop was gone after the import. It is no longer
+    # read and stays a Nix-Brick (test_rev1110_import_values.py).
     "services.xserver.displayManager.autoLogin.enable",
     "services.xserver.displayManager.autoLogin.user",
     "services.xserver.displayManager.gdm.enable",
