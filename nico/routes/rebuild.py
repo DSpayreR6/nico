@@ -565,7 +565,7 @@ def register(app, ctx):
                     "if nix flake update; then",
                     f"    {rebuild_cmd} && _rebuild_ok=1",
                     "else",
-                    "    echo 'nix flake update fehlgeschlagen'",
+                    "    echo 'nix flake update failed'",
                     "fi",
                 ]
             else:
@@ -592,7 +592,7 @@ def register(app, ctx):
         else:
             if update_flake:
                 script_lines.append("nix flake update")
-                script_lines.append(f"[ $? -eq 0 ] && {rebuild_cmd} || echo 'nix flake update fehlgeschlagen'")
+                script_lines.append(f"[ $? -eq 0 ] && {rebuild_cmd} || echo 'nix flake update failed'")
             else:
                 script_lines.append(rebuild_cmd)
             script_lines += [
@@ -1336,7 +1336,7 @@ def register(app, ctx):
                     if upd.returncode != 0:
                         combined = (upd.stdout + upd.stderr).strip()
                         return jsonify({"ok": False, "mode": "flake",
-                                        "output": "nix flake update fehlgeschlagen:\n" + combined})
+                                        "output": chr(0x1f).join(["ERR_DRY_UPDATE_FAILED", combined])})
                 except subprocess.TimeoutExpired:
                     return jsonify({"ok": False, "mode": "flake", "output": "ERR_UPDATE_TIMEOUT"})
                 except FileNotFoundError:
@@ -1374,7 +1374,7 @@ def register(app, ctx):
                 if result.returncode == 0:
                     out = combined or "✓ Nichts zu bauen – Konfiguration ist aktuell."
                     return jsonify({"ok": True, "mode": "flake", "output": out})
-                return jsonify({"ok": False, "mode": "flake", "output": combined or "Unbekannter Fehler."})
+                return jsonify({"ok": False, "mode": "flake", "output": combined or "ERR_UNKNOWN"})
             except subprocess.TimeoutExpired:
                 return jsonify({"ok": False, "mode": "flake", "output": "ERR_DRY_TIMEOUT_FLAKE"})
             except FileNotFoundError:

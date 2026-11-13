@@ -75,6 +75,7 @@ ERR_BAD_REMOTE_BRANCH    = "ERR_BAD_REMOTE_BRANCH"
 # user did not already have from git's own output, and keeping eighteen
 # separate translations of "failed" would be work without a reader.
 ERR_GIT_FAILED           = "ERR_GIT_FAILED"
+ERR_INSIDE_OTHER_REPO    = "ERR_INSIDE_OTHER_REPO"
 ERR_GIT_FAILED_OUT       = "ERR_GIT_FAILED_OUT"
 ERR_REMOTE_BRANCHES      = "ERR_REMOTE_BRANCHES"
 ERR_UPSTREAM_SET_FAILED  = "ERR_UPSTREAM_SET_FAILED"
@@ -149,7 +150,9 @@ def _run(args: list[str], cwd: str, timeout: int = 10, remote: bool = False,
     except subprocess.TimeoutExpired:
         # Marked so callers can tell a timeout from a real git error: the two
         # need different advice ("wait / check the upload" vs. "fix the repo").
-        return 1, f"__TIMEOUT__ git {args[0]} nach {timeout}s abgebrochen"
+        # Tool output, so English like git's own lines; the interface shows
+        # its translated advice for the TIMEOUT class next to it.
+        return 1, f"__TIMEOUT__ git {args[0]} timed out after {timeout}s"
     except Exception as e:
         return 1, str(e)
 
@@ -178,6 +181,21 @@ def is_git_repo(nixos_dir: str) -> bool:
     if rc != 0:
         return False
     return Path(out.strip()).resolve() == Path(nixos_dir).resolve()
+
+
+def inside_other_repo(nixos_dir: str) -> str:
+    """Root of the repository nixos_dir lies in as a subdirectory, '' if none.
+
+    A config kept inside a larger repository (dotfiles) is not "no repository":
+    `git init` there creates a nested one, and the outer repository then sees
+    the config as an untracked directory it can no longer take in
+    (revision 2026-11-10, B41).
+    """
+    rc, out = _run(["rev-parse", "--show-toplevel"], cwd=nixos_dir)
+    if rc != 0 or not out.strip():
+        return ""
+    top = Path(out.strip()).resolve()
+    return "" if top == Path(nixos_dir).resolve() else str(top)
 
 
 def _ensure_identity(nixos_dir: str) -> None:
@@ -258,6 +276,9 @@ def init_repo(nixos_dir: str) -> tuple[bool, str]:
     of all existing files.
     Returns (success, message).
     """
+    outer = inside_other_repo(nixos_dir)
+    if outer:
+        return False, _err(ERR_INSIDE_OTHER_REPO, outer)
     rc, out = _run(["init"], cwd=nixos_dir)
     if rc != 0:
         return False, _err(ERR_GIT_FAILED_OUT, "git init", out)
@@ -884,7 +905,7 @@ def set_remote(nixos_dir: str, url: str) -> tuple[bool, str]:
     else:
         rc, out = _run(["remote", "add", remote_name, url], cwd=nixos_dir)
     if rc != 0:
-        return False, out or 'Fehler beim Setzen des Remotes.'
+        return False, out or _err(ERR_GIT_FAILED, "git remote")
     return True, ''
 
 

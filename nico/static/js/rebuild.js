@@ -1332,7 +1332,9 @@ async function runSaveAndDryRun() {
   if (!res) { output.textContent = t('dryrun.networkError'); return; }
   const data = await res.json();
   output.style.color = '';
-  output.innerHTML = _colorizedOutput(_dryRunHostHeader(body) + (data.output || ''));
+  // tErr as in runDryRun: the output may be a code (ERR_DRY_…), and this
+  // path used to show it as it came.
+  output.innerHTML = _colorizedOutput(_dryRunHostHeader(body) + (tErr(data.output) || ''));
   _dryRunShowStatus(data.ok);
 }
 

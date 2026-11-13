@@ -27,6 +27,8 @@
 - Error text coming from nix is escaped before it is shown in the rebuild monitor
 - Directory names in `config.json` (hosts, modules, Home Manager) must be relative names inside the config directory; a `config.json` that came along with a cloned config can no longer point writes elsewhere
 - Requests that fetch from the git remote, search packages or store the default host require the session token; with "sync with remote" off NiCo no longer contacts the remote for the status display
+- A config directory that sits inside a larger git repository (dotfiles) no longer gets a nested repository of its own during setup; "Initialise git" explains why instead
+- The page shown when NiCo is already running, a failed `nix flake update` in the dry-run and a few git messages appeared in German in every language; they are translated now
 - Removing a flake input that is still in use now names the Nix-Brick using it
 - A Nix-Brick whose end marker is missing or misspelt no longer takes the rest of the file with it. Its content stays in the file as ordinary text and the Nix-Brix behind it are found again; before, the next load reduced the file to its skeleton
 - A Nix-Brick in a zone the file does not have (a host that is gone, outputs extra in a file without outputs) is placed in front of the closing brace instead of disappearing

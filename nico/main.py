@@ -146,19 +146,23 @@ def _running_identity(port: int) -> tuple:
     return str(data.get("version") or ""), str(data.get("revision") or "")
 
 
-def _serve_already_running_page(preferred_port: int) -> None:
-    """Open a browser page offering restart when NiCo is already running."""
-    import http.server
-    import secrets
+# The page a second start ends on. Its texts were German sentences in the
+# source and appeared like that in every language (revision 2026-11-10, B48);
+# they now come from the language files, like the version note above.
+_RUNNING_KEYS = {
+    "T_INTRO":      "running.intro",
+    "T_OPEN":       "running.open",
+    "T_RESTART":    "running.restart",
+    "T_RESTARTING": "running.restarting",
+    "T_STOPPING":   "running.stopping",
+    "T_WAITING":    "running.waiting",
+    "T_TIMEOUT":    "running.timeout",
+}
+# Placeholders that sit in the script and need a JavaScript string literal.
+_RUNNING_JS = ("T_RESTARTING", "T_STOPPING", "T_WAITING", "T_TIMEOUT")
 
-    mini_port = _find_free_port(preferred_port + 1)
-    theme_css = _load_theme_css()
-    # Restart requires this token; it is embedded in the page, which is only
-    # served to requests with a local Host header (DNS-rebinding guard).
-    restart_token = secrets.token_hex(16)
-
-    _HTML = """<!DOCTYPE html>
-<html lang="de">
+_RUNNING_HTML = """<!DOCTYPE html>
+<html lang="T_LANG">
 <head>
   <meta charset="utf-8">
   <title>NiCo</title>
@@ -211,13 +215,11 @@ THEME_CSS
   <div class="card">
     <div class="logo">NiCo</div>
     <h2>NixOS Configurator</h2>
-    <p>NiCo l&auml;uft bereits in einem anderen Fenster &ndash;
-       oder das Tab wurde nur geschlossen.<br>
-       Die laufende Instanz &ouml;ffnen, oder NiCo neu starten:</p>
+    <p>T_INTRO</p>
     VERSION_NOTE
     <div class="buttons">
-      <button id="btn-open" onclick="openRunning()">Laufende Instanz &ouml;ffnen</button>
-      <button id="btn-restart" onclick="doRestart()">Neu starten</button>
+      <button id="btn-open" onclick="openRunning()">T_OPEN</button>
+      <button id="btn-restart" onclick="doRestart()">T_RESTART</button>
     </div>
     <div id="msg"></div>
   </div>
@@ -230,10 +232,10 @@ THEME_CSS
       const msg = document.getElementById('msg');
       document.getElementById('btn-open').disabled = true;
       btn.disabled = true;
-      btn.textContent = 'Wird neu gestartet\u2026';
-      msg.textContent = 'Alte Instanz wird beendet\u2026';
+      btn.textContent = T_RESTARTING;
+      msg.textContent = T_STOPPING;
       try { await fetch('http://127.0.0.1:MINI_PORT/restart', {method:'POST', headers:{'X-Restart-Token':'RESTART_TOKEN'}}); } catch {}
-      msg.textContent = 'Warte auf NiCo\u2026';
+      msg.textContent = T_WAITING;
       for (let i = 0; i < 60; i++) {
         await new Promise(r => setTimeout(r, 300));
         try {
@@ -242,20 +244,61 @@ THEME_CSS
           if (j.running) { window.location.href = 'http://127.0.0.1:PREF_PORT/'; return; }
         } catch {}
       }
-      msg.textContent = 'Timeout \u2013 bitte manuell \xf6ffnen.';
+      msg.textContent = T_TIMEOUT;
     }
   </script>
 </body>
 </html>"""
 
-    note = _version_note(_running_identity(preferred_port), (get_version(), get_revision()),
-                         str(config_manager.get_app_settings().get("language") or "en"))
-    page = (_HTML
+
+def _running_texts(lang: str) -> dict:
+    """The texts of the already-running page in `lang`, English as fallback."""
+    lang_dir = Path(__file__).resolve().parent / "static" / "lang"
+    texts: dict = {}
+    for name in ("en", lang):                       # later wins
+        try:
+            data = json.loads((lang_dir / f"{name}.json").read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        for key in _RUNNING_KEYS.values():
+            if isinstance(data.get(key), str) and data[key] and data[key] != "__TODO__":
+                texts[key] = data[key]
+    return texts
+
+
+def _running_page(lang: str, *, theme_css: str, note: str, mini_port: int,
+                  preferred_port: int, restart_token: str) -> str:
+    texts = _running_texts(lang)
+    page = _RUNNING_HTML.replace("T_LANG", html.escape(lang if lang.isalpha() else "en"))
+    # Longest placeholder first: T_RESTART is a prefix of T_RESTARTING.
+    for placeholder in sorted(_RUNNING_KEYS, key=len, reverse=True):
+        text = texts.get(_RUNNING_KEYS[placeholder], "")
+        page = page.replace(placeholder,
+                            json.dumps(text) if placeholder in _RUNNING_JS
+                            else html.escape(text).replace("\n", "<br>"))
+    return (page
             .replace("THEME_CSS", theme_css)
             .replace("VERSION_NOTE", note)
             .replace("MINI_PORT", str(mini_port))
             .replace("PREF_PORT", str(preferred_port))
             .replace("RESTART_TOKEN", restart_token))
+
+
+def _serve_already_running_page(preferred_port: int) -> None:
+    """Open a browser page offering restart when NiCo is already running."""
+    import http.server
+    import secrets
+
+    mini_port = _find_free_port(preferred_port + 1)
+    theme_css = _load_theme_css()
+    # Restart requires this token; it is embedded in the page, which is only
+    # served to requests with a local Host header (DNS-rebinding guard).
+    restart_token = secrets.token_hex(16)
+
+    lang = str(config_manager.get_app_settings().get("language") or "en")
+    note = _version_note(_running_identity(preferred_port), (get_version(), get_revision()), lang)
+    page = _running_page(lang, theme_css=theme_css, note=note, mini_port=mini_port,
+                         preferred_port=preferred_port, restart_token=restart_token)
 
     class _Handler(http.server.BaseHTTPRequestHandler):
         def _host_ok(self) -> bool:

@@ -415,6 +415,8 @@ def create_app() -> Flask:
 
         # Ensure git repo exists – init if missing (best-effort, silently skip if git unavailable)
         try:
+            # init_repo refuses a directory inside a larger repository
+            # (git_manager.inside_other_repo); nothing is created there.
             if not git_manager.is_git_repo(str(path)):
                 git_manager.init_repo(str(path))
         except Exception:
