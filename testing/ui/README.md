@@ -66,6 +66,23 @@ den Editor-Text; eine abbildbare Host-Datei daneben zeigt weiter ihr
 Formular. Legt Wegwerf-Config und XDG_CONFIG_HOME selbst an. Das Gegenstück
 ohne Browser ist `testing/routes/test_rev1110_guard.py` (84 Prüfungen).
 
+## test_flake_create.py
+
+„flake.nix anlegen" als eigener Schritt, 20 Prüfungen: die Schaltfläche
+erscheint nur ohne `flake.nix`, der Schalter darüber legt keine an, der
+Dialog nennt Verzeichnis und Host und schließt nur per Schaltfläche, danach
+liegen `flake.nix`, Host-Verzeichnis und die verschobene Hardware-Datei da.
+Legt Wegwerf-Config und XDG_CONFIG_HOME selbst an. Das Gegenstück ohne
+Browser ist `testing/routes/test_rev1110_flake_mode.py`.
+
+## test_rebuild_activation_warning.py
+
+Der Rebuild-Monitor bei „gebaut und aktiv, aber ein Dienst startete nicht
+neu" (gelb statt rot, Dienst beim Namen, Sicherungspunkt angeboten) und die
+Maskierung von Fehlertexten aus nix. Es läuft kein Rebuild: `EventSource`
+wird durch eine Attrappe ersetzt. Braucht ein eigenes XDG_CONFIG_HOME; ein
+git-Repository in der Wegwerf-Config legt der Test selbst an.
+
 ## test_validator_gate.py
 
 Der Validator vor dem Bauen, 27 Prüfungen: rote Funde öffnen die Ausgabe,
