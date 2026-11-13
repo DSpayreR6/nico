@@ -119,6 +119,33 @@ try:
     s = state()
     check("Ergebnis ist grün", "result-success" in s["cls"], s["cls"])
     check("Sicherungspunkt wie bisher", s["push"] is True)
+
+    print("\n5. Fehlertext von nix wird maskiert (Revision 2026-11-10, S11)")
+    # A config from elsewhere can make nix say anything, e.g. through
+    # throw "<img src=x onerror=…>". The first error line and the text of an
+    # error event went into innerHTML as they were.
+    EVIL = 'error: <img src=x onerror="window._xss=1">'
+    d.get(f"http://127.0.0.1:{PORT}/"); time.sleep(4)
+    d.execute_script(FAKE + "attachRebuildMonitor(0);")
+    time.sleep(0.5)
+    d.execute_script("window._fakeES.onmessage({data: arguments[0]});",
+                     json.dumps({"type": "output", "line": EVIL}))
+    d.execute_script("window._fakeES.onmessage({data: arguments[0]});",
+                     json.dumps({**BASE, "error_lines": [EVIL]}))
+    time.sleep(1.5)
+    check("erste Fehlerzeile: kein Element im Ergebnis",
+          not d.find_elements(By.CSS_SELECTOR, "#rebuild-result img"))
+    check("der Text steht wörtlich da",
+          "<img src=x" in d.find_element(By.ID, "rebuild-result").text)
+    d.get(f"http://127.0.0.1:{PORT}/"); time.sleep(4)
+    d.execute_script(FAKE + "attachRebuildMonitor(0);")
+    time.sleep(0.5)
+    d.execute_script("window._fakeES.onmessage({data: arguments[0]});",
+                     json.dumps({"type": "error", "message": EVIL}))
+    time.sleep(1.5)
+    check("error-Ereignis: kein Element im Ergebnis",
+          not d.find_elements(By.CSS_SELECTOR, "#rebuild-result img"))
+    check("kein Skript gelaufen", d.execute_script("return window._xss;") is None)
     if len(sys.argv) > 1:
         d.get(f"http://127.0.0.1:{PORT}/"); time.sleep(4)
         play({**BASE, "activated_with_warnings": True,

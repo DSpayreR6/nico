@@ -266,6 +266,9 @@ def init_repo(nixos_dir: str) -> tuple[bool, str]:
     create_gitignore(nixos_dir)  # ensure .gitignore exists before first commit
 
     _run(["add", "-A"], cwd=nixos_dir)
+    # Same limit as every later commit: a 60 MB file taken in here blocks
+    # every push afterwards (incident 2026-09-12; revision 2026-11-10, B46).
+    _unstage_oversized(nixos_dir)
     rc, out = _run(["commit", "-m", "NiCo: repository initialised"], cwd=nixos_dir)
     if rc != 0 and "nothing to commit" not in out:
         return False, _err(ERR_GIT_FAILED_OUT, "git commit", out)
@@ -954,7 +957,7 @@ def _get_commit_list(nixos_dir: str, range_spec: str, limit: int = 5) -> list:
     return result
 
 
-def check_remote_status(nixos_dir: str) -> dict:
+def check_remote_status(nixos_dir: str, fetch: bool = True) -> dict:
     """
     Check whether the local repo is behind its remote.
     Returns {
@@ -975,10 +978,13 @@ def check_remote_status(nixos_dir: str) -> dict:
     if rc != 0 or not remote_url:
         return {"has_git": True, "has_remote": False, "remote_url": "", "behind": 0, "error": ""}
 
-    rc, fetch_out = _run(["fetch", "--quiet", remote_name], cwd=nixos_dir, timeout=15, remote=True)
-    if rc != 0:
-        return {"has_git": True, "has_remote": True, "remote_url": remote_url, "behind": 0,
-                "error": _err(ERR_GIT_FAILED_OUT, "git fetch", fetch_out)}
+    # fetch=False: "Mit Remote abgleichen" is off. The answer then rests on
+    # what the last fetch left behind – the remote is not contacted.
+    if fetch:
+        rc, fetch_out = _run(["fetch", "--quiet", remote_name], cwd=nixos_dir, timeout=15, remote=True)
+        if rc != 0:
+            return {"has_git": True, "has_remote": True, "remote_url": remote_url, "behind": 0,
+                    "error": _err(ERR_GIT_FAILED_OUT, "git fetch", fetch_out)}
 
     rc, count_out = _run(["rev-list", "HEAD..@{u}", "--count"], cwd=nixos_dir)
     if rc != 0:
@@ -993,7 +999,7 @@ def check_remote_status(nixos_dir: str) -> dict:
     return {"has_git": True, "has_remote": True, "remote_url": remote_url, "behind": behind, "error": ""}
 
 
-def check_start_guard(nixos_dir: str) -> dict:
+def check_start_guard(nixos_dir: str, fetch: bool = True) -> dict:
     """
     Inspect the local repository before NiCo loads and normalizes files.
     Returns a state machine for the startup guard dialog.
@@ -1084,7 +1090,8 @@ def check_start_guard(nixos_dir: str) -> dict:
             "local_branch": local_branch.strip() if local_branch else "",
         }
 
-    rc, fetch_out = _run(["fetch", "--quiet", remote_name], cwd=nixos_dir, timeout=15, remote=True)
+    rc, fetch_out = (_run(["fetch", "--quiet", remote_name], cwd=nixos_dir, timeout=15, remote=True)
+                     if fetch else (0, ""))
     if rc != 0:
         return {
             "state": "error",

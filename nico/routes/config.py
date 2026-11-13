@@ -23,6 +23,11 @@ from ..core import (
 )
 
 
+# A host name becomes a directory below hosts_dir. `..` is a valid URL
+# segment and led the write one level up (revision 2026-11-10, S12).
+_HOST_NAME_RE = re.compile(r'[A-Za-z0-9_][\w.-]*')
+
+
 def register(app, ctx):
     _check_csrf     = ctx["check_csrf"]
     _require_setup  = ctx["require_setup"]
@@ -104,6 +109,9 @@ def register(app, ctx):
         patch    = {k: v for k, v in incoming.items() if k in _CONFIG_KEYS}
         if not patch:
             return jsonify({"success": True})
+        for key in config_manager.DIR_SETTING_KEYS:
+            if key in patch and not config_manager.valid_dir_name(patch[key]):
+                return jsonify({"error": "ERR_INVALID_NAME"}), 400
 
         config_manager.save_config_settings(nixos_dir, patch)
         return jsonify({"success": True})
@@ -145,6 +153,9 @@ def register(app, ctx):
         for key in ("rebuild_safe_jobs", "rebuild_safe_cores"):
             if key in patch:
                 patch[key] = buildlimits.clean(patch[key])
+        for key in ("theme", "language"):
+            if key in patch and not isinstance(patch[key], str):
+                del patch[key]
         if not patch:
             return jsonify({"success": True})
 
@@ -406,6 +417,8 @@ def register(app, ctx):
     def save_host_config_route(host_name):
         if err := _check_csrf():
             return err
+        if not _HOST_NAME_RE.fullmatch(host_name):
+            return jsonify({"error": "ERR_INVALID_NAME"}), 400
         nixos_dir, err = _require_setup()
         if err:
             return err
@@ -429,6 +442,8 @@ def register(app, ctx):
     def write_host_file(host_name):
         if err := _check_csrf():
             return err
+        if not _HOST_NAME_RE.fullmatch(host_name):
+            return jsonify({"error": "ERR_INVALID_NAME"}), 400
         nixos_dir, err = _require_setup()
         if err:
             return err

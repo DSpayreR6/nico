@@ -17,6 +17,9 @@ def register(app, ctx):
 
     # -------------------------------------------------------------------- git
 
+    def _git_sync() -> bool:
+        return bool(config_manager.get_app_settings().get("git_sync", True))
+
     @app.route("/api/git/status")
     def git_status():
         import shutil
@@ -31,13 +34,19 @@ def register(app, ctx):
 
     @app.route("/api/git/remote-status")
     def git_remote_status():
+        # GETs that reach out to the remote need the token: any web page can
+        # send a GET to 127.0.0.1. And whether NiCo talks to the remote at
+        # all is the user's switch – it used to be asked in the frontend
+        # only (revision 2026-11-10, S13).
+        if err := _check_csrf(): return err
         nixos_dir, err = _require_setup()
         if err:
             return jsonify({"has_git": False, "has_remote": False, "remote_url": "", "behind": 0, "error": ""})
-        return jsonify(git_manager.check_remote_status(nixos_dir))
+        return jsonify(git_manager.check_remote_status(nixos_dir, fetch=_git_sync()))
 
     @app.route("/api/git/start-check")
     def git_start_check():
+        if err := _check_csrf(): return err
         nixos_dir, err = _require_setup()
         if err:
             return jsonify({
@@ -51,7 +60,7 @@ def register(app, ctx):
                 "remote_url": "",
                 "detail": "ERR_NOT_SETUP",
             })
-        return jsonify(git_manager.check_start_guard(nixos_dir))
+        return jsonify(git_manager.check_start_guard(nixos_dir, fetch=_git_sync()))
 
     @app.route("/api/git/init", methods=["POST"])
     def git_init():

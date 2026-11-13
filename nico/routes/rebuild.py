@@ -239,7 +239,41 @@ class _Activation:
 # from the browser into a shell script - an injection path that vorgaben.txt
 # closes on purpose ("kein shell=True") - or teaching the backend to read the
 # language files, which it does nowhere else. Decided 2026-11-01.
-def _write_rebuild_log(log_path: Path, lines: list[str],
+class _LogBuffer:
+    """The output of one rebuild, capped while it is collected.
+
+    A plain list stood here and the cap applied only when the log was
+    written: a run like the one of 2026-09-12 (2.1 GB) sat in NiCo's memory
+    in full while the machine was busy building (revision 2026-11-10, B43).
+    Keeps the tail, like the written log, and counts what it let go.
+    """
+
+    def __init__(self, max_bytes: int | None = None):
+        from collections import deque
+        self._lines = deque()
+        self._size = 0
+        self._max = _LOG_MAX_BYTES if max_bytes is None else max_bytes
+        self.dropped = 0
+
+    def append(self, line: str) -> None:
+        self._lines.append(line)
+        self._size += len(line.encode("utf-8", "replace")) + 1
+        while self._size > self._max and len(self._lines) > 1:
+            old = self._lines.popleft()
+            self._size -= len(old.encode("utf-8", "replace")) + 1
+            self.dropped += 1
+
+    def __len__(self):
+        return len(self._lines)
+
+    def __iter__(self):
+        return iter(self._lines)
+
+    def __reversed__(self):
+        return reversed(self._lines)
+
+
+def _write_rebuild_log(log_path: Path, lines: "list[str] | _LogBuffer",
                        errors: "_ErrorLines | None" = None) -> bool:
     """Write the rebuild output, keeping at most _LOG_MAX_BYTES from the end.
 
@@ -255,7 +289,7 @@ def _write_rebuild_log(log_path: Path, lines: list[str],
             break
         kept.append(line)
     kept.reverse()
-    dropped = len(lines) - len(kept)
+    dropped = len(lines) - len(kept) + getattr(lines, "dropped", 0)
     try:
         log_path.parent.mkdir(parents=True, exist_ok=True)
         with open(log_path, "w", encoding="utf-8") as fh:
@@ -429,6 +463,8 @@ def register(app, ctx):
     @app.route("/api/rebuild/default-host")
     def rebuild_default_host():
         """Return the default host for rebuild (hostname match, saved setting, or null)."""
+        # A GET that may write the app settings (revision 2026-11-10, S13).
+        if err := _check_csrf(): return err
         nixos_dir, err = _require_setup()
         if err:
             return err
@@ -722,7 +758,7 @@ def register(app, ctx):
                 'dl_expected': 0,
             }
             # Buffer for log output
-            log_lines   = []
+            log_lines   = _LogBuffer()
             # Collected apart from it, never truncated – see _ErrorLines
             err_lines   = _ErrorLines()
             # Outcome of the activation phase – see _Activation

@@ -9,8 +9,8 @@ import hashlib
 import re
 import shlex
 
-from .brix import (FILE_FORMAT, SECTION_HDR_SEP, format_brick, inject_brick_blocks,
-                   input_names_in_bricks, section_file_label)
+from .brix import (SECTION_HDR_SEP, detect_content_format, format_brick,
+                   inject_brick_blocks, input_names_in_bricks, section_file_label)
 from .importer import flake_host_brick_name, flake_host_section
 
 _NIX_ATTR_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_'-]*$")
@@ -70,7 +70,12 @@ def _add_version_hash(content: str, ftype: str = "") -> str:
     h = content_hash(content)
     prefix = f"{ftype}#" if ftype else ""
     lines = content.split("\n")
-    lines.insert(1, f"# nico-version: {prefix}{h}#f{FILE_FORMAT}")
+    # The number the content really needs, not the newest one this version
+    # knows: `#f3` only with a deactivated brick in the file. Stamping
+    # FILE_FORMAT here locked a 0.14.0 out of every file a newer NiCo had
+    # saved, and disagreed with core.set_type_in_content, which stamped the
+    # same file `#f2` after the next brick action (revision 2026-11-10, B42).
+    lines.insert(1, f"# nico-version: {prefix}{h}#f{detect_content_format(content)}")
     return "\n".join(lines)
 
 
@@ -642,11 +647,11 @@ def _sec_backup(data: dict, brix: dict) -> "list[str]":
                     f'    SUBVOLUME = "{nix_esc(sn_cfg["mountpoint"])}";',
                     "    TIMELINE_CREATE = true;",
                     "    TIMELINE_CLEANUP = true;",
-                    f"    TIMELINE_LIMIT_HOURLY = {sn_cfg.get('hourly', 5)};",
-                    f"    TIMELINE_LIMIT_DAILY = {sn_cfg.get('daily', 7)};",
-                    f"    TIMELINE_LIMIT_WEEKLY = {sn_cfg.get('weekly', 0)};",
-                    f"    TIMELINE_LIMIT_MONTHLY = {sn_cfg.get('monthly', 1)};",
-                    f"    TIMELINE_LIMIT_YEARLY = {sn_cfg.get('yearly', 0)};",
+                    f"    TIMELINE_LIMIT_HOURLY = {_int_or(sn_cfg.get('hourly'), 5)};",
+                    f"    TIMELINE_LIMIT_DAILY = {_int_or(sn_cfg.get('daily'), 7)};",
+                    f"    TIMELINE_LIMIT_WEEKLY = {_int_or(sn_cfg.get('weekly'), 0)};",
+                    f"    TIMELINE_LIMIT_MONTHLY = {_int_or(sn_cfg.get('monthly'), 1)};",
+                    f"    TIMELINE_LIMIT_YEARLY = {_int_or(sn_cfg.get('yearly'), 0)};",
                     "  };",
                 ]
     if backup_lines or _has_section_brix(brix, "FSYS"):
@@ -795,7 +800,7 @@ def flake_known_input_lines(data: dict) -> "list[str]":
     hw_input   = bool(data.get("flake_nixos_hardware"))
     pm_input   = bool(data.get("flake_plasma_manager"))
 
-    inp: list[str] = [f'    nixpkgs.url = "github:NixOS/nixpkgs/{channel}";']
+    inp: list[str] = [f'    nixpkgs.url = "github:NixOS/nixpkgs/{nix_esc(channel)}";']
     if hm_input:
         hm_ref = _home_manager_ref_for_nixpkgs_channel(channel)
         hm_url = "github:nix-community/home-manager"
@@ -928,7 +933,7 @@ def generate_flake_nix(data: dict, nixos_dir: "str | Path | None" = None) -> str
             hname = h["name"]
             _ensure_host_brix(hname)
             return (
-                f"    {hname} = nixpkgs.lib.nixosSystem {{\n"
+                f"    {nix_attr(hname)} = nixpkgs.lib.nixosSystem {{\n"
                 + _host_header(hname)
                 + "\n"
                 + "    };"

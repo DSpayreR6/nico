@@ -7,7 +7,11 @@ from create_app() are passed in via the ctx dict.
 
 from flask import jsonify, request
 
+import re
+
 from .. import config_manager
+
+_PKG_ATTR_RE = re.compile(r"[A-Za-z_][\w.'+-]*")
 
 
 def register(app, ctx):
@@ -19,6 +23,9 @@ def register(app, ctx):
 
     @app.route("/api/packages/search")
     def packages_search():
+        # A GET, but it starts `nix search` (network, up to 60 s) – any web
+        # page can trigger a GET against 127.0.0.1 (revision 2026-11-10, S13).
+        if err := _check_csrf(): return err
         from .. import packages as pkg_mod
         query = request.args.get("q", "").strip()
         if len(query) < 2:
@@ -50,6 +57,10 @@ def register(app, ctx):
         pkg = request.get_json(silent=True) or {}
         if not pkg.get("attr"):
             return jsonify({"error": "ERR_NO_PACKAGE"}), 400
+        # The attribute goes into the package list as it is, so it has to be
+        # a plain name – the same shape the importer reads back.
+        if not isinstance(pkg["attr"], str) or not _PKG_ATTR_RE.fullmatch(pkg["attr"]):
+            return jsonify({"error": "ERR_INVALID_NAME"}), 400
 
         data     = config_manager.load_config(nixos_dir) or {}
         pkglist  = data.get("packages", [])
@@ -79,17 +90,7 @@ def register(app, ctx):
         config_manager.save_config(nixos_dir, data)
         return jsonify({"success": True})
 
-    @app.route("/api/packages/<path:attr>/toggle", methods=["POST"])
-    def packages_toggle(attr):
-        if err := _check_csrf(): return err
-        nixos_dir, err = _require_setup()
-        if err:
-            return err
-        data = config_manager.load_config(nixos_dir) or {}
-        for p in data.get("packages", []):
-            if p["attr"] == attr:
-                p["enabled"] = not p.get("enabled", True)
-                break
-        config_manager.save_config(nixos_dir, data)
-        return jsonify({"success": True})
+    # /api/packages/<attr>/toggle stood here, called by nothing. A package
+    # switched off through it fell out of the file and was gone on the next
+    # load (revision 2026-11-10, T16).
 

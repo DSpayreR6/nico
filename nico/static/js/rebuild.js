@@ -949,7 +949,7 @@ function attachRebuildMonitor(fromIndex = 0) {
         ? niIcon('check-circle') + ' ' + t('rebuild.success')
         : activatedWarn
         ? niIcon('alert-triangle') + ' ' + escHtml(t('rebuild.activatedWarn'))
-        : niIcon('x-circle') + ' ' + t('rebuild.failed') + (firstErrorLine ? ': ' + firstErrorLine.substring(0, 80) : '');
+        : niIcon('x-circle') + ' ' + t('rebuild.failed') + (firstErrorLine ? ': ' + escHtml(firstErrorLine.substring(0, 80)) : '');
       _finishMonitor(activatedWarn ? 'warning' : msg.success, label);
       // Units first, error lines second: both insert right after the result
       // line, so the later call ends up on top – and the cause belongs above
@@ -1050,7 +1050,9 @@ function attachRebuildMonitor(fromIndex = 0) {
       span.textContent = '\n[!] ' + errText + '\n';
       logEl.appendChild(span);
       logEl.scrollTop = logEl.scrollHeight;
-      _finishMonitor(false, niIcon('x-circle') + ' ' + errText);
+      // escHtml: the text is nix output or an exception, and a config from
+      // elsewhere can make nix say `throw "<img src=x onerror=…>"`.
+      _finishMonitor(false, niIcon('x-circle') + ' ' + escHtml(errText));
       es.close();
       _rebuildES = null;
 

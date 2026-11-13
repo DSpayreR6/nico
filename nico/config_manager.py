@@ -291,6 +291,10 @@ def get_app_settings() -> dict:
                 stored = json.load(f)
             if not isinstance(stored, dict):
                 raise ValueError("settings.json does not hold an object")
+            # A wrong type here took the start page down (`theme: 5`).
+            for key in ("theme", "language"):
+                if key in stored and not isinstance(stored[key], str):
+                    del stored[key]
             defaults.update(stored)
             return _migrate_section_names(defaults)
         except OSError:
@@ -329,6 +333,19 @@ def _config_json(nixos_dir: str) -> Path:
     return Path(nixos_dir) / "config.json"
 
 
+# config.json travels with a cloned config, so its directory names are
+# someone else's input: `../x` or an absolute path led every host write out
+# of the config directory, and a number made `.strip()` raise everywhere
+# (revision 2026-11-10, S12). Relative, no `..`, no hidden segment.
+_DIR_NAME_RE = re.compile(r'[A-Za-z0-9_][\w.-]*(?:/[A-Za-z0-9_][\w.-]*)*')
+DIR_SETTING_KEYS = ("hosts_dir", "modules_dir", "hm_dir")
+
+
+def valid_dir_name(value) -> bool:
+    """True for a relative directory name NiCo may write below the config."""
+    return isinstance(value, str) and bool(_DIR_NAME_RE.fullmatch(value))
+
+
 def load_config_settings(nixos_dir: str) -> dict:
     """Load config.json from the nixos config directory."""
     import json
@@ -342,6 +359,9 @@ def load_config_settings(nixos_dir: str) -> dict:
             stored = json.load(fh)
         if not isinstance(stored, dict):
             raise ValueError("config.json does not hold an object")
+        for key in DIR_SETTING_KEYS:
+            if key in stored and not valid_dir_name(stored[key]):
+                del stored[key]            # the default takes its place
         defaults.update(stored)
         return defaults
     except OSError:

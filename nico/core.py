@@ -372,16 +372,18 @@ def hm_patch_packages(content: str, packages: list) -> str:
 
 
 def hm_update_hash(content: str) -> str:
-    canonical = re.sub(
-        r'^# nico-version: (?:[a-z]+#)?[0-9a-f]{8}(?:#[pr])?\n', '',
-        content, count=1, flags=re.MULTILINE
-    )
+    """Recompute the hash in the nico-version line, leaving the rest of it.
+
+    Uses the generator's pattern. The one that stood here did not know the
+    `#f<N>` suffix: the version line stayed in the hashed text and the file
+    read as "modified" right after NiCo wrote it (revision 2026-11-10, B44).
+    """
+    m = generator._VERSION_RE.search(content)
+    if not m:
+        return content
+    canonical = generator._VERSION_RE.sub('', content, count=1)
     new_hash = generator.content_hash(canonical)
-    return re.sub(
-        r'^(# nico-version: (?:[a-z]+#)?)[0-9a-f]{8}',
-        rf'\g<1>{new_hash}',
-        content, count=1, flags=re.MULTILINE
-    )
+    return content[:m.start(1)] + new_hash + content[m.end(1):]
 
 
 def normalize_hm_content(content: str) -> tuple[str, dict]:

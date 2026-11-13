@@ -10,6 +10,7 @@ from pathlib import Path
 from flask import jsonify, request
 
 from .. import atomic, config_manager, git_manager, importer
+from ..hardware import _keep_replaced
 from ..core import (
     _FILENAME_TYPE_HINTS,
     _SAFE_NAME_RE,
@@ -160,13 +161,15 @@ def register(app, ctx):
             return jsonify({"error": code}), 400 if code == "ERR_INVALID_PATH" else 404
 
         dst = target_dir / "hardware-configuration.nix"
-        backup = target_dir / "hardware-configuration.nix.bak"
+        replaced = dst.exists()
 
         try:
-            if dst.exists():
-                if backup.exists():
-                    backup.unlink()
-                dst.replace(backup)
+            if replaced:
+                # Never over an existing backup: the first free name is taken
+                # (hardware._keep_replaced). A `.bak` already there used to be
+                # deleted, and with it the only copy of an earlier state
+                # (revision 2026-11-10, B45 – the second place after B26).
+                _keep_replaced(dst)
             shutil.copy2(src, dst)
         except PermissionError:
             return jsonify({"error": "ERR_IMPORT_PERMISSION"}), 403
@@ -176,13 +179,34 @@ def register(app, ctx):
         return jsonify({
             "success": True,
             "target_path": str(dst.relative_to(root)),
-            "backup_created": backup.exists(),
+            "backup_created": replaced,
             "source_path": str(src),
         })
 
     def _resolve_config_rel(root: Path, rel_path: str) -> Path:
         target = (root / rel_path).resolve()
         target.relative_to(root)
+        return target
+
+    def _resolve_entry(root: Path, rel_path: str) -> Path:
+        """The entry itself for rename and delete – not what it points to.
+
+        Only the parent directory is resolved. Resolving the whole path
+        followed a symlink: deleting the link removed its target and left
+        the link dangling. Hidden segments (.git) and `..` are refused
+        (revision 2026-11-10, B47).
+        """
+        import os
+        rel = Path(rel_path)
+        if rel.is_absolute() or not rel.parts:
+            raise ValueError(rel_path)
+        if any(part == ".." or part.startswith(".") for part in rel.parts):
+            raise ValueError(rel_path)
+        parent = (root / rel.parent).resolve()
+        parent.relative_to(root)
+        target = parent / rel.name
+        if not os.path.lexists(target):
+            raise FileNotFoundError(rel_path)
         return target
 
     def _validate_entry_name(name: str, *, file_name: bool = False) -> str | None:
@@ -253,13 +277,13 @@ def register(app, ctx):
 
         root = Path(nixos_dir).resolve()
         try:
-            target = _resolve_config_rel(root, rel)
+            target = _resolve_entry(root, rel)
         except ValueError:
             return jsonify({"error": "ERR_SYSTEM_PATH"}), 403
-        if not target.exists():
+        except FileNotFoundError:
             return jsonify({"error": "ERR_FILE_NOT_FOUND"}), 404
 
-        is_file = target.is_file()
+        is_file = not target.is_dir()
         new_name = _validate_entry_name(body.get("new_name", ""), file_name=is_file)
         if not new_name:
             return jsonify({"error": "ERR_INVALID_NAME"}), 400
@@ -298,16 +322,15 @@ def register(app, ctx):
 
         root = Path(nixos_dir).resolve()
         try:
-            target = _resolve_config_rel(root, rel)
+            target = _resolve_entry(root, rel)
         except ValueError:
             return jsonify({"error": "ERR_SYSTEM_PATH"}), 403
-        if target == root:
-            return jsonify({"error": "ERR_SYSTEM_PATH"}), 403
-        if not target.exists():
+        except FileNotFoundError:
             return jsonify({"error": "ERR_FILE_NOT_FOUND"}), 404
 
         try:
-            if target.is_dir():
+            # A link is removed as a link, also one that points at a directory.
+            if target.is_dir() and not target.is_symlink():
                 shutil.rmtree(target)
             else:
                 target.unlink()

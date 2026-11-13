@@ -65,7 +65,8 @@ def _fetch_nixos_channels() -> tuple[list[str], str]:
     return list(_FALLBACK_NIXOS_CHANNELS), "fallback"
 
 def _load_theme_css(theme_name: str) -> str:
-    if not theme_name or "/" in theme_name or ".." in theme_name:
+    if not isinstance(theme_name, str) or not theme_name \
+            or "/" in theme_name or ".." in theme_name:
         theme_name = _DEFAULT_THEME
     toml_path = _THEMES_DIR / theme_name / "theme.toml"
     if not toml_path.exists():

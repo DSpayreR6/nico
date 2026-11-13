@@ -18,6 +18,15 @@
 - Import no longer changes or drops values it cannot hold in the form; they stay in the file as a Nix-Brick instead: groups with a hyphen (`systemd-journal`), firewall ports given as an expression, a third `experimental-features` entry, `${…}` in the host name, `boot.kernelParams` with `++`, package and font lists with expressions (`python3.withPackages (…)`), a real user named `gast`, `home-manager.sharedModules` with expressions
 - Desktops NiCo has no form entry for (MATE, LXQt, Plasma 5) and snapper configs with further fields are kept instead of disappearing
 - Home Manager files: a `programs.git` block with `aliases` or `signing`, own `xdg.userDirs` paths, packages with a dot in the name (`pkgs.kdePackages.kate`) and `${…}` in the home directory survive saving; a `#` inside a string (`"#1e1e2e"`) no longer cuts the line and leaves invalid Nix
+- Files are stamped with format `#f3` only when they really contain a deactivated Nix-Brick; before, every file saved through the form got `#f3` and locked out a NiCo 0.14.0 on a second machine
+- The rebuild output is limited while it is collected, not only when the log is written; a very long build no longer piles up in NiCo's memory
+- Importing a hardware config no longer overwrites an existing `.bak`; the next free backup name is used
+- "Initialise git" leaves oversized files out of the first commit, like every later commit does
+- Deleting or renaming a symlink in the file tree affects the link, not the file it points to; hidden entries such as `.git` are refused
+- Snapper limits that are empty or not a number fall back to the default instead of producing invalid Nix; a package name with anything but a plain attribute name is refused
+- Error text coming from nix is escaped before it is shown in the rebuild monitor
+- Directory names in `config.json` (hosts, modules, Home Manager) must be relative names inside the config directory; a `config.json` that came along with a cloned config can no longer point writes elsewhere
+- Requests that fetch from the git remote, search packages or store the default host require the session token; with "sync with remote" off NiCo no longer contacts the remote for the status display
 - Removing a flake input that is still in use now names the Nix-Brick using it
 - A Nix-Brick whose end marker is missing or misspelt no longer takes the rest of the file with it. Its content stays in the file as ordinary text and the Nix-Brix behind it are found again; before, the next load reduced the file to its skeleton
 - A Nix-Brick in a zone the file does not have (a host that is gone, outputs extra in a file without outputs) is placed in front of the closing brace instead of disappearing

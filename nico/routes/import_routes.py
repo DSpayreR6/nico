@@ -9,7 +9,6 @@ from pathlib import Path
 from flask import jsonify, request
 
 from .. import atomic, config_manager, git_manager, hardware, importer
-from ..brix import format_brick, next_order_for_section
 from ..core import (
     classify_filename as _classify_filename,
     get_nico_type as _get_nico_type,
@@ -471,59 +470,6 @@ def register(app, ctx):
             "hardware":     decision_json(nixos_dir),
         })
 
-    @app.route("/api/import/from-path", methods=["POST"])
-    def import_from_path():
-        """
-        Liest eine CO-Datei aus dem nixos-Verzeichnis, parst bekannte Felder
-        und speichert den Rest als Brix.  Wird aufgerufen wenn der User einer
-        Datei erstmals den Typ CO zuweist.
-        """
-        if err := _check_csrf(): return err
-        nixos_dir, err = _require_setup()
-        if err:
-            return err
-
-        body = request.get_json(silent=True) or {}
-        rel  = (body.get("path") or "").strip()
-        if not rel:
-            return jsonify({"error": "ERR_NO_PATH"}), 400
-
-        root   = Path(nixos_dir).resolve()
-        target = (root / rel).resolve()
-        try:
-            target.relative_to(root)
-        except ValueError:
-            return jsonify({"error": "ERR_SYSTEM_PATH"}), 403
-
-        try:
-            content = target.read_text(encoding="utf-8")
-        except OSError:
-            return jsonify({"error": "ERR_FILE_READ"}), 500
-
-        recognized = importer.parse_config(content)
-        rest_brix  = importer.build_rest_brix(content, recognized)
-
-        git_manager.auto_commit(nixos_dir, label="NiCo: backup before import")
-
-        data = config_manager.load_config(nixos_dir) or {}
-        data.update(recognized)            # Datei gewinnt für erkannte Felder
-        if rest_brix.strip():
-            blocks     = data.get("brick_blocks", {})
-            brick_name = f"imported-{target.stem}"
-            order      = next_order_for_section(blocks, "HEAD")
-            blocks[brick_name] = {
-                "section": "HEAD",
-                "order":   order,
-                "text":    format_brick("HEAD", order, brick_name, rest_brix.strip()),
-            }
-            data["brick_blocks"] = blocks
-        rescued = importer.rescue_into_bricks(data, content)
-        config_manager.save_config(nixos_dir, data)
-
-        return jsonify({
-            "ok":        True,
-            "recognized": list(recognized.keys()),
-            "brix_added": bool(rest_brix.strip()) or bool(rescued),
-            "rescued":   rescued,
-        })
-
+    # /api/import/from-path stood here, called by nothing. It would have
+    # merged the fields of any file into the root configuration.nix
+    # (revision 2026-11-10, T16).
