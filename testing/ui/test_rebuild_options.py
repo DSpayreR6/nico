@@ -84,7 +84,14 @@ try:
     check("nennt -I nixos-config", "-I nixos-config=" in cmd, cmd)
 
     print("\n5. Schonmodus wirkt auf den Befehl")
-    d.execute_script("document.getElementById('_rbo-safe-mode').click();")
+    # Seit 2026-11-13 ist der Schalter ohne gespeicherten Wert an; der Test
+    # darf darum nicht blind klicken, sondern stellt "an" her.
+    gespeichert = d.execute_script(
+        "return fetch('/api/app/settings').then(r => r.json()).then(a => a.rebuild_safe);")
+    check("Schalter zeigt den gespeicherten Stand (ohne Wert: an)",
+          d.find_element(By.ID, "_rbo-safe-mode").is_selected() == (gespeichert is not False),
+          gespeichert)
+    d.execute_script("const s=document.getElementById('_rbo-safe-mode'); if (!s.checked) s.click();")
     time.sleep(0.3)
     cmd2 = d.execute_script("return document.getElementById('_rbo-cmd')?.textContent || '';")
     check("--max-jobs 1 erscheint", "--max-jobs 1" in cmd2, cmd2)

@@ -118,6 +118,11 @@ DEFAULT_APP_SETTINGS = {
     "section_filter": "all",
     "git_sync": True,
     "git_status_only": False,
+    # On unless switched off (2026-11-13). Without it nix builds as many
+    # packages at once as the machine has cores, each with all cores – the
+    # situation in which memory runs out. Since the limits are calculated
+    # per machine (buildlimits.py) the safe rebuild costs little speed.
+    "rebuild_safe": True,
 }
 
 # Default config settings (travel with the config)

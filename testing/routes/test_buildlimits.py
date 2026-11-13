@@ -14,7 +14,8 @@ Geprüft wird:
   3. Eingaben: nur ganze Zahlen in 1..Kernzahl gelten, alles andere heißt
      „automatisch".
   4. Reihenfolge beim Auflösen: Anfrage, dann App-Settings, dann Vorschlag.
-  5. Die Routen: Vorschlag abrufbar, Settings speichern nur gültige Werte,
+  5. Die Routen: der abgesicherte Rebuild ist an, solange er nie
+     ausgeschaltet wurde; Vorschlag abrufbar, Settings speichern nur gültige Werte,
      das Terminal-Skript trägt die aufgelösten Grenzen.
 
 Lauf: nix-shell shell.nix --run "python testing/routes/test_buildlimits.py"
@@ -109,6 +110,16 @@ import re
 m = re.search(r'name="csrf-token" content="([^"]+)"', c.get("/").get_data(as_text=True))
 tok = m.group(1) if m else ""
 H = {"X-CSRF-Token": tok, "Content-Type": "application/json"}
+
+# Standard seit 2026-11-13: an, solange niemand den Schalter umgelegt hat.
+# Die settings.json dieses Tests enthält den Schlüssel nicht.
+check("abgesicherter Rebuild ist ohne gespeicherten Wert an",
+      config_manager.get_app_settings().get("rebuild_safe") is True)
+check("die Oberfläche bekommt das auch so",
+      (c.get("/api/app/settings").get_json() or {}).get("rebuild_safe") is True)
+c.patch("/api/app/settings", headers=H, data=json.dumps({"rebuild_safe": False}))
+check("ausgeschaltet bleibt ausgeschaltet",
+      config_manager.get_app_settings().get("rebuild_safe") is False)
 
 r = c.get("/api/rebuild/safe-suggest")
 j = r.get_json() or {}

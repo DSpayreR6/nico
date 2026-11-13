@@ -137,7 +137,7 @@ function _showHostPicker(hosts, { allowAll = false, title = '', defaultHost = nu
 async function _showRebuildOptions(hostInfo, { hostname = '', mode = 'switch' } = {}) {
   let defaultFlakeUpdate = false;
   let defaultTerminal = false;
-  let defaultSafeMode = false;
+  let defaultSafeMode = true;     // as DEFAULT_APP_SETTINGS, if the fetch fails
   // Limits of the safe rebuild. `safeHint` is what NiCo suggests for this
   // machine (buildlimits.py), `stored*` what the user typed in earlier;
   // null means "automatic", so the suggestion is recalculated every time.
