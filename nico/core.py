@@ -462,36 +462,38 @@ def unmappable_files(nixos_dir: str) -> list[str]:
     return found
 
 
+def flake_mode(nixos_dir: str) -> bool:
+    """True when this config is built as a flake – see config_manager.flake_mode."""
+    return config_manager.flake_mode(nixos_dir)
+
+
 def reimport_flake(nixos_dir: str, data: dict) -> bool:
     """Take over an imported flake.nix: merge its fields, regenerate it.
 
     Returns False and leaves the file exactly as it is when NiCo cannot
     represent it (importer.flake_unmappable). It then carries no "Generated
     by NiCo" line and is edited in the raw editor.
+
+    Neither sets the `flakes` field nor writes configuration.nix (revision
+    2026-11-10, B34 and the rest of B39). The field used to be forced on
+    because it decided the build path; that is flake_mode() now, and the
+    field is only the experimental-features line – which an imported config
+    either has or does not have. The save_config() calls existed to store
+    that field and created a configuration.nix from defaults next to a
+    flake that has none; the flake_* fields live in flake.nix.
     """
     flake_path = Path(nixos_dir) / "flake.nix"
     if not flake_path.exists():
         return False
-    data["flakes"] = True
+    data["_flake_mode"] = True
     try:
         flake_content = flake_path.read_text(encoding="utf-8")
         if importer.flake_unmappable(flake_content) is not None:
-            # The `flakes` field still decides whether NiCo builds with
-            # --flake (B34, open), so it is stored as before; only the
-            # flake.nix itself is not touched.
-            try:
-                config_manager.save_config(nixos_dir, data)
-            except config_manager.NotMappableError:
-                pass
             return False
         flake_fields  = importer.parse_flake_nix(flake_content)
         flake_brix    = importer.flake_brix_for(flake_content)
         flake_brix    = importer.ensure_flake_host_bricks(flake_content, flake_brix)
         data.update(flake_fields)
-        try:
-            config_manager.save_config(nixos_dir, data)
-        except config_manager.NotMappableError:
-            pass            # configuration.nix stays as it is, the flake is fine
         data["flake_brick_blocks"] = flake_brix
         atomic.write_text(
             flake_path,
@@ -518,6 +520,29 @@ def scan_flake_hosts(flake_path: Path) -> list[str]:
     return found
 
 
+# Host names in a flake.nix NiCo cannot represent. A text search, decided
+# 2026-11-13 over `nix eval .#nixosConfigurations --apply builtins.attrNames`:
+# that is exact but takes seconds, may need the network, and the host list is
+# asked for on every rebuild click. The price is that computed hosts
+# (`nixosConfigurations = import ./hosts inputs;`, a mkHost helper) are not
+# seen; get_flake_hosts then falls back to the hostname.
+_RE_HOST_ATTRPATH = re.compile(r'nixosConfigurations\s*\.\s*"?([\w-]+)"?\s*=')
+_RE_HOST_ASSIGN   = re.compile(
+    r'(?<![\w.-])"?([A-Za-z_][\w-]*)"?\s*=\s*(?:[\w-]+\.)*nixosSystem\b')
+
+
+def scan_unmapped_flake_hosts(content: str) -> list[str]:
+    """Host names found by text search, in the order they appear."""
+    hits = [(m.start(), m.group(1))
+            for rx in (_RE_HOST_ATTRPATH, _RE_HOST_ASSIGN)
+            for m in rx.finditer(content)]
+    found: list[str] = []
+    for _, name in sorted(hits):
+        if name not in found:
+            found.append(name)
+    return found
+
+
 def get_flake_hosts(nixos_dir: str, data: dict) -> list[str]:
     """Return all flake host names for rebuild/dry-run, sourced from flake.nix on disk."""
     hosts: list[str] = []
@@ -531,6 +556,11 @@ def get_flake_hosts(nixos_dir: str, data: dict) -> list[str]:
                 name = h.get("name", "")
                 if name and name not in hosts:
                     hosts.append(name)
+            flake_text = flake_path.read_text(encoding="utf-8")
+            if importer.flake_unmappable(flake_text) is not None:
+                for name in scan_unmapped_flake_hosts(flake_text):
+                    if name not in hosts:
+                        hosts.append(name)
         except OSError:
             pass
 
@@ -959,6 +989,7 @@ def load_and_normalize_config(nixos_dir: str) -> dict:
                     rest_blocks = brix_content_to_bricks(rest, section="HEAD", existing_blocks=blocks)
                     blocks.update(rest_blocks)
                 data["brick_blocks"] = blocks
+                data["_flake_mode"] = flake_mode(nixos_dir)
                 atomic.write_text(
                     cfg_nix,
                     generator.generate_configuration_nix(data)
@@ -1036,6 +1067,8 @@ def write_config_files(
     """
     nixos_path = Path(nixos_dir)
     conf_file = nixos_path / "configuration.nix"
+    # The form does not send it, and must not be able to: see flake_mode().
+    data["_flake_mode"] = flake_mode(nixos_dir)
 
     if conf_file.exists():
         conf_text = conf_file.read_text(encoding="utf-8")
@@ -1064,17 +1097,19 @@ def write_config_files(
         }
 
     flake_file, flake_text = None, None
-    if data.get("flakes"):
+    # An existing flake.nix is carried along; none is ever created here. That
+    # is its own step (POST /api/flake/create), because a flake.nix needs a
+    # host directory and the hardware config in it – writing only the file
+    # left a config that could not be built (revision 2026-11-10, B34).
+    if data["_flake_mode"]:
         flake_file = nixos_path / "flake.nix"
-        _flake_content = flake_file.read_text(encoding="utf-8") if flake_file.exists() else None
-        _flake_nico = _flake_content is None or flake_is_managed(_flake_content)
-        if _flake_nico:
-            if _flake_content:
-                data.update(importer.parse_flake_nix(_flake_content))
-                flake_brix = extract_brick_blocks(_flake_content)
-                flake_brix = importer.ensure_flake_host_bricks(_flake_content, flake_brix)
-                if flake_brix:
-                    data["flake_brick_blocks"] = flake_brix
+        _flake_content = flake_file.read_text(encoding="utf-8")
+        if flake_is_managed(_flake_content):
+            data.update(importer.parse_flake_nix(_flake_content))
+            flake_brix = extract_brick_blocks(_flake_content)
+            flake_brix = importer.ensure_flake_host_bricks(_flake_content, flake_brix)
+            if flake_brix:
+                data["flake_brick_blocks"] = flake_brix
             flake_text = generator.generate_flake_nix(data, nixos_dir=str(nixos_path))
             # Checked before anything is written: one new file next to one old
             # one would be worse than either.

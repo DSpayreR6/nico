@@ -404,6 +404,20 @@ def init_nico_dir(nixos_config_dir: str) -> None:
     pass
 
 
+def flake_mode(nixos_config_dir: str) -> bool:
+    """True when this config is built as a flake: a flake.nix exists.
+
+    The one criterion since revision 2026-11-10 (B34). Before, the form field
+    `flakes` decided – and that field is set by the importer whenever
+    `nix.settings.experimental-features` mentions flakes, which every config
+    of someone running `nix run github:…` does. Such a classic config got a
+    flake.nix pointing at directories that do not exist, and a foreign flake
+    config without the line was built the classic way. The field now only
+    stands for that one line.
+    """
+    return (Path(nixos_config_dir) / "flake.nix").is_file()
+
+
 def load_config(nixos_config_dir: str) -> dict:
     """Parse configuration.nix into a config dict.
     Always returns a dict with defaults for any fields not found in the files."""
@@ -415,6 +429,9 @@ def load_config(nixos_config_dir: str) -> dict:
     data["hardware_config"] = (
         Path(nixos_config_dir) / "hardware-configuration.nix"
     ).is_file()
+    # Not a field of the config: tells the generator which of the two build
+    # paths it writes for (see flake_mode). Set by whoever knows the directory.
+    data["_flake_mode"] = flake_mode(nixos_config_dir)
 
     nix_file = Path(nixos_config_dir) / "configuration.nix"
     if nix_file.exists():
@@ -487,6 +504,7 @@ def save_config(nixos_config_dir: str, data: dict) -> None:
     from .brix import extract_brick_blocks
 
     data = copy.copy(data)
+    data["_flake_mode"] = flake_mode(nixos_config_dir)
     nix_file  = Path(nixos_config_dir) / "configuration.nix"
     _refuse_unmappable(nix_file, "configuration.nix")
 

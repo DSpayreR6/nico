@@ -804,6 +804,7 @@ function clearCoForm() {
  * bleiben leer – nico.json-Werte werden nicht eingemischt.
  */
 async function _populateCoFormFromFile(path, _content) {
+  refreshFlakeCreateRow(path);
   _coFormReady = false;
   _coLoadedPath = path;
   clearCoForm();

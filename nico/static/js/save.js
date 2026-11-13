@@ -32,6 +32,76 @@ async function loadConfig() {
   loadHmFileList();
 }
 
+// ── flake.nix anlegen ─────────────────────────────────────────────────────
+// Flake mode is "a flake.nix exists" (revision 2026-11-10, B34). The switch
+// above the button only allows the flake commands; turning a classic config
+// into a flake config is this explicit step.
+
+/** Show the button only for the root configuration.nix of a config without flake.nix. */
+async function refreshFlakeCreateRow(path = _brixTargetFile) {
+  const row = document.getElementById('flake-create-row');
+  if (!row) return;
+  let show = false;
+  if (path === 'configuration.nix') {
+    try {
+      const info = await csrfFetch('/api/flake/hosts').then(r => r.json());
+      show = info.flake_mode === false;
+    } catch { /* unknown state: offer nothing */ }
+  }
+  row.classList.toggle('hidden', !show);
+}
+
+function _confirmFlakeCreate() {
+  const host = (document.getElementById('hostname')?.value || '').trim() || 'nixos';
+  return new Promise(resolve => {
+    const overlay = document.createElement('div');
+    overlay.className = 'overlay';
+    overlay.innerHTML = `
+      <div class="dialog-box" style="min-width:380px;max-width:560px">
+        <h2 class="dialog-title">${escHtml(t('flake.createTitle'))}</h2>
+        <p style="margin:10px 0 16px;white-space:pre-line">${escHtml(
+          t('flake.createBody', `${_hostsDir}/${host}`, host))}</p>
+        <div class="dialog-actions">
+          <button id="_fc-ok"     class="btn-primary">${escHtml(t('flake.createOk'))}</button>
+          <button id="_fc-cancel" class="btn-secondary">${escHtml(t('unsaved.cancel'))}</button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+    // Closes by button only (no background click).
+    const done = val => { overlay.remove(); resolve(val); };
+    overlay.querySelector('#_fc-ok').addEventListener('click', () => done(true));
+    overlay.querySelector('#_fc-cancel').addEventListener('click', () => done(false));
+  });
+}
+
+async function createFlake() {
+  if (!await _confirmFlakeCreate()) return;
+  // The route reads the files, so what is in the form has to be on disk
+  // first – otherwise the reload afterwards would drop it.
+  if (!await _autoSave()) return;
+  if (!await _writeNix()) return;
+
+  const res  = await csrfFetch('/api/flake/create', {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    '{}',
+  }).catch(() => null);
+  const data = res ? await res.json().catch(() => null) : null;
+  if (!data?.success) {
+    showToast(tErr(data?.error) || t('toast.error'), 'error');
+    return;
+  }
+  showToast(t('flake.createDone'), 'success');
+  if (data.hardware === 'kept')    showToast(t('flake.createHwKept', data.host_dir), 'warning');
+  if (data.hardware === 'missing') showToast(t('flake.createHwMissing'), 'warning');
+  await loadConfig();
+  Sidebar.loadTree();
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('flake-create-btn')?.addEventListener('click', createFlake);
+});
+
 /** Re-read everything an import changed on disk.
  *
  * Deliberately not location.reload(), although the settings import and detach

@@ -2558,6 +2558,7 @@ pre[class*="language-"] {
 
 .toast-success { background: var(--green);  color: var(--crust); }
 .toast-error   { background: var(--red);    color: var(--crust); }
+.toast-warning { background: var(--yellow); color: var(--crust); }
 
 /* (btn-admin is now .btn-header-icon – see header icon group above) */
 

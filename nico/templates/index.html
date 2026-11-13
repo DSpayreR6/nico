@@ -811,12 +811,17 @@
             <h3 class="sec-toggle"><span data-i18n="sec.nixSystem">Nix &amp; System</span></h3>
             <div class="sec-body">
               <label class="toggle-row">
-                <span data-i18n="field.flakes">Flakes aktivieren</span>
+                <span data-i18n="field.flakes">Flake-Befehle erlauben (experimental-features)</span>
                 <span class="toggle-wrap">
                   <input type="checkbox" id="flakes" name="flakes">
                   <span class="toggle-track"><span class="toggle-thumb"></span></span>
                 </span>
               </label>
+              <!-- Only without a flake.nix; see refreshFlakeCreateRow in save.js -->
+              <div id="flake-create-row" class="hidden" style="margin:2px 0 12px">
+                <button type="button" id="flake-create-btn" class="btn-secondary btn-small" data-i18n="flake.create">flake.nix anlegen</button>
+                <p class="hint" style="margin:6px 0 0" data-i18n="flake.createHint">Diese Config hat keine flake.nix und wird klassisch gebaut. Der Schalter oben erlaubt nur die Flake-Befehle – er stellt die Config nicht auf Flakes um.</p>
+              </div>
               <label class="toggle-row">
                 <span data-i18n="field.optimizeStore">Store automatisch optimieren</span>
                 <span class="toggle-wrap">

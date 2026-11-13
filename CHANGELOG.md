@@ -7,9 +7,14 @@
 - Safe rebuild: the limits are no longer fixed at `--max-jobs 1 --cores 4`. NiCo suggests values for this machine from the free memory (2 GB per compiler thread, after a reserve for the desktop), and both can be set by hand; an empty field means automatic
 - Safe rebuild is switched on by default; a choice that was already saved stays as it is
 - A rebuild that built and activated the new system but could not restart every service is no longer shown as failed: the result is yellow, names the services, and the checkpoint is offered as after a successful rebuild
+- "Create flake.nix" in Nix & System turns a classic config into a flake config in one explicit step: checkpoint of the state before, host directory, hardware config moved into it, `flake.nix` written
 
 ### Bug Fixes
 
+- A classic config that allows the flake commands (`experimental-features`, needed for `nix run github:…`) no longer gets a `flake.nix` pointing at directories that do not exist, and keeps its hardware import. Flake mode now means "a `flake.nix` exists"; the switch only controls the `experimental-features` line and is labelled that way
+- A flake config without that line is built with `--flake` instead of the classic way
+- Rebuild and dry-run find the hosts of a `flake.nix` NiCo cannot show as a form, instead of stopping at "no hosts found"
+- Importing a flake config no longer adds the `experimental-features` line on its own and no longer creates a `configuration.nix` next to a `flake.nix` that has none
 - Removing a flake input that is still in use now names the Nix-Brick using it
 - A Nix-Brick whose end marker is missing or misspelt no longer takes the rest of the file with it. Its content stays in the file as ordinary text and the Nix-Brix behind it are found again; before, the next load reduced the file to its skeleton
 - A Nix-Brick in a zone the file does not have (a host that is gone, outputs extra in a file without outputs) is placed in front of the closing brace instead of disappearing

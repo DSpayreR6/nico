@@ -67,8 +67,14 @@ let _rebuildVisHandler = null;  // visibilitychange listener of the active monit
 
 async function _fetchFlakeHosts() {
   try {
-    const res = await csrfFetch('/api/flake/hosts');
-    return await res.json();
+    const res  = await csrfFetch('/api/flake/hosts');
+    const data = await res.json();
+    // A flake.nix NiCo cannot represent has no panel hosts; what can be
+    // built there comes as `build_hosts` (plain names, found by text search).
+    if (data.flake_mode && !(data.hosts || []).length && (data.build_hosts || []).length) {
+      data.hosts = data.build_hosts;
+    }
+    return data;
   } catch { return { flake_mode: false, hosts: [] }; }
 }
 

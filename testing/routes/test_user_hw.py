@@ -52,36 +52,39 @@ def imports_lines(text):
 
 
 # ── 1 Hardware-Import: die vier Fälle einzeln ────────────────────────────────
+# Seit Revision 2026-11-10 (B34) entscheidet `_flake_mode` (= flake.nix
+# existiert), nicht mehr das Formularfeld `flakes`; das steht nur noch für
+# die experimental-features-Zeile. Siehe test_rev1110_flake_mode.py.
 print("1. Hardware-Import pro Modus")
 
 co_noflake = generator.generate_configuration_nix(
-    base_data(flakes=False, hardware_config=True))
+    base_data(_flake_mode=False, hardware_config=True))
 check("Nicht-Flake: configuration.nix bindet die Hardware-Config ein",
       "./hardware-configuration.nix" in co_noflake, imports_lines(co_noflake))
 
 co_flake = generator.generate_configuration_nix(
-    base_data(flakes=True, hardware_config=True))
+    base_data(_flake_mode=True, hardware_config=True))
 check("Flake: configuration.nix bindet sie NICHT ein (flake.nix tut es)",
       "hardware-configuration" not in co_flake, imports_lines(co_flake))
 
 flake_nix = generator.generate_flake_nix(
-    base_data(flakes=True, hardware_config=True, flake_hosts=[{"name": "vm"}]))
+    base_data(_flake_mode=True, hardware_config=True, flake_hosts=[{"name": "vm"}]))
 check("Flake: flake.nix bindet sie pro Host ein",
       "./hosts/vm/hardware-configuration.nix" in flake_nix)
 
 co_nohw = generator.generate_configuration_nix(
-    base_data(flakes=False, hardware_config=False))
+    base_data(_flake_mode=False, hardware_config=False))
 check("Nicht-Flake ohne Hardware-Config: kein Import",
       "hardware-configuration" not in co_nohw, imports_lines(co_nohw))
 
 # ── 2 Moduswechsel in beide Richtungen ───────────────────────────────────────
 print("\n2. Wechsel zwischen Nicht-Flake und Flake")
 
-data = base_data(flakes=False, hardware_config=True)
+data = base_data(_flake_mode=False, hardware_config=True)
 step1 = generator.generate_configuration_nix(data)
-data["flakes"] = True
+data["_flake_mode"] = True
 step2 = generator.generate_configuration_nix(data)
-data["flakes"] = False
+data["_flake_mode"] = False
 step3 = generator.generate_configuration_nix(data)
 
 check("Schritt 1 (Nicht-Flake): Import da", "hardware-configuration" in step1)
@@ -94,7 +97,7 @@ check("Wechsel verliert keine Daten",
 # ── 3 Kein zweites imports-Attribut neben einem Brick ────────────────────────
 print("\n3. Vorhandenes imports im Brick")
 
-with_brick = base_data(flakes=False, hardware_config=True, brick_blocks={
+with_brick = base_data(_flake_mode=False, hardware_config=True, brick_blocks={
     "imports": {
         "section": "HEAD", "order": 1,
         "text": "# <brick: HEAD / #1 imports>\n"
@@ -159,7 +162,7 @@ def findings_for(files: dict, config: dict, host=None) -> dict:
 # 5a – Hardware-Config liegt da, wird aber nicht eingebunden
 got = findings_for(
     {"configuration.nix": generator.generate_configuration_nix(
-        base_data(flakes=False, hardware_config=False)),
+        base_data(_flake_mode=False, hardware_config=False)),
      "hardware-configuration.nix": HW},
     base_data())
 check("hardware_imported meldet den fehlenden Import",
@@ -177,7 +180,7 @@ check("hardware_imported schweigt, wenn das imports im Brick steht",
       "hardware_imported" not in got, sorted(got))
 
 # 5c – Flake erwartet die Datei im Host-Verzeichnis, sie liegt in der Wurzel
-flake_cfg = base_data(flakes=True, hardware_config=True, flake_hosts=[{"name": "vm"}])
+flake_cfg = base_data(_flake_mode=True, hardware_config=True, flake_hosts=[{"name": "vm"}])
 got = findings_for(
     {"configuration.nix": generator.generate_configuration_nix(flake_cfg),
      "flake.nix": generator.generate_flake_nix(flake_cfg),

@@ -324,9 +324,11 @@ print("\n10. Basis-Config: kein TODO-Kommentar, wo leer richtig ist")
 # "# TODO: set NixOS state version" in die Datei, die wie eine unfertige
 # Aufgabe aussieht.
 
-zwei_hosts = {"flakes": True,
+# `_flake_mode` statt `flakes`: seit Revision 2026-11-10 (B34) entscheidet,
+# ob eine flake.nix existiert, nicht das Formularfeld.
+zwei_hosts = {"_flake_mode": True,
               "flake_hosts": [{"name": "nix-desktop"}, {"name": "nix-laptop"}]}
-ein_host = {"flakes": True, "flake_hosts": [{"name": "nix-desktop"}]}
+ein_host = {"_flake_mode": True, "flake_hosts": [{"name": "nix-desktop"}]}
 
 co_multi = generator.generate_configuration_nix(dict(zwei_hosts))
 check("zwei Hosts, kein Wert: kein TODO-Kommentar",
@@ -353,7 +355,8 @@ check("und dann steht kein TODO daneben",
 check("die Schwelle ist zwei Hosts, wie in der Regel",
       generator._state_version_per_host(zwei_hosts) is True
       and generator._state_version_per_host(ein_host) is False
-      and generator._state_version_per_host({"flakes": True}) is False
+      and generator._state_version_per_host({"_flake_mode": True}) is False
+      and generator._state_version_per_host({"flakes": True, "flake_hosts": [1, 2]}) is False
       and generator._state_version_per_host({"flake_hosts": [1, 2]}) is False)
 
 print("\n11. Ueberblick fuer die Hinweiszeile im Formular")

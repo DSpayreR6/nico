@@ -330,7 +330,7 @@ def register(app, ctx):
         candidates = [
             ("configuration.nix", root / "configuration.nix"),
         ]
-        if cfg.get("flakes"):
+        if config_manager.flake_mode(nixos_dir):
             candidates.append(("flake.nix", root / "flake.nix"))
         hm_cfg = config_manager.load_config_settings(nixos_dir)
         hm_dir_name = hm_cfg.get("hm_dir", "home") or "home"

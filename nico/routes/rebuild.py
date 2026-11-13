@@ -433,7 +433,7 @@ def register(app, ctx):
         if err:
             return err
         data = config_manager.load_config(nixos_dir) or {}
-        if not data.get("flakes"):
+        if not config_manager.flake_mode(nixos_dir):
             return jsonify({"default_host": None})
 
         hosts = _get_flake_hosts(nixos_dir, data)
@@ -483,7 +483,7 @@ def register(app, ctx):
 
         body = request.get_json(silent=True) or {}
         data = config_manager.load_config(nixos_dir) or {}
-        use_flake = data.get("flakes", False)
+        use_flake = config_manager.flake_mode(nixos_dir)
 
         hostname          = (body.get("hostname") or "").strip()
         mode              = (body.get("mode") or "switch").strip()
@@ -652,7 +652,7 @@ def register(app, ctx):
 
         data      = config_manager.load_config(nixos_dir) or {}
         conf_path = Path(nixos_dir) / "configuration.nix"
-        use_flake = data.get("flakes", False)
+        use_flake = config_manager.flake_mode(nixos_dir)
 
         # hostname: request value takes precedence; fall back to nico.json
         hostname_param = str(payload.get('hostname') or '').strip()
@@ -1129,7 +1129,7 @@ def register(app, ctx):
 
         payload   = request.get_json(silent=True) or {}
         data      = config_manager.load_config(nixos_dir) or {}
-        use_flake = bool(data.get("flakes", False))
+        use_flake = bool(config_manager.flake_mode(nixos_dir))
         hostname_param = str(payload.get('hostname') or '').strip()
         if hostname_param and re.fullmatch(r'[\w.-]+', hostname_param):
             hostname = hostname_param
@@ -1282,7 +1282,7 @@ def register(app, ctx):
 
         body   = request.get_json(silent=True) or {}
         stored = config_manager.load_config(nixos_dir) or {}
-        use_flake    = stored.get("flakes", False)
+        use_flake    = config_manager.flake_mode(nixos_dir)
         update_flake = bool(body.get("update_flake", False)) and use_flake
 
         # ── Flake mode ────────────────────────────────────────────────────

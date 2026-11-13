@@ -264,6 +264,9 @@ def register(app, ctx):
         host_name = data.pop("_host", None)  # optional host context
         rel_path = data.pop("_path", None)
         nixos_dir = _nixos_dir()
+        # Never taken from the request: which build path this config has is
+        # decided by the files on disk (config_manager.flake_mode).
+        data["_flake_mode"] = bool(nixos_dir) and config_manager.flake_mode(nixos_dir)
 
         # Exact file mode for CO files:
         # use only the current file plus current form state, without merging
@@ -352,19 +355,23 @@ def register(app, ctx):
         result: dict = {
             "configuration_nix": generator.generate_configuration_nix(data)
         }
-        if data.get("flakes"):
-            if nixos_dir:
-                flake_nix_path = Path(nixos_dir) / "flake.nix"
-                if flake_nix_path.exists():
-                    try:
-                        flake_content = flake_nix_path.read_text(encoding="utf-8")
-                        flake_brix = extract_brick_blocks(flake_content)
-                        flake_brix = importer.ensure_flake_host_bricks(flake_content, flake_brix)
-                        if flake_brix:
-                            data["flake_brick_blocks"] = flake_brix
-                    except OSError:
-                        pass
-            result["flake_nix"] = generator.generate_flake_nix(data, nixos_dir=nixos_dir)
+        if data["_flake_mode"]:
+            flake_content = None
+            try:
+                flake_content = (Path(nixos_dir) / "flake.nix").read_text(encoding="utf-8")
+            except OSError:
+                pass
+            if flake_content is not None and not _flake_is_managed(flake_content):
+                # A flake.nix NiCo does not regenerate is shown as it is –
+                # a generated one would be a file that exists nowhere.
+                result["flake_nix"] = flake_content
+            else:
+                if flake_content is not None:
+                    flake_brix = extract_brick_blocks(flake_content)
+                    flake_brix = importer.ensure_flake_host_bricks(flake_content, flake_brix)
+                    if flake_brix:
+                        data["flake_brick_blocks"] = flake_brix
+                result["flake_nix"] = generator.generate_flake_nix(data, nixos_dir=nixos_dir)
 
         return jsonify(result)
 

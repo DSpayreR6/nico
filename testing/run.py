@@ -112,7 +112,6 @@ def _managed_fields_from_original(config_dir: Path) -> dict[str, Any]:
     flake_path = config_dir / "flake.nix"
     if flake_path.exists():
         fields.update(importer.parse_flake_nix(_read_text(flake_path)))
-        fields["flakes"] = True
 
     return fields
 
@@ -150,7 +149,10 @@ def _write_nico_roundtrip(config_dir: Path) -> None:
         data["hardware_config"] = True
 
     if flake_path.exists():
-        data["flakes"] = True
+        # As in the app since revision 2026-11-10 (B34): a flake.nix means
+        # flake mode; the `flakes` field is only the experimental-features
+        # line and stays what the imported configuration.nix says.
+        data["_flake_mode"] = True
         flake_content = _read_text(flake_path)
         data.update(importer.parse_flake_nix(flake_content))
         if not keep_flake:
@@ -171,7 +173,7 @@ def _write_nico_roundtrip(config_dir: Path) -> None:
     if not keep_cfg:
         cfg_path.write_text(generator.generate_configuration_nix(data), encoding="utf-8")
 
-    if data.get("flakes") and not keep_flake:
+    if flake_path.exists() and not keep_flake:
         flake_path.write_text(
             generator.generate_flake_nix(data, nixos_dir=str(config_dir)),
             encoding="utf-8",

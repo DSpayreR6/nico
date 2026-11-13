@@ -195,7 +195,7 @@ def _state_version_per_host(data: dict) -> bool:
     Validator contradicts, or stays silent where the Validator asks for a
     value.
     """
-    return bool(data.get("flakes")) and len(data.get("flake_hosts") or []) >= 2
+    return bool(data.get("_flake_mode")) and len(data.get("flake_hosts") or []) >= 2
 
 
 def _sec_system(data: dict, *, host_mode: bool) -> "list[str]":
@@ -718,7 +718,9 @@ def _hardware_import_lines(data: dict, brix: dict) -> "list[str]":
     Skipped as well when a brick already declares imports – a second imports
     attribute in the same set is an evaluation error.
     """
-    if data.get("flakes") or not data.get("hardware_config"):
+    # `_flake_mode`, not the `flakes` field: that one only says the
+    # experimental-features line is wanted, which a classic config has too.
+    if data.get("_flake_mode") or not data.get("hardware_config"):
         return []
     if any(_RE_BRIX_IMPORTS.search(b.get("text", "")) for b in (brix or {}).values()):
         return []
