@@ -51,9 +51,19 @@ def jsclick(element_id):
     d.execute_script("document.getElementById(arguments[0])?.click()", element_id)
     time.sleep(0.4)
 
+def dismiss_dialogs():
+    """Close whatever start dialog a fresh throwaway config brings up (git
+    hygiene, hardware file). The gear refuses to close the admin panel while
+    any other dialog is open, so a leftover one fails section 3 for no reason."""
+    d.execute_script("""
+      document.querySelectorAll('.overlay:not(.hidden)').forEach(o => {
+        if (o.id) o.classList.add('hidden'); else o.remove();
+      });""")
+
 try:
     d.get(f"http://127.0.0.1:{PORT}/")
     time.sleep(4)
+    dismiss_dialogs()
 
     print("\n1. Gruppen im Abschnitt")
     sect = lambda: d.find_element(By.CSS_SELECTOR, 'section[data-section="FSYS"]')
@@ -82,6 +92,7 @@ try:
     jsclick("tmp_clean_on_boot")
 
     print("\n3. Zahnrad als Umschalter")
+    dismiss_dialogs()
     check("Admin-Bereich zu", lambda: hidden("admin-overlay"))
     jsclick("admin-btn")
     time.sleep(1)
