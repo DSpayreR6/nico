@@ -4,6 +4,8 @@
 
 ### New Features
 
+- Safe rebuild: the limits are no longer fixed at `--max-jobs 1 --cores 4`. NiCo suggests values for this machine from the free memory (2 GB per compiler thread, after a reserve for the desktop), and both can be set by hand; an empty field means automatic
+
 ### Bug Fixes
 
 - Removing a flake input that is still in use now names the Nix-Brick using it

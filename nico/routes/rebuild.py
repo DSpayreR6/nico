@@ -16,7 +16,7 @@ from pathlib import Path
 
 from flask import Response, jsonify, request
 
-from .. import config_manager, git_manager, prebuild
+from .. import buildlimits, config_manager, git_manager, prebuild
 from ..core import (
     clean_nix_error as _clean_nix_error,
     get_flake_hosts as _get_flake_hosts,
@@ -402,6 +402,11 @@ def register(app, ctx):
 
         return jsonify({"default_host": None})
 
+    @app.route("/api/rebuild/safe-suggest")
+    def rebuild_safe_suggest():
+        """Suggested --max-jobs/--cores for the safe rebuild on this machine."""
+        return jsonify(buildlimits.suggest())
+
     @app.route("/api/rebuild/open-terminal", methods=["POST"])
     def rebuild_open_terminal():
         """Build nixos-rebuild command and launch it in a terminal emulator."""
@@ -453,7 +458,9 @@ def register(app, ctx):
             rebuild_cmd = f"sudo nixos-rebuild {mode} -I nixos-config={_shlex.quote(str(conf_path))}"
 
         if safe_mode:
-            rebuild_cmd += " --max-jobs 1 --cores 4"
+            jobs, cores = buildlimits.resolve(body.get("safe_jobs"), body.get("safe_cores"),
+                                              config_manager.get_app_settings())
+            rebuild_cmd += f" --max-jobs {jobs} --cores {cores}"
 
         script_lines = [
             "#!/usr/bin/env bash",
@@ -548,6 +555,9 @@ def register(app, ctx):
           sudo_nonce   – nonce for the cached sudo password (optional)
           update_flake – run `nix flake update` first (flake mode only)
           safe_mode    – limit jobs/cores
+          safe_jobs    – --max-jobs for the safe rebuild (optional)
+          safe_cores   – --cores for the safe rebuild (optional; without
+                         them: app settings, then buildlimits.suggest)
 
         SSE event types produced by the job:
           {"type": "output",   "line": "..."}
@@ -626,10 +636,12 @@ def register(app, ctx):
             cmd = ["sudo", "-S", "nixos-rebuild", mode, "-I", f"nixos-config={conf_path}",
                    "--log-format", "internal-json", "-v"]
 
-        if safe_mode:
-            cmd += ["--max-jobs", "1", "--cores", "4"]
-
         app_settings        = config_manager.get_app_settings()
+        if safe_mode:
+            jobs, cores = buildlimits.resolve(payload.get('safe_jobs'),
+                                              payload.get('safe_cores'), app_settings)
+            cmd += ["--max-jobs", str(jobs), "--cores", str(cores)]
+
         rebuild_log_on      = bool(app_settings.get("rebuild_log", False))
         prefetch_dry_run_on = bool(app_settings.get("prefetch_dry_run", True))
         log_path       = config_manager.REBUILD_LOG_FILE

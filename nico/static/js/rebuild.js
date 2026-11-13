@@ -124,7 +124,8 @@ function _showHostPicker(hosts, { allowAll = false, title = '', defaultHost = nu
 
 /**
  * Zeigt einen kleinen Optionen-Dialog vor Rebuild/Dry-Run.
- * Gibt { updateFlake, safeMode, useTerminal, … } zurück, oder null bei Abbruch.
+ * Gibt { updateFlake, safeMode, safeJobs, safeCores, useTerminal, … } zurück,
+ * oder null bei Abbruch.
  * Die Voreinstellungen kommen aus dem Admin-Panel.
  *
  * Wird auch ohne Flakes angezeigt (2026-10-24): vorher sprang NiCo bei einer
@@ -137,12 +138,22 @@ async function _showRebuildOptions(hostInfo, { hostname = '', mode = 'switch' } 
   let defaultFlakeUpdate = false;
   let defaultTerminal = false;
   let defaultSafeMode = false;
+  // Limits of the safe rebuild. `safeHint` is what NiCo suggests for this
+  // machine (buildlimits.py), `stored*` what the user typed in earlier;
+  // null means "automatic", so the suggestion is recalculated every time.
+  let safeHint    = { jobs: 1, cores: 4, cpus: 4, measured: false };
+  let storedJobs  = null;
+  let storedCores = null;
   let configDir = '';
   try {
-    const [cfg, app] = await Promise.all([
+    const [cfg, app, hint] = await Promise.all([
       csrfFetch('/api/config/settings').then(r => r.json()),
       csrfFetch('/api/app/settings').then(r => r.json()),
+      csrfFetch('/api/rebuild/safe-suggest').then(r => r.json()).catch(() => null),
     ]);
+    if (hint && Number.isInteger(hint.jobs) && Number.isInteger(hint.cores)) safeHint = hint;
+    if (Number.isInteger(app.rebuild_safe_jobs))  storedJobs  = app.rebuild_safe_jobs;
+    if (Number.isInteger(app.rebuild_safe_cores)) storedCores = app.rebuild_safe_cores;
     defaultFlakeUpdate = !!cfg.flake_update_on_rebuild;
     defaultTerminal    = !!app.rebuild_terminal;
     defaultSafeMode    = !!app.rebuild_safe;
@@ -162,9 +173,12 @@ async function _showRebuildOptions(hostInfo, { hostname = '', mode = 'switch' } 
 
   // Vollständiger Pfad statt '.#host': der kopierte Befehl muss aus jedem
   // Verzeichnis heraus funktionieren (manifest.md "nächste Ziele").
+  // What the safe rebuild runs with: the typed value, else the suggestion.
+  let safeJobs  = storedJobs  ?? safeHint.jobs;
+  let safeCores = storedCores ?? safeHint.cores;
   const _buildCmd = (upd, safe) => {
     const mode = selectedMode;      // der im Dialog gewählte, nicht der übergebene
-    const safeArgs = safe ? ' --max-jobs 1 --cores 4' : '';
+    const safeArgs = safe ? ` --max-jobs ${safeJobs} --cores ${safeCores}` : '';
     const flakeDir = configDir || '.';
     if (!isFlake) {
       // Muss zeigen, was NiCo selbst ausführt (routes/rebuild.py): ohne
@@ -176,6 +190,11 @@ async function _showRebuildOptions(hostInfo, { hostname = '', mode = 'switch' } 
     const base = `sudo nixos-rebuild ${mode} --flake ${flakeDir}#${hostname || 'hostname'}${safeArgs}`;
     return upd ? `nix flake update --flake ${flakeDir} && ${base}` : base;
   };
+
+  // style.css only dresses text inputs and selects; give the two number
+  // fields the same look.
+  const numStyle = 'width:100%;background:var(--surface0);border:1px solid var(--surface1);'
+                 + 'color:var(--text);padding:5px 8px;border-radius:6px;font-size:13px;font-family:inherit';
 
   return new Promise(resolve => {
     const overlay = document.createElement('div');
@@ -209,6 +228,20 @@ async function _showRebuildOptions(hostInfo, { hostname = '', mode = 'switch' } 
             <span class="toggle-track"><span class="toggle-thumb"></span></span>
           </span>
         </label>
+        <div id="_rbo-safe-opts" style="display:${defaultSafeMode ? 'block' : 'none'};margin:0 0 12px;padding-left:14px;border-left:2px solid var(--border,#444)">
+          <div style="display:grid;grid-template-columns:1fr 76px;gap:6px 10px;align-items:center;margin-bottom:6px">
+            <label for="_rbo-safe-jobs" style="margin:0;font-size:13px;color:inherit">${t('rebuild.safeJobs')}</label>
+            <input type="number" id="_rbo-safe-jobs" min="1" max="${safeHint.cpus}" step="1"
+                   placeholder="${safeHint.jobs}" value="${storedJobs ?? ''}" style="${numStyle}">
+            <label for="_rbo-safe-cores" style="margin:0;font-size:13px;color:inherit">${t('rebuild.safeCores')}</label>
+            <input type="number" id="_rbo-safe-cores" min="1" max="${safeHint.cpus}" step="1"
+                   placeholder="${safeHint.cores}" value="${storedCores ?? ''}" style="${numStyle}">
+          </div>
+          <div class="hint" style="margin:0;padding-left:2px">${escHtml(safeHint.measured
+              ? t('rebuild.safeHint', safeHint.jobs, safeHint.cores,
+                  Math.round(safeHint.available / 1024 ** 3))
+              : t('rebuild.safeHintFallback', safeHint.jobs, safeHint.cores))}</div>
+        </div>
         <label class="toggle-row" style="margin:0 0 10px;cursor:pointer">
           <span>${t('rebuild.optTerminal')}</span>
           <span class="toggle-wrap">
@@ -255,7 +288,23 @@ async function _showRebuildOptions(hostInfo, { hostname = '', mode = 'switch' } 
     const pushShutCb    = overlay.querySelector('#_rbo-push-shutdown');
     const modeSel       = overlay.querySelector('#_rbo-mode');
     const modeHintEl    = overlay.querySelector('#_rbo-mode-hint');
-    const updateCmd     = () => { cmdEl.textContent = _buildCmd(flakeToggle.checked, safeToggle.checked); };
+    const safeOptsEl    = overlay.querySelector('#_rbo-safe-opts');
+    const safeJobsEl    = overlay.querySelector('#_rbo-safe-jobs');
+    const safeCoresEl   = overlay.querySelector('#_rbo-safe-cores');
+    // An empty field means "automatic" and yields null. Anything else is
+    // pulled into 1..cpus, the range the server accepts as well.
+    const safeValue     = el => {
+      const raw = el.value.trim();
+      if (raw === '') return null;
+      const n = Math.round(Number(raw));
+      if (!Number.isFinite(n)) return null;
+      return Math.min(Math.max(n, 1), safeHint.cpus);
+    };
+    const updateCmd     = () => {
+      safeJobs  = safeValue(safeJobsEl)  ?? safeHint.jobs;
+      safeCores = safeValue(safeCoresEl) ?? safeHint.cores;
+      cmdEl.textContent = _buildCmd(flakeToggle.checked, safeToggle.checked);
+    };
     const MODE_HINTS    = { switch: 'rebuild.modeSwitchHint',
                             boot:   'rebuild.modeBootHint',
                             test:   'rebuild.modeTestHint' };
@@ -268,7 +317,19 @@ async function _showRebuildOptions(hostInfo, { hostname = '', mode = 'switch' } 
     updateMode();
     modeSel.addEventListener('change', updateMode);
     flakeToggle.addEventListener('change', updateCmd);
-    safeToggle.addEventListener('change', updateCmd);
+    safeToggle.addEventListener('change', () => {
+      safeOptsEl.style.display = safeToggle.checked ? 'block' : 'none';
+      updateCmd();
+    });
+    for (const el of [safeJobsEl, safeCoresEl]) {
+      el.addEventListener('input', updateCmd);
+      // Show the value that will really be used once the field is left.
+      el.addEventListener('change', () => {
+        const v = safeValue(el);
+        el.value = v === null ? '' : String(v);
+        updateCmd();
+      });
+    }
     termToggle.addEventListener('change', () => {
       termOptsEl.style.display = termToggle.checked ? 'flex' : 'none';
       if (!termToggle.checked) { shutdownCb.checked = false; pushShutCb.checked = false; }
@@ -292,10 +353,13 @@ async function _showRebuildOptions(hostInfo, { hostname = '', mode = 'switch' } 
       csrfFetch('/api/app/settings', {
         method:  'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ rebuild_safe: safeMode }),
+        body:    JSON.stringify({ rebuild_safe: safeMode,
+                                  rebuild_safe_jobs:  safeValue(safeJobsEl),
+                                  rebuild_safe_cores: safeValue(safeCoresEl) }),
       }).catch(() => {});
+      updateCmd();
       overlay.remove();
-      resolve({ mode: selectedMode, updateFlake, safeMode, useTerminal,
+      resolve({ mode: selectedMode, updateFlake, safeMode, safeJobs, safeCores, useTerminal,
                 shutdownAfter, pushShutdownAfter });
     });
     overlay.querySelector('#_rbo-cancel').addEventListener('click', () => {
@@ -369,8 +433,9 @@ async function _rebuildPrecheck(hostname, opts) {
         <h2 class="dialog-title">${escHtml(t('rebuild.precheck.heavyTitle'))}</h2>
         <p style="margin:8px 0 6px">${escHtml(t('rebuild.precheck.heavyBody'))}</p>
         <ul style="margin:0 0 10px 18px;max-height:180px;overflow-y:auto">${list}</ul>
-        <p class="hint" style="margin:0 0 14px">${escHtml(t(opts.safeMode
-            ? 'rebuild.precheck.heavySafeOn' : 'rebuild.precheck.heavyHint'))}</p>
+        <p class="hint" style="margin:0 0 14px">${escHtml(opts.safeMode
+            ? t('rebuild.precheck.heavySafeOn', opts.safeJobs ?? '?', opts.safeCores ?? '?')
+            : t('rebuild.precheck.heavyHint'))}</p>
         <div class="dialog-actions">
           ${opts.safeMode ? '' : `<button id="_rpc-safe" class="btn-primary">${escHtml(t('rebuild.precheck.btnSafe'))}</button>`}
           <button id="_rpc-go" class="${opts.safeMode ? 'btn-primary' : 'btn-secondary'}">${escHtml(t(opts.safeMode
@@ -512,7 +577,7 @@ async function _rebuildFlow(mode, preparing) {
     const res = await csrfFetch('/api/rebuild/open-terminal', {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ hostname, mode: effMode, update_flake: opts.updateFlake, safe_mode: opts.safeMode, shutdown_after: opts.shutdownAfter, push_shutdown_after: opts.pushShutdownAfter }),
+      body:    JSON.stringify({ hostname, mode: effMode, update_flake: opts.updateFlake, safe_mode: opts.safeMode, safe_jobs: opts.safeJobs, safe_cores: opts.safeCores, shutdown_after: opts.shutdownAfter, push_shutdown_after: opts.pushShutdownAfter }),
     }).catch(() => null);
     if (!res || !res.ok) {
       const err = res ? (await res.json().catch(() => ({}))).error : null;
@@ -536,6 +601,8 @@ async function _rebuildFlow(mode, preparing) {
       sudo_nonce:   sudoNonce,
       update_flake: !!opts.updateFlake,
       safe_mode:    !!opts.safeMode,
+      safe_jobs:    opts.safeJobs,
+      safe_cores:   opts.safeCores,
       ...(pre.fetchMib !== null ? { prefetch_mib: pre.fetchMib } : {}),
     }),
   }).catch(() => null);

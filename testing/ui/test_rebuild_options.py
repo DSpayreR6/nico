@@ -89,6 +89,52 @@ try:
     cmd2 = d.execute_script("return document.getElementById('_rbo-cmd')?.textContent || '';")
     check("--max-jobs 1 erscheint", "--max-jobs 1" in cmd2, cmd2)
 
+    print("\n5b. Grenzen des Schonmodus: Vorschlag und eigene Werte")
+    # Dazugekommen am 2026-11-13: statt fest `--max-jobs 1 --cores 4` schlägt
+    # NiCo Werte aus dem freien Arbeitsspeicher vor (buildlimits.py), ein
+    # leeres Feld heißt "automatisch". Abschnitt 6 bricht ab, gespeichert
+    # wird hier also nichts.
+    import re as _re
+    # Der Vorschlag wird aus dem Dialog gelesen, nicht noch einmal vom Server
+    # geholt: der freie Speicher schwankt, und ein zweiter Abruf kann an einer
+    # 2-GiB-Grenze einen Kern mehr oder weniger ergeben.
+    hint = d.execute_script(
+        "return {jobs: Number(document.getElementById('_rbo-safe-jobs').placeholder),"
+        "        cores: Number(document.getElementById('_rbo-safe-cores').placeholder),"
+        "        cpus: Number(document.getElementById('_rbo-safe-cores').max)};")
+    check("der Vorschlag steht als Platzhalter in den Feldern: 1 Job, 1..Kernzahl Kerne",
+          hint["jobs"] == 1 and 1 <= hint["cores"] <= hint["cpus"], hint)
+    felder = d.find_elements(By.ID, "_rbo-safe-jobs") + d.find_elements(By.ID, "_rbo-safe-cores")
+    check("beide Felder sind da und sichtbar",
+          len(felder) == 2 and all(f.is_displayed() for f in felder))
+    setze = ("const e=document.getElementById(arguments[0]); e.value=arguments[1];"
+             "e.dispatchEvent(new Event('input')); e.dispatchEvent(new Event('change'));")
+    lies_cmd = "return document.getElementById('_rbo-cmd')?.textContent || '';"
+    d.execute_script(setze, "_rbo-safe-jobs", "")
+    d.execute_script(setze, "_rbo-safe-cores", "")
+    cmd_auto = d.execute_script(lies_cmd)
+    check("leere Felder → der Vorschlag steht im Befehl",
+          f"--max-jobs {hint['jobs']} --cores {hint['cores']}" in cmd_auto, cmd_auto)
+    erkl = d.execute_script(
+        "return document.querySelector('#_rbo-safe-opts .hint')?.textContent.trim() || '';")
+    check("die Erklärung nennt den Vorschlag, ohne offene Platzhalter",
+          f"{hint['jobs']} × {hint['cores']}" in erkl and not _re.search(r"\{\d\}", erkl)
+          and not erkl.startswith("rebuild."), erkl)
+    d.execute_script(setze, "_rbo-safe-cores", "1")
+    check("eigener Wert kommt im Befehl an", "--cores 1" in d.execute_script(lies_cmd))
+    d.execute_script(setze, "_rbo-safe-cores", "99999")
+    check("zu großer Wert wird auf die Kernzahl gezogen",
+          d.execute_script("return document.getElementById('_rbo-safe-cores').value;")
+          == str(hint["cpus"]))
+    d.execute_script(setze, "_rbo-safe-cores", "0")
+    check("zu kleiner Wert wird 1",
+          d.execute_script("return document.getElementById('_rbo-safe-cores').value;") == "1")
+    d.execute_script("document.getElementById('_rbo-safe-mode').click();")
+    time.sleep(0.3)
+    check("Schalter aus → Felder verschwinden und der Befehl ist ohne Grenzen",
+          not d.find_element(By.ID, "_rbo-safe-opts").is_displayed()
+          and "--max-jobs" not in d.execute_script(lies_cmd))
+
     print("\n6. Abbrechen startet nichts")
     d.execute_script("document.getElementById('_rbo-cancel').click();")
     time.sleep(0.5)
@@ -167,10 +213,13 @@ try:
     check("der Dialog gibt den gewählten Modus zurück",
           isinstance(ergebnis, dict) and ergebnis.get("mode") == "test", ergebnis)
 
-    print("\n8. Hinweistext in allen sieben Sprachen")
+    print("\n8. Hinweistexte in allen sieben Sprachen")
     for p in sorted((ROOT / "nico" / "static" / "lang").glob("*.json")):
-        val = json.loads(p.read_text(encoding="utf-8")).get("rebuild.optFlakeUpdateNoFlake")
-        check(f"{p.stem}", bool(val) and val != "__TODO__", val)
+        texte = json.loads(p.read_text(encoding="utf-8"))
+        for key in ("rebuild.optFlakeUpdateNoFlake", "rebuild.safeJobs", "rebuild.safeCores",
+                    "rebuild.safeHint", "rebuild.safeHintFallback"):
+            val = texte.get(key)
+            check(f"{p.stem}: {key}", bool(val) and val != "__TODO__", val)
 finally:
     d.quit()
 
