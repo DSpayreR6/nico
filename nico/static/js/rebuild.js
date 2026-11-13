@@ -676,6 +676,7 @@ function attachRebuildMonitor(fromIndex = 0) {
     // vanishes when the new run reports done.
     document.getElementById('rebuild-failed-units')?.remove();
     document.getElementById('rebuild-error-lines')?.remove();
+    document.getElementById('rebuild-unrestarted-units')?.remove();
     resultEl.className     = 'rebuild-result hidden';
     resultEl.textContent   = '';
     counterEl.textContent  = '';
@@ -859,6 +860,32 @@ function attachRebuildMonitor(fromIndex = 0) {
     resultEl.insertAdjacentElement('afterend', box);
   }
 
+  /**
+   * Built and switched, but some units did not restart.
+   *
+   * switch-to-configuration answers that with status 4 and nixos-rebuild with
+   * a failure, although the new system is running (Martins runs of
+   * 2026-11-01 and 2026-11-13: a VirtualBox address unit lost a race against
+   * its own interface and was up again three seconds later). Yellow, not
+   * red – and not a mere note either: the same status can mean sshd.
+   */
+  function _showUnrestartedUnits(units) {
+    document.getElementById('rebuild-unrestarted-units')?.remove();
+    const names = Array.isArray(units) ? units : [];
+    const box = document.createElement('div');
+    box.id = 'rebuild-unrestarted-units';
+    box.className = 'rebuild-failed-units';
+    const rows = names.length
+      ? names.map(u => `<div style="margin:4px 0;overflow-wrap:anywhere"><strong>${escHtml(u)}</strong></div>`).join('')
+      : `<div style="margin:4px 0">${escHtml(t('rebuild.unrestartedNone'))}</div>`;
+    box.innerHTML = `<div style="color:var(--yellow);font-weight:600">${escHtml(
+                       t('rebuild.unrestartedUnits', String(names.length)))}</div>
+                     ${rows}
+                     <div style="margin-top:6px;opacity:0.8">${escHtml(t('rebuild.unrestartedHint'))}</div>`;
+    resultEl.insertAdjacentElement('afterend', box);
+  }
+
+  // `success` is true, false or 'warning' (built and active, see above).
   function _finishMonitor(success, message) {
     isRunning = false;
     counterEl.textContent     = '';
@@ -867,7 +894,8 @@ function attachRebuildMonitor(fromIndex = 0) {
     fetchRemainEl.textContent = '';
     fetchCopyEl.textContent   = '';
     document.querySelectorAll('.rebuild-phase-col').forEach(el => el.classList.remove('active'));
-    resultEl.className  = 'rebuild-result ' + (success ? 'result-success' : 'result-failed');
+    resultEl.className  = 'rebuild-result ' + (success === 'warning' ? 'result-warning'
+                                               : success ? 'result-success' : 'result-failed');
     resultEl.innerHTML  = message;
     if (!success) appendValidationHint(resultEl);
     closeBtn.disabled    = false;
@@ -910,15 +938,23 @@ function attachRebuildMonitor(fromIndex = 0) {
 
     } else if (msg.type === 'done') {
       _flushLog();
+      const activatedWarn = !msg.success && !!msg.activated_with_warnings;
       const label = msg.success
         ? niIcon('check-circle') + ' ' + t('rebuild.success')
+        : activatedWarn
+        ? niIcon('alert-triangle') + ' ' + escHtml(t('rebuild.activatedWarn'))
         : niIcon('x-circle') + ' ' + t('rebuild.failed') + (firstErrorLine ? ': ' + firstErrorLine.substring(0, 80) : '');
-      _finishMonitor(msg.success, label);
+      _finishMonitor(activatedWarn ? 'warning' : msg.success, label);
       // Units first, error lines second: both insert right after the result
       // line, so the later call ends up on top – and the cause belongs above
       // the consequence.
       _showFailedUnits(msg.failed_units);
-      _showErrorLines(msg.error_lines, msg.error_lines_dropped, msg.success);
+      // With named units the error lines only repeat them in red.
+      const unitsNamed = activatedWarn && Array.isArray(msg.unrestarted_units)
+                         && msg.unrestarted_units.length > 0;
+      _showErrorLines(msg.error_lines, msg.error_lines_dropped, msg.success || unitsNamed);
+      document.getElementById('rebuild-unrestarted-units')?.remove();
+      if (activatedWarn) _showUnrestartedUnits(msg.unrestarted_units);
       if (msg.log_written) {
         logBtn.classList.remove('hidden');
         logBtn.onclick = async () => {
@@ -936,7 +972,9 @@ function attachRebuildMonitor(fromIndex = 0) {
       }
       es.close();
       _rebuildES = null;
-      if (msg.success) {
+      // The new system runs in both cases, so the config on disk is the
+      // state worth a checkpoint (decided 2026-11-13).
+      if (msg.success || activatedWarn) {
         csrfFetch('/api/config/settings').then(r => r.json()).then(async cfg => {
           // What git can do here decides what is offered: committing needs a
           // repository, pushing needs a remote on top of that. Offering

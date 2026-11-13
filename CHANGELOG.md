@@ -6,6 +6,7 @@
 
 - Safe rebuild: the limits are no longer fixed at `--max-jobs 1 --cores 4`. NiCo suggests values for this machine from the free memory (2 GB per compiler thread, after a reserve for the desktop), and both can be set by hand; an empty field means automatic
 - Safe rebuild is switched on by default; a choice that was already saved stays as it is
+- A rebuild that built and activated the new system but could not restart every service is no longer shown as failed: the result is yellow, names the services, and the checkpoint is offered as after a successful rebuild
 
 ### Bug Fixes
 

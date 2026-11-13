@@ -1943,6 +1943,7 @@ textarea:focus {
 }
 .rebuild-result.result-success { color: var(--green); background: rgba(166,227,161,.08); }
 .rebuild-result.result-failed  { color: var(--red);   background: rgba(243,139,168,.08); }
+.rebuild-result.result-warning { color: var(--yellow); background: rgba(249,226,175,.08); }
 
 /* Hint below a failed rebuild or dry-run: points at the validator */
 .validate-hint {

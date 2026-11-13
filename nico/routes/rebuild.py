@@ -180,6 +180,60 @@ class _ErrorLines:
         return out
 
 
+# switch-to-configuration ends with status 4 when the new system is in place
+# and only some units did not come back. Measured on Martins runs of
+# 2026-11-01 and 2026-11-13: VirtualBox' vboxnet0 interface is torn down and
+# recreated during the switch, `network-addresses-vboxnet0.service` is
+# restarted in between and fails on the missing device – three seconds later
+# it runs. nixos-rebuild reports that as a failure like any other, although
+# everything was built, the profile is set and the configuration activated.
+_RE_SWITCH_FAILED = re.compile(
+    r"^switching to system configuration \S+ failed \(status (\d+)\)")
+_RE_UNIT_NOT_STARTED = re.compile(
+    r"^Failed to (?:start|restart|reload|reload-or-restart) (\S+)$")
+_RE_UNITS_FAILED = re.compile(r"the following units failed:\s*(.+)$", re.IGNORECASE)
+_SWITCH_UNITS_FAILED = 4
+
+
+class _Activation:
+    """What the activation phase of one rebuild said about its outcome.
+
+    `partial` is the one case that is not a plain failure: built, switched,
+    some units not restarted. Every other status (a failing activation
+    script, a bootloader that could not be installed) stays an error.
+    """
+
+    def __init__(self):
+        self.status: int | None = None
+        self.units: list[str] = []
+
+    def _add(self, unit: str) -> None:
+        unit = unit.strip().rstrip(",.")
+        if unit and unit not in self.units:
+            self.units.append(unit)
+
+    def consider(self, line: str) -> None:
+        plain = _RE_ANSI.sub("", line).strip()
+        if not plain:
+            return
+        m = _RE_SWITCH_FAILED.match(plain)
+        if m:
+            self.status = int(m.group(1))
+            return
+        m = _RE_UNIT_NOT_STARTED.match(plain)
+        if m:
+            self._add(m.group(1))
+            return
+        m = _RE_UNITS_FAILED.search(plain)
+        if m:
+            for unit in m.group(1).split(","):
+                self._add(unit)
+
+    @property
+    def partial(self) -> bool:
+        return self.status == _SWITCH_UNITS_FAILED
+
+
 # The prompts in the generated terminal script are English, like every other
 # text NiCo writes into a file. Translating them would mean sending a string
 # from the browser into a shell script - an injection path that vorgaben.txt
@@ -671,6 +725,8 @@ def register(app, ctx):
             log_lines   = []
             # Collected apart from it, never truncated – see _ErrorLines
             err_lines   = _ErrorLines()
+            # Outcome of the activation phase – see _Activation
+            activation  = _Activation()
 
             # nix activity types
             ACT_BUILD         = 105  # individual derivation build
@@ -976,6 +1032,7 @@ def register(app, ctx):
                         # Everything outside the JSON stream: nixos-rebuild's
                         # own messages and the whole activation phase.
                         err_lines.consider_raw(line)
+                        activation.consider(line)
                         progress = _parse_bracket_progress(line)
                         if progress:
                             global_state['available'] = True
@@ -1011,7 +1068,10 @@ def register(app, ctx):
                 # Asked in both outcomes: a unit that fails quietly after a
                 # successful rebuild is the one nobody notices.
                 units = failed_units(exclude=units_before)
-                yield f"data: {_json.dumps({'type': 'done', 'success': success, 'exit_code': proc.returncode, 'log_written': log_written, 'failed_units': units, 'error_lines': err_lines.lines, 'error_lines_dropped': err_lines.dropped})}\n\n"
+                # Built and switched, only some units did not restart: its own
+                # outcome, shown as a warning. `success` stays the exit code.
+                activated_warn = (not success) and activation.partial
+                yield f"data: {_json.dumps({'type': 'done', 'success': success, 'exit_code': proc.returncode, 'log_written': log_written, 'failed_units': units, 'error_lines': err_lines.lines, 'error_lines_dropped': err_lines.dropped, 'activated_with_warnings': activated_warn, 'unrestarted_units': activation.units if activated_warn else []})}\n\n"
             except FileNotFoundError:
                 msg = "ERR_NO_NIXOS_REBUILD"   # translated in the interface
                 yield f"data: {_json.dumps({'type': 'error', 'message': msg})}\n\n"
