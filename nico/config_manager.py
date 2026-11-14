@@ -443,7 +443,8 @@ def load_config(nixos_config_dir: str) -> dict:
     Always returns a dict with defaults for any fields not found in the files."""
     import copy
     from . import importer as _imp
-    from .brix import strip_brick_blocks, extract_brick_blocks
+    from .brix import (strip_brick_blocks, extract_brick_blocks,
+                       merge_inactive_packages)
 
     data = copy.deepcopy(DEFAULT_NIXOS_CONFIG)
     data["hardware_config"] = (
@@ -460,6 +461,7 @@ def load_config(nixos_config_dir: str) -> dict:
             parsed  = _imp.parse_config(strip_brick_blocks(content))
             data.update(parsed)
             data["brick_blocks"] = extract_brick_blocks(content)
+            merge_inactive_packages(data)
         except OSError:
             pass
 
@@ -558,7 +560,8 @@ def scan_hosts(nixos_dir: str) -> list[str]:
 def load_host_config(nixos_dir: str, host_name: str) -> dict | None:
     """Parse {hosts_dir}/<host_name>/default.nix; returns None if the file doesn't exist."""
     from . import importer as _imp
-    from .brix import strip_brick_blocks, extract_brick_blocks
+    from .brix import (strip_brick_blocks, extract_brick_blocks,
+                       merge_inactive_packages)
 
     cfg = load_config_settings(nixos_dir)
     hosts_dir_name = cfg.get("hosts_dir", "hosts") or "hosts"
@@ -570,6 +573,7 @@ def load_host_config(nixos_dir: str, host_name: str) -> dict | None:
         content = nix_file.read_text(encoding="utf-8")
         data    = _imp.parse_config(strip_brick_blocks(content))
         data["brick_blocks"] = extract_brick_blocks(content)
+        merge_inactive_packages(data)
         data["_hw_config"] = (
             Path(nixos_dir) / hosts_dir_name / host_name / "hardware-configuration.nix"
         ).is_file()

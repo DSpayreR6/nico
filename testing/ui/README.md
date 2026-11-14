@@ -128,6 +128,21 @@ fallen 8 davon.
 Braucht in der Wegwerf-Config den Brick `basis-brick` in
 `configuration.nix`, wie oben beschrieben.
 
+## test_package_inactive.py
+
+Pakete deaktivieren, AppImage-Bibliotheken und die Firefox-Felder, 37
+Prüfungen (2026-11-14). Der Schalter in der Paketliste wirkt sofort in der
+Vorschau: das Paket wandert zwischen der Liste und dem Nix-Brick
+`nico-inactive-packages`. Der Brick ist sichtbar, als verwaltet
+gekennzeichnet, sein Menü bietet nur „Löschen". Dazu: Speichern und
+Neuladen, kein doppelter Eintrag, das Feld „Zusätzliche Bibliotheken"
+(geladen, nur bei aktivem AppImage-Support, ungültige Namen entfernt) und
+dass die Firefox-Felder beim Laden gefüllt werden. Nicht gegen den Stand
+davor gefahren.
+
+Legt sich seine Wegwerf-Config selbst an und setzt `XDG_CONFIG_HOME` selbst –
+es braucht nur `CHROME_BIN`, `CHROMEDRIVER` und `TREE_SITTER_NIX_GRAMMAR`.
+
 ## Die Wegwerf-Config ist pro Test verschieden (gemessen 2026-11-01)
 
 Die Struktur oben deckt **nicht** alle Tests gleichzeitig ab. Drei Konflikte,

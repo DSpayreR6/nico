@@ -7,10 +7,14 @@
 - Safe rebuild: the limits are no longer fixed at `--max-jobs 1 --cores 4`. NiCo suggests values for this machine from the free memory (2 GB per compiler thread, after a reserve for the desktop), and both can be set by hand; an empty field means automatic
 - Safe rebuild is switched on by default; a choice that was already saved stays as it is
 - A rebuild that built and activated the new system but could not restart every service is no longer shown as failed: the result is yellow, names the services, and the checkpoint is offered as after a successful rebuild
+- A system package can be deactivated instead of deleted: a switch in the package list takes it out of the build, the entry stays in the list greyed out. In the file the names are kept in a Nix-Brick of their own (`nico-inactive-packages`), managed by NiCo
+- AppImage support: a field for extra libraries (`programs.appimage.package` with `extraPkgs`), for AppImages that stop with "cannot open shared object file"
 - "Create flake.nix" in Nix & System turns a classic config into a flake config in one explicit step: checkpoint of the state before, host directory, hardware config moved into it, `flake.nix` written
 
 ### Bug Fixes
 
+- Firefox language packs and preferences were not shown in the form after loading; the next save removed both from the file
+- `programs.appimage.binfmt = false` is no longer switched to `true` by the form; such a block stays a Nix-Brick. A `programs.appimage.binfmt = true;` written on its own line no longer comes back as a Nix-Brick next to the generated line
 - A classic config that allows the flake commands (`experimental-features`, needed for `nix run github:…`) no longer gets a `flake.nix` pointing at directories that do not exist, and keeps its hardware import. Flake mode now means "a `flake.nix` exists"; the switch only controls the `experimental-features` line and is labelled that way
 - A flake config without that line is built with `--flake` instead of the classic way
 - Rebuild and dry-run find the hosts of a `flake.nix` NiCo cannot show as a form, instead of stopping at "no hosts found"

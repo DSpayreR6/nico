@@ -723,6 +723,12 @@
                   <span class="toggle-track"><span class="toggle-thumb"></span></span>
                 </span>
               </label>
+              <div id="appimage-detail" class="hidden sub-detail">
+                <label for="appimage_libs" data-i18n="field.appimageLibs">Zusätzliche Bibliotheken (Paketnamen, kommagetrennt)</label>
+                <input type="text" id="appimage_libs" name="appimage_libs"
+                       placeholder="libgpg-error, libepoxy">
+                <span class="hint" data-i18n="field.appimageLibsHint">Für AppImages, die mit „cannot open shared object file" abbrechen. Gemeint ist der Paketname, nicht der Dateiname: libgpg-error, nicht libgpg-error.so.0.</span>
+              </div>
               <label class="toggle-row">
                 <span data-i18n="field.firefox">Firefox</span>
                 <span class="toggle-wrap">

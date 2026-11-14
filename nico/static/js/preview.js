@@ -108,6 +108,10 @@ const SECTION_RE    = /^\s*# ── (.+?) [─]+\s*$/;
 // to be in this regex too: without it the marker line does not match, the
 // brick is rendered as ordinary text and disappears from the panel.
 const BRICK_START_RE = /^\s*# <brick:\s*([^/]+?)\s*\/\s*#(\d+)\s+([\w\-]+)(\s+inactive)?\s*>/;
+// NiCo's own brick for deactivated packages (brix.INACTIVE_PKG_BRICK). Shown
+// like any brick - the file hides nothing - but only the package list writes
+// it, so the menu offers nothing except deleting it.
+const RESERVED_BRICK = 'nico-inactive-packages';
 const BRICK_END_RE   = /^\s*# <\/brick:\s*([\w\-]+)(?:\s+inactive)?\s*>/;
 
 // Canonical list of NiCo sections (mirrors brix.py SECTION_ORDER)
@@ -321,6 +325,7 @@ function renderAnnotatedPreview(code, containerId = 'preview-configuration', fil
       wrap.dataset.brickName = seg.name;  // for post-insert scroll-to
       if (collapsedBrix.has(seg.name)) wrap.classList.add('collapsed');
       if (seg.inactive) wrap.classList.add('brix-inactive');
+      const reserved = seg.name === RESERVED_BRICK;
 
       const headBar = document.createElement('div');
       headBar.className = 'code-brix-head';
@@ -341,7 +346,9 @@ function renderAnnotatedPreview(code, containerId = 'preview-configuration', fil
       const label = document.createElement('span');
       label.className   = 'code-brix-label';
       label.textContent = `# Brick: ${secLabel(seg.section)} / #${seg.order} · ${seg.name}`
-                        + (seg.inactive ? ` · ${t('brix.inactiveTag')}` : '');
+                        + (seg.inactive ? ` · ${t('brix.inactiveTag')}` : '')
+                        + (reserved ? ` · ${t('brix.reservedTag')}` : '');
+      if (reserved) label.title = t('brix.reservedHint');
 
       const actions = document.createElement('div');
       actions.className = 'brix-actions';
@@ -355,7 +362,9 @@ function renderAnnotatedPreview(code, containerId = 'preview-configuration', fil
       const menu = document.createElement('div');
       menu.className = 'brix-context-menu hidden';
 
-      const menuItems = [
+      const menuItems = reserved ? [
+        { key: 'brix.menuDelete', action: () => confirmDeleteBrix(seg.name, file), cls: 'menu-item-danger' },
+      ] : [
         { key: 'brix.menuRename', action: () => { _brixContextFile = file; _brixContextFtype = _brixTargetFtype; openBrixRename(seg.name); } },
         { key: 'brix.menuMove',   action: () => { _brixContextFile = file; _brixContextFtype = _brixTargetFtype; openBrixMoveFor(seg.name); } },
         { key: 'brix.menuSplit',  action: () => { _brixContextFile = file; _brixContextFtype = _brixTargetFtype; openBrixSplit(seg.name); } },
@@ -402,13 +411,14 @@ function renderAnnotatedPreview(code, containerId = 'preview-configuration', fil
       bodyPre.appendChild(bodyCode);
 
       const bodyWrapper = document.createElement('div');
-      bodyWrapper.className = 'code-with-lines brix-editable';
-      bodyWrapper.title = t('brix.clickToEdit');
+      bodyWrapper.className = reserved ? 'code-with-lines' : 'code-with-lines brix-editable';
+      bodyWrapper.title = t(reserved ? 'brix.reservedHint' : 'brix.clickToEdit');
       bodyWrapper.appendChild(renderLineNums(seg.startLine, seg.lines.length));
       bodyWrapper.appendChild(bodyPre);
 
       // Click on body → open inline editor (inner lines, without markers)
       bodyWrapper.addEventListener('click', () => {
+        if (reserved) return;
         if (wrap.querySelector('.brix-inline-editor')) return;  // already open
         const innerContent = seg.lines.slice(1, -1).join('\n');
         openBrixInlineEdit(seg.name, innerContent, wrap, bodyWrapper, file);
@@ -619,9 +629,14 @@ function renderPackageList(packages) {
   const sorted = [...packages].sort((a, b) => a.attr.localeCompare(b.attr));
 
   sorted.forEach(pkg => {
+    // Deactivated packages stay in the list, greyed, at their place: the
+    // point is not having to search for them again. In the file they sit in
+    // the reserved brick instead of the package list.
+    const enabled = pkg.enabled !== false;
     const item = document.createElement('div');
-    item.className    = 'pkg-item';
+    item.className    = enabled ? 'pkg-item' : 'pkg-item disabled';
     item.dataset.attr = pkg.attr;
+    item.dataset.enabled = enabled ? '1' : '0';
     item.dataset.pname = pkg.pname || pkg.attr || '';
     item.dataset.description = pkg.description || pkg.attr || '';
 
@@ -630,9 +645,12 @@ function renderPackageList(packages) {
         <div class="pkg-item-name">${escHtml(pkg.pname || pkg.attr)}</div>
         <div class="pkg-item-desc">${escHtml(pkg.description || pkg.attr)}</div>
       </div>
+      <button type="button" class="pkg-toggle${enabled ? ' active' : ''}"
+              title="${escHtml(t(enabled ? 'pkg.toggleDeactivate' : 'pkg.toggleActivate'))}"></button>
       <button type="button" class="pkg-delete" title="${escHtml(t('pkg.removeTitle'))}">${niIcon('x')}</button>
     `;
 
+    item.querySelector('.pkg-toggle').addEventListener('click', () => togglePackage(item));
     item.querySelector('.pkg-delete').addEventListener('click', () => removePackage(pkg.attr, item));
     list.appendChild(item);
   });
@@ -642,10 +660,21 @@ function renderPackageList(packages) {
 function getPackageListData() {
   return [...document.querySelectorAll('#packages-list .pkg-item')].map(item => ({
     attr: item.dataset.attr || '',
-    enabled: true,
+    enabled: item.dataset.enabled !== '0',
     pname: item.dataset.pname || item.dataset.attr || '',
     description: item.dataset.description || item.dataset.attr || '',
   })).filter(pkg => pkg.attr);
+}
+
+function togglePackage(itemEl) {
+  const enabled = itemEl.dataset.enabled === '0';      // the new state
+  itemEl.dataset.enabled = enabled ? '1' : '0';
+  itemEl.classList.toggle('disabled', !enabled);
+  const btn = itemEl.querySelector('.pkg-toggle');
+  btn.classList.toggle('active', enabled);
+  btn.title = t(enabled ? 'pkg.toggleDeactivate' : 'pkg.toggleActivate');
+  markConfigDirty();
+  schedulePreviewUpdate();
 }
 
 async function removePackage(attr, itemEl) {

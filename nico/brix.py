@@ -751,6 +751,113 @@ def activate_body(body: str) -> str:
     return "\n".join(out)
 
 
+# ── Deactivated system packages ─────────────────────────────────────────────
+# A package switched off in the package list is kept in one reserved brick in
+# the programs section, always inactive, one attribute name per line:
+#
+#     # <brick: PROG / #3 nico-inactive-packages inactive>
+#     #   codex
+#     # </brick: nico-inactive-packages>
+#
+# Decision Martin 2026-11-14, replacing the plan of 2026-11-10 (a commented
+# line inside the list plus format number 4): an inactive brick is format 3,
+# which exists, so no NiCo that reads deactivated bricks is locked out, and
+# an older one keeps the brick like any other. The name is the whole
+# identification - no hash in the marker, which would change the marker
+# format and with it the format number.
+INACTIVE_PKG_BRICK   = "nico-inactive-packages"
+INACTIVE_PKG_SECTION = "PROG"
+# Set by whoever hands the generator a package list that is complete,
+# deactivated entries included: the form, and the package routes. Only then
+# does the generator rebuild the brick. Loading does not set it on purpose:
+# several paths load a config and then overwrite `packages` with what the
+# importer parsed (active entries only) - with an inherited flag the brick
+# would be rebuilt from that and lose every deactivated package.
+PKG_INACTIVE_KNOWN = "_pkg_inactive_known"
+
+_PKG_NAME_RE = re.compile(r"[A-Za-z_][\w'+-]*(?:\.[A-Za-z_][\w'+-]*)*")
+
+
+def is_reserved_brick(name: str) -> bool:
+    """True for a brick name NiCo keeps for itself."""
+    return name == INACTIVE_PKG_BRICK
+
+
+def _inactive_pkg_lines(blocks: dict) -> "list[str]":
+    """Non-empty body lines of the reserved brick, comment prefix removed."""
+    b = (blocks or {}).get(INACTIVE_PKG_BRICK)
+    if not b:
+        return []
+    body = brick_body(b.get("text", ""))
+    if b.get("inactive", False):
+        body = activate_body(body)
+    return [ln.strip() for ln in body.split("\n") if ln.strip()]
+
+
+def inactive_package_names(blocks: dict) -> "list[str]":
+    """Package names held in the reserved brick; other lines are skipped."""
+    names: "list[str]" = []
+    for ln in _inactive_pkg_lines(blocks):
+        if _PKG_NAME_RE.fullmatch(ln) and ln not in names:
+            names.append(ln)
+    return names
+
+
+def inactive_package_foreign_lines(blocks: dict) -> "list[str]":
+    """Lines in the reserved brick that are not a package name (validator)."""
+    return [ln for ln in _inactive_pkg_lines(blocks) if not _PKG_NAME_RE.fullmatch(ln)]
+
+
+def merge_inactive_packages(data: dict) -> dict:
+    """Add the reserved brick's names to data['packages'] as enabled: False.
+
+    A name that is in the active list as well is left active - the list in
+    the file is what Nix builds. Does not set PKG_INACTIVE_KNOWN, see there.
+    """
+    packages = list(data.get("packages") or [])
+    have = {p.get("attr") for p in packages}
+    for name in inactive_package_names(data.get("brick_blocks") or {}):
+        if name not in have:
+            packages.append({"attr": name, "enabled": False})
+            have.add(name)
+    if packages or "packages" in data:
+        data["packages"] = packages
+    return data
+
+
+def sync_inactive_packages(blocks: dict, packages: list) -> dict:
+    """Blocks with the reserved brick rebuilt from the deactivated packages.
+
+    No deactivated package left: the brick is removed. An existing brick
+    keeps its place; a new one goes to the end of the programs section. Lines
+    in it that are not package names are carried along - somebody put them
+    there, and dropping them here would be the silent loss the brick exists
+    to prevent.
+    """
+    out = dict(blocks or {})
+    active = {p.get("attr") for p in (packages or []) if p.get("enabled", True)}
+    names = sorted({p["attr"] for p in (packages or [])
+                    if not p.get("enabled", True)
+                    and isinstance(p.get("attr"), str)
+                    and _PKG_NAME_RE.fullmatch(p["attr"])
+                    and p["attr"] not in active})
+    foreign = inactive_package_foreign_lines(out)
+    old = out.get(INACTIVE_PKG_BRICK)
+    if not names and not foreign:
+        out.pop(INACTIVE_PKG_BRICK, None)
+        return out
+    section = old["section"] if old else INACTIVE_PKG_SECTION
+    order   = old["order"] if old else next_order_for_section(out, section)
+    body    = deactivate_body("\n".join(f"  {ln}" for ln in names + foreign))
+    out[INACTIVE_PKG_BRICK] = {
+        "section":  section,
+        "order":    order,
+        "text":     format_brick(section, order, INACTIVE_PKG_BRICK, body, True),
+        "inactive": True,
+    }
+    return out
+
+
 _BRICK_MARKER_LINE = re.compile(r"^\s*#\s*</?bri[xc]k[: ].*>\s*$")
 
 # An input declaration inside the inputs block: the name, then either a dotted

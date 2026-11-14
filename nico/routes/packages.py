@@ -10,6 +10,7 @@ from flask import jsonify, request
 import re
 
 from .. import config_manager
+from ..brix import PKG_INACTIVE_KNOWN
 
 _PKG_ATTR_RE = re.compile(r"[A-Za-z_][\w.'+-]*")
 
@@ -76,6 +77,7 @@ def register(app, ctx):
             "enabled":     True,
         })
         data["packages"] = pkglist
+        data[PKG_INACTIVE_KNOWN] = True
         config_manager.save_config(nixos_dir, data)
         return jsonify({"success": True})
 
@@ -87,6 +89,7 @@ def register(app, ctx):
             return err
         data = config_manager.load_config(nixos_dir) or {}
         data["packages"] = [p for p in data.get("packages", []) if p["attr"] != attr]
+        data[PKG_INACTIVE_KNOWN] = True
         config_manager.save_config(nixos_dir, data)
         return jsonify({"success": True})
 

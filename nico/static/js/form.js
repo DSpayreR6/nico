@@ -496,12 +496,16 @@ function getFormData() {
     allowUnfree:         ch('allowUnfree'),
     steam:               ch('steam'),
     appimage:            ch('appimage'),
-    firefox:             ch('firefox'),
+    appimage_libs:       ch('appimage') ? v('appimage_libs') : '',
+    firefox:            ch('firefox'),
     firefox_lang_packs:  ch('firefox') ? v('firefox_lang_packs') : '',
     firefox_prefs:       ch('firefox') ? v('firefox_prefs')      : '',
     flatpak_enable:      ch('flatpak_enable'),
     flatpak_remotes:     ch('flatpak_enable') ? getAllFlatpakRemotes() : [],
     packages,
+    // Tells the generator this list is complete, deactivated entries
+    // included, so it may rebuild their brick (brix.PKG_INACTIVE_KNOWN).
+    _pkg_inactive_known: true,
     fonts,
     fonts_extra:         v('fonts_extra'),
     flakes:              ch('flakes'),
@@ -664,7 +668,14 @@ function populateFormFromData(data) {
   if ('allowUnfree'        in data) ch('allowUnfree',         data.allowUnfree);
   if ('steam'              in data) ch('steam',               data.steam);
   if ('appimage'           in data) ch('appimage',            data.appimage);
+  // Always set: a config without the field must not keep the previous one's.
+  { const el = document.getElementById('appimage_libs'); if (el) el.value = data.appimage_libs || ''; }
   if ('firefox'            in data) ch('firefox',             data.firefox);
+  // These two were sent on save but never filled on load: the fields came up
+  // empty and the next save removed languagePacks and preferences from the
+  // file. Always set, like appimage_libs above.
+  v('firefox_lang_packs', data.firefox_lang_packs);
+  v('firefox_prefs',      data.firefox_prefs);
   if ('flatpak_enable' in data) {
     ch('flatpak_enable', data.flatpak_enable);
     document.getElementById('flatpak-area')?.classList.toggle('hidden', !data.flatpak_enable);
@@ -735,6 +746,7 @@ function populateFormFromData(data) {
   document.getElementById('firewall-tcp-detail')?.classList.toggle('hidden', !document.getElementById('firewall_tcp_enable')?.checked);
   document.getElementById('firewall-udp-detail')?.classList.toggle('hidden', !document.getElementById('firewall_udp_enable')?.checked);
   document.getElementById('firefox-detail')?.classList.toggle('hidden', !document.getElementById('firefox')?.checked);
+  document.getElementById('appimage-detail')?.classList.toggle('hidden', !document.getElementById('appimage')?.checked);
   toggleBootEfiOptions((document.getElementById('boot_loader')?.value || 'none') !== 'none');
   togglePipewireOptions(!!document.getElementById('pipewire')?.checked);
   toggleGcOptions(!!document.getElementById('nix_gc')?.checked);
@@ -781,6 +793,7 @@ function clearCoForm() {
   document.getElementById('firewall-tcp-detail')?.classList.add('hidden');
   document.getElementById('firewall-udp-detail')?.classList.add('hidden');
   document.getElementById('firefox-detail')?.classList.add('hidden');
+  document.getElementById('appimage-detail')?.classList.add('hidden');
   toggleBootEfiOptions(false);
   togglePlymouthOptions(false);
   togglePipewireOptions(false);

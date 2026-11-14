@@ -139,6 +139,10 @@ ALL_RULES: list[Rule] = [
          "Verschachtelte Nix-Brix",
          "Erkennt Nix-Brix die in einem anderen Brick stecken – der innere Brick ist für NiCo unsichtbar.",
          "warning"),
+    Rule("pkg_inactive_brick",
+         "Nix-Brick der deaktivierten Pakete",
+         "Prüft den Nix-Brick nico-inactive-packages: er muss deaktiviert sein und darf nur Paketnamen enthalten.",
+         "error"),
     Rule("hm_user_defined",
          "HM-Referenz in Flake",
          "Prüft ob home-manager.users.* in einer .nix-Datei referenziert wird wenn HM-Dateien vorhanden sind.",
@@ -2388,6 +2392,78 @@ def _rule_brix_nested(nixos_dir: str, config: dict, is_flake: bool,
     return findings
 
 
+def _rule_pkg_inactive_brick(nixos_dir: str, config: dict, is_flake: bool,
+                             host: str | None = None) -> list[Finding]:
+    """The reserved brick for deactivated packages, in every file that has one.
+
+    NiCo itself only ever writes it inactive and with package names. Both
+    findings therefore mean the file was edited by hand: the flag removed
+    (the names are then bare identifiers in the module body and Nix refuses
+    the file), or lines added that the package list cannot show.
+    """
+    from .brix import (INACTIVE_PKG_BRICK, extract_brick_blocks,
+                       inactive_package_foreign_lines)
+
+    base = Path(nixos_dir)
+    findings: list[Finding] = []
+    for nix_file in sorted(base.rglob("*.nix")):
+        if ".git" in nix_file.parts:
+            continue
+        try:
+            content = nix_file.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        if INACTIVE_PKG_BRICK not in content:
+            continue
+        blocks = extract_brick_blocks(content)
+        block = blocks.get(INACTIVE_PKG_BRICK)
+        if not block:
+            continue
+        try:
+            rel = str(nix_file.relative_to(base))
+        except ValueError:
+            rel = nix_file.name
+        if not block.get("inactive", False):
+            findings.append(Finding(
+                rule_id="pkg_inactive_brick",
+                severity="error",
+                message=(f'{rel}: Der Nix-Brick "{INACTIVE_PKG_BRICK}" ist nicht '
+                         "als deaktiviert markiert – die Datei baut so nicht."),
+                message_key="validator.f.pkg_inactive_active",
+                params=[rel, INACTIVE_PKG_BRICK],
+                detail=(
+                    "In diesem Nix-Brick legt NiCo die deaktivierten Pakete ab, als "
+                    "bloße Namen. Ohne die Flagge inactive stehen sie als Code in "
+                    "der Datei, und Nix kann sie nicht lesen.\n"
+                    "Beheben: im Raw-Editor in der ersten Markerzeile hinter dem "
+                    "Namen wieder inactive ergänzen und jede Zeile des Inhalts mit "
+                    "\"# \" beginnen lassen – oder den Nix-Brick löschen."
+                ),
+                detail_key="validator.d.pkg_inactive_active",
+            ))
+            continue
+        foreign = inactive_package_foreign_lines(blocks)
+        if foreign:
+            shown = ", ".join(foreign[:5])
+            findings.append(Finding(
+                rule_id="pkg_inactive_brick",
+                severity="info",
+                message=(f'{rel}: Im Nix-Brick "{INACTIVE_PKG_BRICK}" stehen Zeilen, '
+                         f"die kein Paketname sind: {shown}"),
+                message_key="validator.f.pkg_inactive_foreign",
+                params=[rel, INACTIVE_PKG_BRICK, shown],
+                detail=(
+                    "NiCo liest aus diesem Nix-Brick nur Paketnamen, einen pro Zeile. "
+                    "Andere Zeilen bleiben in der Datei erhalten, erscheinen aber "
+                    "nicht in der Paketliste.\n"
+                    "Beheben: die Zeilen im Raw-Editor entfernen oder in einen "
+                    "eigenen Nix-Brick verschieben."
+                ),
+                detail_key="validator.d.pkg_inactive_foreign",
+            ))
+    return findings
+
+
 def _rule_brix_redundant(nixos_dir: str, config: dict, is_flake: bool,
                          host: str | None = None) -> list[Finding]:
     from . import importer as _imp
@@ -3363,6 +3439,7 @@ _RULE_FNS: dict[str, object] = {
     "imports_exist":         _rule_imports_exist,
     "brix_redundant":        _rule_brix_redundant,
     "brix_nested":           _rule_brix_nested,
+    "pkg_inactive_brick":    _rule_pkg_inactive_brick,
     "hm_user_defined":       _rule_hm_user_defined,
     "hm_missing_file":       _rule_hm_missing_file,
     "hm_orphan_root":        _rule_hm_orphan_root,

@@ -418,6 +418,16 @@ def register(app, ctx):
             return jsonify({"error": "ERR_NOT_MAPPABLE", "file": rel})
 
         parsed = importer.parse_config(content)
+        # Deactivated packages live in a reserved brick, which the parser
+        # never sees. Without them the form would show a shorter list and
+        # the next save would drop them from the file.
+        from ..brix import extract_brick_blocks, merge_inactive_packages
+        inactive = merge_inactive_packages(
+            {"packages": [], "brick_blocks": extract_brick_blocks(content)})["packages"]
+        if inactive:
+            have = {p.get("attr") for p in parsed.get("packages", [])}
+            parsed["packages"] = list(parsed.get("packages", [])) + [
+                p for p in inactive if p["attr"] not in have]
         return jsonify(parsed)
 
     @app.route("/api/parse/flake", methods=["POST"])

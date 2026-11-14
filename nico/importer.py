@@ -745,7 +745,25 @@ def _extract_fields(kv: 'dict[str, str]', clean: str) -> 'tuple[dict, set[str]]'
 
     # ── System-Programme ──────────────────────────────────────────────────────
     b('steam',    'programs.steam.enable')
-    b('appimage', 'programs.appimage.enable')
+    # The generator always writes `binfmt = true`. A config that says
+    # anything else is not taken into the form: the block stays a Nix-Brick
+    # instead of being switched to true on the first save.
+    _bf = _vt('programs.appimage.binfmt')
+    if _bf is None or _np.extract_bool(_bf) is True:
+        b('appimage', 'programs.appimage.enable')
+    if r.get('appimage'):
+        # Flat spelling: a statement of its own, written identically by the
+        # generator. Left unconsumed it came back as a brick next to the
+        # generated line – the same leaf twice, and the write was refused.
+        if 'programs.appimage.binfmt' in kv:
+            consumed.add('programs.appimage.binfmt')
+        libs = _appimage_libs(kv)
+        if libs:
+            r['appimage_libs'] = ', '.join(libs)
+            # Only the flat spelling has a key of its own; inside the block
+            # the leaf counts as written because the generator writes it.
+            if 'programs.appimage.package' in kv:
+                consumed.add('programs.appimage.package')
 
     ff_vt = _vt('programs.firefox')
     if ff_vt:
@@ -1144,6 +1162,44 @@ def parse_config(nix_content: str) -> dict:
 
     kv, _stmts = _rx_top_level_bindings(nix_content)
     return _extract_fields(kv, strip_brick_blocks(nix_content))[0]
+
+
+_RE_APPIMAGE_PKG = re.compile(
+    r'pkgs\.appimage-run\.override\s*\{\s*extraPkgs\s*=\s*pkgs\s*:\s*'
+    r'\[([^\[\]]*)\]\s*;\s*\}\s*;?')
+_RE_APPIMAGE_LIB = re.compile(r"pkgs\.([A-Za-z_][\w'+-]*(?:\.[A-Za-z_][\w'+-]*)*)")
+
+
+def _appimage_libs(kv: dict) -> 'list[str]':
+    """Names from `programs.appimage.package`, only in the generator's shape.
+
+    `pkgs.appimage-run.override { extraPkgs = pkgs: [ pkgs.a pkgs.b ]; }` and
+    nothing else: another package, further override arguments or a list with
+    anything but `pkgs.<name>` returns [] – the statement then stays in the
+    file as a Nix-Brick instead of being reduced to what the form can hold.
+    """
+    from . import nix_parser as _np
+    value = kv.get('programs.appimage.package')
+    if value is None and 'programs.appimage' in kv:
+        inner = _np.extract_inner_block(kv['programs.appimage']) or ''
+        for stmt in _split_top_level_stmts(inner):
+            path, val = _split_stmt(stmt)
+            if path == 'package':
+                value = val
+                break
+    if value is None:
+        return []
+    m = _RE_APPIMAGE_PKG.fullmatch(value.strip())
+    if not m:
+        return []
+    names: 'list[str]' = []
+    for tok in m.group(1).split():
+        lib = _RE_APPIMAGE_LIB.fullmatch(tok)
+        if not lib:
+            return []
+        if lib.group(1) not in names:
+            names.append(lib.group(1))
+    return names
 
 
 def build_rest_brix(nix_content: str, recognized: dict) -> str:

@@ -10,7 +10,8 @@ from pathlib import Path
 from flask import jsonify, request
 
 from ..brix import (extract_brick_blocks, format_brick, next_order_for_section,
-                    check_bracket_balance, deactivate_body, activate_body, valid_section)
+                    check_bracket_balance, deactivate_body, activate_body, valid_section,
+                    is_reserved_brick)
 from ..core import (
     brick_body as _brick_body,
     brick_blocks_for_file as _brick_blocks_for_file,
@@ -89,6 +90,8 @@ def register(app, ctx):
             return jsonify({"error": "ERR_NO_BRICK_NAME"}), 400
         if not re.fullmatch(r'[\w\-]+', name):
             return jsonify({"error": "ERR_INVALID_NAME"}), 400
+        if is_reserved_brick(name):
+            return jsonify({"error": "ERR_BRICK_RESERVED"}), 400
         # The section ends up in the marker line - see brix.valid_section.
         section = valid_section(section)
         if section is None:
@@ -159,6 +162,12 @@ def register(app, ctx):
         # brick write: nesting, bracket balance, and the refusal when the
         # result would stop Nix from reading the file.
         want_inactive = body.get("inactive")
+        # NiCo's own brick (deactivated packages) is written by the package
+        # list only. Its body is a list of names, not Nix - activated, the
+        # file would not parse - and an edited body would be overwritten by
+        # the next save of the form anyway.
+        if is_reserved_brick(name):
+            return jsonify({"error": "ERR_BRICK_RESERVED"}), 400
 
         # Only for a real content edit. A deactivate request carries no body of
         # its own - it works on what is on disk, which also makes it idempotent.
@@ -233,6 +242,8 @@ def register(app, ctx):
             return jsonify({"error": "ERR_NO_BRICK_NAME"}), 400
         if not re.fullmatch(r'[\w\-]+', new_name):
             return jsonify({"error": "ERR_INVALID_NAME"}), 400
+        if is_reserved_brick(old_name) or is_reserved_brick(new_name):
+            return jsonify({"error": "ERR_BRICK_RESERVED"}), 400
 
         # Pre-check current state
         fpath = Path(nixos_dir) / fname
@@ -282,6 +293,8 @@ def register(app, ctx):
             return jsonify({"error": "ERR_NO_BRICK_NAME"}), 400
         if not re.fullmatch(r'[\w\-]+', new_name):
             return jsonify({"error": "ERR_INVALID_NAME"}), 400
+        if is_reserved_brick(name) or is_reserved_brick(new_name):
+            return jsonify({"error": "ERR_BRICK_RESERVED"}), 400
         if not isinstance(split_line, int) or split_line < 1:
             return jsonify({"error": "ERR_INVALID_SPLIT_LINE"}), 400
         errors = [None]
@@ -336,6 +349,8 @@ def register(app, ctx):
         fname   = body.get("file", "configuration.nix")
         if not name:
             return jsonify({"error": "ERR_NO_BRICK_NAME"}), 400
+        if is_reserved_brick(name):
+            return jsonify({"error": "ERR_BRICK_RESERVED"}), 400
         section = valid_section(section) if section else None
         if section is None:
             return jsonify({"error": "ERR_NO_SECTION"}), 400

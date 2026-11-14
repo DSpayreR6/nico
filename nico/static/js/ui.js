@@ -618,6 +618,23 @@ function bindUI() {
   document.getElementById('firefox')?.addEventListener('change', function() {
     document.getElementById('firefox-detail')?.classList.toggle('hidden', !this.checked);
   });
+  document.getElementById('appimage')?.addEventListener('change', function() {
+    document.getElementById('appimage-detail')?.classList.toggle('hidden', !this.checked);
+  });
+  // The generator leaves out anything that is not a plain package name
+  // (generator.appimage_lib_names). Doing the same here and saying so keeps
+  // an entry from vanishing without a word on the next save.
+  document.getElementById('appimage_libs')?.addEventListener('change', function() {
+    const ok = /^[A-Za-z_][\w'+-]*(\.[A-Za-z_][\w'+-]*)*$/;
+    const kept = [], dropped = [];
+    this.value.split(/[,\s]+/).filter(Boolean).forEach(tok => {
+      const name = tok.replace(/^pkgs\./, '');
+      if (!ok.test(name)) dropped.push(tok);
+      else if (!kept.includes(name)) kept.push(name);
+    });
+    this.value = kept.join(', ');
+    if (dropped.length) showToast(t('field.appimageLibsInvalid', dropped.join(', ')), 'error');
+  });
 
 
   addSectionLineHints();
