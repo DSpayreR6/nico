@@ -344,6 +344,7 @@
   "rebuild.safeCores": "Núcleos por paquete (--cores)",
   "rebuild.safeHint": "Vacío = sugerencia para este equipo: {0} × {1}, calculada a partir de {2} GB de memoria libre menos una reserva. Es una estimación: algunos paquetes necesitan más.",
   "rebuild.safeHintFallback": "Vacío = valor predeterminado {0} × {1}. No se pudo determinar la memoria libre.",
+  "rebuild.optVerbose": "Mostrar todos los mensajes de Nix",
   "rebuild.preparing.check": "Preparando la reconstrucción … {0} s",
   "rebuild.preparing.save": "Guardando los cambios … {0} s",
   "rebuild.preparing.validate": "Validator está comprobando la configuración … {0} s",

@@ -344,6 +344,7 @@
   "rebuild.safeCores": "パッケージごとのコア数 (--cores)",
   "rebuild.safeHint": "空欄 = このマシンへの提案: {0} × {1}（空きメモリ {2} GB から予備分を引いて算出）。あくまで目安で、パッケージによってはさらに必要です。",
   "rebuild.safeHintFallback": "空欄 = 既定値 {0} × {1}。空きメモリを取得できませんでした。",
+  "rebuild.optVerbose": "Nix のメッセージをすべて表示",
   "rebuild.preparing.check": "リビルドを準備しています … {0} 秒",
   "rebuild.preparing.save": "変更を保存しています … {0} 秒",
   "rebuild.preparing.validate": "Validator が設定を確認しています … {0} 秒",

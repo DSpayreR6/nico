@@ -130,7 +130,7 @@ function _showHostPicker(hosts, { allowAll = false, title = '', defaultHost = nu
 
 /**
  * Zeigt einen kleinen Optionen-Dialog vor Rebuild/Dry-Run.
- * Gibt { updateFlake, safeMode, safeJobs, safeCores, useTerminal, … } zurück,
+ * Gibt { updateFlake, safeMode, safeJobs, safeCores, verbose, useTerminal, … } zurück,
  * oder null bei Abbruch.
  * Die Voreinstellungen kommen aus dem Admin-Panel.
  *
@@ -144,6 +144,7 @@ async function _showRebuildOptions(hostInfo, { hostname = '', mode = 'switch' } 
   let defaultFlakeUpdate = false;
   let defaultTerminal = false;
   let defaultSafeMode = true;     // as DEFAULT_APP_SETTINGS, if the fetch fails
+  let defaultVerbose  = false;    // likewise
   // Limits of the safe rebuild. `safeHint` is what NiCo suggests for this
   // machine (buildlimits.py), `stored*` what the user typed in earlier;
   // null means "automatic", so the suggestion is recalculated every time.
@@ -163,6 +164,7 @@ async function _showRebuildOptions(hostInfo, { hostname = '', mode = 'switch' } 
     defaultFlakeUpdate = !!cfg.flake_update_on_rebuild;
     defaultTerminal    = !!app.rebuild_terminal;
     defaultSafeMode    = !!app.rebuild_safe;
+    defaultVerbose     = !!app.rebuild_verbose;
     configDir          = (app.nixos_config_dir || '').trim();
   } catch {
     defaultFlakeUpdate = !!(document.getElementById('flake-update-toggle')?.checked);
@@ -249,6 +251,13 @@ async function _showRebuildOptions(hostInfo, { hostname = '', mode = 'switch' } 
               : t('rebuild.safeHintFallback', safeHint.jobs, safeHint.cores))}</div>
         </div>
         <label class="toggle-row" style="margin:0 0 10px;cursor:pointer">
+          <span>${t('rebuild.optVerbose')}</span>
+          <span class="toggle-wrap">
+            <input type="checkbox" id="_rbo-verbose" ${defaultVerbose ? 'checked' : ''}>
+            <span class="toggle-track"><span class="toggle-thumb"></span></span>
+          </span>
+        </label>
+        <label class="toggle-row" style="margin:0 0 10px;cursor:pointer">
           <span>${t('rebuild.optTerminal')}</span>
           <span class="toggle-wrap">
             <input type="checkbox" id="_rbo-terminal" ${defaultTerminal ? 'checked' : ''}>
@@ -288,6 +297,7 @@ async function _showRebuildOptions(hostInfo, { hostname = '', mode = 'switch' } 
     const cmdEl         = overlay.querySelector('#_rbo-cmd');
     const flakeToggle   = overlay.querySelector('#_rbo-flake-update');
     const safeToggle    = overlay.querySelector('#_rbo-safe-mode');
+    const verboseToggle = overlay.querySelector('#_rbo-verbose');
     const termToggle    = overlay.querySelector('#_rbo-terminal');
     const termOptsEl    = overlay.querySelector('#_rbo-terminal-opts');
     const shutdownCb    = overlay.querySelector('#_rbo-shutdown');
@@ -353,6 +363,7 @@ async function _showRebuildOptions(hostInfo, { hostname = '', mode = 'switch' } 
     overlay.querySelector('#_rbo-ok').addEventListener('click', () => {
       const updateFlake     = !!flakeToggle.checked;
       const safeMode        = !!safeToggle.checked;
+      const verbose         = !!verboseToggle.checked;
       const useTerminal     = !!termToggle.checked;
       const shutdownAfter   = !!shutdownCb.checked;
       const pushShutdownAfter = !!pushShutCb.checked;
@@ -360,12 +371,13 @@ async function _showRebuildOptions(hostInfo, { hostname = '', mode = 'switch' } 
         method:  'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({ rebuild_safe: safeMode,
+                                  rebuild_verbose: verbose,
                                   rebuild_safe_jobs:  safeValue(safeJobsEl),
                                   rebuild_safe_cores: safeValue(safeCoresEl) }),
       }).catch(() => {});
       updateCmd();
       overlay.remove();
-      resolve({ mode: selectedMode, updateFlake, safeMode, safeJobs, safeCores, useTerminal,
+      resolve({ mode: selectedMode, updateFlake, safeMode, safeJobs, safeCores, verbose, useTerminal,
                 shutdownAfter, pushShutdownAfter });
     });
     overlay.querySelector('#_rbo-cancel').addEventListener('click', () => {
@@ -609,6 +621,7 @@ async function _rebuildFlow(mode, preparing) {
       safe_mode:    !!opts.safeMode,
       safe_jobs:    opts.safeJobs,
       safe_cores:   opts.safeCores,
+      verbose:      !!opts.verbose,
       ...(pre.fetchMib !== null ? { prefetch_mib: pre.fetchMib } : {}),
     }),
   }).catch(() => null);
@@ -667,6 +680,25 @@ function attachRebuildMonitor(fromIndex = 0) {
   const fetchDoneEl  = document.getElementById('rph-fetch-done');
   const fetchRemainEl= document.getElementById('rph-fetch-remain');
   const fetchCopyEl  = document.getElementById('rph-fetch-copy');
+  const verboseEl    = document.getElementById('rebuild-verbose-toggle');
+
+  // Detail messages of nix. The same remembered choice as in the options
+  // dialog; here it also reaches the running job, so the lines start or
+  // stop at once. What was dropped before does not come back.
+  // `onchange`, not addEventListener: the monitor is attached again after a
+  // reload or tab switch and must not stack handlers.
+  csrfFetch('/api/app/settings').then(r => r.json())
+    .then(a => { verboseEl.checked = !!a.rebuild_verbose; })
+    .catch(() => {});
+  verboseEl.onchange = () => {
+    const on = verboseEl.checked;
+    csrfFetch('/api/rebuild/verbose', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ on }),
+    }).then(r => { if (!r.ok) throw new Error(); })
+      .catch(() => { verboseEl.checked = !on; showToast(t('toast.error'), 'error'); });
+  };
 
   // Batched log rendering – prevents per-line reflow in Firefox
   const MAX_LOG_LINES = 500;

@@ -357,6 +357,7 @@
   "rebuild.safeCores": "Kerne je Paket (--cores)",
   "rebuild.safeHint": "Leer = Vorschlag für diesen Rechner: {0} × {1}, berechnet aus {2} GB freiem Arbeitsspeicher abzüglich einer Reserve. Das ist eine Schätzung – einzelne Pakete brauchen mehr.",
   "rebuild.safeHintFallback": "Leer = Vorgabe {0} × {1}. Der freie Arbeitsspeicher ließ sich nicht ermitteln.",
+  "rebuild.optVerbose": "Alle Meldungen von Nix anzeigen",
   "rebuild.preparing.check": "Rebuild wird vorbereitet … {0} s",
   "rebuild.preparing.save": "Änderungen werden gespeichert … {0} s",
   "rebuild.preparing.validate": "Validator prüft die Config … {0} s",

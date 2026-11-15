@@ -8,6 +8,7 @@
 - Safe rebuild is switched on by default; a choice that was already saved stays as it is
 - A rebuild that built and activated the new system but could not restart every service is no longer shown as failed: the result is yellow, names the services, and the checkpoint is offered as after a successful rebuild
 - A system package can be deactivated instead of deleted: a switch in the package list takes it out of the build, the entry stays in the list greyed out. In the file the names are kept in a Nix-Brick of their own (`nico-inactive-packages`), managed by NiCo
+- Rebuild monitor: the flood of Nix detail messages (evaluated files, store links) is off by default, so warnings and notes stay visible; the monitor now shows what a rebuild in the terminal shows, and the log file no longer fills up with them. A switch "Show all Nix messages" in the rebuild options and in the monitor brings them back, also while a rebuild is running; the choice is remembered per machine
 - AppImage support: a field for extra libraries (`programs.appimage.package` with `extraPkgs`), for AppImages that stop with "cannot open shared object file"
 - "Create flake.nix" in Nix & System turns a classic config into a flake config in one explicit step: checkpoint of the state before, host directory, hardware config moved into it, `flake.nix` written
 

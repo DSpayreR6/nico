@@ -143,6 +143,15 @@ davor gefahren.
 Legt sich seine Wegwerf-Config selbst an und setzt `XDG_CONFIG_HOME` selbst –
 es braucht nur `CHROME_BIN`, `CHROMEDRIVER` und `TREE_SITTER_NIX_GRAMMAR`.
 
+## test_rebuild_verbose.py
+
+Der Schalter „Alle Meldungen von Nix anzeigen" im Rebuild-Monitor: sichtbar,
+ohne gespeicherten Wert aus, ein Klick merkt die Wahl in den App-Settings, und
+der Optionen-Dialog zeigt denselben Stand. Öffnet den Monitor ohne Job, startet
+also keinen Rebuild. Dass der Server die Detailmeldungen eines laufenden Jobs
+verwirft, prüft `testing/routes/test_rebuild_verbose.py`. Braucht ein eigenes
+XDG_CONFIG_HOME; eine leere `configuration.nix` genügt. Port 8812.
+
 ## Die Wegwerf-Config ist pro Test verschieden (gemessen 2026-11-01)
 
 Die Struktur oben deckt **nicht** alle Tests gleichzeitig ab. Drei Konflikte,

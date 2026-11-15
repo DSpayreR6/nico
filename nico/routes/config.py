@@ -145,7 +145,7 @@ def register(app, ctx):
         """Merge settings into app settings (~/.config/nico/settings.json)."""
         if err := _check_csrf(): return err
 
-        _APP_KEYS = frozenset({"language", "theme", "code_view_plain", "rebuild_log", "hidden_sections", "section_filter", "show_flake_lock", "default_host", "rebuild_terminal", "rebuild_safe", "rebuild_safe_jobs", "rebuild_safe_cores", "prefetch_dry_run", "git_sync", "git_status_only"})
+        _APP_KEYS = frozenset({"language", "theme", "code_view_plain", "rebuild_log", "hidden_sections", "section_filter", "show_flake_lock", "default_host", "rebuild_terminal", "rebuild_safe", "rebuild_safe_jobs", "rebuild_safe_cores", "rebuild_verbose", "prefetch_dry_run", "git_sync", "git_status_only"})
         incoming = request.get_json(silent=True) or {}
         patch    = {k: v for k, v in incoming.items() if k in _APP_KEYS}
         # Limits of the safe rebuild: a whole number within 1..cpus, anything
@@ -153,6 +153,8 @@ def register(app, ctx):
         for key in ("rebuild_safe_jobs", "rebuild_safe_cores"):
             if key in patch:
                 patch[key] = buildlimits.clean(patch[key])
+        if "rebuild_verbose" in patch and not isinstance(patch["rebuild_verbose"], bool):
+            del patch["rebuild_verbose"]
         for key in ("theme", "language"):
             if key in patch and not isinstance(patch[key], str):
                 del patch[key]

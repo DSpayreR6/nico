@@ -56,6 +56,7 @@ try:
 
     print("\n2. Alles Flake-unabhängige ist bedienbar")
     for element_id, label in (("_rbo-safe-mode", "Schonmodus"),
+                              ("_rbo-verbose", "alle Meldungen"),
                               ("_rbo-terminal", "im Terminal starten"),
                               ("_rbo-copy", "Befehl kopieren"),
                               ("_rbo-ok", "Starten"),
@@ -63,6 +64,13 @@ try:
         els = d.find_elements(By.ID, element_id)
         enabled = bool(els) and els[0].is_enabled()
         check(f"{label} vorhanden und aktiv", enabled, f"gefunden={bool(els)}")
+
+    # Seit 2026-11-15: `-v` nur auf Wunsch, ohne gespeicherten Wert aus.
+    verbose_saved = d.execute_script(
+        "return fetch('/api/app/settings').then(r => r.json()).then(a => a.rebuild_verbose);")
+    check("alle Meldungen: zeigt den gespeicherten Stand (ohne Wert: aus)",
+          d.find_element(By.ID, "_rbo-verbose").is_selected() == (verbose_saved is True),
+          verbose_saved)
 
     print("\n3. Flake-Update ist ausgegraut, nicht versteckt")
     flake = d.find_elements(By.ID, "_rbo-flake-update")
@@ -224,7 +232,7 @@ try:
     for p in sorted((ROOT / "nico" / "static" / "lang").glob("*.json")):
         texte = json.loads(p.read_text(encoding="utf-8"))
         for key in ("rebuild.optFlakeUpdateNoFlake", "rebuild.safeJobs", "rebuild.safeCores",
-                    "rebuild.safeHint", "rebuild.safeHintFallback"):
+                    "rebuild.safeHint", "rebuild.safeHintFallback", "rebuild.optVerbose"):
             val = texte.get(key)
             check(f"{p.stem}: {key}", bool(val) and val != "__TODO__", val)
 finally:

@@ -344,6 +344,7 @@
   "rebuild.safeCores": "Cœurs par paquet (--cores)",
   "rebuild.safeHint": "Vide = suggestion pour cette machine : {0} × {1}, calculée à partir de {2} Go de mémoire libre moins une réserve. C'est une estimation – certains paquets en demandent davantage.",
   "rebuild.safeHintFallback": "Vide = valeur par défaut {0} × {1}. La mémoire libre n'a pas pu être déterminée.",
+  "rebuild.optVerbose": "Afficher tous les messages de Nix",
   "rebuild.preparing.check": "Préparation de la reconstruction … {0} s",
   "rebuild.preparing.save": "Enregistrement des modifications … {0} s",
   "rebuild.preparing.validate": "Validator vérifie la configuration … {0} s",

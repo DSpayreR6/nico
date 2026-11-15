@@ -44,10 +44,10 @@ _SWITCH_BUSY_STATES = {"active", "activating", "reloading", "deactivating"}
 _job_cv = threading.Condition()
 _job = None
 
-# Upper bound for the written rebuild log. nixos-rebuild runs with
-# `--log-format internal-json -v`, which emits one JSON line per evaluated
+# Upper bound for the written rebuild log. nixos-rebuild runs with `--log-format internal-json -v`, which emits one JSON line per evaluated
 # file: a single failed run produced 2.1 GB here, so everything above this is
-# dropped.
+# dropped. Since 2026-11-15 those lines are only kept while "show all
+# messages" is on (is_detail_msg).
 #
 # The tail is what is kept, and the tail is the wrong end: with `-v` a run
 # finishes on store-optimisation chatter. On 2026-11-01 a failed rebuild
@@ -57,6 +57,55 @@ _job = None
 # lines that explain a failure are therefore collected separately, are not
 # subject to this cap, and are written above the log – see _ErrorLines.
 _LOG_MAX_BYTES = 5 * 1024 * 1024
+
+
+def rebuild_cmd(mode: str, flake_arg: str, conf_path) -> list:
+    """The nixos-rebuild call of the monitored rebuild, without the limits.
+
+    Always with `-v`, so the switch in the monitor can turn the detail
+    messages on while the build runs; switched off they are dropped right
+    after reading (is_detail_msg) and reach neither monitor nor log.
+
+    Module level so a test can drive it; the job itself is a closure.
+    """
+    if flake_arg:
+        cmd = ["sudo", "-S", "nixos-rebuild", mode, "--flake", flake_arg]
+    else:
+        cmd = ["sudo", "-S", "nixos-rebuild", mode, "-I", f"nixos-config={conf_path}"]
+    return cmd + ["--log-format", "internal-json", "-v"]
+
+
+# nix verbosity: 0 error, 1 warn, 2 notice, 3 info – what a rebuild in the
+# terminal shows. From 4 (talkative) on it is detail that only `-v` brings.
+_LVL_TALKATIVE = 4
+
+
+def is_detail_msg(json_str: str) -> bool:
+    """True for a `@nix` message line of level 4 or above.
+
+    One line per evaluated file and per store link: what scrolled through
+    the monitor and pushed warnings out of sight (Martin, 2026-11-15). Only
+    `msg` counts. Activities (`start`/`stop`) and results carry a level too
+    and must pass – phases, progress and builder output are read from them;
+    measured on 2026-11-15, they arrive with and without `-v` alike.
+    """
+    # Cheap test first: this runs for every line of the build.
+    if '"msg"' not in json_str:
+        return False
+    try:
+        data = json.loads(json_str)
+    except Exception:
+        return False
+    if not isinstance(data, dict) or data.get("action") != "msg":
+        return False
+    level = data.get("level")
+    return isinstance(level, int) and not isinstance(level, bool) and level >= _LVL_TALKATIVE
+
+
+def _job_verbose() -> bool:
+    """Whether the running job shows detail messages – read live per line."""
+    with _job_cv:
+        return bool(_job and _job.get("verbose"))
 
 # Terminal escapes: nix colours its own errors and so do compilers and test
 # runners, so a match on `^FAILED` would miss `\x1b[31;1mFAILED\x1b[0m`.
@@ -417,6 +466,7 @@ def _job_public(job):
         "acked":    job["acked"],
         "mode":     job["mode"],
         "hostname": job["hostname"],
+        "verbose":  bool(job.get("verbose")),
         "started":  job["started"],
         "finished": job["finished"],
         "events":   job["dropped"] + len(job["events"]),
@@ -648,6 +698,10 @@ def register(app, ctx):
           safe_jobs    – --max-jobs for the safe rebuild (optional)
           safe_cores   – --cores for the safe rebuild (optional; without
                          them: app settings, then buildlimits.suggest)
+          verbose      – show the detail messages of nix (optional; without
+                         it: app setting rebuild_verbose, default off).
+                         Can be changed while the job runs:
+                         /api/rebuild/verbose
 
         SSE event types produced by the job:
           {"type": "output",   "line": "..."}
@@ -720,17 +774,18 @@ def register(app, ctx):
         if use_flake:
             flake_arg = prebuild.flake_ref(nixos_dir, hostname,
                                            git_manager.is_git_repo(nixos_dir))
-            cmd = ["sudo", "-S", "nixos-rebuild", mode, "--flake", flake_arg,
-                   "--log-format", "internal-json", "-v"]
-        else:
-            cmd = ["sudo", "-S", "nixos-rebuild", mode, "-I", f"nixos-config={conf_path}",
-                   "--log-format", "internal-json", "-v"]
+        cmd = rebuild_cmd(mode, flake_arg, conf_path)
 
         app_settings        = config_manager.get_app_settings()
         if safe_mode:
             jobs, cores = buildlimits.resolve(payload.get('safe_jobs'),
                                               payload.get('safe_cores'), app_settings)
             cmd += ["--max-jobs", str(jobs), "--cores", str(cores)]
+
+        # Detail messages: what the dialog sent, else the remembered choice.
+        verbose = payload.get('verbose')
+        if not isinstance(verbose, bool):
+            verbose = bool(app_settings.get("rebuild_verbose", False))
 
         rebuild_log_on      = bool(app_settings.get("rebuild_log", False))
         prefetch_dry_run_on = bool(app_settings.get("prefetch_dry_run", True))
@@ -1061,10 +1116,15 @@ def register(app, ctx):
                 proc.stdin.close()
                 for raw_line in proc.stdout:
                     line = raw_line.rstrip('\r\n')
-                    log_lines.append(line)
                     if line.startswith('@nix '):
+                        # Detail messages: dropped here, before log and
+                        # monitor, unless the switch is on right now.
+                        if is_detail_msg(line[5:]) and not _job_verbose():
+                            continue
+                        log_lines.append(line)
                         yield from _parse_nix_line(line[5:])
                     else:
+                        log_lines.append(line)
                         # Everything outside the JSON stream: nixos-rebuild's
                         # own messages and the whole activation phase.
                         err_lines.consider_raw(line)
@@ -1125,6 +1185,7 @@ def register(app, ctx):
                 "acked":    False,
                 "mode":     mode,
                 "hostname": hostname if use_flake else "",
+                "verbose":  verbose,
                 "started":  time.time(),
                 "finished": None,
             }
@@ -1195,6 +1256,20 @@ def register(app, ctx):
             if _job is None:
                 return jsonify({"job": None})
             return jsonify({"job": _job_public(_job)})
+
+    @app.route("/api/rebuild/verbose", methods=["POST"])
+    def rebuild_verbose():
+        """Switch the detail messages on or off – for the running job at once,
+        and as the remembered choice for the next one (app settings)."""
+        if err := _check_csrf(): return err
+        on = (request.get_json(silent=True) or {}).get("on")
+        if not isinstance(on, bool):
+            return jsonify({"success": False}), 400
+        with _job_cv:
+            if _job is not None and _job["running"]:
+                _job["verbose"] = on
+        config_manager.save_app_settings({"rebuild_verbose": on})
+        return jsonify({"success": True, "verbose": on})
 
     @app.route("/api/rebuild/ack", methods=["POST"])
     def rebuild_ack():

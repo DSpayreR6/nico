@@ -1546,6 +1546,13 @@
       <div class="modal-logo" data-i18n="rebuild.title">NixOS-Rebuild</div>
       <p class="setup-hint" style="margin:0 0 8px" data-i18n="rebuild.restartHint">__TODO__</p>
       <pre id="rebuild-log" class="rebuild-log"></pre>
+      <label class="toggle-row" style="margin:6px 0 4px;cursor:pointer">
+        <span data-i18n="rebuild.optVerbose">Alle Meldungen von Nix anzeigen</span>
+        <span class="toggle-wrap">
+          <input type="checkbox" id="rebuild-verbose-toggle">
+          <span class="toggle-track"><span class="toggle-thumb"></span></span>
+        </span>
+      </label>
       <div id="rebuild-monitor" class="rebuild-monitor">
         <div class="rebuild-phases">
           <div id="rph-analysing" class="rebuild-phase-col" data-phase="analysing">

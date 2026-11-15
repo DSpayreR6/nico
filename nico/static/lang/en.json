@@ -344,6 +344,7 @@
   "rebuild.safeCores": "Cores per package (--cores)",
   "rebuild.safeHint": "Empty = suggestion for this machine: {0} × {1}, calculated from {2} GB of free memory minus a reserve. This is an estimate – some packages need more.",
   "rebuild.safeHintFallback": "Empty = default {0} × {1}. The free memory could not be determined.",
+  "rebuild.optVerbose": "Show all Nix messages",
   "rebuild.preparing.check": "Preparing the rebuild … {0} s",
   "rebuild.preparing.save": "Saving changes … {0} s",
   "rebuild.preparing.validate": "Validator is checking the config … {0} s",

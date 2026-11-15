@@ -344,6 +344,7 @@
   "rebuild.safeCores": "每个软件包的核心数 (--cores)",
   "rebuild.safeHint": "留空 = 本机的建议值：{0} × {1}，根据 {2} GB 可用内存减去预留量算出。这只是估算——个别软件包需要更多。",
   "rebuild.safeHintFallback": "留空 = 默认值 {0} × {1}。无法获取可用内存。",
+  "rebuild.optVerbose": "显示 Nix 的全部消息",
   "rebuild.preparing.check": "正在准备重建 … {0} 秒",
   "rebuild.preparing.save": "正在保存更改 … {0} 秒",
   "rebuild.preparing.validate": "Validator 正在检查配置 … {0} 秒",

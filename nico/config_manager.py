@@ -123,6 +123,10 @@ DEFAULT_APP_SETTINGS = {
     # situation in which memory runs out. Since the limits are calculated
     # per machine (buildlimits.py) the safe rebuild costs little speed.
     "rebuild_safe": True,
+    # Off unless switched on (2026-11-15): the detail messages of nix, one
+    # line per evaluated file and store link. Off they are dropped before
+    # monitor and log; the switch sits in the rebuild dialog and the monitor.
+    "rebuild_verbose": False,
 }
 
 # Default config settings (travel with the config)
