@@ -376,7 +376,7 @@
   "rebuild.activatedWarn": "Build succeeded, new system active – not all services could be restarted",
   "rebuild.unrestartedUnits": "Services not restarted: {0}",
   "rebuild.unrestartedNone": "Which services are affected could not be determined – see the log.",
-  "rebuild.unrestartedHint": "The build finished and the new system is running. While switching, these services could not be restarted. They often start on their own shortly after; check with “systemctl status <service>”. Another rebuild usually goes through without this message.",
+  "rebuild.unrestartedHint": "The build finished and the new system is running. While switching, these services could not be restarted. Some start on their own shortly after, and another rebuild then goes through without this message. If the message comes back, the service does not fit this machine; “systemctl status <service>” shows the cause.",
   "rebuild.errorLines": "Error lines of this run: {0}",
   "rebuild.errorLinesDropped": "{0} further error lines were not kept.",
   "rebuild.errorLinesHint": "These lines come from the build itself and usually name the package it failed on. The full output is under “Open log”.",

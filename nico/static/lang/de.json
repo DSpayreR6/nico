@@ -389,7 +389,7 @@
   "rebuild.activatedWarn": "Bau erfolgreich, neues System aktiv – nicht alle Dienste ließen sich neu starten",
   "rebuild.unrestartedUnits": "Nicht neu gestartete Dienste: {0}",
   "rebuild.unrestartedNone": "Welche Dienste betroffen sind, ließ sich nicht ermitteln – es steht im Log.",
-  "rebuild.unrestartedHint": "Der Bau ist durchgelaufen und das neue System läuft. Beim Umschalten ließen sich diese Dienste nicht neu starten. Oft starten sie kurz darauf von selbst; prüfen lässt sich das mit „systemctl status <Dienst>“. Ein erneuter Rebuild läuft meist ohne diese Meldung durch.",
+  "rebuild.unrestartedHint": "Der Bau ist durchgelaufen und das neue System läuft. Beim Umschalten ließen sich diese Dienste nicht neu starten. Manche starten kurz darauf von selbst, dann läuft ein erneuter Rebuild ohne diese Meldung durch. Kommt die Meldung wieder, passt der Dienst nicht zu diesem Rechner; die Ursache zeigt „systemctl status <Dienst>“.",
   "rebuild.errorLines": "Fehlerzeilen dieses Durchlaufs: {0}",
   "rebuild.errorLinesDropped": "{0} weitere Fehlerzeilen wurden nicht behalten.",
   "rebuild.errorLinesHint": "Diese Zeilen kommen aus dem Bauvorgang selbst und nennen meist das Paket, an dem er gescheitert ist. Die vollständige Ausgabe steht unter „Log öffnen“.",

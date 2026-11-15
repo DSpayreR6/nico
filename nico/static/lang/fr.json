@@ -376,7 +376,7 @@
   "rebuild.activatedWarn": "Construction réussie, nouveau système actif – tous les services n'ont pas pu être redémarrés",
   "rebuild.unrestartedUnits": "Services non redémarrés : {0}",
   "rebuild.unrestartedNone": "Impossible de déterminer les services concernés – voir le journal.",
-  "rebuild.unrestartedHint": "La construction est terminée et le nouveau système fonctionne. Lors de la bascule, ces services n'ont pas pu être redémarrés. Ils démarrent souvent d'eux-mêmes peu après ; vérifiez avec « systemctl status <service> ». Un nouveau rebuild passe en général sans ce message.",
+  "rebuild.unrestartedHint": "La construction est terminée et le nouveau système fonctionne. Lors de la bascule, ces services n'ont pas pu être redémarrés. Certains démarrent d'eux-mêmes peu après, et un nouveau rebuild passe alors sans ce message. Si le message revient, le service ne convient pas à cette machine ; « systemctl status <service> » en montre la cause.",
   "rebuild.errorLines": "Lignes d'erreur de cette exécution : {0}",
   "rebuild.errorLinesDropped": "{0} autres lignes d'erreur n'ont pas été conservées.",
   "rebuild.errorLinesHint": "Ces lignes viennent de la compilation elle-même et nomment en général le paquet sur lequel elle a échoué. La sortie complète se trouve sous « Ouvrir le journal ».",

@@ -376,7 +376,7 @@
   "rebuild.activatedWarn": "Compilación correcta, nuevo sistema activo: no se pudieron reiniciar todos los servicios",
   "rebuild.unrestartedUnits": "Servicios no reiniciados: {0}",
   "rebuild.unrestartedNone": "No se pudo determinar qué servicios están afectados; consta en el registro.",
-  "rebuild.unrestartedHint": "La compilación terminó y el nuevo sistema está en marcha. Al cambiar, estos servicios no se pudieron reiniciar. A menudo arrancan solos poco después; se comprueba con «systemctl status <servicio>». Otro rebuild suele terminar sin este aviso.",
+  "rebuild.unrestartedHint": "La compilación terminó y el nuevo sistema está en marcha. Al cambiar, estos servicios no se pudieron reiniciar. Algunos arrancan solos poco después, y entonces otro rebuild termina sin este aviso. Si el aviso vuelve a aparecer, el servicio no encaja con este equipo; «systemctl status <servicio>» muestra la causa.",
   "rebuild.errorLines": "Líneas de error de esta ejecución: {0}",
   "rebuild.errorLinesDropped": "No se conservaron {0} líneas de error adicionales.",
   "rebuild.errorLinesHint": "Estas líneas provienen de la compilación misma y suelen nombrar el paquete en el que falló. La salida completa está en «Abrir registro».",
