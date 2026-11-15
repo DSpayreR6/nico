@@ -64,11 +64,17 @@ def state():
               units: u ? u.textContent : null,
               errors: !!document.getElementById('rebuild-error-lines'),
               // 4 = DOCUMENT_POSITION_FOLLOWING: the argument comes later.
-              resultAboveLog: !!(r.compareDocumentPosition(document.getElementById('rebuild-log')) & 4),
-              unitsAboveLog: u ? !!(u.compareDocumentPosition(document.getElementById('rebuild-log')) & 4) : null,
+              resultAfterLog: !!(document.getElementById('rebuild-log').compareDocumentPosition(r) & 4),
+              resultInWindow: !!r.closest('#rebuild-log-window'),
+              unitsInWindow: u ? !!u.closest('#rebuild-log-window') : null,
               unitsBelowResult: u ? !!(r.compareDocumentPosition(u) & 4) : null,
-              resultTop: r.getBoundingClientRect().top,
-              logTop: document.getElementById('rebuild-log').getBoundingClientRect().top,
+              resultBeforePhases: !!(r.compareDocumentPosition(document.getElementById('rebuild-monitor')) & 4),
+              // Visible without scrolling: inside the window's box.
+              resultVisible: (() => { const w = document.getElementById('rebuild-log-window').getBoundingClientRect();
+                                      const b = r.getBoundingClientRect();
+                                      return b.height > 0 && b.top >= w.top - 1 && b.bottom <= w.bottom + 1; })(),
+              phasesTop: document.getElementById('rebuild-monitor').getBoundingClientRect().top,
+              buttonsTop: document.getElementById('rebuild-close-btn').getBoundingClientRect().top,
               push: p && !p.classList.contains('hidden'),
               pushText: p ? p.textContent.trim() : ''};""")
 
@@ -99,11 +105,16 @@ try:
     check("kein Validator-Hinweis im Ergebnis",
           not d.find_elements(By.CSS_SELECTOR, "#rebuild-result button, #rebuild-result a"))
     check("der Sicherungspunkt wird angeboten", s["push"] is True and bool(s["pushText"]), s)
-    # Martin, 2026-11-15: the outcome belongs above the log, not under the phases.
-    check("Ergebnis steht über dem Textfenster", s["resultAboveLog"] is True and s["resultTop"] < s["logTop"],
-          (s["resultTop"], s["logTop"]))
-    check("der Kasten mit den Diensten folgt dem Ergebnis, noch über dem Textfenster",
-          s["unitsBelowResult"] is True and s["unitsAboveLog"] is True, s)
+    # Martin, 2026-11-15: heading, output, outcome, phases, buttons. The
+    # outcome is the last part of the output window, not a block above it
+    # (first attempt, rejected the same day) and not below the phases.
+    check("Ergebnis steht im Textfenster, hinter der Ausgabe",
+          s["resultInWindow"] is True and s["resultAfterLog"] is True, s)
+    check("der Kasten mit den Diensten folgt dem Ergebnis im selben Fenster",
+          s["unitsBelowResult"] is True and s["unitsInWindow"] is True, s)
+    check("Phasen und Knöpfe stehen darunter",
+          s["resultBeforePhases"] is True and s["phasesTop"] < s["buttonsTop"], s)
+    check("Ergebnis ist ohne Rollen zu sehen", s["resultVisible"] is True, s)
 
     print("\n2. Status 4 ohne erkannten Dienst")
     d.get(f"http://127.0.0.1:{PORT}/"); time.sleep(4)
@@ -157,10 +168,52 @@ try:
     check("error-Ereignis: kein Element im Ergebnis",
           not d.find_elements(By.CSS_SELECTOR, "#rebuild-result img"))
     check("kein Skript gelaufen", d.execute_script("return window._xss;") is None)
+    print("\n6. Ergebnis am Ende einer langen Ausgabe")
+    def play_long(done, lines=300):
+        d.execute_script(FAKE + "attachRebuildMonitor(0);")
+        time.sleep(0.5)
+        d.execute_script("""
+          for (let i = 0; i < arguments[0]; i++)
+            window._fakeES.onmessage({data: JSON.stringify({type: 'output', line: 'building step ' + i})});
+          window._fakeES.onmessage({data: arguments[1]});""", lines, json.dumps(done))
+        time.sleep(1.5)
+    def window_state():
+        return d.execute_script("""
+          const w = document.getElementById('rebuild-log-window'), wb = w.getBoundingClientRect();
+          const r = document.getElementById('rebuild-result').getBoundingClientRect();
+          const o = document.getElementById('rebuild-outcome').getBoundingClientRect();
+          return {scrolls: w.scrollHeight > w.clientHeight + 1,
+                  atEnd: Math.abs(w.scrollHeight - w.clientHeight - w.scrollTop) < 2,
+                  resultVisible: r.height > 0 && r.top >= wb.top - 1 && r.bottom <= wb.bottom + 1,
+                  outcomeAtTop: Math.abs(o.top - wb.top) < 3,
+                  outcomeTaller: o.height > wb.height,
+                  lines: document.getElementById('rebuild-log').childElementCount};""")
+    d.get(f"http://127.0.0.1:{PORT}/"); time.sleep(4)
+    play_long({**BASE, "activated_with_warnings": True,
+               "unrestarted_units": ["network-addresses-vboxnet0.service"]})
+    w = window_state()
+    check("das Fenster rollt", w["scrolls"] is True and w["lines"] == 300, w)
+    check("kurzes Ergebnis: ans Ende gerollt, Ergebnis ganz zu sehen",
+          w["atEnd"] is True and w["resultVisible"] is True, w)
+    d.get(f"http://127.0.0.1:{PORT}/"); time.sleep(4)
+    play_long({**BASE, "activated_with_warnings": False, "unrestarted_units": [],
+               "error_lines": [f"error: builder for '/nix/store/x-{i}.drv' failed with exit code 1"
+                               for i in range(120)]})
+    w = window_state()
+    check("langes Ergebnis ist höher als das Fenster", w["outcomeTaller"] is True, w)
+    check("dann steht sein Anfang am oberen Rand, die Überschrift ist zu sehen",
+          w["outcomeAtTop"] is True and w["resultVisible"] is True, w)
+    d.execute_script(FAKE + "attachRebuildMonitor(0);")
+    time.sleep(0.5)
+    check("ein neuer Lauf räumt das Ergebnis aus dem Fenster",
+          d.execute_script("return document.getElementById('rebuild-outcome').classList.contains('hidden')"
+                           " && !!document.getElementById('rebuild-result')"
+                           " && !document.getElementById('rebuild-error-lines');") is True)
+
     if len(sys.argv) > 1:
         d.get(f"http://127.0.0.1:{PORT}/"); time.sleep(4)
-        play({**BASE, "activated_with_warnings": True,
-              "unrestarted_units": ["network-addresses-vboxnet0.service"]})
+        play_long({**BASE, "activated_with_warnings": True,
+                   "unrestarted_units": ["network-addresses-vboxnet0.service"]}, 40)
         # Start-up dialogs (git hygiene of the throwaway config) would cover it.
         d.execute_script("document.querySelectorAll('.overlay, .modal-overlay').forEach("
                          "o => { if (o.id !== 'rebuild-overlay') o.remove(); });")

@@ -669,6 +669,8 @@ async function _gitCapabilities() {
 function attachRebuildMonitor(fromIndex = 0) {
   const overlay      = document.getElementById('rebuild-overlay');
   const logEl        = document.getElementById('rebuild-log');
+  const logWinEl     = document.getElementById('rebuild-log-window');
+  const outcomeEl    = document.getElementById('rebuild-outcome');
   const monitorEl    = document.getElementById('rebuild-monitor');
   const resultEl     = document.getElementById('rebuild-result');
   const closeBtn     = document.getElementById('rebuild-close-btn');
@@ -717,6 +719,7 @@ function attachRebuildMonitor(fromIndex = 0) {
     document.getElementById('rebuild-unrestarted-units')?.remove();
     resultEl.className     = 'rebuild-result hidden';
     resultEl.textContent   = '';
+    outcomeEl.classList.add('hidden');
     counterEl.textContent  = '';
     buildPkgEl.textContent = '';
     fetchDoneEl.textContent   = '';
@@ -767,7 +770,25 @@ function attachRebuildMonitor(fromIndex = 0) {
     while (logEl.childElementCount > MAX_LOG_LINES) {
       logEl.removeChild(logEl.firstChild);
     }
-    logEl.scrollTop = logEl.scrollHeight;
+    logWinEl.scrollTop = logWinEl.scrollHeight;
+  }
+
+  /**
+   * Bring the outcome into view inside the log window.
+   *
+   * Short outcome: scroll to the end, the last output lines stay above it.
+   * Long one (many error lines or journals): its first line goes to the top
+   * edge, so the headline is what is seen, not the tail of a list.
+   * In a frame of its own – the boxes are added after the result, and an
+   * output flush still pending must run first or it scrolls to the end again.
+   */
+  function _revealOutcome() {
+    requestAnimationFrame(() => {
+      const top = outcomeEl.getBoundingClientRect().top
+                - logWinEl.getBoundingClientRect().top + logWinEl.scrollTop;
+      const end = logWinEl.scrollHeight - logWinEl.clientHeight;
+      logWinEl.scrollTop = Math.max(0, Math.min(top, end));
+    });
   }
 
   function _appendLog(line) {
@@ -937,8 +958,8 @@ function attachRebuildMonitor(fromIndex = 0) {
     resultEl.innerHTML  = message;
     if (!success) appendValidationHint(resultEl);
     closeBtn.disabled    = false;
-    // The result sits above the log; a dialog scrolled down would hide it.
-    resultEl.scrollIntoView({ block: 'nearest' });
+    outcomeEl.classList.remove('hidden');
+    _revealOutcome();
   }
 
   es.onmessage = (event) => {
@@ -1083,7 +1104,6 @@ function attachRebuildMonitor(fromIndex = 0) {
       span.className   = 'log-error';
       span.textContent = '\n[!] ' + errText + '\n';
       logEl.appendChild(span);
-      logEl.scrollTop = logEl.scrollHeight;
       // escHtml: the text is nix output or an exception, and a config from
       // elsewhere can make nix say `throw "<img src=x onerror=…>"`.
       _finishMonitor(false, niIcon('x-circle') + ' ' + escHtml(errText));

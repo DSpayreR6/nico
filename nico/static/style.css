@@ -1801,10 +1801,20 @@ textarea:focus {
   margin-top: 8px;
 }
 
-.rebuild-log {
+/* The scrolling window. It holds the output and, after the rebuild, the
+   outcome below it. */
+.rebuild-log-window {
   background: var(--crust);
   border: 1px solid var(--surface1);
   border-radius: 6px 6px 0 0;
+  min-height: 60px;
+  max-height: 38vh;
+  overflow-y: auto;
+  margin-top: 8px;
+}
+
+.rebuild-log {
+  margin: 0;
   padding: 12px 14px;
   font-family: var(--mono);
   font-size: 11px;
@@ -1812,10 +1822,6 @@ textarea:focus {
   color: var(--text);
   white-space: pre-wrap;
   word-break: break-all;
-  min-height: 60px;
-  max-height: 38vh;
-  overflow-y: auto;
-  margin-top: 8px;
 }
 
 .rebuild-monitor {
@@ -1935,11 +1941,14 @@ textarea:focus {
   line-height: 1;
 }
 
-/* Above the log. Result and boxes used to sit inside .rebuild-monitor and
-   took its type from there. */
+/* Last part of the log window, set off by a rule. Result and boxes used to
+   sit inside .rebuild-monitor and took its type from there. */
 .rebuild-outcome {
   font-family: var(--mono);
   font-size: 11px;
+  margin: 0 14px;
+  padding: 10px 0 12px;
+  border-top: 1px dashed var(--surface2);
 }
 .rebuild-outcome > .rebuild-failed-units { margin-top: 6px; }
 
