@@ -30,6 +30,7 @@
 - Deleting or renaming a symlink in the file tree affects the link, not the file it points to; hidden entries such as `.git` are refused
 - Snapper limits that are empty or not a number fall back to the default instead of producing invalid Nix; a package name with anything but a plain attribute name is refused
 - Error text coming from nix is escaped before it is shown in the rebuild monitor
+- The validator now reports a config that has no `hardware-configuration.nix` at all and no line importing one; before, only the dry-run failed. Configs that get their file systems another way (written by hand, disko, WSL, a container) are not reported
 - Rebuild monitor, dry-run and syntax check: a line counts as an error only where `error:` stands as a word of its own. The headline of a failed rebuild no longer quotes a `debug:` line of `nixos-rebuild`, and the last line of its traceback (`CalledProcessError:`) is no longer painted red
 - Directory names in `config.json` (hosts, modules, Home Manager) must be relative names inside the config directory; a `config.json` that came along with a cloned config can no longer point writes elsewhere
 - Requests that fetch from the git remote, search packages or store the default host require the session token; with "sync with remote" off NiCo no longer contacts the remote for the status display

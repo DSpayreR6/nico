@@ -343,6 +343,68 @@ with Machine("nix-desktop"):
     clean = validator._rule_hardware_matches(str(d), {}, True, host="nix-desktop")
 check("passende Datei: kein Fund", clean == [], clean)
 
+# Gar keine Hardware-Datei (Martin, VM-Durchlauf 2026-11-15). Nach "flake.nix
+# anlegen" liegt die Datei im Host-Verzeichnis und die imports-Zeile ist aus
+# der configuration.nix; flake.nix und Host-Verzeichnis von Hand geloescht,
+# blieb weder Datei noch Zeile. Der Validator schwieg, erst der Dry-Run
+# scheiterte.
+def bare(files: dict) -> Path:
+    d = Path(tempfile.mkdtemp(prefix="nico-hw-none-"))
+    (d / "config.json").write_text(json.dumps({"hosts_dir": "hosts"}), encoding="utf-8")
+    for rel, content in files.items():
+        p = d / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(content, encoding="utf-8")
+    return d
+
+def none_findings(files, host=None, is_flake=False):
+    with Machine("nix-vm"):
+        return validator._rule_hardware_matches(str(bare(files)), {}, is_flake, host=host)
+
+def conf(extra=""):
+    return '{ config, pkgs, ... }:\n{\n' + extra + '  networking.hostName = "nix-vm";\n}\n'
+
+IMPORT_HW = "  imports = [ ./hardware-configuration.nix ];\n"
+got = none_findings({"configuration.nix": conf()})
+check("keine Datei, keine Zeile: roter Fund",
+      len(got) == 1 and got[0].severity == "error"
+      and got[0].message_key == "validator.f.hardware_none"
+      and got[0].detail_key == "validator.d.hardware_none",
+      [(f.message_key, f.severity) for f in got])
+got = none_findings({"configuration.nix": conf(IMPORT_HW)})
+check("Zeile da, Datei fehlt: kein zweiter Fund (imports_exist meldet es)", got == [], got)
+ie = validator._rule_imports_exist(str(bare({"configuration.nix": conf(IMPORT_HW)})), {}, False)
+check("imports_exist meldet die fehlende Datei tatsaechlich",
+      len(ie) == 1 and "hardware-configuration.nix" in ie[0].message, [f.message for f in ie])
+got = none_findings({"configuration.nix":
+                     conf('  fileSystems."/" = { device = "/dev/sda1"; fsType = "ext4"; };\n')})
+check("Dateisysteme von Hand in der configuration.nix: kein Fund", got == [], got)
+got = none_findings({"configuration.nix": conf("  imports = [ ./platten.nix ];\n"),
+                     "platten.nix": '{ fileSystems."/" = { device = "/dev/sda1"; fsType = "ext4"; }; }\n'})
+check("Dateisysteme in einer Datei mit anderem Namen: kein Fund", got == [], got)
+got = none_findings({"configuration.nix": conf("  wsl.enable = true;\n")})
+check("WSL braucht keine: kein Fund", got == [], got)
+got = none_findings({"configuration.nix": conf("  boot.isContainer = true;\n")})
+check("Container braucht keine: kein Fund", got == [], got)
+got = none_findings({"configuration.nix": conf("  imports = [ inputs.disko.nixosModules.disko ];\n")})
+check("disko legt die Dateisysteme an: kein Fund", got == [], got)
+got = none_findings({"configuration.nix":
+                     conf('  # fileSystems."/" kommt noch\n  # imports = [ ./hardware-configuration.nix ];\n')})
+check("nur im Kommentar erwaehnt: roter Fund bleibt", len(got) == 1, got)
+got = none_findings({"configuration.nix": conf(), "flake.nix": "{ }\n",
+                     "hosts/nix-vm/default.nix": "{ }\n"}, host="nix-vm", is_flake=True)
+check("Flake-Config ohne Datei und ohne Zeile: roter Fund",
+      len(got) == 1 and got[0].message_key == "validator.f.hardware_none", got)
+got = none_findings({"configuration.nix": conf(),
+                     "flake.nix": "{ modules = [ ./configuration.nix ./hosts/nix-vm/hardware-configuration.nix ]; }\n",
+                     "hosts/nix-vm/default.nix": "{ }\n"}, host="nix-vm", is_flake=True)
+check("Flake nennt die Datei, sie fehlt: kein zweiter Fund", got == [], got)
+for p in sorted((ROOT / "nico" / "static" / "lang").glob("*.json")):
+    texts = json.loads(p.read_text(encoding="utf-8"))
+    check(f"{p.stem}: Text zum Fund vorhanden",
+          all(texts.get(k) and texts.get(k) != "__TODO__"
+              for k in ("validator.f.hardware_none", "validator.d.hardware_none")))
+
 # Die Regel steht im Katalog als Fehler, sonst haelt sie den Rebuild nicht auf.
 rule = next(r for r in validator.ALL_RULES if r.id == "hardware_matches")
 check("Regel ist rot", rule.severity == "error", rule.severity)

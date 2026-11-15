@@ -1222,6 +1222,33 @@ def _rule_user_uid_system(nixos_dir: str, config: dict, is_flake: bool,
     return findings
 
 
+# What stands in for a hardware-configuration.nix. A config can be complete
+# without that file: the file systems written by hand or kept under another
+# name, laid out by disko, or not needed at all (WSL, a container). The file
+# name itself counts too – a list that points at a missing file is reported
+# by imports_exist, with file and line, and need not be reported twice.
+_HW_STAND_IN = re.compile(
+    r'\bfileSystems\b|\bdisko\b|wsl\s*\.\s*enable|boot\s*\.\s*isContainer'
+    r'|hardware-configuration\.nix')
+
+
+def _hardware_declared_elsewhere(nixos_dir: str) -> bool:
+    """True when the written config gets its file systems without the file."""
+    from .importer import _strip_nix_comments
+
+    base = Path(nixos_dir)
+    for nix_file in sorted(base.rglob("*.nix")):
+        if ".git" in nix_file.parts:
+            continue
+        try:
+            content = nix_file.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        if _HW_STAND_IN.search(_strip_nix_comments(content)):
+            return True
+    return False
+
+
 def _rule_hardware_matches(nixos_dir: str, config: dict, is_flake: bool,
                            host: str | None = None) -> list[Finding]:
     """
@@ -1242,9 +1269,29 @@ def _rule_hardware_matches(nixos_dir: str, config: dict, is_flake: bool,
         return []
 
     if decision.action == _hw.ADD:
-        # No hardware config anywhere – hardware_imported already covers that,
-        # and there is nothing machine-specific to add here.
-        return []
+        # No hardware config anywhere. Nothing reported this until 2026-11-15:
+        # hardware_imported stops when the file is missing, imports_exist
+        # needs a line that points at it, and a comment here claimed the
+        # first of the two had it covered. Found by Martin in the VM – after
+        # "create flake.nix" the file sits in the host directory and the
+        # imports line is gone from configuration.nix; with flake.nix and the
+        # host directory deleted by hand, neither file nor line was left, the
+        # validator was silent and only the dry-run failed.
+        if _hardware_declared_elsewhere(nixos_dir):
+            return []
+        return [Finding(
+            rule_id="hardware_matches",
+            severity="error",
+            message="Diese Config hat keine hardware-configuration.nix.",
+            message_key="validator.f.hardware_none",
+            detail=(
+                "Ohne sie kennt NixOS weder Festplatten noch Dateisysteme, der "
+                "Bau bricht ab. Beim Neuladen der Seite bietet NiCo an, die "
+                "Datei dieses Rechners einzutragen; neu erzeugt sie "
+                "„nixos-generate-config --show-hardware-config“."
+            ),
+            detail_key="validator.d.hardware_none",
+        )]
 
     if decision.action == _hw.PICK_HOST:
         names = ", ".join(decision.hosts) or "?"
