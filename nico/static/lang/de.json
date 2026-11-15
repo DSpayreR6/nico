@@ -1160,7 +1160,7 @@
   "validator.d.snapper_btrfs.notbtrfs": "Snapper unterstützt nur btrfs. Der Mountpoint muss ein btrfs-Subvolume sein.",
   "validator.d.btrfs_without_btrfs.no_btrfs": "Die Config baut und bootet, die Wartungsjobs laufen aber ins Leere: Scrub und Balance gibt es nur für btrfs. Bei ext4 oder einem anderen Dateisystem beide Schalter ausschalten.",
   "validator.f.btrfs_without_btrfs.declared": "Diese Config richtet btrfs-Dienste ein, auf diesem Rechner ist aber kein btrfs eingebunden ({0}).",
-  "validator.d.btrfs_without_btrfs.declared": "Gefunden in den geschriebenen .nix-Dateien, also auch in Nix-Brix. Ein btrfs-Dienst auf einem Rechner ohne btrfs scheitert beim Start und lässt den Rebuild fehlschlagen. Gehört die Einstellung zu einem anderen Rechner, verschiebe sie in dessen Host-Datei.",
+  "validator.d.btrfs_without_btrfs.declared": "Gefunden in den geschriebenen .nix-Dateien, also auch in Nix-Brix. Ein btrfs-Dienst auf einem Rechner ohne btrfs startet nicht. Das System wird trotzdem gebaut und aktiviert, der Rebuild endet aber mit einer Warnung. Gehört die Einstellung zu einem anderen Rechner, verschiebe sie in dessen Host-Datei.",
   "validator.d.btrfs_without_btrfs.root_not_btrfs": "Der von NiCo erzeugte Balance-Job arbeitet fest auf /. Liegt das btrfs-Dateisystem woanders, bleibt der Job wirkungslos und schlägt bei jedem Lauf fehl.",
   "validator.d.btrfs_without_btrfs.other_host": "Die Prüfung liest die Mountpoints des laufenden Systems. Führe den Validator auf dem betroffenen Rechner erneut aus.",
   "validator.d.snapper_in_host": "Bei mehreren Flake-Hosts haben Hosts unterschiedliche Subvolumes. Die Snapper-Config sollte in der jeweiligen Host-Config stehen.",

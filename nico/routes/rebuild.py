@@ -107,6 +107,40 @@ def _job_verbose() -> bool:
     with _job_cv:
         return bool(_job and _job.get("verbose"))
 
+class _OwnChatter:
+    """nixos-rebuild's own detail lines, which the monitor hides.
+
+    With `-v` nixos-rebuild-ng logs every command it runs (`debug: …`) and
+    ends a failure on a Python traceback of some fifty lines, of which the
+    last one says what happened (Martins VM run of 2026-11-15). Neither is a
+    `@nix` message, so is_detail_msg never saw them.
+
+    Unlike the nix detail messages these always reach the log file – they
+    are a few dozen lines, and a failure that does not repeat on a second
+    run (the vboxnet0 race of 2026-11-13) would otherwise be lost. Only the
+    monitor skips them while "show all messages" is off.
+
+    Stateful: `hidden` must see every plain line, whatever the switch says,
+    because the switch can flip in the middle of a traceback.
+    """
+
+    def __init__(self):
+        self._in_traceback = False
+
+    def hidden(self, line: str) -> bool:
+        plain = _RE_ANSI.sub("", line)
+        if self._in_traceback:
+            # Frames, source lines and carets are indented; the exception
+            # itself is not, and it is the line worth showing.
+            if not plain.strip() or plain[:1].isspace():
+                return True
+            self._in_traceback = False
+        if plain.startswith("Traceback (most recent call last):"):
+            self._in_traceback = True
+            return True
+        return plain.startswith("debug: ")
+
+
 # Terminal escapes: nix colours its own errors and so do compilers and test
 # runners, so a match on `^FAILED` would miss `\x1b[31;1mFAILED\x1b[0m`.
 _RE_ANSI = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
@@ -238,6 +272,17 @@ class _ErrorLines:
 # everything was built, the profile is set and the configuration activated.
 _RE_SWITCH_FAILED = re.compile(
     r"^switching to system configuration \S+ failed \(status (\d+)\)")
+# The same status once more, in the last line of nixos-rebuild-ng's traceback:
+#   subprocess.CalledProcessError: Command '['systemd-run', …,
+#   '--unit=nixos-rebuild-switch-to-configuration', …]' returned non-zero
+#   exit status 4.
+# On Martins VM run of 2026-11-15 (NixOS 26.05) the rebuild ended red although
+# only btrfs-dynamic-reclaim.service had failed; the pasted tail showed this
+# line and not the one above. Only a command that names switch-to-configuration
+# counts – a failed `nix build` raises the same exception with its own status.
+_RE_SWITCH_CMD_FAILED = re.compile(
+    r"^subprocess\.CalledProcessError: Command '.*switch-to-configuration.*' "
+    r"returned non-zero exit status (\d+)\.?$")
 _RE_UNIT_NOT_STARTED = re.compile(
     r"^Failed to (?:start|restart|reload|reload-or-restart) (\S+)$")
 _RE_UNITS_FAILED = re.compile(r"the following units failed:\s*(.+)$", re.IGNORECASE)
@@ -268,6 +313,12 @@ class _Activation:
         m = _RE_SWITCH_FAILED.match(plain)
         if m:
             self.status = int(m.group(1))
+            return
+        m = _RE_SWITCH_CMD_FAILED.match(plain)
+        if m:
+            # switch-to-configuration's own line wins where both are there.
+            if self.status is None:
+                self.status = int(m.group(1))
             return
         m = _RE_UNIT_NOT_STARTED.match(plain)
         if m:
@@ -818,6 +869,8 @@ def register(app, ctx):
             err_lines   = _ErrorLines()
             # Outcome of the activation phase – see _Activation
             activation  = _Activation()
+            # nixos-rebuild's debug lines and tracebacks – see _OwnChatter
+            chatter     = _OwnChatter()
 
             # nix activity types
             ACT_BUILD         = 105  # individual derivation build
@@ -1149,7 +1202,11 @@ def register(app, ctx):
                             if 'dl_expected' in progress:
                                 global_state['dl_expected'] = progress['dl_expected']
                             yield _emit_global_progress()
-                        yield f"data: {_json.dumps({'type': 'output', 'line': line})}\n\n"
+                        # Asked for every line, so a traceback is followed
+                        # to its end even while everything is shown.
+                        own_detail = chatter.hidden(line)
+                        if not own_detail or _job_verbose():
+                            yield f"data: {_json.dumps({'type': 'output', 'line': line})}\n\n"
                         # Activating phase detected from raw output (activation scripts
                         # run outside of nix's logger and write directly to stderr)
                         if _re.search(r'activating the configuration', line, _re.I):

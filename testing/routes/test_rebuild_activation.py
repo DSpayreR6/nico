@@ -23,6 +23,9 @@ Geprüft wird:
      (Status 2) oder ein gescheiterter Bau bleiben ein Fehler.
   4. Die Sammelzeile `the following units failed: a, b` wird gelesen,
      Doppelte fallen weg, ANSI-Farben stören nicht.
+  4b. Status 4 wird auch aus der letzten Zeile des Tracebacks gelesen
+     (VM-Lauf vom 2026-11-15, NixOS 26.05) – nur wenn der Befehl
+     switch-to-configuration nennt.
   5. Das done-Ereignis trägt den Ausgang, die Oberfläche wertet ihn aus
      und bietet den Sicherungspunkt an; Texte in sieben Sprachen.
 
@@ -111,8 +114,42 @@ a = run(["warning: the following units failed: foo.service, bar.mount",
 check("alle drei, jeder einmal, in Reihenfolge",
       a.units == ["foo.service", "bar.mount", "baz.service"], a.units)
 
+print("\n4b. Status 4 aus der letzten Zeile des Tracebacks (VM, 2026-11-15)")
+# Wörtlich aus Martins VM-Lauf (NixOS 26.05), Store-Pfad gekürzt. Dort endete
+# der Rebuild rot, obwohl nur btrfs-dynamic-reclaim.service nicht startete.
+VMSYS = "/nix/store/r6594aka-nixos-system-nix-vm-26.05.20261113.f1e5c35"
+def cpe(status, sysd=True):
+    cmd = (f"['systemd-run', '-E', 'LOCALE_ARCHIVE', '-E', 'NIXOS_INSTALL_BOOTLOADER', '-E', 'NIXOS_NO_CHECK', "
+           f"'--collect', '--no-ask-password', '--pipe', '--quiet', '--service-type=exec', "
+           f"'--unit=nixos-rebuild-switch-to-configuration', PosixPath('{VMSYS}/bin/switch-to-configuration'), 'switch']"
+           if sysd else f"[PosixPath('{VMSYS}/bin/switch-to-configuration'), 'switch']")
+    return f"subprocess.CalledProcessError: Command '{cmd}' returned non-zero exit status {status}."
+VM_TAIL = ["Nov 15 15:09:34 nix-vm systemd[1]: btrfs-dynamic-reclaim.service: Failed with result 'exit-code'.",
+           "Nov 15 15:09:34 nix-vm systemd[1]: Failed to start Enable Btrfs dynamic block group reclaim for data chunks (all volumes).",
+           "Traceback (most recent call last):",
+           "    raise CalledProcessError(retcode, process.args,",
+           cpe(4)]
+a = run(VM_TAIL)
+check("VM: Status 4 erkannt, teilweise gelungen", a.status == 4 and a.partial, (a.status, a.partial))
+check("VM: kein Dienstname aus diesen Zeilen (steht in der Liste darunter)", a.units == [], a.units)
+a = run([cpe(4, sysd=False)])
+check("ohne systemd-run: ebenfalls erkannt", a.partial is True, a.status)
+for st in (1, 2, 100):
+    a = run([cpe(st)])
+    check(f"Status {st} aus dem Traceback bleibt ein Fehler", a.partial is False and a.status == st, a.status)
+a = run(["subprocess.CalledProcessError: Command '['nix', 'build', '--print-out-paths', "
+         "'/cfg#nixosConfigurations.\"nix-vm\".config.system.build.toplevel']' returned non-zero exit status 4."])
+check("anderer Befehl mit Status 4: kein Sonderfall", a.partial is False and a.status is None, a.status)
+a = run([f"switching to system configuration {VMSYS} failed (status 2)", cpe(4)])
+check("die Zeile von switch-to-configuration hat Vorrang", a.status == 2 and not a.partial, a.status)
+a = run(["debug: nixos_rebuild.process: calling run with args=['systemd-run', "
+         "'--unit=nixos-rebuild-switch-to-configuration'], returned non-zero exit status 4."])
+check("debug-Zeile mit ähnlichem Text zählt nicht", a.status is None, a.status)
+a = run(REAL)
+check("Desktop-Lauf unverändert", a.status == 4 and a.units == ["network-addresses-vboxnet0.service"])
+
 print("\n5. Ereignis, Oberfläche, Texte")
-src = (ROOT / "nico" / "routes" / "rebuild.py").read_text(encoding="utf-8")
+src =(ROOT / "nico" / "routes" / "rebuild.py").read_text(encoding="utf-8")
 check("done-Ereignis trägt den Ausgang",
       "'activated_with_warnings'" in src and "'unrestarted_units'" in src)
 js = (ROOT / "nico" / "static" / "js" / "rebuild.js").read_text(encoding="utf-8")

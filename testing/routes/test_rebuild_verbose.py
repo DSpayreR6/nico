@@ -27,6 +27,11 @@ Geprüft wird:
      ein beendeter Job bleibt unberührt.
   5. Dialog und Monitor kennen den Schalter.
   6. Der Text steht in allen sieben Sprachen.
+  7. nixos-rebuilds eigene Zeilen (`debug: …`, Python-Traceback) – Martins
+     VM-Lauf vom selben Tag: Sie sind kein Nix-Text, der Filter aus 2. sah
+     sie nie. Bei ausgeschaltetem Schalter zeigt der Monitor sie nicht, vom
+     Traceback bleibt die letzte Zeile. In die Logdatei gehen sie immer:
+     ein Fehler, der beim zweiten Lauf nicht wiederkommt, wäre sonst weg.
 
 Lauf: nix-shell shell.nix --run "python testing/routes/test_rebuild_verbose.py"
 """
@@ -169,6 +174,84 @@ for p in langs:
     val = json.loads(p.read_text(encoding="utf-8")).get("rebuild.optVerbose")
     # `-v` läuft immer mit; der Schalter verspricht es darum nicht mehr.
     check(f"{p.stem}: rebuild.optVerbose", bool(val) and val != "__TODO__" and "-v" not in val, val)
+
+print("\n7. nixos-rebuilds eigene Zeilen")
+# Wörtlich aus Martins VM-Lauf vom 2026-11-15 (NixOS 26.05), Pfade gekürzt.
+NG = "/nix/store/937n-nixos-rebuild-ng-26.05/lib/python3.13/site-packages/nixos_rebuild"
+VM = f"""debug: nixos_rebuild.process: calling run with args=['test', '-f', PosixPath('/nix/store/r659-nixos-system-nix-vm-26.05/nixos-version')], kwargs={{}}, env=None, append_local_env=None
+debug: nixos_rebuild.process: captured output with stdout='', stderr=None
+activating the configuration...
+Nov 15 15:09:34 nix-vm systemd[1]: btrfs-dynamic-reclaim.service: Failed with result 'exit-code'.
+Nov 15 15:09:34 nix-vm systemd[1]: Failed to start Enable Btrfs dynamic block group reclaim for data chunks (all volumes).
+Traceback (most recent call last):
+  File "{NG}/__init__.py", line 400, in main
+    execute(sys.argv)
+    ~~~~~~~^^^^^^^^^^
+  File "{NG}/services.py", line 335, in build_and_activate_system
+    _activate_system(
+    ~~~~~~~~~~~~~~~~^
+        path_to_config=path_to_config,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<6 lines>...
+    )
+    ^
+  File "{NG}/process.py", line 211, in run_wrapper
+    r = subprocess.run(
+        final_args,
+    ...<5 lines>...
+        **kwargs,
+    )
+  File "/nix/store/kp6p-python3-3.13.17/lib/python3.13/subprocess.py", line 578, in run
+    raise CalledProcessError(retcode, process.args,
+                             output=stdout, stderr=stderr)
+subprocess.CalledProcessError: Command '['systemd-run', '-E', 'LOCALE_ARCHIVE']' returned non-zero exit status 4.
+── log saved ──""".splitlines()
+
+Chatter = getattr(rb, "_OwnChatter", None)
+check("es gibt _OwnChatter", Chatter is not None)
+if Chatter:
+    ch = Chatter()
+    shown = [ln for ln in VM if not ch.hidden(ln)]
+    check("debug:-Zeilen verborgen", not any(ln.startswith("debug:") for ln in shown), shown)
+    check("Traceback-Kopf und Rahmen verborgen",
+          not any("Traceback" in ln or ln.startswith(" ") for ln in shown), shown)
+    check("letzte Zeile des Tracebacks bleibt",
+          any(ln.startswith("subprocess.CalledProcessError:") for ln in shown), shown)
+    check("was danach kommt, bleibt", shown[-1] == "── log saved ──", shown[-1])
+    check("Aktivierung und systemd-Zeilen bleiben",
+          shown[:3] == VM[2:5], shown[:3])
+    check("genau fünf Zeilen übrig", len(shown) == 5, len(shown))
+
+    check("debug mitten im Satz ist keine debug-Zeile",
+          not Chatter().hidden("warning: debug: is only a word here"))
+    check("eingerückte Zeile ohne Traceback bleibt", not Chatter().hidden("  setting up /etc..."))
+    check("farbige debug-Zeile verborgen", Chatter().hidden("\x1b[2mdebug: nixos_rebuild.process: x\x1b[0m"))
+
+    # Chained exceptions: each traceback is cut, each exception line stays.
+    ch = Chatter()
+    chain = ["Traceback (most recent call last):", '  File "a.py", line 1, in f', "    g()",
+             "KeyError: 'x'", "",
+             "During handling of the above exception, another exception occurred:", "",
+             "Traceback (most recent call last):", '  File "b.py", line 2, in h',
+             "RuntimeError: kaputt", "danach"]
+    shown = [ln for ln in chain if not ch.hidden(ln)]
+    check("verkettete Ausnahmen: beide Ursachen bleiben",
+          "KeyError: 'x'" in shown and "RuntimeError: kaputt" in shown and shown[-1] == "danach", shown)
+    check("verkettete Ausnahmen: keine Rahmen", not any(ln.startswith("  ") for ln in shown), shown)
+
+# The loop itself is a closure of the job; its wiring is read from the source.
+src = (ROOT / "nico" / "routes" / "rebuild.py").read_text(encoding="utf-8")
+loop = src[src.index("for raw_line in proc.stdout:"):src.index("proc.wait()")]
+plain = loop[loop.index("else:"):]
+check("jede Zeile wird befragt, unabhängig vom Schalter",
+      "own_detail = chatter.hidden(line)" in plain)
+check("Monitor: verborgen nur bei ausgeschaltetem Schalter",
+      "if not own_detail or _job_verbose():" in plain)
+check("Logdatei bekommt die Zeile vor jeder Entscheidung",
+      plain.index("log_lines.append(line)") < plain.index("chatter.hidden(line)"))
+check("Fehlerzeilen und Aktivierung sehen sie ebenfalls",
+      plain.index("activation.consider(line)") < plain.index("chatter.hidden(line)")
+      and plain.index("err_lines.consider_raw(line)") < plain.index("chatter.hidden(line)"))
 
 print("\n" + ("ALLE PRÜFUNGEN BESTANDEN" if not fails else f"FEHLGESCHLAGEN: {fails}"))
 sys.exit(1 if fails else 0)

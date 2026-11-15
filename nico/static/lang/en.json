@@ -1006,7 +1006,7 @@
   "validator.d.snapper_btrfs.notbtrfs": "Snapper only supports btrfs. The mountpoint has to be a btrfs subvolume.",
   "validator.d.btrfs_without_btrfs.no_btrfs": "The config builds and boots, but the maintenance jobs do nothing: scrub and balance exist only for btrfs. On ext4 or another file system, switch both off.",
   "validator.f.btrfs_without_btrfs.declared": "This config sets up btrfs services, but no btrfs is mounted on this machine ({0}).",
-  "validator.d.btrfs_without_btrfs.declared": "Found in the written .nix files, Nix-Brix included. A btrfs service on a machine without btrfs fails to start and takes the rebuild down with it. If the setting belongs to another machine, move it into that host's file.",
+  "validator.d.btrfs_without_btrfs.declared": "Found in the written .nix files, Nix-Brix included. A btrfs service on a machine without btrfs does not start. The system is still built and activated, but the rebuild ends with a warning. If the setting belongs to another machine, move it into that host's file.",
   "validator.d.btrfs_without_btrfs.root_not_btrfs": "The balance job NiCo generates works on / specifically. If the btrfs file system lives elsewhere, the job has no effect and fails on every run.",
   "validator.d.btrfs_without_btrfs.other_host": "The check reads the mountpoints of the running system. Run the Validator again on the machine in question.",
   "validator.d.snapper_in_host": "With several flake hosts, the hosts have different subvolumes. The snapper config belongs in the config of the host it applies to.",

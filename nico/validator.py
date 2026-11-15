@@ -3090,7 +3090,8 @@ def _rule_btrfs_without_btrfs(nixos_dir: str, config: dict, is_flake: bool,
                 params=[", ".join(declared[:3])],
                 detail="Gefunden in den geschriebenen .nix-Dateien, also auch in "
                        "Nix-Brix. Ein btrfs-Dienst auf einem Rechner ohne btrfs "
-                       "scheitert beim Start und lässt den Rebuild fehlschlagen. "
+                       "startet nicht. Das System wird trotzdem gebaut und "
+                       "aktiviert, der Rebuild endet aber mit einer Warnung. "
                        "Gehört die Einstellung zu einem anderen Rechner, verschiebe "
                        "sie in dessen Host-Datei.",
                 detail_key="validator.d.btrfs_without_btrfs.declared",
