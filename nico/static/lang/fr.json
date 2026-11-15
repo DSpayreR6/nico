@@ -317,6 +317,8 @@
   "flake.noHosts": "Aucun hôte trouvé dans flake.nix.",
   "flake.create": "Créer flake.nix",
   "flake.createTitle": "Créer flake.nix",
+  "flake.createHostLabel": "Nom de l'hôte",
+  "flake.createHostHint": "Il est aussi inscrit comme nom d'hôte de la machine (champ « Nom d'hôte » dans la section Système).",
   "flake.createBody": "NiCo transforme cette configuration en configuration flake, dans cet ordre :\n\n1. Créer un point de contrôle de l'état actuel (commit) – seulement si la configuration est un dépôt git\n2. Créer le répertoire {0} et y déplacer hardware-configuration.nix\n3. Écrire flake.nix avec l'hôte « {1} » et autoriser les commandes flake\n\nEnsuite, NiCo construit cette configuration avec --flake.",
   "flake.createHint": "Cette configuration n'a pas de flake.nix et est construite de façon classique. L'interrupteur ci-dessus autorise seulement les commandes flake – il ne transforme pas la configuration en configuration flake.",
   "flake.createOk": "Créer",

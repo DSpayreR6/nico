@@ -317,6 +317,8 @@
   "flake.noHosts": "在 flake.nix 中未找到主机。",
   "flake.create": "创建 flake.nix",
   "flake.createTitle": "创建 flake.nix",
+  "flake.createHostLabel": "主机名称",
+  "flake.createHostHint": "同时会写入为本机的主机名（“系统”部分的“主机名”字段）。",
   "flake.createBody": "NiCo 将按以下顺序把此配置转换为 flake 配置：\n\n1. 为当前状态创建检查点（commit）——仅当配置是 git 仓库时\n2. 创建目录 {0} 并把 hardware-configuration.nix 移入其中\n3. 写入包含主机“{1}”的 flake.nix，并允许 flake 命令\n\n此后 NiCo 使用 --flake 构建此配置。",
   "flake.createHint": "此配置没有 flake.nix，按传统方式构建。上方的开关只是允许 flake 命令——它不会把配置转换为 flake 配置。",
   "flake.createOk": "创建",

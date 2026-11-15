@@ -96,6 +96,33 @@ try:
     check("Dialog ist offen", bool(text))
     check("nennt Verzeichnis und Host", "hosts/kiste" in text and "„kiste“" in text, text)
     check("keine offenen Platzhalter", "{0}" not in text and "{1}" not in text and "flake.create" not in text, text)
+    # Martin, VM run of 2026-11-15: the dialog showed the host and offered
+    # nowhere to enter one. The name is asked for here now.
+    def dlg():
+        return d.execute_script("""
+          const i = document.getElementById('_fc-host');
+          return {value: i ? i.value : null,
+                  label: document.querySelector('label[for="_fc-host"]')?.textContent || '',
+                  body: document.getElementById('_fc-body')?.textContent || '',
+                  okOff: document.getElementById('_fc-ok').disabled,
+                  error: !document.getElementById('_fc-error').classList.contains('hidden')};""")
+    def type_host(name):
+        d.execute_script("""const i = document.getElementById('_fc-host'); i.value = arguments[0];
+                            i.dispatchEvent(new Event('input', {bubbles: true}));""", name)
+        time.sleep(0.2)
+        return dlg()
+    s0 = dlg()
+    check("Feld für den Namen ist da, beschriftet und vorbelegt",
+          s0["value"] == "kiste" and s0["label"] == "Name des Hosts", s0)
+    check("vorbelegter Name ist gültig: Anlegen frei, kein Fehler", not s0["okOff"] and not s0["error"], s0)
+    s1 = type_host("werkbank")
+    check("die Schritte folgen der Eingabe", "hosts/werkbank" in s1["body"] and "„werkbank“" in s1["body"], s1["body"])
+    for bad in ("9zimmer", "mein host", "kü-che", "a.b"):
+        sb = type_host(bad)
+        check(f"„{bad}“: Anlegen gesperrt, Fehler steht da", sb["okOff"] and sb["error"], sb)
+    sb = type_host("")
+    check("leer: Anlegen gesperrt, ohne Fehlertext", sb["okOff"] and not sb["error"], sb)
+    type_host("werkbank")
     d.execute_script("document.querySelector('#_fc-ok').closest('.overlay').click();")
     time.sleep(0.3)
     check("Klick auf den Hintergrund schließt nicht", bool(d.find_elements(By.ID, "_fc-ok")))
@@ -103,10 +130,14 @@ try:
     time.sleep(0.5)
     check("Abbrechen schließt", not d.find_elements(By.ID, "_fc-ok"))
     check("und ändert nichts", not (cfg / "flake.nix").exists() and not (cfg / "hosts").exists())
+    check("auch den Hostnamen im Formular nicht",
+          d.execute_script("return document.getElementById('hostname').value;") == "kiste")
 
     print("\n3. Anlegen")
     d.execute_script("document.getElementById('flake-create-btn').click();")
     time.sleep(0.6)
+    d.execute_script("""const i = document.getElementById('_fc-host'); i.value = 'werkbank';
+                        i.dispatchEvent(new Event('input', {bubbles: true}));""")
     d.execute_script("document.getElementById('_fc-ok').click();")
     for _ in range(40):
         if (cfg / "flake.nix").exists(): break
@@ -114,9 +145,16 @@ try:
     time.sleep(3)
     clear_startup_dialogs()
     check("flake.nix liegt da", (cfg / "flake.nix").is_file())
-    check("Host-Verzeichnis mit default.nix", (cfg / "hosts" / "kiste" / "default.nix").is_file())
+    check("Host-Verzeichnis trägt den eingegebenen Namen", (cfg / "hosts" / "werkbank" / "default.nix").is_file())
+    check("kein Verzeichnis unter dem alten Namen", not (cfg / "hosts" / "kiste").exists())
+    check("flake.nix nennt den Host", "werkbank" in (cfg / "flake.nix").read_text(encoding="utf-8")
+          and "kiste" not in (cfg / "flake.nix").read_text(encoding="utf-8"))
+    check("der Hostname des Rechners ist derselbe Name",
+          d.execute_script("return document.getElementById('hostname').value;") == "werkbank"
+          and 'networking.hostName = "werkbank";' in
+              "\n".join(p.read_text(encoding="utf-8") for p in cfg.rglob("*.nix")))
     check("Hardware-Datei verschoben",
-          (cfg / "hosts" / "kiste" / "hardware-configuration.nix").is_file()
+          (cfg / "hosts" / "werkbank" / "hardware-configuration.nix").is_file()
           and not (cfg / "hardware-configuration.nix").exists())
     check("Schaltfläche ist jetzt weg", not row_visible())
     toasts = d.execute_script("return [...document.querySelectorAll('.toast')].map(t => t.textContent);")
@@ -126,11 +164,11 @@ try:
     info = d.execute_script("return _fetchFlakeHosts();")
     check("der Rebuild kennt den Host",
           info.get("flake_mode") is True
-          and [h["name"] if isinstance(h, dict) else h for h in info.get("hosts") or []] == ["kiste"], info)
-    d.execute_script("window._rbo = null; _showRebuildOptions({flake_mode: true}, {hostname: 'kiste'});")
+          and [h["name"] if isinstance(h, dict) else h for h in info.get("hosts") or []] == ["werkbank"], info)
+    d.execute_script("window._rbo = null; _showRebuildOptions({flake_mode: true}, {hostname: 'werkbank'});")
     time.sleep(1)
     cmd = d.execute_script("return document.getElementById('_rbo-cmd')?.textContent || '';")
-    check("der Rebuild-Befehl baut mit --flake", "--flake" in cmd and "#kiste" in cmd, cmd)
+    check("der Rebuild-Befehl baut mit --flake", "--flake" in cmd and "#werkbank" in cmd, cmd)
     if len(sys.argv) > 1:
         d.execute_script("document.getElementById('_rbo-cancel')?.click();")
         d.save_screenshot(sys.argv[1])

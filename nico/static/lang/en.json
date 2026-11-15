@@ -317,6 +317,8 @@
   "flake.noHosts": "No hosts found in flake.nix.",
   "flake.create": "Create flake.nix",
   "flake.createTitle": "Create flake.nix",
+  "flake.createHostLabel": "Name of the host",
+  "flake.createHostHint": "Also entered as the hostname of the machine (field “Hostname” in the System section).",
   "flake.createBody": "NiCo turns this config into a flake config, in this order:\n\n1. Create a checkpoint of the current state (commit) – only if the config is a git repository\n2. Create the directory {0} and move hardware-configuration.nix into it\n3. Write flake.nix with the host “{1}” and allow the flake commands\n\nFrom then on NiCo builds this config with --flake.",
   "flake.createHint": "This config has no flake.nix and is built the classic way. The switch above only allows the flake commands – it does not turn the config into a flake config.",
   "flake.createOk": "Create",

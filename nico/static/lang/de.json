@@ -329,6 +329,8 @@
   "flake.noHosts":      "Keine Hosts in der flake.nix gefunden.",
   "flake.create": "flake.nix anlegen",
   "flake.createTitle": "flake.nix anlegen",
+  "flake.createHostLabel": "Name des Hosts",
+  "flake.createHostHint": "Wird auch als Hostname des Rechners eingetragen (Feld „Hostname“ im Abschnitt System).",
   "flake.createBody": "NiCo stellt diese Config auf Flakes um, in dieser Reihenfolge:\n\n1. Sicherungspunkt des jetzigen Stands anlegen (Commit) – nur, wenn die Config ein git-Repository ist\n2. Verzeichnis {0} anlegen und die hardware-configuration.nix dorthin verschieben\n3. flake.nix mit dem Host „{1}“ schreiben und die Flake-Befehle erlauben\n\nDanach baut NiCo diese Config mit --flake.",
   "flake.createHint": "Diese Config hat keine flake.nix und wird klassisch gebaut. Der Schalter oben erlaubt nur die Flake-Befehle – er stellt die Config nicht auf Flakes um.",
   "flake.createOk": "Anlegen",

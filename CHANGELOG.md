@@ -10,7 +10,7 @@
 - A system package can be deactivated instead of deleted: a switch in the package list takes it out of the build, the entry stays in the list greyed out. In the file the names are kept in a Nix-Brick of their own (`nico-inactive-packages`), managed by NiCo. Deleting that brick drops the deactivated packages for good: they leave the package list as well
 - Rebuild monitor: the flood of Nix detail messages (evaluated files, store links) is off by default, so warnings and notes stay visible; the monitor now shows what a rebuild in the terminal shows, and the log file no longer fills up with them. A switch "Show all Nix messages" in the rebuild options and in the monitor brings them back, also while a rebuild is running; the choice is remembered per machine. The debug lines of `nixos-rebuild` and the frames of its Python traceback are hidden in the monitor the same way, with the last line of the traceback kept; these always go into the log file
 - AppImage support: a field for extra libraries (`programs.appimage.package` with `extraPkgs`), for AppImages that stop with "cannot open shared object file"
-- "Create flake.nix" in Nix & System turns a classic config into a flake config in one explicit step: checkpoint of the state before, host directory, hardware config moved into it, `flake.nix` written
+- "Create flake.nix" in Nix & System turns a classic config into a flake config in one explicit step: checkpoint of the state before, host directory, hardware config moved into it, `flake.nix` written. The dialog asks for the name of the host; it is entered as the hostname of the machine as well
 
 ### Bug Fixes
 

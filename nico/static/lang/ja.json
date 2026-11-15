@@ -317,6 +317,8 @@
   "flake.noHosts": "flake.nixにホストが見つかりません。",
   "flake.create": "flake.nix を作成",
   "flake.createTitle": "flake.nix を作成",
+  "flake.createHostLabel": "ホストの名前",
+  "flake.createHostHint": "このマシンのホスト名としても設定されます（「システム」セクションの「ホスト名」欄）。",
   "flake.createBody": "NiCo はこの設定を次の順序で flake 構成に切り替えます。\n\n1. 現在の状態のチェックポイントを作成（commit）– 設定が git リポジトリの場合のみ\n2. ディレクトリ {0} を作成し、hardware-configuration.nix をそこへ移動\n3. ホスト「{1}」を含む flake.nix を書き込み、flake コマンドを許可\n\n以後、NiCo はこの設定を --flake でビルドします。",
   "flake.createHint": "この設定には flake.nix がなく、従来の方法でビルドされます。上のスイッチは flake コマンドを許可するだけで、設定を flake 構成に切り替えるものではありません。",
   "flake.createOk": "作成",

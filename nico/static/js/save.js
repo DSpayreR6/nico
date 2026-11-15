@@ -51,31 +51,66 @@ async function refreshFlakeCreateRow(path = _brixTargetFile) {
   row.classList.toggle('hidden', !show);
 }
 
+// The name of the host is asked for here. Until 2026-11-15 the dialog only
+// showed it: it came from the Hostname field in the System section, and
+// nothing said so (Martin, VM run: "nowhere to enter anything"). Host and
+// hostname stay one name on purpose – nixos-rebuild looks up the flake host
+// named like the machine – so what is entered here goes into that field.
+// The pattern is the one /api/flake/create checks.
+const _FLAKE_HOST_RE = /^[a-zA-Z][a-zA-Z0-9_-]*$/;
+
+/** Resolves to the chosen host name, or null when cancelled. */
 function _confirmFlakeCreate() {
-  const host = (document.getElementById('hostname')?.value || '').trim() || 'nixos';
+  const start = (document.getElementById('hostname')?.value || '').trim() || 'nixos';
   return new Promise(resolve => {
     const overlay = document.createElement('div');
     overlay.className = 'overlay';
     overlay.innerHTML = `
       <div class="dialog-box" style="min-width:380px;max-width:560px">
         <h2 class="dialog-title">${escHtml(t('flake.createTitle'))}</h2>
-        <p style="margin:10px 0 16px;white-space:pre-line">${escHtml(
-          t('flake.createBody', `${_hostsDir}/${host}`, host))}</p>
+        <label for="_fc-host" style="display:block;margin:10px 0 4px">${escHtml(t('flake.createHostLabel'))}</label>
+        <input type="text" id="_fc-host" value="${escHtml(start)}" autocomplete="off" spellcheck="false" style="width:100%">
+        <div class="setup-hint" style="margin:4px 0 0">${escHtml(t('flake.createHostHint'))}</div>
+        <div id="_fc-error" class="hidden" style="margin:4px 0 0;color:var(--red)">${escHtml(tErr('ERR_INVALID_NAME'))}</div>
+        <p id="_fc-body" style="margin:14px 0 16px;white-space:pre-line"></p>
         <div class="dialog-actions">
           <button id="_fc-ok"     class="btn-primary">${escHtml(t('flake.createOk'))}</button>
           <button id="_fc-cancel" class="btn-secondary">${escHtml(t('unsaved.cancel'))}</button>
         </div>
       </div>`;
     document.body.appendChild(overlay);
+    const input = overlay.querySelector('#_fc-host');
+    const okBtn = overlay.querySelector('#_fc-ok');
+    const sync  = () => {
+      const host  = input.value.trim();
+      const valid = _FLAKE_HOST_RE.test(host);
+      // The steps name directory and host, so they follow what is typed.
+      overlay.querySelector('#_fc-body').textContent =
+        t('flake.createBody', `${_hostsDir}/${host || '…'}`, host || '…');
+      overlay.querySelector('#_fc-error').classList.toggle('hidden', valid || !host);
+      okBtn.disabled = !valid;
+    };
+    input.addEventListener('input', sync);
+    sync();
+    input.focus();
+    input.select();
     // Closes by button only (no background click).
     const done = val => { overlay.remove(); resolve(val); };
-    overlay.querySelector('#_fc-ok').addEventListener('click', () => done(true));
-    overlay.querySelector('#_fc-cancel').addEventListener('click', () => done(false));
+    okBtn.addEventListener('click', () => done(input.value.trim()));
+    overlay.querySelector('#_fc-cancel').addEventListener('click', () => done(null));
   });
 }
 
 async function createFlake() {
-  if (!await _confirmFlakeCreate()) return;
+  const host = await _confirmFlakeCreate();
+  if (!host) return;
+  // The route takes the host from the saved config, so the name goes into
+  // the form first and is written with it below.
+  const field = document.getElementById('hostname');
+  if (field && field.value.trim() !== host) {
+    field.value = host;
+    field.dispatchEvent(new Event('input', { bubbles: true }));
+  }
   // The route reads the files, so what is in the form has to be on disk
   // first – otherwise the reload afterwards would drop it.
   if (!await _autoSave()) return;
