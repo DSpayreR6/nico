@@ -792,10 +792,7 @@ function attachRebuildMonitor(fromIndex = 0) {
   }
 
   function _appendLog(line) {
-    let cls = '';
-    if (/error:/i.test(line))        cls = 'log-error';
-    else if (/warning:/i.test(line)) cls = 'log-warning';
-    _logBuffer.push({ text: line + '\n', cls });
+    _logBuffer.push({ text: line + '\n', cls: _logLineClass(line) });
     if (!_logRafId) _logRafId = requestAnimationFrame(_flushLog);
   }
 
@@ -968,7 +965,7 @@ function attachRebuildMonitor(fromIndex = 0) {
 
     if (msg.type === 'output') {
       const line = msg.line;
-      if (!firstErrorLine && /error:/i.test(line)) firstErrorLine = line.trim();
+      if (!firstErrorLine && _logLineClass(line) === 'log-error') firstErrorLine = line.trim();
       _appendLog(line);
 
     } else if (msg.type === 'phase') {
@@ -1198,13 +1195,35 @@ async function restoreRebuildMonitor() {
 
 // ── Shared output helpers ─────────────────────────────────────────────────────
 
+/**
+ * Colour class of one output line: 'log-error', 'log-warning' or ''.
+ *
+ * `error:` counts as a word of its own – at the start of the line or after
+ * a blank, the rule the server uses for its error lines (_RE_RAW_ERR). A
+ * plain search for the letters also hit `subprocess.CalledProcessError:`,
+ * the last line of nixos-rebuild's traceback, and painted it red under a
+ * yellow result (Martins VM run of 2026-11-15).
+ *
+ * A `debug:` line of nixos-rebuild is never an error, whatever it quotes:
+ * on the same run `debug: nixos_rebuild.process: captured output …` became
+ * the headline of the failure. The monitor's headline is the first line this
+ * function calls an error.
+ */
+function _logLineClass(line) {
+  // nix colours its own `error:`; the escape would stand in front of the word.
+  const plain = String(line).replace(/\x1b\[[0-9;]*[A-Za-z]/g, '');
+  if (/^\s*debug:/.test(plain))          return '';
+  if (/(?:^|\s)error:/i.test(plain))     return 'log-error';
+  if (/warning:/i.test(plain))           return 'log-warning';
+  return '';
+}
+
 // Render plain text into colorized HTML spans (safe: escapes HTML before inserting)
 function _colorizedOutput(text) {
   return text.split('\n').map(line => {
     const esc = line.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    if (/error:/i.test(line))   return `<span class="log-error">${esc}</span>`;
-    if (/warning:/i.test(line)) return `<span class="log-warning">${esc}</span>`;
-    return esc;
+    const cls = _logLineClass(line);
+    return cls ? `<span class="${cls}">${esc}</span>` : esc;
   }).join('\n');
 }
 

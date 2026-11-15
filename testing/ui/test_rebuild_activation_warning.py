@@ -210,6 +210,48 @@ try:
                            " && !!document.getElementById('rebuild-result')"
                            " && !document.getElementById('rebuild-error-lines');") is True)
 
+    print("\n7. Was als Fehlerzeile zählt (Überschrift und Rotfärbung)")
+    cls = lambda line: d.execute_script("return _logLineClass(arguments[0]);", line)
+    CPE = ("subprocess.CalledProcessError: Command '['systemd-run', '-E', 'LOCALE_ARCHIVE']' "
+           "returned non-zero exit status 4.")
+    DBG = "debug: nixos_rebuild.process: captured output with stdout='', stderr='error: boom'"
+    check("error: am Zeilenanfang ist rot", cls("error: builder for 'x.drv' failed") == "log-error")
+    check("error: nach einem Leerzeichen ist rot", cls("hello> src/a.c:3: error: expected ';'") == "log-error")
+    check("farbiges error: von nix ist rot", cls("\x1b[31;1merror:\x1b[0m attribute 'x' missing") == "log-error")
+    check("CalledProcessError: ist nicht rot", cls(CPE) == "", cls(CPE))
+    check("debug:-Zeile mit error: darin ist nicht rot", cls(DBG) == "", cls(DBG))
+    check("debug:-Zeile mit Leerzeichen vor error: ebenfalls nicht",
+          cls("debug: nixos_rebuild.process: stderr was error: boom") == "")
+    check("debug:-Zeile mit warning: ist nicht gelb", cls("debug: got warning: Git tree is dirty") == "")
+    check("warning: bleibt gelb", cls("warning: Git tree '/cfg' is dirty") == "log-warning")
+    check("gewöhnliche Zeile bleibt ohne Farbe", cls("activating the configuration...") == "")
+    check("die Vorschau färbt nach derselben Regel",
+          d.execute_script("return _colorizedOutput(arguments[0]);", CPE + "\nerror: x <b>")
+          == CPE + '\n<span class="log-error">error: x &lt;b&gt;</span>')
+
+    # Headline of a real failure with "show all messages" on: the debug line
+    # and the traceback come first, the cause is the nix error behind them.
+    def headline(lines):
+        d.get(f"http://127.0.0.1:{PORT}/"); time.sleep(4)
+        d.execute_script(FAKE + "attachRebuildMonitor(0);")
+        time.sleep(0.5)
+        for ln in lines:
+            d.execute_script("window._fakeES.onmessage({data: arguments[0]});",
+                             json.dumps({"type": "output", "line": ln}))
+        d.execute_script("window._fakeES.onmessage({data: arguments[0]});",
+                         json.dumps({**BASE, "error_lines": []}))
+        time.sleep(1.5)
+        red = d.execute_script("return [...document.querySelectorAll('#rebuild-log .log-error')]"
+                               ".map(e => e.textContent.trim());")
+        return d.find_element(By.ID, "rebuild-result").text.strip(), red
+    text, red = headline([DBG, CPE, "error: builder for '/nix/store/x-foo.drv' failed with exit code 1"])
+    check("Überschrift nennt den nix-Fehler, nicht die debug-Zeile",
+          "builder for" in text and "debug:" not in text and "CalledProcessError" not in text, text)
+    check("rot ist im Textfenster nur der nix-Fehler", len(red) == 1 and red[0].startswith("error: builder"), red)
+    text, red = headline([DBG, CPE])
+    check("ohne echte Fehlerzeile: Überschrift ohne Zusatz",
+          "debug:" not in text and "CalledProcessError" not in text and not text.endswith(":"), text)
+
     if len(sys.argv) > 1:
         d.get(f"http://127.0.0.1:{PORT}/"); time.sleep(4)
         play_long({**BASE, "activated_with_warnings": True,
