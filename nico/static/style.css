@@ -1935,6 +1935,14 @@ textarea:focus {
   line-height: 1;
 }
 
+/* Above the log. Result and boxes used to sit inside .rebuild-monitor and
+   took its type from there. */
+.rebuild-outcome {
+  font-family: var(--mono);
+  font-size: 11px;
+}
+.rebuild-outcome > .rebuild-failed-units { margin-top: 6px; }
+
 .rebuild-result {
   font-size: 12px;
   font-weight: 600;

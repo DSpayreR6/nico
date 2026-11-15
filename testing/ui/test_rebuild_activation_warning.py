@@ -63,6 +63,12 @@ def state():
               yellow: getComputedStyle(document.documentElement).getPropertyValue('--yellow').trim(),
               units: u ? u.textContent : null,
               errors: !!document.getElementById('rebuild-error-lines'),
+              // 4 = DOCUMENT_POSITION_FOLLOWING: the argument comes later.
+              resultAboveLog: !!(r.compareDocumentPosition(document.getElementById('rebuild-log')) & 4),
+              unitsAboveLog: u ? !!(u.compareDocumentPosition(document.getElementById('rebuild-log')) & 4) : null,
+              unitsBelowResult: u ? !!(r.compareDocumentPosition(u) & 4) : null,
+              resultTop: r.getBoundingClientRect().top,
+              logTop: document.getElementById('rebuild-log').getBoundingClientRect().top,
               push: p && !p.classList.contains('hidden'),
               pushText: p ? p.textContent.trim() : ''};""")
 
@@ -93,6 +99,11 @@ try:
     check("kein Validator-Hinweis im Ergebnis",
           not d.find_elements(By.CSS_SELECTOR, "#rebuild-result button, #rebuild-result a"))
     check("der Sicherungspunkt wird angeboten", s["push"] is True and bool(s["pushText"]), s)
+    # Martin, 2026-11-15: the outcome belongs above the log, not under the phases.
+    check("Ergebnis steht über dem Textfenster", s["resultAboveLog"] is True and s["resultTop"] < s["logTop"],
+          (s["resultTop"], s["logTop"]))
+    check("der Kasten mit den Diensten folgt dem Ergebnis, noch über dem Textfenster",
+          s["unitsBelowResult"] is True and s["unitsAboveLog"] is True, s)
 
     print("\n2. Status 4 ohne erkannten Dienst")
     d.get(f"http://127.0.0.1:{PORT}/"); time.sleep(4)

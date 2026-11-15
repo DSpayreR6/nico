@@ -937,6 +937,8 @@ function attachRebuildMonitor(fromIndex = 0) {
     resultEl.innerHTML  = message;
     if (!success) appendValidationHint(resultEl);
     closeBtn.disabled    = false;
+    // The result sits above the log; a dialog scrolled down would hide it.
+    resultEl.scrollIntoView({ block: 'nearest' });
   }
 
   es.onmessage = (event) => {
