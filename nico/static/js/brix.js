@@ -125,6 +125,16 @@ async function confirmDeleteBrix(name, file = 'configuration.nix') {
     return;
   }
   showToast(t('brix.deleted', name));
+  // NiCo's own brick is rebuilt from the package list: the preview and every
+  // save send the list, deactivated entries included, and the generator
+  // writes the brick from it. Deleted in the file only, it was back at once
+  // (Martin, VM run of 2026-11-15: delete confirmed, brick stayed). Deleting
+  // it means dropping the deactivated packages, so they leave the list too.
+  if (name === RESERVED_BRICK) {
+    document.querySelectorAll('#packages-list .pkg-item').forEach(el => {
+      if (el.dataset.enabled === '0') el.remove();
+    });
+  }
   await _refreshPreviewForFile(file);
 }
 

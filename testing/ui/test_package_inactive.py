@@ -199,6 +199,33 @@ try:
     check("Datei: beide Bibliotheken",
           lambda: "extraPkgs = pkgs: [ pkgs.libgpg-error pkgs.libepoxy pkgs.x ];" in disk())
 
+    print("\n8. Den verwalteten Brick löschen (Martin, VM-Durchlauf 2026-11-15)")
+    # Delete was confirmed and the brick stayed: the preview rebuilt it from
+    # the package list, which still held the deactivated entries.
+    if item("git")["on"]:
+        toggle("git")
+    check("Ausgangslage: git deaktiviert, Brick da", lambda: in_brick(preview(), "git"))
+    check("Speichern", lambda: save() is True)
+    check("Brick steht in der Datei", lambda: NAME in disk())
+    n_before = js("return document.querySelectorAll('#packages-list .pkg-item').length")
+    n_off = js("return document.querySelectorAll('#packages-list .pkg-item.disabled').length")
+    js("window.confirm = () => true;")
+    js("""[...arguments[0].querySelectorAll('.brix-menu-item')][0].click();""", brick())
+    time.sleep(3)
+    check("Brick ist aus der Vorschau", lambda: NAME not in preview())
+    check("Brick ist aus der Datei", lambda: NAME not in disk())
+    check("die deaktivierten Pakete sind aus der Liste",
+          lambda: item("git") is None
+          and js("return document.querySelectorAll('#packages-list .pkg-item.disabled').length") == 0)
+    check("die aktiven bleiben",
+          lambda: n_off > 0
+          and js("return document.querySelectorAll('#packages-list .pkg-item').length") == n_before - n_off)
+    check("Speichern danach", lambda: save() is True)
+    check("der Brick kommt nicht zurück", lambda: NAME not in disk() and NAME not in preview())
+    load()
+    check("auch nach dem Neuladen nicht",
+          lambda: NAME not in preview() and item("git") is None)
+
 finally:
     d.quit()
 
