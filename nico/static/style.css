@@ -586,6 +586,10 @@ select {
   cursor: pointer;
 }
 
+/* `.modal label` sets display:block and would stack text and switch;
+   keep the rebuild monitor's switch on the same line, right-aligned. */
+#rebuild-overlay .toggle-row { display: flex; }
+
 .toggle-wrap {
   position: relative;
   flex-shrink: 0;
