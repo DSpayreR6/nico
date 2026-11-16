@@ -14,6 +14,7 @@ from ..brix import extract_brick_blocks, brix_content_to_bricks
 from ..core import (
     NestedBricksError as _NestedBricksError,
     flake_is_managed as _flake_is_managed,
+    keep_unmodelled as _keep_unmodelled,
     read_config_file as _read_config_file,
     write_raw_config_file as _write_raw_config_file,
     load_and_normalize_config as _load_and_normalize_config,
@@ -296,8 +297,10 @@ def register(app, ctx):
                 try:
                     nix_content = target.read_text(encoding="utf-8")
                     on_disk = extract_brick_blocks(nix_content)
-                    if on_disk:
-                        data["brick_blocks"] = on_disk
+                    # Same as the write paths, or the preview shows a file
+                    # without what the next save keeps (core.keep_unmodelled).
+                    data["brick_blocks"] = _keep_unmodelled(
+                        nix_content, on_disk if on_disk else data.get("brick_blocks"))
                 except OSError:
                     pass
 
@@ -349,13 +352,8 @@ def register(app, ctx):
                 try:
                     nix_content = cfg_nix.read_text(encoding="utf-8")
                     on_disk = extract_brick_blocks(nix_content)
-                    if on_disk:
-                        brick_blocks = on_disk
-                    elif not brick_blocks:
-                        recognized = importer.parse_config(nix_content)
-                        rest = importer.build_rest_brix(nix_content, recognized)
-                        if rest.strip():
-                            brick_blocks = brix_content_to_bricks(rest, section="Start")
+                    brick_blocks = _keep_unmodelled(
+                        nix_content, on_disk if on_disk else brick_blocks)
                 except OSError:
                     pass
             data["brick_blocks"] = brick_blocks
@@ -463,10 +461,13 @@ def register(app, ctx):
 
         # Merge brix from existing file into host_data before the single write below
         if host_nix.exists():
-            on_disk_brix = extract_brick_blocks(host_nix.read_text(encoding="utf-8"))
+            host_disk    = host_nix.read_text(encoding="utf-8")
+            on_disk_brix = extract_brick_blocks(host_disk)
             stored_brix  = host_data.get("brick_blocks", {})
             stored_brix.update(on_disk_brix)
-            host_data["brick_blocks"] = stored_brix
+            # Statements outside any brick the form cannot hold
+            # (core.keep_unmodelled) – lost here before 2026-11-16.
+            host_data["brick_blocks"] = _keep_unmodelled(host_disk, stored_brix)
 
         hw_config = (host_dir / "hardware-configuration.nix").exists()
         host_dir.mkdir(parents=True, exist_ok=True)

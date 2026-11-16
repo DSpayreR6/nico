@@ -534,14 +534,19 @@ def save_config(nixos_config_dir: str, data: dict) -> None:
     nix_file  = Path(nixos_config_dir) / "configuration.nix"
     _refuse_unmappable(nix_file, "configuration.nix")
 
-    # Preserve brick_blocks from the existing file when not supplied
-    if not data.get("brick_blocks") and nix_file.exists():
+    from .core import keep_unmodelled
+    disk = ""
+    if nix_file.exists():
         try:
-            data["brick_blocks"] = extract_brick_blocks(
-                nix_file.read_text(encoding="utf-8")
-            )
+            disk = nix_file.read_text(encoding="utf-8")
         except OSError:
             pass
+    # Preserve brick_blocks from the existing file when not supplied
+    if not data.get("brick_blocks") and disk:
+        data["brick_blocks"] = extract_brick_blocks(disk)
+    # … and what stands outside any brick that the form cannot hold
+    # (raw-mode edits, edits from outside; core.keep_unmodelled).
+    data["brick_blocks"] = keep_unmodelled(disk, data.get("brick_blocks"))
 
     atomic.write_text(
         nix_file,
@@ -611,13 +616,18 @@ def save_host_config(nixos_dir: str, host_name: str, data: dict) -> None:
     data     = copy.copy(data)
     _refuse_unmappable(nix_file, f"{hosts_dir_name}/{host_name}/default.nix")
 
-    if not data.get("brick_blocks") and nix_file.exists():
+    from .core import keep_unmodelled
+    disk = ""
+    if nix_file.exists():
         try:
-            data["brick_blocks"] = extract_brick_blocks(
-                nix_file.read_text(encoding="utf-8")
-            )
+            disk = nix_file.read_text(encoding="utf-8")
         except OSError:
             pass
+    if not data.get("brick_blocks") and disk:
+        data["brick_blocks"] = extract_brick_blocks(disk)
+    # Host files had no rescue at all: a statement outside any brick was
+    # dropped on every panel save, also after an edit from outside.
+    data["brick_blocks"] = keep_unmodelled(disk, data.get("brick_blocks"))
 
     hw_config = data.get("_hw_config") or (
         host_dir / "hardware-configuration.nix"

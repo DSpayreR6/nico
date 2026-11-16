@@ -183,6 +183,18 @@ erscheint er nicht; im Dry-Run bis zum Ergebnis. Dazu, dass der Schalter
 setzte `display: block`). Kein echter Lauf: `EventSource`, Status und
 Dry-Run werden im Browser ersetzt. Port 8813.
 
+## test_raw_panel_keep.py
+
+Raw-Modus → Einstellung außerhalb eines Bricks → Panel → Speichern, 16
+Prüfungen, für `configuration.nix` und eine Host-Datei. Aus dem Befund vom
+2026-11-16: die Einstellung war danach weg (Raw-Speichern setzt den Hash
+neu; Host-Dateien hatten gar keine Umwandlung). Fährt den Weg durch die
+Oberfläche – Panel-Schalter, Raw-Editor, Raw-Speichern-Knopf, `saveConfig()`
+– und prüft, dass die Einstellung als Nix-Brick genau einmal in der Datei
+steht. Gegen den Stand vor dem Fix fallen 6 Prüfungen. Legt Wegwerf-Config
+und XDG_CONFIG_HOME selbst an. Gegenstück ohne Browser:
+`testing/routes/test_keep_unmodelled.py`. Port 8814.
+
 ## Ports nicht doppelt belegen
 
 Jeder Test startet seinen eigenen Server. Zwei Tests auf demselben Port laufen

@@ -18,6 +18,7 @@ from .brix import (
     detect_content_format,
     extract_brick_blocks,
     find_nested_bricks,
+    format_brick,
     inject_brick_blocks,
     input_still_used,
     new_nested_bricks,
@@ -957,6 +958,52 @@ def push_after_save(nixos_dir: str) -> dict:
 
 # ── Config load / write orchestration ─────────────────────────────────────────
 
+def keep_unmodelled(disk_text: str, bricks: dict | None) -> dict:
+    """Bricks for a regenerated file, plus whatever on disk the form cannot hold.
+
+    Every panel write regenerates the file from the form and the bricks it
+    already has. A statement outside any brick that the form does not model
+    fell out on that write. Two ways got it there unnoticed: a raw-mode save
+    re-stamps the hash (routes/files.py), so a switch back to the panel never
+    reached the rescue in load_and_normalize_config; and host files had no
+    rescue at all, so even an edit from outside was lost (measured
+    2026-11-16, manifest „Befund aus Schritt 0“).
+
+    Only build_rest_brix, i.e. what the form cannot represent. Not
+    importer.rescue_into_bricks: that compares against the form values, and
+    a value the user cleared in the form would come back as a brick.
+
+    NiCo's own output yields nothing here (measured on the 18 roundtrip
+    configs and the defaults, tree-sitter and regex path), so repeated saves
+    do not add bricks. A statement already standing in one of the given
+    bricks is skipped: the import (server._apply_import_result) has turned
+    the same rest into bricks of the same names just before it saves, and
+    they must not appear twice. A name already taken by other content gets a
+    numbered suffix instead of replacing the existing brick.
+    """
+    blocks = dict(bricks or {})
+    if not disk_text or importer.config_unmappable(disk_text):
+        return blocks
+    rest = importer.build_rest_brix(strip_brick_blocks(disk_text), {})
+    if not rest.strip():
+        return blocks
+    bodies = [brick_body(b.get("text", "")) for b in blocks.values()]
+    for name, block in brix_content_to_bricks(rest, section="HEAD",
+                                              existing_blocks=blocks).items():
+        stmt = brick_body(block["text"]).strip()
+        if stmt and any(stmt in body for body in bodies):
+            continue
+        final, n = name, 2
+        while final in blocks:
+            final = f"{name}-{n}"
+            n += 1
+        if final != name:
+            block = {**block, "text": format_brick(block["section"], block["order"],
+                                                   final, brick_body(block["text"]))}
+        blocks[final] = block
+    return blocks
+
+
 def load_and_normalize_config(nixos_dir: str) -> dict:
     """
     Load config state from disk, normalize any externally-modified .nix files,
@@ -1082,7 +1129,7 @@ def write_config_files(
                 "error":   "ERR_NOT_MAPPABLE",
                 "file":    "configuration.nix",
             }
-        data["brick_blocks"] = extract_brick_blocks(conf_text)
+        data["brick_blocks"] = keep_unmodelled(conf_text, extract_brick_blocks(conf_text))
 
     # Refuse to write a file Nix would reject. The same leaf defined twice –
     # typically a brick carrying an attribute the form writes as well – stops

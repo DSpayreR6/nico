@@ -8,6 +8,7 @@
 
 ### Bug Fixes
 
+- Settings written outside a Nix-Brick are no longer lost on the next save in the panel: in `configuration.nix` after editing in raw mode and switching back (raw save re-stamped the file, so it no longer counted as changed), and in host files after any edit outside NiCo, which had no rescue at all. Whatever the form cannot hold now becomes a Nix-Brick on every panel save; comments outside bricks are still not kept
 - Rebuild output: the "Show all Nix messages" switch sits on the same line as its label again, right-aligned, instead of below it
 
 ## 0.17.0 (2026-11-15)
