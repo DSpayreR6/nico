@@ -6,6 +6,8 @@
 
 ### Bug Fixes
 
+- Rebuild output: the "Show all Nix messages" switch sits on the same line as its label again, right-aligned, instead of below it
+
 ## 0.17.0 (2026-11-15)
 
 ### New Features
