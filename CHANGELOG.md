@@ -4,6 +4,8 @@
 
 ### New Features
 
+- Rebuild and dry-run show a turning `| / - \` with the elapsed time while waiting, so a long stretch without output no longer looks stuck; the rebuild counts from the job's real start, also after a reload
+
 ### Bug Fixes
 
 - Rebuild output: the "Show all Nix messages" switch sits on the same line as its label again, right-aligned, instead of below it

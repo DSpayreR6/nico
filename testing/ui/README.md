@@ -171,6 +171,18 @@ die beim Bau von `test_brick_inactive.py` aufgefallen sind:
 
 Vor jedem Test die Fixture neu schreiben, nicht einmal für die ganze Suite.
 
+## test_rebuild_spinner.py
+
+Drehender Strich mit Laufzeit (`| 1:23`) in Rebuild-Monitor und Dry-Run,
+21 Prüfungen. Aus Martins Befund vom 2026-11-16: Strecken ohne neue Zeile
+sehen aus, als stünde NiCo. Geprüft: Laufzeit ab dem Job-Start vom Server
+(nicht ab dem Öffnen des Monitors), der Strich dreht sich, steht unter der
+letzten Ausgabezeile und verschwindet am Ende; bei einem schon fertigen Job
+erscheint er nicht; im Dry-Run bis zum Ergebnis. Dazu, dass der Schalter
+„Alle Meldungen“ in einer Zeile mit seinem Text steht (`.modal label`
+setzte `display: block`). Kein echter Lauf: `EventSource`, Status und
+Dry-Run werden im Browser ersetzt. Port 8813.
+
 ## Ports nicht doppelt belegen
 
 Jeder Test startet seinen eigenen Server. Zwei Tests auf demselben Port laufen

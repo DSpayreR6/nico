@@ -62,6 +62,7 @@ async function acquireSudoNonce() {
 // EventSource requires GET → CSRF token passed as query param.
 let _rebuildES = null;  // active EventSource, closed on modal close
 let _rebuildVisHandler = null;  // visibilitychange listener of the active monitor
+let _rebuildSpinner = null;     // elapsed-time spinner of the active monitor
 
 // ── Flake host picker ────────────────────────────────────────────────────────
 
@@ -738,6 +739,21 @@ function attachRebuildMonitor(fromIndex = 0) {
   _resetMonitor();
   overlay.classList.remove('hidden');
 
+  // Spinner with the elapsed time as the line after the output. It counts
+  // from the job's start on the server (same machine, same clock), so a
+  // monitor reopened after a reload shows the real duration. Until the
+  // status answers it counts from now; a job already finished hides it.
+  const spinEl = document.getElementById('rebuild-spinner');
+  _rebuildSpinner?.stop();
+  _rebuildSpinner = startElapsedSpinner(spinEl);
+  spinEl.classList.remove('hidden');
+  const spinner = _rebuildSpinner;
+  fetch('/api/rebuild/status').then(r => r.json()).then(d => {
+    if (spinner !== _rebuildSpinner) return;  // a newer monitor took over
+    if (d.job && d.job.running && d.job.started) spinner.setStart(d.job.started * 1000);
+    else if (d.job && !d.job.running) _stopSpinner();
+  }).catch(() => {});
+
   // Close any previous stream
   if (_rebuildES) { _rebuildES.close(); _rebuildES = null; }
 
@@ -794,6 +810,12 @@ function attachRebuildMonitor(fromIndex = 0) {
   function _appendLog(line) {
     _logBuffer.push({ text: line + '\n', cls: _logLineClass(line) });
     if (!_logRafId) _logRafId = requestAnimationFrame(_flushLog);
+  }
+
+  function _stopSpinner() {
+    _rebuildSpinner?.stop();
+    _rebuildSpinner = null;
+    document.getElementById('rebuild-spinner')?.classList.add('hidden');
   }
 
   function _phaseCol(phase) {
@@ -944,6 +966,7 @@ function attachRebuildMonitor(fromIndex = 0) {
   // `success` is true, false or 'warning' (built and active, see above).
   function _finishMonitor(success, message) {
     isRunning = false;
+    _stopSpinner();
     counterEl.textContent     = '';
     buildPkgEl.textContent    = '';
     fetchDoneEl.textContent   = '';
@@ -1153,6 +1176,8 @@ async function _finishAfterPush(info) {
 
 function closeRebuild() {
   if (_rebuildES) { _rebuildES.close(); _rebuildES = null; }
+  _rebuildSpinner?.stop();
+  _rebuildSpinner = null;
   document.getElementById('rebuild-overlay').classList.add('hidden');
   // Tell the server the result was seen, so a reload stops reopening it
   csrfFetch('/api/rebuild/ack', { method: 'POST' }).catch(() => {});
@@ -1350,31 +1375,37 @@ async function runDryRun() {
 
   const overlay = document.getElementById('dryrun-overlay');
   const output  = document.getElementById('dryrun-output');
-  output.textContent = '…';
   output.style.color = '';
   _dryRunResetStatus();
   overlay.classList.remove('hidden');
+  // Counts from the click: a dry-run does not outlive a reload.
+  const spinner = startElapsedSpinner(output);
 
-  if (!await Sidebar.flakeSave()) return;
-  if (!await _autoSave()) return;
-  if (!await _writeNix()) return;
+  try {
+    if (!await Sidebar.flakeSave()) return;
+    if (!await _autoSave()) return;
+    if (!await _writeNix()) return;
 
-  if (!await _validationGate(_dryRunGateHosts(hostInfo, body), 'dryrun')) {
-    overlay.classList.add('hidden');
-    return;
+    if (!await _validationGate(_dryRunGateHosts(hostInfo, body), 'dryrun')) {
+      overlay.classList.add('hidden');
+      return;
+    }
+
+    const res = await csrfFetch('/api/dry-run', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify(body),
+    }).catch(() => null);
+
+    spinner.stop();
+    if (!res) { output.textContent = t('dryrun.networkError'); return; }
+    const data = await res.json();
+    output.style.color = '';
+    output.innerHTML = _colorizedOutput(_dryRunHostHeader(body) + (tErr(data.output) || ''));
+    _dryRunShowStatus(data.ok);
+  } finally {
+    spinner.stop();
   }
-
-  const res = await csrfFetch('/api/dry-run', {
-    method:  'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body:    JSON.stringify(body),
-  }).catch(() => null);
-
-  if (!res) { output.textContent = t('dryrun.networkError'); return; }
-  const data = await res.json();
-  output.style.color = '';
-  output.innerHTML = _colorizedOutput(_dryRunHostHeader(body) + (tErr(data.output) || ''));
-  _dryRunShowStatus(data.ok);
 }
 
 async function runSaveAndDryRun() {
@@ -1391,16 +1422,21 @@ async function runSaveAndDryRun() {
 
   const overlay = document.getElementById('dryrun-overlay');
   const output  = document.getElementById('dryrun-output');
-  output.textContent = '…';
   output.style.color = '';
   _dryRunResetStatus();
   overlay.classList.remove('hidden');
+  const spinner = startElapsedSpinner(output);
 
-  const res = await csrfFetch('/api/dry-run', {
-    method:  'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body:    JSON.stringify(body),
-  }).catch(() => null);
+  let res;
+  try {
+    res = await csrfFetch('/api/dry-run', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify(body),
+    }).catch(() => null);
+  } finally {
+    spinner.stop();
+  }
 
   if (!res) { output.textContent = t('dryrun.networkError'); return; }
   const data = await res.json();

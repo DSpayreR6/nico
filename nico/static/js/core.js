@@ -17,6 +17,48 @@ function niIcon(name) {
   return `<span class="ni-icon ni-icon-${name}" aria-hidden="true"></span>`;
 }
 
+// ── Elapsed-time spinner ──────────────────────────────────────────────────
+// Rebuild and dry-run can sit for minutes without a new output line. A
+// turning `| / - \` with the elapsed time shows that NiCo is still waiting,
+// not stuck. Characters and digits only, so nothing to translate.
+const ELAPSED_SPIN_FRAMES = ['|', '/', '-', '\\'];
+const ELAPSED_SPIN_MS     = 120;
+
+/** `m:ss` for a duration in milliseconds. */
+function fmtElapsed(ms) {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+}
+
+/**
+ * Animate `el` as `| 1:23` until stop() is called.
+ *
+ * startMs is when the wait began (epoch ms), so a monitor reopened after a
+ * reload can count from the job's real start; setStart() moves it later.
+ * stop() leaves the element alone if the caller has written into it
+ * meanwhile, and clears it otherwise.
+ */
+function startElapsedSpinner(el, startMs = Date.now()) {
+  let frame = 0;
+  let start = startMs;
+  let shown = '';
+  const render = () => {
+    shown = `${ELAPSED_SPIN_FRAMES[frame % ELAPSED_SPIN_FRAMES.length]} ${fmtElapsed(Date.now() - start)}`;
+    el.textContent = shown;
+  };
+  render();
+  let timer = setInterval(() => { frame++; render(); }, ELAPSED_SPIN_MS);
+  return {
+    setStart(ms) { start = ms; if (timer) render(); },
+    stop() {
+      if (!timer) return;
+      clearInterval(timer);
+      timer = null;
+      if (el.textContent === shown) el.textContent = '';
+    },
+  };
+}
+
 // ── CSRF ──────────────────────────────────────────────────────────────────
 const CSRF_TOKEN = document.querySelector('meta[name="csrf-token"]')?.content ?? '';
 

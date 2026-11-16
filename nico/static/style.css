@@ -1828,6 +1828,19 @@ textarea:focus {
   word-break: break-all;
 }
 
+/* Turning `| 1:23` as the line after the output while the rebuild runs.
+   The negative margin takes back the log's bottom padding, so it reads as
+   the next output line; `pre` keeps the width steady as the frame changes. */
+.rebuild-spinner {
+  margin-top: -12px;
+  padding: 0 14px 12px;
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--blue);
+  white-space: pre;
+}
+
 .rebuild-monitor {
   background: var(--mantle);
   border: 1px solid var(--surface1);
