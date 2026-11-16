@@ -12,31 +12,35 @@ Umgebung bauen:
         chromium chromedriver
       ]; }'
 
-Starten (ENV = der ausgegebene Pfad, CFG = Verzeichnis mit Wegwerf-Config):
+Starten (ENV = der ausgegebene Pfad, BASE = ein leeres Verzeichnis, Grammatik
+aus `nix-shell shell.nix --run 'echo $TREE_SITTER_NIX_GRAMMAR'`):
 
-    export XDG_CONFIG_HOME=$CFG/xdg XDG_CACHE_HOME=$CFG/cache
     export CHROMEDRIVER=$ENV/bin/chromedriver CHROME_BIN=$ENV/bin/chromium
     export TREE_SITTER_NIX_GRAMMAR=<grammar>/parser
-    $ENV/bin/python3 testing/ui/test_collapse.py
+    $ENV/bin/python3 testing/ui/make_test_config.py --for test_collapse $BASE
+    export XDG_CONFIG_HOME=$BASE/xdg XDG_CACHE_HOME=$BASE/cache
+    env -u LD_LIBRARY_PATH $ENV/bin/python3 testing/ui/test_collapse.py
 
-$CFG/xdg/nico/settings.json muss auf das Config-Verzeichnis zeigen.
 Exit-Code 0 = alles grün.
 
-## Wegwerf-Config, die alle Tests erfüllt
+## Wegwerf-Config: `make_test_config.py`
 
-Mehrere Tests prüfen Brick-Listen und brechen ohne passende Dateien ab oder
-melden Fehler, die keine sind. Diese Struktur deckt alle ab:
+Die Wegwerf-Config legt `make_test_config.py` an, **vor jedem Test neu** – die
+Tests verändern sie. `--for <test>` wählt das passende Profil, alle anderen
+Tests bekommen `standard`. Welche Dateien und Bricks in welchem Profil
+stehen, steht im Kopf des Skripts; es ist die einzige Quelle dafür.
 
-    configuration.nix              Brick "basis-brick", **kein** imports-Attribut
-                                   (ein imports = [ … ] wird zu einem Brick
-                                   namens "imports" und verfälscht die Listen)
-    hosts/testhost/default.nix     Bricks "host-brick-eins", "host-brick-zwei"
-    home/martin.nix                Brick "hm-brick"
-    bestand.nix                    Brick "huelle" mit einem Brick "innen" darin
-                                   (vorhandene Verschachtelung)
+Bis 2026-11-16 wurde die Config pro Sitzung von Hand im Temp-Verzeichnis
+gebaut und nirgends aufbewahrt. Mit der Sitzung war sie weg, und
+`test_collapse`, `test_nested_dialogs` und `test_state_version_hint` liefen
+nicht mehr: der erste wurde vom Startdialog „Hardware-Datei prüfen“
+blockiert (jedes Profil hat deshalb eine bestätigte Hardware-Datei), der
+zweite braucht Bricks, die `test_brix_dialogs` stören würden, der dritte
+einen Flake mit drei Hosts.
 
-Deutsche Abschnittsnamen in den Markern sind dabei nützlich: dann läuft der
-Test gleich über den Weg, auf dem NiCo Dateien älterer Versionen einliest.
+Tests, die ihre Config selbst anlegen und das Skript nicht brauchen:
+`test_unmappable`, `test_flake_create`, `test_raw_panel_keep`,
+`test_git_menu_remote`, `test_rebuild_preparing`, `test_package_inactive`.
 
 ## test_collapse.py
 
