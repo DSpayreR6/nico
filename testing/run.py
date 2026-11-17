@@ -29,7 +29,7 @@ if str(ROOT) not in sys.path:
 
 from nico import config_manager, generator, hm_generator, importer  # noqa: E402
 from nico.brix import brix_content_to_bricks, extract_brick_blocks, strip_brick_blocks  # noqa: E402
-from nico.core import get_nico_type  # noqa: E402
+from nico.core import get_nico_type, keep_unmodelled  # noqa: E402
 
 
 @dataclass
@@ -131,8 +131,9 @@ def _write_nico_roundtrip(config_dir: Path) -> None:
         importer.flake_unmappable(_read_text(flake_path)) is not None
     keep_home = home_path.exists() and importer.config_unmappable(_read_text(home_path))
 
+    cfg_content = None
     if cfg_path.exists() and not keep_cfg:
-        content = _read_text(cfg_path)
+        content = cfg_content = _read_text(cfg_path)
         clean = strip_brick_blocks(content)
         recognized = importer.parse_config(clean)
         rest = importer.build_rest_brix(clean, recognized)
@@ -171,6 +172,14 @@ def _write_nico_roundtrip(config_dir: Path) -> None:
         data["hm_brick_blocks"] = hm_blocks
 
     if not keep_cfg:
+        if cfg_content is not None:
+            # What config_manager.save_config does with the imported file on
+            # disk: rest statements and comments outside bricks are kept
+            # (core.keep_unmodelled). Without it the runner never saw the
+            # comment rescue of 2026-11-17.
+            data["brick_blocks"] = keep_unmodelled(
+                cfg_content, data.get("brick_blocks"),
+                render=lambda b: generator.generate_configuration_nix({**data, "brick_blocks": b}))
         cfg_path.write_text(generator.generate_configuration_nix(data), encoding="utf-8")
 
     if flake_path.exists() and not keep_flake:

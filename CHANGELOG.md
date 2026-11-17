@@ -4,6 +4,8 @@
 
 ### New Features
 
+- Comments outside Nix-Bricks are no longer lost when NiCo regenerates `configuration.nix` or a host file – on import, after editing in raw mode, or when they were added from outside. They are collected in one Nix-Brick per file, `imported-notes`, each block headed by where it stood (`before networking.hostName`, `inside services.pipewire`, …); a comment directly above a statement that becomes a Nix-Brick anyway moves into that brick with it. Blank lines and formatting outside bricks are still not kept
+
 ### Bug Fixes
 
 - A file changed outside NiCo while its form was open (Syncthing, `git pull`, an editor, a second NiCo) is no longer overwritten with the old form values on the next save. NiCo asks instead: reload the form from the file, show the differences, or overwrite – then the state from outside is kept in a checkpoint first

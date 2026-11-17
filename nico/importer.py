@@ -12,6 +12,8 @@ Strategie:
 
 import re
 import shutil
+import textwrap
+from dataclasses import dataclass
 from pathlib import Path
 from . import atomic
 from .brix import strip_brick_blocks
@@ -26,7 +28,13 @@ _NICO_COMMENT_LINE_RE = re.compile(
     r'</brick:.*|'
     r'<brix:.*|'
     r'</brix:.*|'
-    r'──+.*'
+    r'──+.*|'
+    # Further lines the generators write outside bricks (inventory
+    # 2026-11-17 for the comment rescue): the host file header, also in the
+    # German wording of older versions, and the stateVersion placeholder.
+    r'Host-specific configuration for .*|'
+    r'Host-spezifische Konfiguration für .*|'
+    r'system\.stateVersion = "";\s*# TODO: set NixOS state version'
     r')\s*$'
 )
 
@@ -214,7 +222,17 @@ def _split_top_level_stmts(content: str) -> list[str]:
 
 
 def _brix_name_from_stmt(stmt: str) -> str:
-    m = re.match(r'\s*([\w.\-]+)', stmt)
+    # A rest statement can carry the comments that stood above it
+    # (_ts_rest_texts); the name comes from the code, not from them.
+    body = stmt.lstrip()
+    while body.startswith('#') or body.startswith('/*'):
+        if body.startswith('#'):
+            nl = body.find('\n')
+            body = '' if nl < 0 else body[nl + 1:].lstrip()
+        else:
+            end = body.find('*/')
+            body = '' if end < 0 else body[end + 2:].lstrip()
+    m = re.match(r'\s*([\w.\-]+)', body)
     return m.group(1).replace('.', '-') if m else 'imported'
 
 
@@ -1128,7 +1146,332 @@ def _ts_build_rest_brix(nix_content: str, consumed: set[str]) -> 'str | None':
 
     if not unclaimed:
         return ''
-    return _wrap_brix([bi.full_text for bi in unclaimed])
+    texts = _ts_rest_texts(clean, {bi.start_line for bi in unclaimed})[0]
+    return _wrap_brix([texts.get(bi.start_line, bi.full_text) for bi in unclaimed])
+
+
+# ── Comments outside Nix-Bricks (plan 2026-11-16, Martin 2026-11-17) ─────────
+# Regenerating a file from the form dropped every comment outside a brick.
+# Now each one NiCo did not write itself is kept:
+#   * comments directly above a statement that becomes a rest brick anyway,
+#     and one behind it on its last line, go into that brick with it;
+#   * all others go into one collecting brick per file, NOTES_BRICK, each block
+#     headed by where it stood ("before x", "inside y", …). Where it stood is
+#     always true; what it was about would be a guess (Martin).
+# A rescued comment sits in a brick afterwards, and brick content is never
+# collected again (strip_brick_blocks) – nothing multiplies on later saves.
+
+NOTES_BRICK = "imported-notes"
+NOTES_SEPARATOR = "# " + "=" * 42
+
+
+@dataclass
+class Note:
+    """One block of consecutive comment lines (blank lines do not split)."""
+    where: str            # "before networking.hostName", "" without a position
+    lines: list[str]      # comment text without its '#', '' for a blank line
+
+
+def is_nico_comment(text: str) -> bool:
+    """True for a comment line NiCo's generators write themselves."""
+    return bool(_NICO_COMMENT_LINE_RE.match(text))
+
+
+def _comment_lines(text: str) -> list[str]:
+    """The text of one comment node, without '#' or '/* */'."""
+    if text.startswith('/*'):
+        inner = (text[2:-2] if text.endswith('*/') else text[2:]).splitlines()
+        # The first line starts right after '/*'; the others carry the
+        # file's indentation, which goes.
+        rest = textwrap.dedent("\n".join(inner[1:])).splitlines()
+        lines = [l.rstrip() for l in ([inner[0].strip()] if inner else []) + rest]
+        while lines and not lines[0].strip():
+            lines.pop(0)
+        while lines and not lines[-1].strip():
+            lines.pop()
+        return lines
+    body = text[1:]
+    return [body[1:] if body.startswith(' ') else body]
+
+
+def _ts_prev(node):
+    """Previous sibling; from the first statement of a set on into the set's
+    parent. Comments between `{` and the first statement hang there, one
+    level up, not in the binding_set."""
+    p = node.prev_sibling
+    if p is None and node.parent is not None and node.parent.type == "binding_set":
+        p = node.parent.prev_sibling
+    return p
+
+
+def _ts_next(node):
+    """Next sibling; a binding_set stands for its first statement."""
+    n = node.next_sibling
+    if n is not None and n.type == "binding_set" and n.named_child_count:
+        return n.named_children[0]
+    return n
+
+
+def _ts_top_binding_set(tree):
+    from . import nix_parser as _np
+    return _np._find_first(tree.root_node, "binding_set")
+
+
+def _ts_rest_texts(clean: str, unclaimed_lines: set) -> 'tuple[dict, set]':
+    """Rest statements with the comments attached to them.
+
+    Returns ({start_line: text}, {start_byte of every comment taken along or
+    inside an unclaimed statement}). Attached: a run of comment lines that
+    ends on the line directly above the statement, with no blank line inside
+    – and a comment behind the statement on its last line.
+    """
+    from . import nix_parser as _np
+    tree = _np.parse_tree(clean)
+    if tree is None:
+        return {}, set()
+    bs = _ts_top_binding_set(tree)
+    if bs is None:
+        return {}, set()
+    used: set = set()
+    texts: dict = {}
+    kids = bs.children
+    for i, node in enumerate(kids):
+        if node.type not in ("binding", "inherit"):
+            continue
+        line = node.start_point[0] + 1
+        if line not in unclaimed_lines:
+            continue
+        lead = []
+        row = node.start_point[0]
+        c = _ts_prev(node)
+        while c is not None and c.type == "comment" and c.end_point[0] == row - 1:
+            prev = _ts_prev(c)
+            if prev is not None and prev.type != "comment" \
+                    and prev.end_point[0] == c.start_point[0]:
+                break                         # inline comment of the previous statement
+            lead.insert(0, c)
+            row = c.start_point[0]
+            c = prev
+        trail = None
+        if i + 1 < len(kids) and kids[i + 1].type == "comment" \
+                and kids[i + 1].start_point[0] == node.end_point[0]:
+            trail = kids[i + 1]
+        text = node.text.decode("utf-8")
+        if lead:
+            text = "\n".join(c.text.decode("utf-8") for c in lead) + "\n" + text
+        if trail is not None:
+            text += " " + trail.text.decode("utf-8")
+        texts[line] = text
+        for c in lead + ([trail] if trail is not None else []):
+            used.add(c.start_byte)
+        stack = [node]
+        while stack:
+            n = stack.pop()
+            if n.type == "comment":
+                used.add(n.start_byte)
+            stack.extend(n.children)
+    return texts, used
+
+
+def _ts_path(node) -> str:
+    """Dotted attribute path of `node` and every binding around it."""
+    parts = []
+    n = node
+    while n is not None:
+        if n.type == "binding":
+            for c in n.children:
+                if c.type == "attrpath":
+                    parts.insert(0, c.text.decode("utf-8").strip())
+                    break
+        n = n.parent
+    return ".".join(parts)
+
+
+def _ts_where(first, last, body_start: int) -> str:
+    """Where a block of comments stood, for its heading."""
+    prev = first.prev_sibling
+    if prev is not None and prev.type != "comment" \
+            and prev.end_point[0] == first.start_point[0]:
+        if prev.type == "binding":
+            return f"after {_ts_path(prev)}"
+    else:
+        nxt = _ts_next(last)
+        while nxt is not None and nxt.type == "comment":
+            nxt = _ts_next(nxt)
+        if nxt is not None and nxt.type == "binding":
+            return f"before {_ts_path(nxt)}"
+        if nxt is not None and nxt.type == "inherit":
+            around = _ts_path(first)
+            return f"before inherit in {around}" if around else "before inherit"
+    around = _ts_path(first)
+    if around:
+        return f"inside {around}"
+    return "at the top of the file" if first.start_byte < body_start \
+        else "at the end of the file"
+
+
+def _ts_collect_notes(clean: str, consumed: set) -> 'list[Note] | None':
+    from . import nix_parser as _np
+    tree = _np.parse_tree(clean)
+    if tree is None:
+        return None
+    result = _np.parse(clean)
+    unclaimed = {bi.start_line for bi in result.known + result.unknown
+                 if bi.key not in consumed}
+    used = _ts_rest_texts(clean, unclaimed)[1]
+    bs = _ts_top_binding_set(tree)
+    # The opening brace of the top attribute set: comments before it stood
+    # at the top of the file, unplaced ones after it at the end.
+    body = bs.parent if bs is not None and bs.parent is not None else bs
+    body_start = body.start_byte if body is not None else len(clean.encode("utf-8"))
+
+    comments = []
+    stack = [tree.root_node]
+    while stack:
+        n = stack.pop()
+        if n.type == "comment":
+            comments.append(n)
+        stack.extend(n.children)
+    comments.sort(key=lambda c: c.start_byte)
+
+    def inline(c):
+        p = c.prev_sibling
+        return p is not None and p.type != "comment" and p.end_point[0] == c.start_point[0]
+
+    notes: list[Note] = []
+    block: list = []
+
+    def flush():
+        if not block:
+            return
+        lines: list[str] = []
+        for k, c in enumerate(block):
+            if k and c.start_point[0] > block[k - 1].end_point[0] + 1:
+                lines.append('')
+            lines += _comment_lines(c.text.decode("utf-8"))
+        notes.append(Note(_ts_where(block[0], block[-1], body_start), lines))
+        block.clear()
+
+    for c in comments:
+        text = c.text.decode("utf-8")
+        if c.start_byte in used or is_nico_comment(text):
+            flush()
+            continue
+        joins = (block and not inline(c) and not inline(block[-1])
+                 and c.parent == block[-1].parent
+                 and block[-1].next_sibling is not None
+                 and block[-1].next_sibling.start_byte == c.start_byte)
+        if not joins:
+            flush()
+        block.append(c)
+    flush()
+    return notes
+
+
+def _rx_collect_notes(clean: str) -> 'list[Note]':
+    """Without tree-sitter: every comment, in blocks, without a position.
+
+    The regex path cannot see the structure, so it claims none (Martin,
+    2026-11-17). Its rest statements lose their comments (_strip_nix_comments),
+    so here every comment is collected, those of rest statements included.
+    """
+    notes: list[Note] = []
+    cur: list[str] = []
+    cur_end = -2
+    i, n, row, code_on_row = 0, len(clean), 0, False
+
+    def flush():
+        nonlocal cur
+        if cur:
+            notes.append(Note("", cur))
+        cur = []
+
+    while i < n:
+        ch = clean[i]
+        if ch == '\n':
+            row += 1
+            code_on_row = False
+            i += 1
+        elif ch == '"':
+            j = i + 1
+            while j < n and clean[j] != '"':
+                j += 2 if clean[j] == '\\' else 1
+            row += clean.count('\n', i, j + 1)
+            code_on_row = True
+            i = j + 1
+        elif clean.startswith("''", i):
+            j = i + 2
+            while j < n:
+                if clean.startswith("'''", j) or clean.startswith("''$", j) \
+                        or clean.startswith("''\\", j):
+                    j += 3
+                elif clean.startswith("''", j):
+                    break
+                else:
+                    j += 1
+            row += clean.count('\n', i, j + 2)
+            code_on_row = True
+            i = j + 2
+        elif ch == '#' or clean.startswith('/*', i):
+            if ch == '#':
+                j = clean.find('\n', i)
+                j = n if j < 0 else j
+            else:
+                j = clean.find('*/', i + 2)
+                j = n if j < 0 else j + 2
+            text = clean[i:j]
+            start_row = row
+            row += text.count('\n')
+            if is_nico_comment(text):
+                flush()
+            else:
+                if code_on_row:
+                    flush()
+                    notes.append(Note("", _comment_lines(text)))
+                else:
+                    if cur and start_row > cur_end + 1:
+                        cur.append('')
+                    cur += _comment_lines(text)
+                    cur_end = row
+            i = j
+        else:
+            if not ch.isspace():
+                flush()
+                code_on_row = True
+            i += 1
+    flush()
+    return notes
+
+
+def collect_notes(nix_content: str) -> 'list[Note]':
+    """Comment blocks outside any brick that NiCo did not write itself."""
+    if config_unmappable(nix_content):
+        return []
+    clean = strip_brick_blocks(nix_content).strip()
+    ts = _ts_parse_config(nix_content)
+    if ts is not None:
+        notes = _ts_collect_notes(clean, ts[1])
+        if notes is not None:
+            return notes
+    return _rx_collect_notes(clean)
+
+
+def _defuse_markers(line: str) -> str:
+    """A comment quoting a brick marker must not end or open a brick."""
+    return re.sub(r'<(/?)(bri(?:x|ck):)', r'< \1\2', line)
+
+
+def render_notes(notes: 'list[Note]') -> str:
+    """Notes as the body of NOTES_BRICK: one block each, separated by a line."""
+    parts = []
+    for note in notes:
+        if note.where:
+            lines = [f"# {note.where}:"] + [
+                ("#   " + _defuse_markers(l)).rstrip() for l in note.lines]
+        else:
+            lines = [("# " + _defuse_markers(l)).rstrip() for l in note.lines]
+        parts.append("\n".join(lines))
+    return f"\n{NOTES_SEPARATOR}\n".join(parts)
 
 
 # ── public API ────────────────────────────────────────────────────────────────

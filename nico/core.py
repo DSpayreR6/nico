@@ -22,6 +22,7 @@ from .brix import (
     inject_brick_blocks,
     input_still_used,
     new_nested_bricks,
+    next_order_for_section,
     strip_brick_blocks,
     sync_outputs_args,
 )
@@ -974,7 +975,42 @@ def push_after_save(nixos_dir: str) -> dict:
 
 # ── Config load / write orchestration ─────────────────────────────────────────
 
-def keep_unmodelled(disk_text: str, bricks: dict | None) -> dict:
+def _merge_notes(blocks: dict, notes: list, render=None) -> dict:
+    """Add rescued comments to the file's NOTES_BRICK (importer.collect_notes).
+
+    render(blocks) -> file text, when given, drops every block whose lines
+    all reappear in the file NiCo writes anyway: a form value kept verbatim
+    (a user's package list, say) carries its comments along, and they must
+    not stand twice. Appends to an existing NOTES_BRICK; a block already
+    standing in any brick is not added again.
+    """
+    if not notes:
+        return blocks
+    if render is not None:
+        out = {l.strip() for l in render(blocks).splitlines()}
+        notes = [n for n in notes
+                 if not all(("#" + l).strip() in out or ("# " + l).strip() in out
+                            or not l.strip() for l in n.lines)]
+    bodies = "\n".join(brick_body(b.get("text", "")) for b in blocks.values())
+    fresh = [n for n in notes if importer.render_notes([n]) not in bodies]
+    if not fresh:
+        return blocks
+    blocks = dict(blocks)
+    add = importer.render_notes(fresh)
+    name = importer.NOTES_BRICK
+    old = blocks.get(name)
+    if old is not None:
+        body = brick_body(old["text"]).rstrip("\n")
+        body = f"{body}\n{importer.NOTES_SEPARATOR}\n{add}" if body.strip() else add
+        blocks[name] = {**old, "text": format_brick(old["section"], old["order"], name, body)}
+    else:
+        order = next_order_for_section(blocks, "TAIL")
+        blocks[name] = {"section": "TAIL", "order": order,
+                        "text": format_brick("TAIL", order, name, add)}
+    return blocks
+
+
+def keep_unmodelled(disk_text: str, bricks: dict | None, render=None) -> dict:
     """Bricks for a regenerated file, plus whatever on disk the form cannot hold.
 
     Every panel write regenerates the file from the form and the bricks it
@@ -1000,6 +1036,14 @@ def keep_unmodelled(disk_text: str, bricks: dict | None) -> dict:
     blocks = dict(bricks or {})
     if not disk_text or importer.config_unmappable(disk_text):
         return blocks
+    blocks = _keep_rest(disk_text, blocks)
+    # Comments outside any brick (importer.collect_notes); `render` lets
+    # _merge_notes skip what the regenerated file carries along anyway.
+    return _merge_notes(blocks, importer.collect_notes(disk_text), render)
+
+
+def _keep_rest(disk_text: str, blocks: dict) -> dict:
+    """The statement part of keep_unmodelled."""
     rest = importer.build_rest_brix(strip_brick_blocks(disk_text), {})
     if not rest.strip():
         return blocks
@@ -1054,8 +1098,11 @@ def load_and_normalize_config(nixos_dir: str) -> dict:
                 if rest.strip():
                     rest_blocks = brix_content_to_bricks(rest, section="HEAD", existing_blocks=blocks)
                     blocks.update(rest_blocks)
-                data["brick_blocks"] = blocks
                 data["_flake_mode"] = flake_mode(nixos_dir)
+                data["brick_blocks"] = _merge_notes(
+                    blocks, importer.collect_notes(nix_content),
+                    render=lambda b: generator.generate_configuration_nix(
+                        {**data, "brick_blocks": b}))
                 atomic.write_text(
                     cfg_nix,
                     generator.generate_configuration_nix(data)
@@ -1147,7 +1194,9 @@ def write_config_files(
                 "error":   "ERR_NOT_MAPPABLE",
                 "file":    "configuration.nix",
             }
-        data["brick_blocks"] = keep_unmodelled(conf_text, extract_brick_blocks(conf_text))
+        data["brick_blocks"] = keep_unmodelled(
+            conf_text, extract_brick_blocks(conf_text),
+            render=lambda b: generator.generate_configuration_nix({**data, "brick_blocks": b}))
 
     # A file in raw mode is left alone (file_in_raw_mode); flake.nix below
     # is decided on its own.

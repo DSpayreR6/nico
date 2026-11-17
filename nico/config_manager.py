@@ -548,7 +548,9 @@ def save_config(nixos_config_dir: str, data: dict) -> None:
         data["brick_blocks"] = extract_brick_blocks(disk)
     # … and what stands outside any brick that the form cannot hold
     # (raw-mode edits, edits from outside; core.keep_unmodelled).
-    data["brick_blocks"] = keep_unmodelled(disk, data.get("brick_blocks"))
+    data["brick_blocks"] = keep_unmodelled(
+        disk, data.get("brick_blocks"),
+        render=lambda b: _gen.generate_configuration_nix({**data, "brick_blocks": b}))
 
     atomic.write_text(
         nix_file,
@@ -631,11 +633,13 @@ def save_host_config(nixos_dir: str, host_name: str, data: dict) -> None:
         data["brick_blocks"] = extract_brick_blocks(disk)
     # Host files had no rescue at all: a statement outside any brick was
     # dropped on every panel save, also after an edit from outside.
-    data["brick_blocks"] = keep_unmodelled(disk, data.get("brick_blocks"))
-
     hw_config = data.get("_hw_config") or (
         host_dir / "hardware-configuration.nix"
     ).is_file()
+    data["brick_blocks"] = keep_unmodelled(
+        disk, data.get("brick_blocks"),
+        render=lambda b: _gen.generate_host_nix({**data, "brick_blocks": b},
+                                                host_name, hw_config))
 
     content = _gen.generate_host_nix(data, host_name, hw_config)
     duplicates = _validator.duplicate_attrs_in(content)

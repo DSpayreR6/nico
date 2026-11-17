@@ -276,7 +276,7 @@
   "brix.editSaved": "Nix-Brickを保存しました。",
   "write.title": "設定を書き込む",
   "write.info": "NiCoは現在の設定をNixOSディレクトリに書き込み、<strong>チェックポイント</strong>を作成します – 設定のタイムマシンのようなものです。<br><br>問題が発生した場合は、管理パネルで以前のチェックポイントに戻ることができます。",
-  "write.regenNote": "この際、フォームで管理されているファイルは完全に再生成されます。Nix-Brix の外にある独自のコメントや書式は保持されません – Nix-Brick 内の内容のみが安全です。",
+  "write.regenNote": "この際、フォームで管理されているファイルは完全に再生成されます。Nix-Brix の外にある独自のコメントは、元の位置の情報とともに Nix-Brick「imported-notes」にまとめられます。空行や独自の書式は保持されません – 変更されないのは Nix-Brick 内の内容のみです。",
   "write.labelLabel": "チェックポイント名",
   "write.labelHint": "（任意 – 後で見つけやすくなります）",
   "write.labelPlaceholder": "例：「KDE移行前」または「最初の動作設定」",

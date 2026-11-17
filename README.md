@@ -33,7 +33,7 @@ Feedback and discussion: https://discourse.nixos.org/t/nico-nixos-configurator/7
 
 Most GUI config tools only allow what their forms cover. NiCo takes a different approach: anything it doesn't have a form field for, you write as a **Nix brick** — a free Nix section wrapped in marker comments that NiCo **never touches**. Form fields and hand-written Nix coexist in the same file. When importing an existing config, unrecognized sections are preserved as bricks automatically — nothing is ever discarded.
 
-This has one important consequence: every time you write, NiCo regenerates the form-managed file completely from its current state instead of patching the existing text. Nix bricks are copied over unchanged, but comments, blank lines and manual formatting **outside** of Nix bricks are not preserved — they disappear with the next write. Only content inside a Nix brick is safe from being overwritten, so put anything you want to keep verbatim into a brick.
+This has one important consequence: every time you write, NiCo regenerates the form-managed file completely from its current state instead of patching the existing text. Nix bricks are copied over unchanged. Your own comments **outside** of Nix bricks are collected into one Nix brick per file, `imported-notes`, each with a note on where it stood (`before networking.hostName`, `inside services.pipewire`, …); a comment directly above a statement that becomes a brick anyway moves into that brick with it. Blank lines and manual formatting outside of bricks are not preserved. Only content inside a Nix brick stays exactly as written, so put anything you want to keep verbatim into a brick.
 
 ---
 
@@ -151,9 +151,9 @@ back if the imported config brings a foreign one.)
    the setup dialog; it does not have to exist yet.
 3. **Import your own config** from `/etc/nixos`, from a directory, or from a
    ZIP. Your original is never written to. The *copy* is rewritten straight
-   away, though: comments and formatting outside a Nix-Brick are lost there —
-   your settings are not, anything NiCo does not recognise is kept as a
-   Nix-Brick.
+   away, though: formatting outside a Nix-Brick is lost there, your comments
+   are collected in the Nix-Brick `imported-notes` — and your settings are
+   kept, anything NiCo does not recognise becomes a Nix-Brick.
 4. **Build with `test` instead of `switch`.** Pick it in the options dialog
    that appears before the rebuild. `test` activates the new system right
    away but leaves the bootloader alone, so **a reboot brings your old system

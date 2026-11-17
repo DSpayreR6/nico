@@ -189,6 +189,22 @@ def parse(content: str) -> ParseResult:
     _walk_binding_set(binding_set, src_bytes, result)
     return result
 
+def parse_tree(content: str):
+    """The raw tree-sitter tree of `content`, or None without tree-sitter.
+
+    For callers that need more than the top-level bindings parse() collects –
+    the comment rescue (importer.collect_notes) walks every comment node.
+    """
+    lang = _load_language()
+    if lang is None:
+        return None
+    try:
+        import tree_sitter
+        return tree_sitter.Parser(lang).parse(content.encode("utf-8"))
+    except Exception:
+        return None
+
+
 def body_shape(content: str) -> str | None:
     """How a module file is built: 'plain', 'other', or None without tree-sitter.
 

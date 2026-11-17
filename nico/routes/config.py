@@ -325,8 +325,18 @@ def register(app, ctx):
                     on_disk = extract_brick_blocks(nix_content)
                     # Same as the write paths, or the preview shows a file
                     # without what the next save keeps (core.keep_unmodelled).
+                    hm = re.search(rf"(?:^|/){re.escape(_hosts_dir_name(nixos_dir))}"
+                                   r"/([^/]+)/default\.nix$", rel_path)
+                    if hm:
+                        _hw = (target.parent / "hardware-configuration.nix").exists()
+                        render = lambda b: generator.generate_host_nix(  # noqa: E731
+                            {**data, "brick_blocks": b}, hm.group(1), _hw)
+                    else:
+                        render = lambda b: generator.generate_configuration_nix(  # noqa: E731
+                            {**data, "brick_blocks": b})
                     data["brick_blocks"] = _keep_unmodelled(
-                        nix_content, on_disk if on_disk else data.get("brick_blocks"))
+                        nix_content, on_disk if on_disk else data.get("brick_blocks"),
+                        render=render)
                 except OSError:
                     pass
 
@@ -379,7 +389,9 @@ def register(app, ctx):
                     nix_content = cfg_nix.read_text(encoding="utf-8")
                     on_disk = extract_brick_blocks(nix_content)
                     brick_blocks = _keep_unmodelled(
-                        nix_content, on_disk if on_disk else brick_blocks)
+                        nix_content, on_disk if on_disk else brick_blocks,
+                        render=lambda b: generator.generate_configuration_nix(
+                            {**data, "brick_blocks": b}))
                 except OSError:
                     pass
             data["brick_blocks"] = brick_blocks
@@ -489,6 +501,7 @@ def register(app, ctx):
         if _file_in_raw_mode(host_nix):
             return jsonify({"success": True, "written": []})
 
+        hw_config = (host_dir / "hardware-configuration.nix").exists()
         # Merge brix from existing file into host_data before the single write below
         if host_nix.exists():
             host_disk    = host_nix.read_text(encoding="utf-8")
@@ -497,9 +510,11 @@ def register(app, ctx):
             stored_brix.update(on_disk_brix)
             # Statements outside any brick the form cannot hold
             # (core.keep_unmodelled) – lost here before 2026-11-16.
-            host_data["brick_blocks"] = _keep_unmodelled(host_disk, stored_brix)
+            host_data["brick_blocks"] = _keep_unmodelled(
+                host_disk, stored_brix,
+                render=lambda b: generator.generate_host_nix(
+                    {**host_data, "brick_blocks": b}, host_name, hw_config))
 
-        hw_config = (host_dir / "hardware-configuration.nix").exists()
         host_dir.mkdir(parents=True, exist_ok=True)
         host_text = generator.generate_host_nix(host_data, host_name, hw_config)
         duplicates = validator.duplicate_attrs_in(host_text)
