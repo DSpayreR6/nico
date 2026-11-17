@@ -203,10 +203,16 @@ const Sidebar = (() => {
     // them over the raw file and dropped its #r (2026-11-17).
     if (newMode === 'r') {
       let ok = true;
+      // A CO file is saved even without changes (Martin, 2026-11-17): the
+      // panel preview shows the file as the next save writes it – rescued
+      // comments, rest bricks – and the raw editor has to show the same.
+      // Saving only when dirty left raw showing the old file.
+      const isCo = document.querySelector(
+        `.tree-file[data-path="${CSS.escape(activeFile.path)}"]`)?.dataset.fileType === 'co';
       try {
         await _hmFlushPendingSave();
         if (_flakeFormDirty) ok = await _flakeSave();
-        if (ok && _formDirty) {
+        if (ok && (_formDirty || (isCo && _canSaveCurrentCoForm()))) {
           ok = await _autoSave();
           if (ok) _formDirty = false;
         }

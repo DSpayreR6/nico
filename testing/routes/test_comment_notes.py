@@ -171,6 +171,17 @@ out = importer.render_notes([importer.Note("before x", ["</brick: x>", "<brick: 
 check("Endmarker entschärft", not _END.search(out), out)
 check("Startmarker entschärft", not _START.search(out), out)
 
+# ── 6a. Hinter der letzten Einstellung ──────────────────────────────────────
+print("\n6a. Kommentar hinter der letzten Einstellung (Martins VM-Datei)")
+last = '{ config, ... }:\n{\n  time.timeZone = "Europe/Berlin";\n  services.pipewire.alsa.support32Bit = true; #test hm2\n}\n'
+got = [(nt.where, nt.lines) for nt in importer.collect_notes(last)]
+check("Ort ist die letzte Einstellung, nicht das Dateiende",
+      got == [("after services.pipewire.alsa.support32Bit", ["test hm2"])], got)
+last_rest = '{ config, ... }:\n{\n  time.timeZone = "Europe/Berlin";\n  services.restdienst.enable = true; # hinten\n}\n'
+check("hinter dem letzten Rest-Befehl: mit in dessen Brick",
+      "services.restdienst.enable = true; # hinten" in importer.build_rest_brix(last_rest, {})
+      and importer.collect_notes(last_rest) == [], importer.collect_notes(last_rest))
+
 # ── 6b. Home-Manager-Datei ──────────────────────────────────────────────────
 print("\n6b. Home-Manager-Datei (Raw-Speichern normalisiert)")
 s, r = post("/api/hm/create", {"username": "anna", "home_dir": "/home/anna",

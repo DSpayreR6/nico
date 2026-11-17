@@ -9,6 +9,7 @@
 ### Bug Fixes
 
 - A file changed outside NiCo while its form was open (Syncthing, `git pull`, an editor, a second NiCo) is no longer overwritten with the old form values on the next save. NiCo asks instead: reload the form from the file, show the differences, or overwrite – then the state from outside is kept in a checkpoint first
+- Switching from the panel to raw mode saves `configuration.nix` and host files even without changes, so the raw editor shows the same file the panel preview showed – rescued comments and new Nix-Bricks included. Before, raw still showed the old file until the next save
 
 ## 0.18.0 (2026-11-17)
 

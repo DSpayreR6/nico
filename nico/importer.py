@@ -1204,6 +1204,28 @@ def _ts_prev(node):
     return p
 
 
+def _ts_stmt_before(node):
+    """The statement a comment follows on its line, or None.
+
+    A comment behind the last statement of a set hangs after the
+    binding_set, one level up; its previous sibling is then the set, and
+    the statement is the set's last one."""
+    p = node.prev_sibling
+    if p is not None and p.type == "binding_set":
+        kids = [c for c in p.named_children if c.type != "comment"]
+        p = kids[-1] if kids else None
+    return p
+
+
+def _ts_after(node):
+    """Next sibling; behind the last statement of a set, the node after
+    the set (see _ts_stmt_before)."""
+    n = node.next_sibling
+    if n is None and node.parent is not None and node.parent.type == "binding_set":
+        n = node.parent.next_sibling
+    return n
+
+
 def _ts_next(node):
     """Next sibling; a binding_set stands for its first statement."""
     n = node.next_sibling
@@ -1253,9 +1275,10 @@ def _ts_rest_texts(clean: str, unclaimed_lines: set) -> 'tuple[dict, set]':
             row = c.start_point[0]
             c = prev
         trail = None
-        if i + 1 < len(kids) and kids[i + 1].type == "comment" \
-                and kids[i + 1].start_point[0] == node.end_point[0]:
-            trail = kids[i + 1]
+        after = _ts_after(node)
+        if after is not None and after.type == "comment" \
+                and after.start_point[0] == node.end_point[0]:
+            trail = after
         text = node.text.decode("utf-8")
         if lead:
             text = "\n".join(c.text.decode("utf-8") for c in lead) + "\n" + text
@@ -1289,7 +1312,7 @@ def _ts_path(node) -> str:
 
 def _ts_where(first, last, body_start: int) -> str:
     """Where a block of comments stood, for its heading."""
-    prev = first.prev_sibling
+    prev = _ts_stmt_before(first)
     if prev is not None and prev.type != "comment" \
             and prev.end_point[0] == first.start_point[0]:
         if prev.type == "binding":

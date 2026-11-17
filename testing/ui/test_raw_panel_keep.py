@@ -123,12 +123,44 @@ def panel_to_raw():
     time.sleep(1.5)
     check("Raw speichern danach geht", ok and "services.nachumschalt.enable" in (cfg / rel).read_text())
 
+def switch_without_change():
+    """2026-11-17 (Martin, VM): Panel → raw without any change. The panel
+    preview already showed imported-notes, raw still the old file – the
+    switch saved only with unsaved changes. Now it always saves."""
+    print("\n4. Panel → Raw ohne Änderung: Raw zeigt, was die Vorschau zeigte")
+    rel = "configuration.nix"
+    d.execute_script("Sidebar.selectFile(arguments[0], arguments[0], {force: true});", rel)
+    time.sleep(2)
+    if mode() == "p":
+        toggle()
+    check("Raw-Modus", mode() == "r", mode())
+    ok = d.execute_script("""
+      const ta = document.getElementById('raw-file-editor');
+      if (!ta) return false;
+      ta.value = ta.value.replace('  networking.hostName', '  # notiz-ohne-aenderung\\n  networking.hostName');
+      document.getElementById('raw-save-tab-btn').click();
+      return ta.value.includes('notiz-ohne-aenderung');""")
+    time.sleep(1.5)
+    check("Kommentar im Raw eingetragen und gespeichert",
+          ok and "notiz-ohne-aenderung" in (cfg / rel).read_text())
+    toggle()
+    check("Panel-Modus", mode() == "p", mode())
+    check("Datei noch nicht umgebaut", "imported-notes" not in (cfg / rel).read_text())
+    toggle()
+    check("Raw-Modus", mode() == "r", mode())
+    text = (cfg / rel).read_text()
+    check("imported-notes steht in der Datei", "imported-notes" in text)
+    check("… mit dem Kommentar", "#   notiz-ohne-aenderung" in text)
+    raw = d.execute_script("return document.getElementById('raw-file-editor')?.value || '';")
+    check("… und im Raw-Editor", "imported-notes" in raw)
+
 try:
     d.get(f"http://127.0.0.1:{PORT}/")
     time.sleep(4)
     user_path("configuration.nix", "  services.uiraw.enable = true;\n", "1. configuration.nix")
     user_path("hosts/h1/default.nix", "  services.uihost.enable = true;\n", "2. Host-Datei")
     panel_to_raw()
+    switch_without_change()
 finally:
     d.quit()
 
