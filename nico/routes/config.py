@@ -13,6 +13,7 @@ from .. import atomic, buildlimits, config_manager, generator, git_manager, impo
 from ..brix import extract_brick_blocks, brix_content_to_bricks
 from ..core import (
     NestedBricksError as _NestedBricksError,
+    file_in_raw_mode as _file_in_raw_mode,
     flake_is_managed as _flake_is_managed,
     keep_unmodelled as _keep_unmodelled,
     read_config_file as _read_config_file,
@@ -214,6 +215,8 @@ def register(app, ctx):
         _flake_content = flake_file.read_text(encoding="utf-8") if flake_file.exists() else None
         if _flake_content is not None and not _flake_is_managed(_flake_content):
             # external flake.nix, or one NiCo cannot represent – never overwrite
+            return jsonify({"success": True})
+        if _file_in_raw_mode(flake_file):
             return jsonify({"success": True})
 
         # Build data: base from configuration.nix, then overlay flake.nix, then incoming
@@ -458,6 +461,8 @@ def register(app, ctx):
         hosts_dir_name = _hosts_dir_name(nixos_dir)
         host_dir = Path(nixos_dir) / hosts_dir_name / host_name
         host_nix = host_dir / "default.nix"
+        if _file_in_raw_mode(host_nix):
+            return jsonify({"success": True, "written": []})
 
         # Merge brix from existing file into host_data before the single write below
         if host_nix.exists():

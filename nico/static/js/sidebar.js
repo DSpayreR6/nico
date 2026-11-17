@@ -197,7 +197,28 @@ const Sidebar = (() => {
     const curMode  = btn?.dataset.mode || 'p';
     const newMode  = curMode === 'r' ? 'p' : 'r';
 
-    // If currently in raw mode, include any unsaved edits in the request
+    // Panel → raw: save the panel first. Unsaved form changes were neither in
+    // the file the raw editor shows nor gone – the next background save wrote
+    // them over the raw file and dropped its #r (2026-11-17).
+    if (newMode === 'r') {
+      let ok = true;
+      try {
+        await _hmFlushPendingSave();
+        if (_flakeFormDirty) ok = await _flakeSave();
+        if (ok && _formDirty) {
+          ok = await _autoSave();
+          if (ok) _formDirty = false;
+        }
+      } catch { ok = false; }
+      if (!ok) {
+        e.target.checked = !e.target.checked;
+        _panelToggleBusy = false;
+        showToast(t('toast.error'), 'error');
+        return;
+      }
+    }
+
+    // Raw → panel: include any unsaved raw edits in the request
     let bodyContent = null;
     if (_rawEditPath === activeFile.path) {
       const editorBody = document.getElementById('raw-file-editor')?.value ?? '';
@@ -975,7 +996,7 @@ const Sidebar = (() => {
     _hmSaveTimer = null;
     const fn = _hmPendingSave;
     _hmPendingSave = null;
-    fn?.();
+    return fn?.();
   }
 
   // ── HM-Panel Parser ──────────────────────────────────────────────

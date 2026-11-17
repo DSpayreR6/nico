@@ -9,6 +9,7 @@
 ### Bug Fixes
 
 - Settings written outside a Nix-Brick are no longer lost on the next save in the panel: in `configuration.nix` after editing in raw mode and switching back (raw save re-stamped the file, so it no longer counted as changed), and in host files after any edit outside NiCo, which had no rescue at all. Whatever the form cannot hold now becomes a Nix-Brick on every panel save; comments outside bricks are still not kept
+- Raw mode: a background save of the form (opening the admin area, Validator, dry-run, rebuild, switching files) no longer rewrites a file that is open in raw mode. It took the file out of raw mode, replaced raw edits of settings the form knows with the old form values, and the next raw save failed with "This file is managed by NiCo". Switching from the panel to raw mode now saves the panel first, so its unsaved changes are in the file the raw editor shows
 - Rebuild output: the "Show all Nix messages" switch sits on the same line as its label again, right-aligned, instead of below it
 
 ## 0.17.0 (2026-11-15)

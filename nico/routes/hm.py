@@ -18,6 +18,7 @@ from ..core import (
     hm_patch_packages as _hm_patch_packages,
     hm_patch_str as _hm_patch_str,
     hm_update_hash as _hm_update_hash,
+    get_panel_mode as _get_panel_mode,
 )
 
 
@@ -112,6 +113,9 @@ def register(app, ctx):
         ftype = _get_nico_type(content)
         if ftype not in (None, "", "hm"):
             return jsonify({"error": "ERR_NOT_HM_FILE"}), 400
+        # Raw mode: the file belongs to the raw editor (core.file_in_raw_mode)
+        if _get_panel_mode(content) == "r":
+            return jsonify({"success": True, "content": content})
 
         if "username"      in body: content = _hm_patch_str( content, "home.username",               body["username"])
         if "home_dir"      in body: content = _hm_patch_str( content, "home.homeDirectory",          body["home_dir"])

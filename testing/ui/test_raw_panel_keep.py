@@ -93,11 +93,42 @@ def user_path(rel, stmt, name):
     check("… als Nix-Brick", any(key in b["text"] for b in extract_brick_blocks(text).values()))
     check("… genau einmal", text.count(key) == 1, text.count(key))
 
+def panel_to_raw():
+    """2026-11-17: Panel → raw saves the panel first; a background save
+    afterwards leaves the raw file alone, and raw save still works."""
+    print("\n3. Panel ändern → Raw: erst speichern, dann umschalten")
+    rel = "configuration.nix"
+    d.execute_script("Sidebar.selectFile(arguments[0], arguments[0], {force: true});", rel)
+    time.sleep(2)
+    check("Panel-Modus", mode() == "p", mode())
+    d.execute_script("""
+      const el = document.getElementById('hostname');
+      el.value = 'umschaltwert';
+      el.dispatchEvent(new Event('input', {bubbles: true}));""")
+    toggle()
+    check("Raw-Modus an", mode() == "r", mode())
+    text = (cfg / rel).read_text()
+    check("Panel-Änderung steht in der Datei", "umschaltwert" in text)
+    check("… und #r", "#r#" in text.splitlines()[1] if len(text.splitlines()) > 1 else False)
+    d.execute_async_script("const cb = arguments[0]; _autoSave().then(cb);")
+    time.sleep(1)
+    check("stilles Speichern lässt #r stehen", "#r#" in (cfg / rel).read_text())
+    ok = d.execute_script("""
+      const ta = document.getElementById('raw-file-editor');
+      if (!ta) return false;
+      const v = ta.value, i = v.trimEnd().lastIndexOf('}');
+      ta.value = v.slice(0, i) + '  services.nachumschalt.enable = true;\\n' + v.slice(i);
+      document.getElementById('raw-save-tab-btn').click();
+      return true;""")
+    time.sleep(1.5)
+    check("Raw speichern danach geht", ok and "services.nachumschalt.enable" in (cfg / rel).read_text())
+
 try:
     d.get(f"http://127.0.0.1:{PORT}/")
     time.sleep(4)
     user_path("configuration.nix", "  services.uiraw.enable = true;\n", "1. configuration.nix")
     user_path("hosts/h1/default.nix", "  services.uihost.enable = true;\n", "2. Host-Datei")
+    panel_to_raw()
 finally:
     d.quit()
 

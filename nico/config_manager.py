@@ -534,7 +534,9 @@ def save_config(nixos_config_dir: str, data: dict) -> None:
     nix_file  = Path(nixos_config_dir) / "configuration.nix"
     _refuse_unmappable(nix_file, "configuration.nix")
 
-    from .core import keep_unmodelled
+    from .core import keep_unmodelled, file_in_raw_mode
+    if file_in_raw_mode(nix_file):
+        return
     disk = ""
     if nix_file.exists():
         try:
@@ -616,7 +618,9 @@ def save_host_config(nixos_dir: str, host_name: str, data: dict) -> None:
     data     = copy.copy(data)
     _refuse_unmappable(nix_file, f"{hosts_dir_name}/{host_name}/default.nix")
 
-    from .core import keep_unmodelled
+    from .core import keep_unmodelled, file_in_raw_mode
+    if file_in_raw_mode(nix_file):
+        return
     disk = ""
     if nix_file.exists():
         try:
