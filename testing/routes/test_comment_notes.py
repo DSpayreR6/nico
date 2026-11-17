@@ -171,6 +171,31 @@ out = importer.render_notes([importer.Note("before x", ["</brick: x>", "<brick: 
 check("Endmarker entschärft", not _END.search(out), out)
 check("Startmarker entschärft", not _START.search(out), out)
 
+# ── 6b. Home-Manager-Datei ──────────────────────────────────────────────────
+print("\n6b. Home-Manager-Datei (Raw-Speichern normalisiert)")
+s, r = post("/api/hm/create", {"username": "anna", "home_dir": "/home/anna",
+                               "state_version": "25.05"})
+check("HM-Datei erzeugt", s == 200 and r.get("success"), r)
+HM = r.get("path", "home/anna.nix")
+check("NiCos eigene HM-Datei ergibt nichts",
+      importer.collect_notes(read(HM), rest_comments=False) == [],
+      importer.collect_notes(read(HM), rest_comments=False))
+t = read(HM)
+t = t.replace("  home.username", "  # mein Hauptkonto\n  home.username", 1)
+i = t.rstrip().rfind("}")
+t = t[:i] + "  # eigener Dienst\n  services.hmeigen.enable = true; # hinten\n" + t[i:]
+s, r = post("/api/file", {"files": [{"path": HM, "content": t}]})
+check("Raw speichern ok", s == 200 and r.get("success"), r)
+hm_text = read(HM)
+hn = notes(hm_text)
+check("Kommentar vor Formularfeld mit Ort", "# before home.username:\n#   mein Hauptkonto" in hn, hn)
+check("Kommentar zum Rest-Befehl gerettet", "#   eigener Dienst" in hn, hn)
+check("Kommentar hinter Rest-Befehl gerettet", "#   hinten" in hn, hn)
+check("Rest-Befehl als Nix-Brick", any("services.hmeigen.enable" in b["text"]
+      for b in extract_brick_blocks(hm_text).values()))
+s, r = post("/api/file", {"files": [{"path": HM, "content": hm_text}]})
+check("zweites Raw-Speichern ändert nichts", read(HM) == hm_text)
+
 # ── 7. Ohne tree-sitter ─────────────────────────────────────────────────────
 print("\n7. Ersatzweg ohne tree-sitter")
 orig = nix_parser._load_language

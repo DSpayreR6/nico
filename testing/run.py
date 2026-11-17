@@ -29,7 +29,7 @@ if str(ROOT) not in sys.path:
 
 from nico import config_manager, generator, hm_generator, importer  # noqa: E402
 from nico.brix import brix_content_to_bricks, extract_brick_blocks, strip_brick_blocks  # noqa: E402
-from nico.core import get_nico_type, keep_unmodelled  # noqa: E402
+from nico.core import _merge_notes, get_nico_type, keep_unmodelled  # noqa: E402
 
 
 @dataclass
@@ -167,6 +167,10 @@ def _write_nico_roundtrip(config_dir: Path) -> None:
         hm_blocks = extract_brick_blocks(home_content)
         if rest_home.strip():
             hm_blocks.update(brix_content_to_bricks(rest_home, section="End", existing_blocks=hm_blocks))
+        # Comments outside bricks, as core.normalize_hm_content keeps them.
+        hm_blocks = _merge_notes(
+            hm_blocks, importer.collect_notes(home_content, rest_comments=False),
+            render=lambda b: hm_generator.generate_home_nix({**hm, "hm_brick_blocks": b}))
         hm["hm_brick_blocks"] = hm_blocks
         data["home_manager"] = hm
         data["hm_brick_blocks"] = hm_blocks

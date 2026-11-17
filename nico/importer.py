@@ -1310,15 +1310,19 @@ def _ts_where(first, last, body_start: int) -> str:
         else "at the end of the file"
 
 
-def _ts_collect_notes(clean: str, consumed: set) -> 'list[Note] | None':
+def _ts_collect_notes(clean: str, consumed: 'set | None') -> 'list[Note] | None':
+    """consumed=None: no rest statement takes comments along (Home Manager,
+    whose rest bricks are cut by regex without their comments)."""
     from . import nix_parser as _np
     tree = _np.parse_tree(clean)
     if tree is None:
         return None
-    result = _np.parse(clean)
-    unclaimed = {bi.start_line for bi in result.known + result.unknown
-                 if bi.key not in consumed}
-    used = _ts_rest_texts(clean, unclaimed)[1]
+    used: set = set()
+    if consumed is not None:
+        result = _np.parse(clean)
+        unclaimed = {bi.start_line for bi in result.known + result.unknown
+                     if bi.key not in consumed}
+        used = _ts_rest_texts(clean, unclaimed)[1]
     bs = _ts_top_binding_set(tree)
     # The opening brace of the top attribute set: comments before it stood
     # at the top of the file, unplaced ones after it at the end.
@@ -1443,11 +1447,19 @@ def _rx_collect_notes(clean: str) -> 'list[Note]':
     return notes
 
 
-def collect_notes(nix_content: str) -> 'list[Note]':
-    """Comment blocks outside any brick that NiCo did not write itself."""
+def collect_notes(nix_content: str, rest_comments: bool = True) -> 'list[Note]':
+    """Comment blocks outside any brick that NiCo did not write itself.
+
+    rest_comments=False for Home Manager files: build_home_rest_brix cuts
+    its rest statements by regex and drops their comments, so none of them
+    is left out here – all go to NOTES_BRICK, still with where they stood.
+    """
     if config_unmappable(nix_content):
         return []
     clean = strip_brick_blocks(nix_content).strip()
+    if not rest_comments:
+        notes = _ts_collect_notes(clean, None)
+        return notes if notes is not None else _rx_collect_notes(clean)
     ts = _ts_parse_config(nix_content)
     if ts is not None:
         notes = _ts_collect_notes(clean, ts[1])

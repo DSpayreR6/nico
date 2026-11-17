@@ -4,7 +4,7 @@
 
 ### New Features
 
-- Comments outside Nix-Bricks are no longer lost when NiCo regenerates `configuration.nix` or a host file – on import, after editing in raw mode, or when they were added from outside. They are collected in one Nix-Brick per file, `imported-notes`, each block headed by where it stood (`before networking.hostName`, `inside services.pipewire`, …); a comment directly above a statement that becomes a Nix-Brick anyway moves into that brick with it. Blank lines and formatting outside bricks are still not kept
+- Comments outside Nix-Bricks are no longer lost when NiCo regenerates `configuration.nix`, a host file or a Home Manager file – on import, after editing in raw mode, or when they were added from outside. They are collected in one Nix-Brick per file, `imported-notes`, each block headed by where it stood (`before networking.hostName`, `inside services.pipewire`, …); a comment directly above a statement that becomes a Nix-Brick anyway moves into that brick with it. Blank lines and formatting outside bricks are still not kept
 
 ### Bug Fixes
 

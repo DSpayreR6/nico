@@ -421,6 +421,11 @@ def normalize_hm_content(content: str) -> tuple[str, dict]:
     if rest.strip():
         rest_blocks = brix_content_to_bricks(rest, section="TAIL", existing_blocks=blocks)
         blocks.update(rest_blocks)
+    # Comments outside bricks (importer.collect_notes); after
+    # build_home_rest_brix, which may switch the shell block to a brick.
+    blocks = _merge_notes(
+        blocks, importer.collect_notes(content, rest_comments=False),
+        render=lambda b: hm_generator.generate_home_nix({**hm, "hm_brick_blocks": b}))
     hm_data                  = dict(hm)
     hm_data["hm_brick_blocks"] = blocks
     return hm_generator.generate_home_nix(hm_data), blocks
