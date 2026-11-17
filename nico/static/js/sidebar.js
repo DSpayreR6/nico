@@ -136,6 +136,7 @@ const Sidebar = (() => {
     document.getElementById('config-form')?.addEventListener('input', () => { _formDirty = true; });
     document.addEventListener('nico:config-dirty', () => { _formDirty = true; });
     document.addEventListener('nico:config-saved', () => { _formDirty = false; });
+    document.addEventListener('nico:config-clean', () => { _formDirty = false; });
 
     initFindBar();
 

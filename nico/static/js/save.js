@@ -191,6 +191,70 @@ function hideIntegrityWarning() {
   document.getElementById('integrity-warning-banner')?.classList.add('hidden');
 }
 
+// ── File changed outside NiCo (outside.py) ───────────────────────────────
+// The form still holds the values from when it was loaded; saving would write
+// them back over the newer file. The user decides (Martin, 2026-11-17).
+
+/** Ask what to do. Resolves 'reload' or 'overwrite'; "show differences"
+ *  opens the diff inside the dialog and keeps it open. No closing by a click
+ *  on the background – only the buttons decide. */
+function askChangedOutside(rel) {
+  const overlay = document.getElementById('outside-overlay');
+  const diffEl  = document.getElementById('outside-diff');
+  document.getElementById('outside-file').textContent = rel;
+  diffEl.innerHTML = '';
+  diffEl.classList.add('hidden');
+  overlay.classList.remove('hidden');
+  return new Promise(resolve => {
+    const reloadBtn = document.getElementById('outside-reload-btn');
+    const overBtn   = document.getElementById('outside-overwrite-btn');
+    const diffBtn   = document.getElementById('outside-diff-btn');
+    const done = choice => {
+      reloadBtn.onclick = overBtn.onclick = diffBtn.onclick = null;
+      overlay.classList.add('hidden');
+      resolve(choice);
+    };
+    reloadBtn.onclick = () => done('reload');
+    overBtn.onclick   = () => done('overwrite');
+    diffBtn.onclick   = async () => {
+      if (!diffEl.classList.contains('hidden')) { diffEl.classList.add('hidden'); return; }
+      try {
+        const data = await fetch(`/api/file/outside-diff?path=${encodeURIComponent(rel)}`)
+          .then(r => r.json());
+        diffEl.innerHTML = data.error ? escHtml(tErr(data.error)) : _renderDiff(data);
+      } catch {
+        diffEl.textContent = t('toast.error');
+      }
+      diffEl.classList.remove('hidden');
+    };
+    reloadBtn.focus();
+  });
+}
+
+/** POST the CO form; on ERR_CHANGED_OUTSIDE ask and act. Returns the
+ *  response data, `{reloaded: true}` after "reload", or null on a network
+ *  error. After "reload" the calling action stops: carrying on with values
+ *  the user has not seen yet would surprise more than starting it again. */
+async function _postCoForm(url, payload) {
+  const send = async body => {
+    const res = await csrfFetch(url, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify(body),
+    }).catch(() => null);
+    return res ? await res.json().catch(() => null) : null;
+  };
+  const data = await send(payload);
+  if (data?.error !== 'ERR_CHANGED_OUTSIDE') return data;
+  const choice = await askChangedOutside(data.file);
+  if (choice === 'overwrite') return await send({ ...payload, _overwrite: true });
+  await _populateCoFormFromFile(data.file);
+  document.dispatchEvent(new CustomEvent('nico:config-clean'));
+  schedulePreviewUpdate();
+  showToast(t('outside.reloaded'), 'success');
+  return { reloaded: true };
+}
+
 async function saveConfig() {
   if (!_canSaveCurrentCoForm()) {
     showToast(t('toast.error'), 'error');
@@ -203,12 +267,9 @@ async function saveConfig() {
     ? `/api/host/${encodeURIComponent(_activeHost)}/config`
     : '/api/config';
 
-  const res  = await csrfFetch(url, {
-    method:  'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body:    JSON.stringify(payload),
-  });
-  const data = await res.json();
+  const data = await _postCoForm(url, payload);
+  if (!data) { showToast(t('toast.error'), 'error'); return false; }
+  if (data.reloaded) return false;
   showToast(data.success ? t('toast.saved') : (tErr(data.error) || t('toast.error')),
             data.success ? 'success' : 'error');
   if (data.success) {
@@ -227,13 +288,8 @@ async function _autoSave() {
     ? `/api/host/${encodeURIComponent(_activeHost)}/config`
     : '/api/config';
 
-  const res  = await csrfFetch(url, {
-    method:  'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body:    JSON.stringify(payload),
-  }).catch(() => null);
-  if (!res) return false;
-  const data = await res.json().catch(() => null);
+  const data = await _postCoForm(url, payload);
+  if (!data || data.reloaded) return false;
   if (data?.success) {
     document.dispatchEvent(new CustomEvent('nico:config-saved'));
     return true;

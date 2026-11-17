@@ -9,7 +9,7 @@ from pathlib import Path
 
 from flask import jsonify, request
 
-from .. import atomic, config_manager, git_manager, importer
+from .. import atomic, config_manager, git_manager, importer, outside
 from ..hardware import _keep_replaced
 from ..core import (
     _FILENAME_TYPE_HINTS,
@@ -383,6 +383,23 @@ def register(app, ctx):
 
         return jsonify({"files": files, "count": len(files)})
 
+    @app.route("/api/file/outside-diff")
+    def outside_diff():
+        """What changed on disk since the form was loaded (outside.py)."""
+        nixos_dir, err = _require_setup()
+        if err:
+            return err
+        rel = request.args.get("path", "").strip()
+        if not rel:
+            return jsonify({"error": "ERR_NO_PATH"}), 400
+        root   = Path(nixos_dir).resolve()
+        target = (root / rel).resolve()
+        try:
+            target.relative_to(root)
+        except ValueError:
+            return jsonify({"error": "ERR_SYSTEM_PATH"}), 403
+        return jsonify(outside.diff(target, rel))
+
     @app.route("/api/parse/co")
     def parse_co_file():
         """Parst eine CO-Datei und gibt nur die darin gefundenen Felder zurück.
@@ -417,6 +434,9 @@ def register(app, ctx):
         if importer.config_unmappable(content):
             return jsonify({"error": "ERR_NOT_MAPPABLE", "file": rel})
 
+        # The form is filled from this content: it is the state a later
+        # form save compares the disk against (outside.py).
+        outside.remember(target, content)
         parsed = importer.parse_config(content)
         # Deactivated packages live in a reserved brick, which the parser
         # never sees. Without them the form would show a shorter list and

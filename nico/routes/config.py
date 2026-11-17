@@ -9,7 +9,7 @@ from pathlib import Path
 
 from flask import jsonify, request
 
-from .. import atomic, buildlimits, config_manager, generator, git_manager, importer, validator
+from .. import atomic, buildlimits, config_manager, generator, git_manager, importer, outside, validator
 from ..brix import extract_brick_blocks, brix_content_to_bricks
 from ..core import (
     NestedBricksError as _NestedBricksError,
@@ -28,6 +28,27 @@ from ..core import (
 # A host name becomes a directory below hosts_dir. `..` is a valid URL
 # segment and led the write one level up (revision 2026-11-10, S12).
 _HOST_NAME_RE = re.compile(r'[A-Za-z0-9_][\w.-]*')
+
+
+def _outside_conflict(nixos_dir: str, rel: str, body: dict):
+    """409 if the file changed outside NiCo since the form was loaded.
+
+    `_overwrite: true` in the body is the user's answer "overwrite": the
+    state from outside goes into a checkpoint first, then the form is
+    written. A file in raw mode is never written from the form
+    (core.file_in_raw_mode), so there is nothing to ask.
+    """
+    overwrite = bool(body.pop("_overwrite", False))
+    target = Path(nixos_dir) / rel
+    if _file_in_raw_mode(target) or not outside.changed_outside(target):
+        return None
+    if not overwrite:
+        return jsonify({"error": "ERR_CHANGED_OUTSIDE", "file": rel}), 409
+    try:
+        git_manager.auto_commit(nixos_dir, label=f"NiCo: backup before overwriting {rel}")
+    except Exception:
+        pass
+    return None
 
 
 def register(app, ctx):
@@ -56,6 +77,8 @@ def register(app, ctx):
         incoming = request.get_json(silent=True) or {}
         if not incoming.get("_co_ready") or incoming.get("_co_path") != "configuration.nix":
             return jsonify({"error": "ERR_STALE_FORM"}), 409
+        if conflict := _outside_conflict(nixos_dir, "configuration.nix", incoming):
+            return conflict
         existing = config_manager.load_config(nixos_dir) or {}
 
         # These fields are managed by dedicated endpoints – never overwrite from the form
@@ -429,6 +452,8 @@ def register(app, ctx):
         expected = f"{_hosts_dir_name(nixos_dir)}/{host_name}/default.nix"
         if not data.get("_co_ready") or data.get("_co_path") != expected:
             return jsonify({"error": "ERR_STALE_FORM"}), 409
+        if conflict := _outside_conflict(nixos_dir, expected, data):
+            return conflict
         data.pop("_co_path", None)
         data.pop("_co_ready", None)
         try:

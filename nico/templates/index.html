@@ -1726,6 +1726,24 @@
     </div>
   </div>
 
+  <!-- File changed outside NiCo while its form was open (outside.py) -->
+  <div id="outside-overlay" class="overlay hidden">
+    <div class="modal modal-wide">
+      <div class="modal-logo" data-i18n="outside.title">Datei außerhalb von NiCo geändert</div>
+      <p class="raw-panel-hint" id="outside-file"></p>
+      <p data-i18n="outside.info">Die Datei wurde geändert, seit NiCo sie geladen hat.</p>
+      <div id="outside-diff" class="hidden" style="max-height:40vh;overflow:auto;margin-bottom:12px"></div>
+      <div class="confirm-buttons">
+        <button type="button" id="outside-reload-btn" class="btn-primary"
+                data-i18n="outside.reloadBtn">Neu laden</button>
+        <button type="button" id="outside-diff-btn"
+                data-i18n="outside.diffBtn">Unterschiede ansehen</button>
+        <button type="button" id="outside-overwrite-btn" class="btn-red"
+                data-i18n="outside.overwriteBtn">Überschreiben</button>
+      </div>
+    </div>
+  </div>
+
   <div id="write-overlay" class="overlay hidden">
     <div class="modal">
       <div class="modal-logo" data-i18n="write.title">Konfiguration schreiben</div>

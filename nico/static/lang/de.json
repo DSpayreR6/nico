@@ -1047,6 +1047,13 @@
   "hm.noFiles":               "Keine HM-Dateien vorhanden.",
 
   "integrity.modified": "⚠ {files} Datei(en) außerhalb von NiCo geändert.",
+  "outside.title": "Datei außerhalb von NiCo geändert",
+  "outside.info": "Die Datei wurde geändert, seit NiCo sie geladen hat – etwa durch Syncthing, git pull oder einen Editor. „Neu laden“ übernimmt den Stand der Datei; deine ungespeicherten Änderungen im Panel entfallen. „Überschreiben“ legt vom Stand der Datei zuerst einen Sicherungspunkt (Commit) an, sofern Git eingerichtet ist, und schreibt dann deinen Stand aus dem Panel.",
+  "outside.reloadBtn": "Neu laden",
+  "outside.diffBtn": "Unterschiede ansehen",
+  "outside.overwriteBtn": "Überschreiben",
+  "outside.reloaded": "Formular aus der Datei neu geladen.",
+  "errors.ERR_CHANGED_OUTSIDE": "Die Datei wurde außerhalb von NiCo geändert.",
 
   "admin.settingsTitle":           "Einstellungen",
   "admin.settingsPathLabel":       "Aktueller NixOS-Config-Pfad:",

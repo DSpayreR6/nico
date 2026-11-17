@@ -36,6 +36,8 @@ import os
 import tempfile
 from pathlib import Path
 
+from . import outside
+
 # Mode for a file that does not exist yet. The temporary file is created 0600,
 # so without this every newly written config would end up readable only by its
 # owner - and an existing file would silently lose its mode, which for a
@@ -72,6 +74,9 @@ def write_bytes(path: str | Path, data: bytes) -> None:
         os.chmod(tmp_name, mode)
         os.replace(tmp_name, target)
         tmp_name = None
+        # What NiCo wrote is what NiCo knows (outside.py): a form save
+        # after this does not count it as a change from outside.
+        outside.remember(target, data)
     finally:
         # A failed write must not leave its fragment next to the real file.
         if tmp_name is not None:

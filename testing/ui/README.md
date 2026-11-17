@@ -40,7 +40,8 @@ einen Flake mit drei Hosts.
 
 Tests, die ihre Config selbst anlegen und das Skript nicht brauchen:
 `test_unmappable`, `test_flake_create`, `test_raw_panel_keep`,
-`test_git_menu_remote`, `test_rebuild_preparing`, `test_package_inactive`.
+`test_git_menu_remote`, `test_rebuild_preparing`, `test_package_inactive`,
+`test_outside_change`.
 
 ## test_collapse.py
 
