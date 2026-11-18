@@ -83,6 +83,9 @@ for rel in (CO, HOST, HM):
     check(f"{rel}: outside leer", s == 200 and r.get("outside") is None, r.get("outside"))
 s, r = post("/api/file/restructure", {"path": CO})
 check("Umbauen einer unveränderten Datei tut nichts", s == 200 and r.get("backup") is None, r)
+for rel in (CO, HOST):
+    s, r = get(f"/api/file/panel-check?path={rel}")
+    check(f"{rel}: Panel würde nichts ändern", r.get("changes") is False, r)
 
 # ── 2. configuration.nix ────────────────────────────────────────────────────
 print("\n2. configuration.nix außen geändert")
@@ -147,6 +150,33 @@ check("… die Einstellung steht nicht in einem Brick", not in_brick(HOST, "serv
 s, r = get(f"/api/file?path={HOST}")
 check("im Raw-Modus nichts zu fragen", r.get("outside") is None, r.get("outside"))
 
+# ── 5b. Raw-Modus: Meldung und Umschalten ───────────────────────────────────
+print("\n5b. Raw-Modus: außen geändert = nur Meldung; Raw-Änderung vor dem Panel")
+edit_outside(HOST, "  services.rawaussen.enable = true;\n")
+s, r = get(f"/api/file?path={HOST}")
+check("im Raw-Modus meldet /api/file outside (für die Meldung)", r.get("outside") == "modified",
+      r.get("outside"))
+check("… und panel_mode r", r.get("panel_mode") == "r", r.get("panel_mode"))
+t = read(HOST)
+i = t.rstrip().rfind("}")
+s, r = post("/api/file", {"files": [{"path": HOST, "content": t[:i] + ".\n" + t[i:]}]})
+check("Raw speichern mit verirrtem Punkt", s == 200 and r.get("success"), r)
+s, r = get(f"/api/file?path={HOST}")
+check("Raw-Speichern setzt die Prüfsumme: outside leer", r.get("outside") is None, r.get("outside"))
+s, r = get(f"/api/file/panel-check?path={HOST}")
+check("panel-check sieht die Raw-Änderung", r.get("changes") is True, r)
+s, r = get(f"/api/file/restructure-diff?path={HOST}")
+removed = [h["content"] for f in r.get("files", []) for h in f["hunks"] if h["type"] == "removed"]
+check("Unterschiede zeigen den Punkt als entfernt", "." in [x.strip() for x in removed], removed)
+s, r = post("/api/file/panel-mode", {"path": HOST, "mode": "p"})
+check("aufs Panel umgeschaltet", s == 200 and r.get("ok"), r)
+s, r = post("/api/file/restructure", {"path": HOST})
+check("Umbauen nach dem Umschalten ok", s == 200 and r.get("success") and r.get("backup") == "git", r)
+check("Raw-Einstellung als Nix-Brick erhalten", in_brick(HOST, "services.rawbleibt.enable"))
+check("Punkt ist weg", "." not in [l.strip() for l in read(HOST).splitlines()])
+log = [c["message"] for c in git_manager.get_log(str(cfg), 6)]
+check("Stand mit Punkt liegt in einem Sicherungspunkt", any("restructuring" in m for m in log), log)
+
 # ── 6. Ohne Versionszeile ───────────────────────────────────────────────────
 print("\n6. configuration.nix ganz ohne Versionszeile (von Hand geschrieben)")
 (cfg / CO).write_text('{ config, pkgs, ... }:\n{\n  networking.hostName = "hand";\n'
@@ -168,6 +198,10 @@ check("/api/file meldet modified", r.get("outside") == "modified", r.get("outsid
 s, r = post("/api/file/restructure", {"path": FL})
 check("Umbauen ok", s == 200 and r.get("success"), r)
 check("Prüfsumme stimmt", generator.check_version_hash(read(FL)) == "ok")
+check("Host-Brick nicht verdoppelt", read(FL).count("# <brick: HOST:") == 1,
+      read(FL).count("# <brick: HOST:"))
+s, r = get(f"/api/file/panel-check?path={FL}")
+check("danach würde das Panel nichts ändern", r.get("changes") is False, r)
 # Known gap, unchanged by Fall A: flake.nix has no comment rescue (manifest,
 # plan 2026-11-16, step 8). The comment is in the checkpoint made before.
 print("  HINWEIS Kommentar in flake.nix nach dem Umbau:",

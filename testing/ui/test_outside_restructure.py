@@ -120,6 +120,61 @@ try:
     time.sleep(1)
     check("stilles Speichern lässt die Datei stehen",
           strip((cfg / CO).read_text(encoding="utf-8")) == strip(before))
+
+    print("\n3. Raw-Änderung, dann aufs Panel: erst fragen (Martins Punkt)")
+    ok = d.execute_script("""
+      const ta = document.getElementById('raw-file-editor');
+      if (!ta) return false;
+      const v = ta.value, i = v.trimEnd().lastIndexOf('}');
+      ta.value = v.slice(0, i) + '.\\n' + v.slice(i);
+      return true;""")
+    check("Punkt im Raw-Editor eingetragen (ungespeichert)", ok)
+    d.execute_script("document.getElementById('panel-toggle-check').click();")
+    time.sleep(2.5)
+    check("Dialog erscheint beim Umschalten", dialog_open())
+    check("… dritter Knopf heißt „Im Raw-Modus bleiben“", d.execute_script(
+        "return document.getElementById('restructure-raw-btn').textContent;") == "Im Raw-Modus bleiben")
+    check("… ohne Satz „außerhalb geändert“ (Änderung kam aus dem Raw-Editor)", d.execute_script(
+        "return document.getElementById('restructure-outside-note').classList.contains('hidden');"))
+    check("ungespeicherte Raw-Änderung wurde vorher gespeichert",
+          "." in [l.strip() for l in (cfg / CO).read_text(encoding="utf-8").splitlines()])
+    click("restructure-raw-btn")
+    time.sleep(1.5)
+    check("Im Raw-Modus bleiben: Dialog zu", not dialog_open())
+    mode = d.execute_script("return document.getElementById('panel-toggle-btn')?.dataset.mode;")
+    check("… Schalter steht weiter auf Raw", mode == "r", mode)
+    check("… Punkt noch in der Datei",
+          "." in [l.strip() for l in (cfg / CO).read_text(encoding="utf-8").splitlines()])
+    d.execute_script("document.getElementById('panel-toggle-check').click();")
+    time.sleep(2.5)
+    check("zweiter Versuch: Dialog wieder da", dialog_open())
+    click("restructure-ok-btn")
+    time.sleep(3)
+    check("Umbauen: Dialog zu", not dialog_open())
+    text = (cfg / CO).read_text(encoding="utf-8")
+    mode = d.execute_script("return document.getElementById('panel-toggle-btn')?.dataset.mode;")
+    check("… Panel-Modus", mode == "p", mode)
+    check("… Punkt weg", "." not in [l.strip() for l in text.splitlines()])
+    check("… Einstellung aus Teil 2 als Nix-Brick", any(
+        "services.uiraw.enable" in b["text"] for b in extract_brick_blocks(text).values()))
+
+    print("\n4. Raw-Modus, außen geändert: nur eine Meldung")
+    HOST = "hosts/h1/default.nix"
+    r = d.execute_async_script("""
+      const cb = arguments[arguments.length - 1];
+      csrfFetch('/api/file/panel-mode', {method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({path: arguments[0], mode: 'r'})}).then(r => r.json()).then(cb);""", HOST)
+    check("Host-Datei im Raw-Modus", bool(r.get("ok")), r)
+    edit_outside(HOST, "  services.rawnotiz.enable = true;\n")
+    d.execute_script("Sidebar.selectFile(arguments[0], 'default.nix', {force: true});", HOST)
+    time.sleep(2)
+    notice = d.execute_script("return !!document.getElementById('outside-notice-overlay');")
+    check("Meldung erscheint", notice)
+    check("… kein Umbau-Dialog", not dialog_open())
+    d.execute_script("document.getElementById('outside-notice-ok')?.click();")
+    time.sleep(1.5)
+    raw = d.execute_script("return document.getElementById('raw-file-editor')?.value || '';")
+    check("nach OK: Raw-Editor zeigt die Änderung", "services.rawnotiz.enable" in raw)
 finally:
     d.quit()
 

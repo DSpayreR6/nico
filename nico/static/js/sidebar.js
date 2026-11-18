@@ -225,6 +225,16 @@ const Sidebar = (() => {
       }
     }
 
+    if (newMode === 'p') {
+      let step = 'go';
+      try { step = await _checkBeforePanel(activeFile.path); } catch { step = 'stay'; }
+      if (step !== 'go') {
+        if (step === 'stay') e.target.checked = !e.target.checked;
+        _panelToggleBusy = false;
+        return;
+      }
+    }
+
     // Raw → panel: include any unsaved raw edits in the request
     let bodyContent = null;
     if (_rawEditPath === activeFile.path) {
@@ -257,6 +267,26 @@ const Sidebar = (() => {
       _panelToggleBusy = false;
     }
   });
+
+  /** Raw → panel: would the panel write the file differently? Then ask first
+   *  (Martin, 2026-11-18 – a stray `.` vanished on the switch). Resolves
+   *  'go' (switch as usual), 'done' (restructured and shown) or 'stay'. */
+  async function _checkBeforePanel(path) {
+    if (_rawEditPath === path) {
+      const ta = document.getElementById('raw-file-editor');
+      // Unsaved raw edits go to disk first, so the check sees them.
+      if (ta && ta.value !== _rawEditOrig && !await _saveRawFile()) return 'stay';
+    }
+    let check = null;
+    try {
+      check = await fetch(`/api/file/panel-check?path=${encodeURIComponent(path)}`).then(r => r.json());
+    } catch { /* no answer: switch as before */ }
+    if (!check?.changes) return 'go';
+    const res = await resolveOutside(path, { switching: true, outside: !!check.outside });
+    if (res !== 'restructured') return 'stay';
+    await _loadFileIntoView(path, { skipTypeDialog: true });
+    return 'done';
+  }
 
   // ── Dateityp-Dialog ──────────────────────────────────────────────
 
@@ -875,8 +905,11 @@ const Sidebar = (() => {
     }
 
     // Changed outside NiCo (Fall A): nothing is shown in a form – and so
-    // nothing can be saved from one – before the user has answered.
-    if (data.outside) {
+    // nothing can be saved from one – before the user has answered. In raw
+    // mode it is only a notice, further down.
+    const _panelOn = !['co', 'fl', 'hm'].includes(ftype) ||
+      _effectivePanelMode(data.content || '') !== 'r';
+    if (data.outside && _panelOn) {
       if (!await resolveOutside(path)) return;
       const fresh = await csrfFetch(`/api/file?path=${encodeURIComponent(path)}`)
         .then(r => r.json()).catch(() => null);
@@ -889,6 +922,9 @@ const Sidebar = (() => {
     // Panel-capable files respect the #p/#r flag
     const panelCapable = ['co', 'fl', 'hm'].includes(ftype);
     if (panelCapable && _effectivePanelMode(data.content || '') === 'r') {
+      // Changed outside NiCo: in raw mode only a notice (Martin, 2026-11-18).
+      if (data.outside) await showOutsideNotice(path);
+      if (activeFile?.path !== path) return;
       _showRawView(data.content || '', fileName, path);
       _showLeftPanel('panel-off', fileName, { panelOff: true, flagSource: _getPanelModeFromContent(data.content || '') !== null ? 'file' : 'settings' });
       _setRawModeUI(true);

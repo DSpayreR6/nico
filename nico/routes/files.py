@@ -26,6 +26,7 @@ from ..core import (
     get_panel_mode as _get_panel_mode,
     set_panel_mode as _set_panel_mode,
     outside_status as _outside_status,
+    panel_changes as _panel_changes,
     restructured_text as _restructured_text,
     restructure_file as _restructure_file,
 )
@@ -418,7 +419,24 @@ def register(app, ctx):
             content = target.read_text(encoding="utf-8")
         except OSError:
             return None, (jsonify({"error": "ERR_FILE_READ"}), 500)
-        return (target, content, _outside_status(nixos_dir, rel, content)), None
+        return (target, content, bool(_outside_status(nixos_dir, rel, content)
+                                      or _panel_changes(nixos_dir, rel, content))), None
+
+    @app.route("/api/file/panel-check")
+    def panel_check():
+        """Before switching from raw mode to the panel: would the panel write
+        this file differently (core.panel_changes), and was it changed
+        outside NiCo (core.outside_status)?"""
+        nixos_dir, err = _require_setup()
+        if err:
+            return err
+        rel = request.args.get("path", "").strip()
+        found, err = _outside_target(nixos_dir, rel)
+        if err:
+            return err
+        _target, content, _any = found
+        return jsonify({"changes": _panel_changes(nixos_dir, rel, content),
+                        "outside": _outside_status(nixos_dir, rel, content)})
 
     @app.route("/api/file/restructure-diff")
     def restructure_diff():
@@ -434,7 +452,7 @@ def register(app, ctx):
         found, err = _outside_target(nixos_dir, rel)
         if err:
             return err
-        _target, content, _status = found
+        _target, content, _changes = found
         try:
             after = _restructured_text(nixos_dir, rel, content)
         except Exception:
@@ -454,8 +472,8 @@ def register(app, ctx):
         found, err = _outside_target(nixos_dir, rel)
         if err:
             return err
-        _target, _content, status = found
-        if not status:
+        _target, _content, changes = found
+        if not changes:
             return jsonify({"success": True, "backup": None})
         backup, zip_name = None, None
         if git_manager.is_git_repo(nixos_dir):

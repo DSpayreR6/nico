@@ -1744,14 +1744,16 @@
     </div>
   </div>
 
-  <!-- Changed outside NiCo before it was opened (Fall A, Martin 2026-11-18):
-       restructure only after asking. No close button – one of the three
-       answers is needed before the panel may write the file. -->
+  <!-- Before the panel takes over a file it would restructure (Fall A,
+       Martin 2026-11-18): changed outside NiCo when opened, or different
+       from what the panel writes when switching from raw mode. No close
+       button – one of the three answers is needed first. -->
   <div id="restructure-overlay" class="overlay hidden">
     <div class="modal modal-wide">
-      <div class="modal-logo" data-i18n="outside.title">Datei außerhalb von NiCo geändert</div>
+      <div class="modal-logo" data-i18n="restructure.title">Datei für das Panel umbauen?</div>
       <p class="raw-panel-hint" id="restructure-file"></p>
-      <p data-i18n="restructure.info">Diese Datei wurde außerhalb von NiCo geändert oder noch nie von NiCo gespeichert.</p>
+      <p id="restructure-outside-note" class="hidden"><strong data-i18n="restructure.outsideNote">Die Datei wurde außerhalb von NiCo geändert.</strong></p>
+      <p data-i18n="restructure.info">Das Panel baut diese Datei um.</p>
       <div id="restructure-diff" class="hidden" style="max-height:40vh;overflow:auto;margin-bottom:12px"></div>
       <div class="confirm-buttons">
         <button type="button" id="restructure-ok-btn" class="btn-primary"

@@ -14,7 +14,9 @@ async function loadConfig() {
   // and asks again if it still has to.
   try {
     const f = await csrfFetch('/api/file?path=configuration.nix').then(r => r.json());
-    if (f.outside && await resolveOutside('configuration.nix') !== 'restructured') {
+    if (f.outside && f.panel_mode === 'r') {
+      await showOutsideNotice('configuration.nix');
+    } else if (f.outside && await resolveOutside('configuration.nix') !== 'restructured') {
       await Sidebar.selectFile('configuration.nix', 'configuration.nix', { force: true });
       loadHmFileList();
       return;
@@ -173,27 +175,37 @@ async function refreshAfterImport() {
   if (_gitSync) checkGitRemoteStatus();
 }
 
-// ── Changed outside NiCo before it was opened (Fall A) ───────────────────
-// /api/file reports `outside` when the hash in a file is wrong or missing:
-// NiCo did not write what is on disk, and the next save from the panel would
-// restructure it – settings the form does not know become Nix-Bricks,
-// comments go to imported-notes. That used to happen without a word; now
-// nothing is written before the user answers (Martin, 2026-11-18).
+// ── Before the panel restructures a file (Fall A) ────────────────────────
+// Two ways in (Martin, 2026-11-18):
+//  * opening a file whose hash is wrong or missing (/api/file `outside`):
+//    NiCo did not write what is on disk;
+//  * switching from raw mode to the panel when the panel would write the
+//    file differently (/api/file/panel-check) – raw save recomputes the
+//    hash, so only the comparison sees edits from the raw editor.
+// The panel would turn settings the form does not know into Nix-Bricks,
+// comments into imported-notes, and drop what it cannot place at all.
+// Nothing is written before the user answers. In raw mode a changed hash
+// is only a notice: the raw editor shows the file as it is.
 
 const _restructurePending = {};
 
 /** Ask once per file, also when two places open it at the same time.
+ *  opts.switching: called from the raw → panel switch ("stay in raw mode").
+ *  opts.outside:   the hash says it was changed outside NiCo.
  *  Resolves 'restructured', 'raw', or null when the step failed. */
-function resolveOutside(rel) {
-  _restructurePending[rel] ??= _askRestructure(rel)
+function resolveOutside(rel, opts = {}) {
+  _restructurePending[rel] ??= _askRestructure(rel, opts)
     .finally(() => { delete _restructurePending[rel]; });
   return _restructurePending[rel];
 }
 
-async function _askRestructure(rel) {
+async function _askRestructure(rel, { switching = false, outside = true } = {}) {
   const overlay = document.getElementById('restructure-overlay');
   const diffEl  = document.getElementById('restructure-diff');
+  const rawBtn  = document.getElementById('restructure-raw-btn');
   document.getElementById('restructure-file').textContent = rel;
+  document.getElementById('restructure-outside-note').classList.toggle('hidden', !outside);
+  rawBtn.textContent = t(switching ? 'restructure.rawStayBtn' : 'restructure.rawBtn');
   diffEl.innerHTML = '';
   diffEl.classList.add('hidden');
   overlay.classList.remove('hidden');
@@ -201,7 +213,6 @@ async function _askRestructure(rel) {
   // an answer, the panel must not write the file.
   const choice = await new Promise(resolve => {
     const okBtn   = document.getElementById('restructure-ok-btn');
-    const rawBtn  = document.getElementById('restructure-raw-btn');
     const diffBtn = document.getElementById('restructure-diff-btn');
     const done = c => {
       okBtn.onclick = rawBtn.onclick = diffBtn.onclick = null;
@@ -228,17 +239,50 @@ async function _askRestructure(rel) {
     headers: { 'Content-Type': 'application/json' },
     body:    JSON.stringify(body),
   }).then(r => r.json()).catch(() => null);
+  const fail = d => { showToast(tErr(d?.error) || t('toast.error'), 'error'); return null; };
 
   if (choice === 'raw') {
+    if (switching) return 'raw';            // already raw: nothing to write
     const d = await post('/api/file/panel-mode', { path: rel, mode: 'r' });
-    if (!d?.ok) { showToast(tErr(d?.error) || t('toast.error'), 'error'); return null; }
-    return 'raw';
+    return d?.ok ? 'raw' : fail(d);
+  }
+  if (switching) {
+    // Into panel mode first: the route checks the brick markers and that a
+    // panel fits the file at all, and its write is the checkpoint of the
+    // raw state.
+    const m = await post('/api/file/panel-mode', { path: rel, mode: 'p' });
+    if (!m?.ok) {
+      if (m?.error === 'ERR_BRIX_INCOMPLETE') { showToast(t('panelToggle.brixError'), 'error'); return null; }
+      return fail(m);
+    }
   }
   const d = await post('/api/file/restructure', { path: rel });
-  if (!d?.success) { showToast(tErr(d?.error) || t('toast.error'), 'error'); return null; }
+  if (!d?.success) return fail(d);
   if (d.backup === 'zip')      showToast(t('restructure.doneZip', d.zip), 'success');
   else if (d.backup === 'git') showToast(t('restructure.doneGit'), 'success');
   return 'restructured';
+}
+
+/** Raw mode, hash wrong: say so, nothing else to decide. Button only. */
+function showOutsideNotice(rel) {
+  return new Promise(resolve => {
+    const overlay = document.createElement('div');
+    overlay.className = 'overlay';
+    overlay.id = 'outside-notice-overlay';
+    overlay.innerHTML = `
+      <div class="modal">
+        <div class="modal-logo">${escHtml(t('outside.title'))}</div>
+        <p class="raw-panel-hint">${escHtml(rel)}</p>
+        <p>${escHtml(t('restructure.rawNotice'))}</p>
+        <div class="confirm-buttons">
+          <button type="button" id="outside-notice-ok" class="btn-primary">OK</button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+    const ok = overlay.querySelector('#outside-notice-ok');
+    ok.addEventListener('click', () => { overlay.remove(); resolve(); });
+    ok.focus();
+  });
 }
 
 // ── File changed outside NiCo (outside.py) ───────────────────────────────

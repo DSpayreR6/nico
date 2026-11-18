@@ -849,6 +849,8 @@ def read_config_file(nixos_dir: str, rel_path: str, *, persist_stamp: bool = Tru
     # Before any stamp: set_type_in_content() below recomputes the hash and
     # would make a file changed outside look as if NiCo had written it.
     outside = outside_status(nixos_dir, rel, content)
+    mode = get_panel_mode(content) or \
+        config_manager.load_config_settings(nixos_dir).get("panel_default", "p")
     if outside:
         persist_stamp = False
 
@@ -889,6 +891,7 @@ def read_config_file(nixos_dir: str, rel_path: str, *, persist_stamp: bool = Tru
         "file_type": ftype,
         # 'modified' / 'no_hash' / None – see outside_status().
         "outside": outside,
+        "panel_mode": mode,
         "writable": target.suffix in _WRITABLE_SUFFIXES,
         # The interface shows such a file in the raw editor instead of a form.
         "unmappable": file_unmappable(nixos_dir, rel, content, ftype or path_type),
@@ -1106,29 +1109,76 @@ def _is_hm_file(nixos_dir: str, rel: str, content: str) -> bool:
     return (len(parts) >= 2 and parts[0] == hm_dir) or get_nico_type(content) == "hm"
 
 
-def outside_status(nixos_dir: str, rel: str, content: str) -> "str | None":
-    """'modified' or 'no_hash' when the next form save would restructure a
-    file NiCo did not write; None when there is nothing to ask.
-
-    Only files a form writes back: configuration.nix, flake.nix, host
-    default.nix and Home Manager files. Not in raw mode (no form writes
-    them) and not when NiCo cannot represent the file at all.
-    """
+def _panel_file(nixos_dir: str, rel: str, content: str) -> bool:
+    """A file a form writes back and NiCo can represent: configuration.nix,
+    a NiCo flake.nix, host default.nix, Home Manager files."""
     rel = (rel or "").strip()
     if rel not in ("configuration.nix", "flake.nix") and \
             not _host_of(nixos_dir, rel) and not _is_hm_file(nixos_dir, rel, content):
-        return None
-    mode = get_panel_mode(content) or \
-        config_manager.load_config_settings(nixos_dir).get("panel_default", "p")
-    if mode == "r":
-        return None
+        return False
     # A flake.nix without a nico stamp is not NiCo's (flake_is_managed).
     if rel == "flake.nix" and not flake_is_managed(content):
-        return None
-    if file_unmappable(nixos_dir, rel, content):
+        return False
+    return not file_unmappable(nixos_dir, rel, content)
+
+
+def outside_status(nixos_dir: str, rel: str, content: str) -> "str | None":
+    """'modified' or 'no_hash' when the hash says NiCo did not write this
+    state; None otherwise. In raw mode as well: there it is only a notice
+    (Martin, 2026-11-18)."""
+    if not _panel_file(nixos_dir, rel, content):
         return None
     status = generator.check_version_hash(content)
     return None if status == "ok" else status
+
+
+_MARKER_SECTION_RE = re.compile(r'^(\s*# <brick: )([^/>]+?)( / .*)$')
+
+
+def _body_lines(text: str) -> list:
+    """Lines to compare: without the version line, legacy section names in
+    brick markers read as their code (brix.LEGACY_SECTIONS) – the import
+    wrote `Start` for HEAD until 2026-11-18, and the generator writes the
+    code, so every imported file would otherwise count as changed."""
+    from .brix import LEGACY_SECTIONS
+    out = []
+    for line in text.splitlines():
+        if line.startswith("# nico-version:"):
+            continue
+        m = _MARKER_SECTION_RE.match(line)
+        if m and m.group(2) in LEGACY_SECTIONS:
+            line = m.group(1) + LEGACY_SECTIONS[m.group(2)] + m.group(3)
+        out.append(line)
+    return out
+
+
+def panel_changes(nixos_dir: str, rel: str, content: str) -> bool:
+    """True when the panel would write this file differently from how it is.
+
+    Asked when switching from raw mode to the panel (Martin, 2026-11-18).
+    The hash cannot answer it there: raw save and the panel switch recompute
+    it, so an edit in the raw editor looked like NiCo's own, and whatever
+    the panel could not place was dropped without a word – a stray `.` in
+    Martin's VM run. Opening a file asks the hash instead (outside_status):
+    edits in the raw editor only reach the panel through the switch, and
+    comparing on every opening would also ask about files an older NiCo
+    wrote in its older layout. The version line does not count.
+    """
+    if not _panel_file(nixos_dir, rel, content):
+        return False
+    rel = (rel or "").strip()
+    if rel not in ("configuration.nix", "flake.nix") and not _host_of(nixos_dir, rel):
+        # Home Manager: the panel patches single lines in place (/api/hm/patch)
+        # and never regenerates the file, so "what would it write" has no
+        # answer. The hash decides there, as before; HM in raw mode is the
+        # next pass anyway (manifest, 2026-11-18).
+        return outside_status(nixos_dir, rel, content) is not None
+    try:
+        after = restructured_text(nixos_dir, rel, content)
+    except Exception:
+        # The panel save would fail the same way and say so; nothing to ask.
+        return False
+    return _body_lines(after) != _body_lines(content)
 
 
 def _restructure_co(nixos_dir: str, nix_content: str, data: dict) -> str:
@@ -1173,7 +1223,11 @@ def restructured_text(nixos_dir: str, rel: str, content: str) -> str:
     if rel == "flake.nix":
         data = config_manager.load_config(nixos_dir) or config_manager.get_defaults()
         data.update(importer.parse_flake_nix(content))
-        brix = importer.build_flake_brix(content)
+        # A flake NiCo generated keeps its bricks as they are, like the flake
+        # panel save (/api/config/flake); build_flake_brix is for a foreign
+        # one and doubled the host bricks of a generated flake.
+        brix = extract_brick_blocks(content) if "# Generated by NiCo" in content \
+            else importer.build_flake_brix(content)
         data["flake_brick_blocks"] = importer.ensure_flake_host_bricks(content, brix)
         return generator.generate_flake_nix(data, nixos_dir=nixos_dir)
     host = _host_of(nixos_dir, rel)

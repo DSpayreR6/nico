@@ -61,9 +61,16 @@ def check(label, cond, got=None):
 def mode():
     return d.execute_script("return document.getElementById('panel-toggle-btn')?.dataset.mode || 'p';")
 
+asked = []
 def toggle():
+    """Since 2026-11-18 raw → panel asks first when the panel would change the
+    file (Fall A); here the answer is always "restructure"."""
     d.execute_script("document.getElementById('panel-toggle-check').click();")
     time.sleep(1.5)
+    if d.execute_script("return !document.getElementById('restructure-overlay').classList.contains('hidden');"):
+        asked.append(True)
+        d.execute_script("document.getElementById('restructure-ok-btn').click();")
+        time.sleep(2)
 
 def user_path(rel, stmt, name):
     print(f"\n{name}")
@@ -83,8 +90,10 @@ def user_path(rel, stmt, name):
     time.sleep(1.5)
     key = stmt.strip().split(" =")[0]
     check("steht nach Raw-Speichern in der Datei", key in (cfg / rel).read_text())
+    asked.clear()
     toggle()
     check("Panel-Modus an", mode() == "p", mode())
+    check("… nach Rückfrage (Panel würde umbauen)", bool(asked))
     saved = d.execute_script("return saveConfig();")
     time.sleep(1.5)
     check("im Formular gespeichert", saved is True, saved)
@@ -143,9 +152,13 @@ def switch_without_change():
     time.sleep(1.5)
     check("Kommentar im Raw eingetragen und gespeichert",
           ok and "notiz-ohne-aenderung" in (cfg / rel).read_text())
+    asked.clear()
     toggle()
     check("Panel-Modus", mode() == "p", mode())
-    check("Datei noch nicht umgebaut", "imported-notes" not in (cfg / rel).read_text())
+    # Since Fall A (2026-11-18) the switch asks first, and "restructure"
+    # writes the file at once – before, it waited for the next save.
+    check("beim Umschalten gefragt", bool(asked))
+    check("… und sofort umgebaut", "imported-notes" in (cfg / rel).read_text())
     toggle()
     check("Raw-Modus", mode() == "r", mode())
     text = (cfg / rel).read_text()

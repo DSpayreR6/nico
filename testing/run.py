@@ -139,7 +139,7 @@ def _write_nico_roundtrip(config_dir: Path) -> None:
         rest = importer.build_rest_brix(clean, recognized)
         blocks = extract_brick_blocks(content)
         if rest.strip():
-            blocks.update(brix_content_to_bricks(rest, section="Start", existing_blocks=blocks))
+            blocks.update(brix_content_to_bricks(rest, section="HEAD", existing_blocks=blocks))
         data.update(recognized)
         data["brick_blocks"] = blocks
         # Same step the import routes take: rescue what the generator would not

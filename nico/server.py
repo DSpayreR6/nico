@@ -169,7 +169,7 @@ def create_app() -> Flask:
             data[key] = val
         if rest_brix.strip():
             blocks = data.get("brick_blocks", {})
-            rest_blocks = brix_content_to_bricks(rest_brix, section="Start", existing_blocks=blocks)
+            rest_blocks = brix_content_to_bricks(rest_brix, section="HEAD", existing_blocks=blocks)
             blocks.update(rest_blocks)
             data["brick_blocks"] = blocks
         if original_content.strip():
