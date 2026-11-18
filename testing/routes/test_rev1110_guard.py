@@ -307,7 +307,8 @@ d = tmp()
 data = core.load_and_normalize_config(str(d))
 check("einfache fremde Config wird weiter übernommen (Hostname im Modell)",
       data.get("hostname") == "plain-pc")
-check("… und als NiCo-Datei geschrieben",
+core.restructure_file(str(d), "configuration.nix")
+check("… und nach dem Umbauen als NiCo-Datei geschrieben",
       "# nico-version:" in (d / "configuration.nix").read_text(encoding="utf-8"))
 check("… und nicht als nicht abbildbar gemeldet", not data.get("_unmappable"),
       data.get("_unmappable"))

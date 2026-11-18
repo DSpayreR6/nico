@@ -67,7 +67,9 @@ r = client.get("/api/config", headers={"X-CSRF-Token": csrf})
 check("mit Token erfolgreich", r.status_code == 200, r.status_code)
 data = r.get_json() or {}
 check("mit Token kommen die Daten", data.get("hostname") == "handmade" or "brick_blocks" in data, list(data)[:8])
-check("mit Token läuft die Normalisierung wie bisher", snapshot() != before)
+# Fall A (2026-11-18): the GET no longer rewrites a file changed outside;
+# the interface asks first and restructures via /api/file/restructure.
+check("mit Token schreibt der GET auch nichts mehr (Fall A)", snapshot() == before)
 
 print()
 if fails:

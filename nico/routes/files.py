@@ -25,6 +25,9 @@ from ..core import (
     check_brix_integrity as _check_brix_integrity,
     get_panel_mode as _get_panel_mode,
     set_panel_mode as _set_panel_mode,
+    outside_status as _outside_status,
+    restructured_text as _restructured_text,
+    restructure_file as _restructure_file,
 )
 
 
@@ -399,6 +402,85 @@ def register(app, ctx):
         except ValueError:
             return jsonify({"error": "ERR_SYSTEM_PATH"}), 403
         return jsonify(outside.diff(target, rel))
+
+    def _outside_target(nixos_dir, rel):
+        """(target, content, status) or an error response for the two
+        routes below."""
+        if not rel:
+            return None, (jsonify({"error": "ERR_NO_PATH"}), 400)
+        root   = Path(nixos_dir).resolve()
+        target = (root / rel).resolve()
+        try:
+            target.relative_to(root)
+        except ValueError:
+            return None, (jsonify({"error": "ERR_SYSTEM_PATH"}), 403)
+        try:
+            content = target.read_text(encoding="utf-8")
+        except OSError:
+            return None, (jsonify({"error": "ERR_FILE_READ"}), 500)
+        return (target, content, _outside_status(nixos_dir, rel, content)), None
+
+    @app.route("/api/file/restructure-diff")
+    def restructure_diff():
+        """What restructuring a file changed outside NiCo would change (Fall A).
+
+        Against what NiCo would write, not against the last checkpoint: after
+        a `git pull` the change from outside is already in the checkpoint,
+        and that comparison would come back empty."""
+        nixos_dir, err = _require_setup()
+        if err:
+            return err
+        rel = request.args.get("path", "").strip()
+        found, err = _outside_target(nixos_dir, rel)
+        if err:
+            return err
+        _target, content, _status = found
+        try:
+            after = _restructured_text(nixos_dir, rel, content)
+        except Exception:
+            return jsonify({"error": "ERR_RESTRUCTURE"}), 500
+        return jsonify(outside.diff_texts(content, after, rel))
+
+    @app.route("/api/file/restructure", methods=["POST"])
+    def restructure_route():
+        """Answer "restructure" to a file changed outside NiCo (Fall A):
+        checkpoint with the state from outside (a ZIP without git), then
+        write the file as the form would."""
+        if err := _check_csrf(): return err
+        nixos_dir, err = _require_setup()
+        if err:
+            return err
+        rel = ((request.get_json(silent=True) or {}).get("path") or "").strip()
+        found, err = _outside_target(nixos_dir, rel)
+        if err:
+            return err
+        _target, _content, status = found
+        if not status:
+            return jsonify({"success": True, "backup": None})
+        backup, zip_name = None, None
+        if git_manager.is_git_repo(nixos_dir):
+            ok, msg, _skipped = git_manager.auto_commit(
+                nixos_dir, label=f"NiCo: backup before restructuring {rel}")
+            if not ok:
+                # No checkpoint, no restructuring: the state from outside
+                # would be gone for good.
+                return jsonify({"error": "ERR_RESTRUCTURE_BACKUP", "detail": msg}), 500
+            backup = "git"
+        else:
+            try:
+                zip_name = importer.backup_to_zip(nixos_dir)
+            except OSError:
+                return jsonify({"error": "ERR_RESTRUCTURE_BACKUP"}), 500
+            backup = "zip"
+        try:
+            _restructure_file(nixos_dir, rel)
+        except config_manager.DuplicateAttrError as exc:
+            return jsonify({"error": "ERR_DUPLICATE_ATTR", "duplicates": exc.names}), 409
+        except Exception:
+            return jsonify({"error": "ERR_RESTRUCTURE"}), 500
+        if backup == "git":
+            git_manager.auto_commit(nixos_dir)
+        return jsonify({"success": True, "backup": backup, "zip": zip_name})
 
     @app.route("/api/parse/co")
     def parse_co_file():

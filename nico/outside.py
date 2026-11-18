@@ -71,6 +71,11 @@ def diff(path: str | Path, label: str) -> dict:
         now = Path(path).read_text(encoding="utf-8")
     except OSError:
         now = ""
+    return diff_texts(base, now, label)
+
+
+def diff_texts(base: str, now: str, label: str) -> dict:
+    """Two texts against each other, same shape as diff()."""
     hunks = []
     # The version line changes with every write (hash); it says nothing
     # about what was changed.

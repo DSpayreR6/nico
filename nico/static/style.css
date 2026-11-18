@@ -2532,29 +2532,6 @@ pre[class*="language-"] {
 }
 .git-warning-dismiss:hover { opacity: 1; }
 
-.integrity-warning-banner {
-  position: relative;
-  background: color-mix(in srgb, var(--peach) 15%, var(--mantle));
-  border-bottom: 2px solid var(--peach);
-  color: var(--peach);
-  font-size: 13px;
-  font-weight: 500;
-  padding: 8px 44px 8px 20px;
-  text-align: center;
-}
-.integrity-dismiss-btn {
-  position: absolute;
-  right: 12px;
-  top: 50%;
-  transform: translateY(-50%);
-  background: none;
-  border: none;
-  color: var(--peach);
-  cursor: pointer;
-  font-size: 14px;
-  padding: 2px 6px;
-}
-
 .git-remote-banner {
   display: flex;
   align-items: center;

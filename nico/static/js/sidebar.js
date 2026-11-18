@@ -874,6 +874,16 @@ const Sidebar = (() => {
       return;
     }
 
+    // Changed outside NiCo (Fall A): nothing is shown in a form – and so
+    // nothing can be saved from one – before the user has answered.
+    if (data.outside) {
+      if (!await resolveOutside(path)) return;
+      const fresh = await csrfFetch(`/api/file?path=${encodeURIComponent(path)}`)
+        .then(r => r.json()).catch(() => null);
+      if (!fresh || fresh.error || fresh.outside || activeFile?.path !== path) return;
+      return _renderFileIntoView(path, fresh, { skipTypeDialog });
+    }
+
     _updatePanelToggle(ftype, data.content || '');
 
     // Panel-capable files respect the #p/#r flag

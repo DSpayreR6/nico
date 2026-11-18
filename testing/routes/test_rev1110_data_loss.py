@@ -166,8 +166,11 @@ check("Abbruch beim Zerlegen kommt als Fehler an", raised)
 check("Abbruch beim Zerlegen: die Datei auf Platte ist unverändert",
       (d / "configuration.nix").read_text(encoding="utf-8") == hand)
 core.load_and_normalize_config(str(d))
+check("Laden allein schreibt nichts mehr (Fall A)",
+      (d / "configuration.nix").read_text(encoding="utf-8") == hand)
+core.restructure_file(str(d), "configuration.nix")
 normal = (d / "configuration.nix").read_text(encoding="utf-8")
-check("ohne Abbruch wird wie bisher normalisiert",
+check("Umbauen übernimmt die Einstellung als Nix-Brick",
       "services.alpha.enable" in normal and "# nico-version:" in normal)
 shutil.rmtree(d)
 

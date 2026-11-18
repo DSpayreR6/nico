@@ -4,7 +4,11 @@
 
 ### New Features
 
+- A file changed outside NiCo (an editor, Syncthing, `git pull`) or never saved by NiCo is no longer restructured silently. NiCo checks the hash of every file a form writes – `configuration.nix`, `flake.nix`, host and Home Manager files – and asks before the form takes it over: restructure (a checkpoint of the state from outside first, a ZIP without Git), show what restructuring would change, or open it in raw mode, which leaves the file as it is
+
 ### Bug Fixes
+
+- Opening `configuration.nix` or `flake.nix` no longer rewrites them when they were changed outside NiCo; host and Home Manager files had their hash not checked at all and were restructured on the next save without a checkpoint
 
 ## 0.19.0 (2026-11-18)
 

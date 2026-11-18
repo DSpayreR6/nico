@@ -1,4 +1,4 @@
-/** NiCo frontend — config load/save/write, autosave, ZIP export/import, settings import, detach, integrity warning. Split from app.js; classic script sharing the global scope. */
+/** NiCo frontend — config load/save/write, autosave, ZIP export/import, settings import, detach, files changed outside NiCo. Split from app.js; classic script sharing the global scope. */
 'use strict';
 
 // ── Config load / save ─────────────────────────────────────────────────────
@@ -9,7 +9,17 @@ async function loadConfig() {
   _brixContextFile = 'configuration.nix';
   _brixTargetFtype = 'co';
   _brixContextFtype = 'co';
-  hideIntegrityWarning();
+  // Changed outside NiCo (Fall A): ask before the form takes the file. After
+  // "open as raw" – or when restructuring failed – the file view takes over,
+  // and asks again if it still has to.
+  try {
+    const f = await csrfFetch('/api/file?path=configuration.nix').then(r => r.json());
+    if (f.outside && await resolveOutside('configuration.nix') !== 'restructured') {
+      await Sidebar.selectFile('configuration.nix', 'configuration.nix', { force: true });
+      loadHmFileList();
+      return;
+    }
+  } catch { /* the form load below reports its own errors */ }
   await _populateCoFormFromFile('configuration.nix');
   // A configuration.nix NiCo cannot represent: the form stays empty and
   // locked (_coFormReady is false after the call above), the raw editor
@@ -163,32 +173,72 @@ async function refreshAfterImport() {
   if (_gitSync) checkGitRemoteStatus();
 }
 
-// ── Änderungserkennung (nico-version Hash) ────────────────────────────────
-function showIntegrityWarning(files) {
-  let el = document.getElementById('integrity-warning-banner');
-  if (!el) {
-    el = document.createElement('div');
-    el.id = 'integrity-warning-banner';
-    el.className = 'integrity-warning-banner';
-    // Dismiss button
-    const btn = document.createElement('button');
-    btn.className = 'integrity-dismiss-btn';
-    btn.innerHTML = niIcon('x');
-    btn.addEventListener('click', hideIntegrityWarning);
-    el.appendChild(btn);
-    const msg = document.createElement('span');
-    msg.id = 'integrity-warning-msg';
-    el.appendChild(msg);
-    const header = document.querySelector('#app header');
-    header?.insertAdjacentElement('afterend', el);
-  }
-  document.getElementById('integrity-warning-msg').textContent =
-    t('integrity.modified').replace('{files}', files.length);
-  el.classList.remove('hidden');
+// ── Changed outside NiCo before it was opened (Fall A) ───────────────────
+// /api/file reports `outside` when the hash in a file is wrong or missing:
+// NiCo did not write what is on disk, and the next save from the panel would
+// restructure it – settings the form does not know become Nix-Bricks,
+// comments go to imported-notes. That used to happen without a word; now
+// nothing is written before the user answers (Martin, 2026-11-18).
+
+const _restructurePending = {};
+
+/** Ask once per file, also when two places open it at the same time.
+ *  Resolves 'restructured', 'raw', or null when the step failed. */
+function resolveOutside(rel) {
+  _restructurePending[rel] ??= _askRestructure(rel)
+    .finally(() => { delete _restructurePending[rel]; });
+  return _restructurePending[rel];
 }
 
-function hideIntegrityWarning() {
-  document.getElementById('integrity-warning-banner')?.classList.add('hidden');
+async function _askRestructure(rel) {
+  const overlay = document.getElementById('restructure-overlay');
+  const diffEl  = document.getElementById('restructure-diff');
+  document.getElementById('restructure-file').textContent = rel;
+  diffEl.innerHTML = '';
+  diffEl.classList.add('hidden');
+  overlay.classList.remove('hidden');
+  // No closing by a click on the background and no cancel: until there is
+  // an answer, the panel must not write the file.
+  const choice = await new Promise(resolve => {
+    const okBtn   = document.getElementById('restructure-ok-btn');
+    const rawBtn  = document.getElementById('restructure-raw-btn');
+    const diffBtn = document.getElementById('restructure-diff-btn');
+    const done = c => {
+      okBtn.onclick = rawBtn.onclick = diffBtn.onclick = null;
+      overlay.classList.add('hidden');
+      resolve(c);
+    };
+    okBtn.onclick  = () => done('restructure');
+    rawBtn.onclick = () => done('raw');
+    diffBtn.onclick = async () => {
+      if (!diffEl.classList.contains('hidden')) { diffEl.classList.add('hidden'); return; }
+      try {
+        const data = await fetch(`/api/file/restructure-diff?path=${encodeURIComponent(rel)}`)
+          .then(r => r.json());
+        diffEl.innerHTML = data.error ? escHtml(tErr(data.error)) : _renderDiff(data);
+      } catch {
+        diffEl.textContent = t('toast.error');
+      }
+      diffEl.classList.remove('hidden');
+    };
+    okBtn.focus();
+  });
+  const post = (url, body) => csrfFetch(url, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify(body),
+  }).then(r => r.json()).catch(() => null);
+
+  if (choice === 'raw') {
+    const d = await post('/api/file/panel-mode', { path: rel, mode: 'r' });
+    if (!d?.ok) { showToast(tErr(d?.error) || t('toast.error'), 'error'); return null; }
+    return 'raw';
+  }
+  const d = await post('/api/file/restructure', { path: rel });
+  if (!d?.success) { showToast(tErr(d?.error) || t('toast.error'), 'error'); return null; }
+  if (d.backup === 'zip')      showToast(t('restructure.doneZip', d.zip), 'success');
+  else if (d.backup === 'git') showToast(t('restructure.doneGit'), 'success');
+  return 'restructured';
 }
 
 // ── File changed outside NiCo (outside.py) ───────────────────────────────

@@ -35,6 +35,8 @@ Most GUI config tools only allow what their forms cover. NiCo takes a different 
 
 This has one important consequence: every time you write, NiCo regenerates the form-managed file completely from its current state instead of patching the existing text. Nix bricks are copied over unchanged. Your own comments **outside** of Nix bricks are collected into one Nix brick per file, `imported-notes`, each with a note on where it stood (`before networking.hostName`, `inside services.pipewire`, …); a comment directly above a statement that becomes a brick anyway moves into that brick with it. Blank lines and manual formatting outside of bricks are not preserved. Only content inside a Nix brick stays exactly as written, so put anything you want to keep verbatim into a brick.
 
+A file changed outside NiCo — an editor, Syncthing, `git pull` — or never saved by NiCo is not rewritten behind your back. NiCo recognises it by the hash in its first lines and asks before it opens the form: **restructure** (a checkpoint of the current state comes first, a ZIP without Git), **show differences** (what restructuring would change), or **open in raw mode** (the file stays as it is).
+
 ---
 
 ## Features

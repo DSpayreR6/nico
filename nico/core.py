@@ -846,6 +846,12 @@ def read_config_file(nixos_dir: str, rel_path: str, *, persist_stamp: bool = Tru
     rel_parts = Path(rel).parts
     path_type = "hm" if len(rel_parts) >= 2 and rel_parts[0] == hm_dir else None
 
+    # Before any stamp: set_type_in_content() below recomputes the hash and
+    # would make a file changed outside look as if NiCo had written it.
+    outside = outside_status(nixos_dir, rel, content)
+    if outside:
+        persist_stamp = False
+
     ftype = get_nico_type(content)
     if ftype == "":
         stamp = hint_type or path_type or classify_filename(target.name) or "nd"
@@ -869,7 +875,9 @@ def read_config_file(nixos_dir: str, rel_path: str, *, persist_stamp: bool = Tru
                     pass
             ftype = override
 
-    if ftype == "hm":
+    # Not for a file changed outside: the user is about to be asked whether
+    # it may be restructured, and has to see it as it is.
+    if ftype == "hm" and not outside:
         try:
             content, _ = normalize_hm_content(content)
         except Exception:
@@ -879,6 +887,8 @@ def read_config_file(nixos_dir: str, rel_path: str, *, persist_stamp: bool = Tru
         "content": content,
         "path": rel,
         "file_type": ftype,
+        # 'modified' / 'no_hash' / None – see outside_status().
+        "outside": outside,
         "writable": target.suffix in _WRITABLE_SUFFIXES,
         # The interface shows such a file in the raw editor instead of a form.
         "unmappable": file_unmappable(nixos_dir, rel, content, ftype or path_type),
@@ -1069,6 +1079,124 @@ def _keep_rest(disk_text: str, blocks: dict) -> dict:
     return blocks
 
 
+# ── Changed outside NiCo (Fall A, decision Martin 2026-11-18) ─────────────────
+# Every file NiCo writes from a form carries a hash. A wrong or missing hash
+# means NiCo did not write what is on disk now, and the next form save would
+# restructure the file: settings the form does not know become Nix-Bricks,
+# comments go to imported-notes. That used to happen without a word - for
+# configuration.nix and flake.nix already on a GET, for host and Home Manager
+# files on the next save, and their hash was never even looked at. Now the
+# interface asks first: restructure (checkpoint before), open as raw, or show
+# what would change.
+
+def _host_of(nixos_dir: str, rel: str) -> "str | None":
+    """Host name if rel is <hosts_dir>/<host>/default.nix, else None."""
+    cfg = config_manager.load_config_settings(nixos_dir)
+    hosts = (cfg.get("hosts_dir") or "hosts").strip() or "hosts"
+    parts = Path(rel).parts
+    if len(parts) == 3 and parts[0] == hosts and parts[2] == "default.nix":
+        return parts[1]
+    return None
+
+
+def _is_hm_file(nixos_dir: str, rel: str, content: str) -> bool:
+    cfg = config_manager.load_config_settings(nixos_dir)
+    hm_dir = (cfg.get("hm_dir") or "home").strip() or "home"
+    parts = Path(rel).parts
+    return (len(parts) >= 2 and parts[0] == hm_dir) or get_nico_type(content) == "hm"
+
+
+def outside_status(nixos_dir: str, rel: str, content: str) -> "str | None":
+    """'modified' or 'no_hash' when the next form save would restructure a
+    file NiCo did not write; None when there is nothing to ask.
+
+    Only files a form writes back: configuration.nix, flake.nix, host
+    default.nix and Home Manager files. Not in raw mode (no form writes
+    them) and not when NiCo cannot represent the file at all.
+    """
+    rel = (rel or "").strip()
+    if rel not in ("configuration.nix", "flake.nix") and \
+            not _host_of(nixos_dir, rel) and not _is_hm_file(nixos_dir, rel, content):
+        return None
+    mode = get_panel_mode(content) or \
+        config_manager.load_config_settings(nixos_dir).get("panel_default", "p")
+    if mode == "r":
+        return None
+    # A flake.nix without a nico stamp is not NiCo's (flake_is_managed).
+    if rel == "flake.nix" and not flake_is_managed(content):
+        return None
+    if file_unmappable(nixos_dir, rel, content):
+        return None
+    status = generator.check_version_hash(content)
+    return None if status == "ok" else status
+
+
+def _restructure_co(nixos_dir: str, nix_content: str, data: dict) -> str:
+    """The text a panel save would make of this configuration.nix; fills data."""
+    existing_bricks = extract_brick_blocks(nix_content)
+    nix_without_bricks = strip_brick_blocks(nix_content)
+    recognized = importer.parse_config(nix_without_bricks)
+    data.update(recognized)
+    rest = importer.build_rest_brix(nix_without_bricks, recognized)
+    blocks = dict(existing_bricks)
+    if rest.strip():
+        blocks.update(brix_content_to_bricks(rest, section="HEAD", existing_blocks=blocks))
+    data["_flake_mode"] = flake_mode(nixos_dir)
+    data["brick_blocks"] = _merge_notes(
+        blocks, importer.collect_notes(nix_content),
+        render=lambda b: generator.generate_configuration_nix({**data, "brick_blocks": b}))
+    return generator.generate_configuration_nix(data)
+
+
+def _restructure_host(nixos_dir: str, host: str) -> str:
+    """The text a panel save would make of this host's default.nix."""
+    host_data = config_manager.load_host_config(nixos_dir, host) or {}
+    cfg = config_manager.load_config_settings(nixos_dir)
+    host_dir = Path(nixos_dir) / ((cfg.get("hosts_dir") or "hosts").strip() or "hosts") / host
+    host_nix = host_dir / "default.nix"
+    hw_config = (host_dir / "hardware-configuration.nix").exists()
+    disk = host_nix.read_text(encoding="utf-8")
+    bricks = dict(host_data.get("brick_blocks", {}))
+    bricks.update(extract_brick_blocks(disk))
+    host_data["brick_blocks"] = keep_unmodelled(
+        disk, bricks,
+        render=lambda b: generator.generate_host_nix({**host_data, "brick_blocks": b}, host, hw_config))
+    return generator.generate_host_nix(host_data, host, hw_config)
+
+
+def restructured_text(nixos_dir: str, rel: str, content: str) -> str:
+    """What NiCo would write for this file when it restructures it."""
+    rel = (rel or "").strip()
+    if rel == "configuration.nix":
+        data = config_manager.load_config(nixos_dir) or config_manager.get_defaults()
+        return _restructure_co(nixos_dir, content, data)
+    if rel == "flake.nix":
+        data = config_manager.load_config(nixos_dir) or config_manager.get_defaults()
+        data.update(importer.parse_flake_nix(content))
+        brix = importer.build_flake_brix(content)
+        data["flake_brick_blocks"] = importer.ensure_flake_host_bricks(content, brix)
+        return generator.generate_flake_nix(data, nixos_dir=nixos_dir)
+    host = _host_of(nixos_dir, rel)
+    if host:
+        return _restructure_host(nixos_dir, host)
+    if _is_hm_file(nixos_dir, rel, content):
+        return normalize_hm_content(content)[0]
+    raise ValueError("ERR_NOT_RESTRUCTURABLE")
+
+
+def restructure_file(nixos_dir: str, rel: str) -> str:
+    """Restructure the file on disk; returns the new text. No checkpoint
+    here - the caller makes it first, with the state from outside."""
+    target = _resolve_config_rel(Path(nixos_dir).resolve(), rel)
+    text = restructured_text(nixos_dir, rel, target.read_text(encoding="utf-8"))
+    if _host_of(nixos_dir, rel):
+        duplicates = validator.duplicate_attrs_in(text)
+        if duplicates:
+            raise config_manager.DuplicateAttrError(duplicates)
+    atomic.write_text(target, text)
+    return text
+
+
 def load_and_normalize_config(nixos_dir: str) -> dict:
     """
     Load config state from disk, normalize any externally-modified .nix files,
@@ -1089,29 +1217,10 @@ def load_and_normalize_config(nixos_dir: str) -> dict:
                 data["brick_blocks"] = extract_brick_blocks(nix_content)
             elif hash_status in ("modified", "no_hash") and \
                     get_panel_mode(nix_content) != "r":
-                existing_bricks = extract_brick_blocks(nix_content)
-                nix_without_bricks = strip_brick_blocks(nix_content)
-                recognized = importer.parse_config(nix_without_bricks)
-                data.update(recognized)
-                # One write, below, once the rest is known. A save_config()
-                # stood here and wrote the file without its unrecognised
-                # content first; anything going wrong in build_rest_brix then
-                # left that content off the disk for good (revision
-                # 2026-11-10, B39).
-                rest = importer.build_rest_brix(nix_without_bricks, recognized)
-                blocks = dict(existing_bricks)
-                if rest.strip():
-                    rest_blocks = brix_content_to_bricks(rest, section="HEAD", existing_blocks=blocks)
-                    blocks.update(rest_blocks)
-                data["_flake_mode"] = flake_mode(nixos_dir)
-                data["brick_blocks"] = _merge_notes(
-                    blocks, importer.collect_notes(nix_content),
-                    render=lambda b: generator.generate_configuration_nix(
-                        {**data, "brick_blocks": b}))
-                atomic.write_text(
-                    cfg_nix,
-                    generator.generate_configuration_nix(data)
-                )
+                # Read as it would be restructured, but not written: the
+                # user decides first (restructure_file, Fall A 2026-11-18).
+                # Until then this rewrote the file on every GET, silently.
+                _restructure_co(nixos_dir, nix_content, data)
             else:
                 data["brick_blocks"] = extract_brick_blocks(nix_content)
         except OSError:
@@ -1133,17 +1242,8 @@ def load_and_normalize_config(nixos_dir: str) -> dict:
             # in configuration.nix, so there is nothing to persist - and the
             # call created a configuration.nix from defaults next to a flake
             # that has none (revision 2026-11-10, B39).
-            if flake_is_managed(flake_content) and \
-                    "# Generated by NiCo" not in flake_content and \
-                    get_panel_mode(flake_content) != "r":
-                flake_brix = importer.build_flake_brix(flake_content)
-                flake_brix = importer.ensure_flake_host_bricks(flake_content, flake_brix)
-                data["flake_brick_blocks"] = flake_brix
-                atomic.write_text(
-                    flake_nix_path,
-                    generator.generate_flake_nix(data, nixos_dir=nixos_dir)
-                )
-                flake_content = flake_nix_path.read_text(encoding="utf-8")
+            # Not rewritten here any more either (Fall A, 2026-11-18): an
+            # externally changed flake.nix waits for the user's answer.
             flake_brix = extract_brick_blocks(flake_content)
             data["flake_brick_blocks"] = importer.ensure_flake_host_bricks(flake_content, flake_brix)
         except OSError:
@@ -1162,13 +1262,6 @@ def load_and_normalize_config(nixos_dir: str) -> dict:
         except OSError:
             pass
 
-    modified = []
-    for fname in ("configuration.nix", "flake.nix"):
-        p = Path(nixos_dir) / fname
-        if p.exists():
-            if generator.check_version_hash(p.read_text(encoding="utf-8")) == "modified":
-                modified.append(fname)
-    data["_modified_files"] = modified
     data["_unmappable"] = unmappable_files(nixos_dir)
     return data
 
