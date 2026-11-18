@@ -1882,8 +1882,14 @@ def backup_to_zip(nixos_dir: str | Path) -> str:
     root = Path(nixos_dir)
     ts = _dt.now().strftime("%Y-%m-%d-%H%M%S")
     zip_name = f"nixos-config-{ts}.zip"
+    # Second resolution: a second backup in the same second replaced the
+    # first (revision 2026-11-18, finding 7).
+    n = 2
+    while (root / zip_name).exists():
+        zip_name = f"nixos-config-{ts}-{n}.zip"
+        n += 1
     zip_path = root / zip_name
-    with _zipfile.ZipFile(zip_path, "w", _zipfile.ZIP_DEFLATED) as zf:
+    with _zipfile.ZipFile(zip_path, "x", _zipfile.ZIP_DEFLATED) as zf:
         for f in sorted(root.rglob("*")):
             if not f.is_file():
                 continue

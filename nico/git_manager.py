@@ -1335,14 +1335,22 @@ def rollback(nixos_dir: str, commit_hash: str) -> tuple[bool, str]:
 
     # Tracked files that were added after the target commit must be removed,
     # otherwise the working tree is a mix of both states.
+    # A failure here is the same mixed state as a failed checkout and is
+    # reported the same way; it used to be ignored and committed as a
+    # successful restore (revision 2026-11-18, finding 24).
     removed = []
     rc_cur, current = _run_paths(["ls-files"], cwd=nixos_dir)
-    if rc_cur == 0:
-        for fname in current:
-            if fname and fname not in target_files:
-                rc_rm, _ = _run(["rm", "-f", "--", fname], cwd=nixos_dir)
-                if rc_rm == 0:
-                    removed.append(fname)
+    if rc_cur != 0:
+        return False, _err(ERR_GIT_FAILED_OUT, "git ls-files", "")
+    for fname in current:
+        if fname and fname not in target_files:
+            rc_rm, _ = _run(["rm", "-f", "--", fname], cwd=nixos_dir)
+            if rc_rm == 0:
+                removed.append(fname)
+            else:
+                failed.append(fname)
+    if failed:
+        return False, _err(ERR_PARTIALLY_RESTORED, ", ".join(sorted(failed)[:10]))
 
     short = commit_hash[:7]
     parts = [f"{len(restored)} file(s)"]

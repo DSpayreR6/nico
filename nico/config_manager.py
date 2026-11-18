@@ -512,12 +512,20 @@ class NotMappableError(Exception):
 
 def _refuse_unmappable(nix_file: Path, rel_path: str) -> None:
     from . import importer as _imp
-    try:
-        if nix_file.is_file() and _imp.config_unmappable(
-                nix_file.read_text(encoding="utf-8")):
-            raise NotMappableError(rel_path)
-    except OSError:
-        pass
+    # A read error propagates: going on as if the file were mappable (or
+    # empty) replaced it, bricks and all (revision 2026-11-18, finding 31).
+    if nix_file.is_file() and _imp.config_unmappable(
+            nix_file.read_text(encoding="utf-8")):
+        raise NotMappableError(rel_path)
+
+
+def _read_disk(nix_file: Path) -> str:
+    """The file as it is, '' only when it does not exist. A read error is
+    raised, never read as '' – that wrote the file anew without its bricks
+    and everything outside them (revision 2026-11-18, finding 31)."""
+    if not nix_file.exists():
+        return ""
+    return nix_file.read_text(encoding="utf-8")
 
 
 def save_config(nixos_config_dir: str, data: dict) -> None:
@@ -537,12 +545,7 @@ def save_config(nixos_config_dir: str, data: dict) -> None:
     from .core import keep_unmodelled, file_in_raw_mode
     if file_in_raw_mode(nix_file):
         return
-    disk = ""
-    if nix_file.exists():
-        try:
-            disk = nix_file.read_text(encoding="utf-8")
-        except OSError:
-            pass
+    disk = _read_disk(nix_file)
     # Preserve brick_blocks from the existing file when not supplied
     if not data.get("brick_blocks") and disk:
         data["brick_blocks"] = extract_brick_blocks(disk)
@@ -552,10 +555,15 @@ def save_config(nixos_config_dir: str, data: dict) -> None:
         disk, data.get("brick_blocks"),
         render=lambda b: _gen.generate_configuration_nix({**data, "brick_blocks": b}))
 
-    atomic.write_text(
-        nix_file,
-        _gen.generate_configuration_nix(data)
-    )
+    # Same check as save_host_config: a form value next to a brick setting
+    # the same attribute gave a file Nix refuses, reported as success
+    # (revision 2026-11-18, finding 30).
+    from . import validator as _validator
+    content = _gen.generate_configuration_nix(data)
+    duplicates = _validator.duplicate_attrs_in(content)
+    if duplicates:
+        raise DuplicateAttrError(duplicates)
+    atomic.write_text(nix_file, content)
 
 
 # ── Multi-Host Support ────────────────────────────────────────────────────────
@@ -623,12 +631,7 @@ def save_host_config(nixos_dir: str, host_name: str, data: dict) -> None:
     from .core import keep_unmodelled, file_in_raw_mode
     if file_in_raw_mode(nix_file):
         return
-    disk = ""
-    if nix_file.exists():
-        try:
-            disk = nix_file.read_text(encoding="utf-8")
-        except OSError:
-            pass
+    disk = _read_disk(nix_file)
     if not data.get("brick_blocks") and disk:
         data["brick_blocks"] = extract_brick_blocks(disk)
     # Host files had no rescue at all: a statement outside any brick was

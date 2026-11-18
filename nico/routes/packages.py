@@ -78,7 +78,10 @@ def register(app, ctx):
         })
         data["packages"] = pkglist
         data[PKG_INACTIVE_KNOWN] = True
-        config_manager.save_config(nixos_dir, data)
+        try:
+            config_manager.save_config(nixos_dir, data)
+        except config_manager.DuplicateAttrError as exc:
+            return jsonify({"error": "ERR_DUPLICATE_ATTR", "duplicates": exc.names}), 409
         return jsonify({"success": True})
 
     @app.route("/api/packages/<path:attr>", methods=["DELETE"])
@@ -90,7 +93,10 @@ def register(app, ctx):
         data = config_manager.load_config(nixos_dir) or {}
         data["packages"] = [p for p in data.get("packages", []) if p["attr"] != attr]
         data[PKG_INACTIVE_KNOWN] = True
-        config_manager.save_config(nixos_dir, data)
+        try:
+            config_manager.save_config(nixos_dir, data)
+        except config_manager.DuplicateAttrError as exc:
+            return jsonify({"error": "ERR_DUPLICATE_ATTR", "duplicates": exc.names}), 409
         return jsonify({"success": True})
 
     # /api/packages/<attr>/toggle stood here, called by nothing. A package

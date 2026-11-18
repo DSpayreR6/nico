@@ -188,14 +188,6 @@ def register(app, ctx):
         current_hosts.append({"name": name})
         data["flake_hosts"] = current_hosts
 
-        try:
-            atomic.write_text(
-                flake_path,
-                generator.generate_flake_nix(data, nixos_dir=nixos_dir)
-            )
-        except OSError as exc:
-            return jsonify({"error": str(exc)}), 500
-
         # The generated host entry references ./<hosts_dir>/<name> and the
         # hardware config inside it. Nix resolves a directory through its
         # default.nix, so without this file the flake stops evaluating for the
@@ -208,11 +200,22 @@ def register(app, ctx):
         # build: the host body is generated once and never again, so the line
         # would never come back and the host would build without filesystems.
         host_default = Path(nixos_dir) / _hosts_dir_name(nixos_dir) / name / "default.nix"
+        # Written before the flake, and a failure stops here: it used to be
+        # swallowed, with success reported and a flake pointing at a host
+        # without default.nix (revision 2026-11-18, finding 22).
         if not host_default.exists():
             try:
                 config_manager.save_host_config(nixos_dir, name, {})
             except OSError:
-                pass
+                return jsonify({"error": "ERR_FILE_WRITE"}), 500
+
+        try:
+            atomic.write_text(
+                flake_path,
+                generator.generate_flake_nix(data, nixos_dir=nixos_dir)
+            )
+        except OSError as exc:
+            return jsonify({"error": str(exc)}), 500
 
         git_manager.auto_commit(nixos_dir)
         return jsonify({"success": True, "hosts": current_hosts})

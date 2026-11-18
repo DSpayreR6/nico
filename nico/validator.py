@@ -1958,6 +1958,10 @@ def _state_version_sites(nixos_dir: str, host: str | None,
         if in_hm != home_manager:
             continue
         for i, line in enumerate(content.split("\n"), 1):
+            # A commented-out definition (or a deactivated brick) is not one
+            # (revision 2026-11-18, finding 20).
+            if line.lstrip().startswith("#"):
+                continue
             m = pattern.search(line)
             if m:
                 prio = (m.group(1) or "").split()[0] if m.group(1) else ""
@@ -2997,17 +3001,20 @@ def host_fingerprint(nixos_dir: str, host: str | None) -> str:
     from . import config_manager
 
     base = Path(nixos_dir)
+    settings  = config_manager.load_config_settings(nixos_dir)
+    hosts_dir = settings.get("hosts_dir") or "hosts"
+    # Every .nix file except those of other hosts: a shared module in
+    # modules/ changed the build but not the fingerprint, so a stored check
+    # looked current (revision 2026-11-18, finding 21). Hidden paths (.git)
+    # are no part of a build.
     files: list[Path] = []
-    for name in ("configuration.nix", "flake.nix", "hardware-configuration.nix"):
-        f = base / name
-        if f.is_file():
-            files.append(f)
-    if host:
-        settings  = config_manager.load_config_settings(nixos_dir)
-        hosts_dir = settings.get("hosts_dir") or "hosts"
-        host_root = base / hosts_dir / host
-        if host_root.is_dir():
-            files.extend(sorted(p for p in host_root.rglob("*.nix") if p.is_file()))
+    for p in base.rglob("*.nix"):
+        rel = p.relative_to(base).parts
+        if not p.is_file() or any(part.startswith(".") for part in rel):
+            continue
+        if len(rel) >= 3 and rel[0] == hosts_dir and rel[1] != host:
+            continue
+        files.append(p)
     digest = hashlib.sha256()
     for f in sorted(set(files)):
         try:

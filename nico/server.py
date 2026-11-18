@@ -178,9 +178,11 @@ def create_app() -> Flask:
             data["hardware_config"] = True
         try:
             config_manager.save_config(nixos_dir, data)
-        except config_manager.NotMappableError:
+        except (config_manager.NotMappableError, config_manager.DuplicateAttrError):
             # The imported configuration.nix has a form NiCo cannot write
-            # back. It is already in place, exactly as it came, and stays so.
+            # back, or NiCo's version would define an attribute twice. It is
+            # already in place, exactly as it came, and stays so; opening it
+            # asks before restructuring (Fall A).
             pass
         return data
 
@@ -304,6 +306,11 @@ def create_app() -> Flask:
     def _format_guard():
         if request.method not in ("POST", "PUT", "DELETE"):
             return None
+        # The override belongs to one config directory. Checked before it:
+        # after a switch it outlived the directory it was given for, because
+        # only _format_too_new() resets it (revision 2026-11-18, finding 8).
+        if _nixos_dir() != _format_state["dir"]:
+            _format_state.update(dir=_nixos_dir(), at=0.0, too_new=[], override=False)
         if request.path in _FORMAT_GUARD_EXEMPT or _format_state["override"]:
             return None
         if not request.path.startswith("/api/"):

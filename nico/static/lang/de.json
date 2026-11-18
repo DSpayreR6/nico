@@ -217,6 +217,7 @@
   "brix.insertInfo":     "Nix-Brix sind manuelle Nix-Abschnitte die NiCo <strong>nie verändert</strong>. NiCo weist automatisch eine eindeutige ID zu.",
   "brix.nameLabel":      "Bezeichnung",
   "brix.namePlaceholder": "z.B. syncthing",
+  "brix.sectionLabel": "Bereich",
   "brix.lineLabel":      "Nach Zeile",
   "brix.lineHint":       "(optional, derzeit wird am Ende eingefügt)",
   "brix.linePlaceholder": "z.B. 42",
@@ -290,6 +291,7 @@
   "brix.editSaved":      "Nix-Brick gespeichert.",
 
   "write.title":          "Konfiguration schreiben",
+  "write.confirm": "Speichern",
   "write.info":           "NiCo schreibt die aktuelle Konfiguration in dein NixOS-Verzeichnis und legt dabei einen <strong>Sicherungspunkt</strong> an – wie eine Zeitmaschine für deine Config.<br><br>Im Admin-Bereich kannst du jederzeit zu einem früheren Sicherungspunkt zurückkehren, falls etwas nicht stimmt.",
   "write.regenNote":      "Die formular-verwaltete Datei wird dabei komplett neu erzeugt. Eigene Kommentare außerhalb von Nix-Brix sammelt NiCo im Nix-Brick „imported-notes“, mit dem Ort, an dem sie standen. Leerzeilen und eigene Formatierung bleiben nicht erhalten – unverändert bleibt nur Inhalt innerhalb eines Nix-Bricks.",
   "write.labelLabel":     "Bezeichnung des Sicherungspunkts",
@@ -1044,6 +1046,9 @@
   "hm.sharedModules":         "Shared Modules",
   "hm.sharedModulesExtra":    "Weitere Module (eine pro Zeile)",
   "hm.createFile":            "Neue HM-Datei erstellen",
+  "hm.errorCreate": "Die HM-Datei konnte nicht angelegt werden.",
+  "hm.errorFileExists": "Diese HM-Datei gibt es schon.",
+  "hm.promptUsername": "Benutzername (z. B. martin):",
   "hm.noFiles":               "Keine HM-Dateien vorhanden.",
 
   "outside.title": "Datei außerhalb von NiCo geändert",

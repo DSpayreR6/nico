@@ -311,7 +311,9 @@ def hm_patch_str(content: str, key: str, value: str) -> str:
     # Lambda replacement: value must not be interpreted as re.sub template
     # (backslashes/\g would break); nix_esc keeps the .nix string valid.
     quoted = f'"{generator.nix_esc(value)}"'
-    return re.sub(rf'({ek}\s*=\s*)"[^"]*"', lambda m: m.group(1) + quoted, content)
+    # The old value may contain an escaped quote: `"[^"]*"` stopped there and
+    # left the rest behind the new string (revision 2026-11-18, finding 19).
+    return re.sub(rf'({ek}\s*=\s*)"(?:[^"\\]|\\.)*"', lambda m: m.group(1) + quoted, content)
 
 
 def hm_patch_bool(content: str, key: str, value: bool) -> str:

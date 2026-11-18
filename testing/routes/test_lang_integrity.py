@@ -51,6 +51,24 @@ for code, d in sorted(data.items()):
     check(f"{code}: keine __TODO__-Reste", not todo, todo[:3])
     check(f"{code}: Platzhalter wie in de", not ph, ph[:3])
 
+print("\n1b. Schlüssel aus JS und Templates gibt es in de.json")
+# t() returns the key itself when it is missing, so a `t('x') || 'Text'`
+# fallback never fires and the interface shows "x". Found by the revision
+# 2026-11-18 (findings 10 and 27): five keys, two of them in index.html.
+# Only literal keys: `t('a.' + b)` and template literals are built at run
+# time and cannot be checked here.
+used = {}
+for f in sorted((ROOT / "nico" / "static" / "js").glob("*.js")):
+    for m in re.finditer(r"""\b(?:t|tOr)\(\s*['"]([A-Za-z0-9_.\-]+)['"]\s*[,)]""",
+                         f.read_text(encoding="utf-8")):
+        used.setdefault(m.group(1), f.name)
+for f in sorted((ROOT / "nico" / "templates").glob("*.html")):
+    for m in re.finditer(r'data-i18n(?:-html|-placeholder|-title|-label)?="([^"{}$]+)"',
+                         f.read_text(encoding="utf-8")):
+        used.setdefault(m.group(1), f.name)
+unknown = sorted(f"{k} ({used[k]})" for k in used if k not in de)
+check(f"{len(used)} verwendete Schlüssel stehen in de.json", not unknown, unknown[:5])
+
 print("\n2. Platzhalter gegen die Parameter im Validator")
 tree = ast.parse((ROOT / "nico" / "validator.py").read_text(encoding="utf-8"))
 sites = 0

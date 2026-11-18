@@ -91,7 +91,10 @@ def register(app, ctx):
 
         incoming.pop("_co_path", None)
         incoming.pop("_co_ready", None)
-        config_manager.save_config(nixos_dir, incoming)
+        try:
+            config_manager.save_config(nixos_dir, incoming)
+        except config_manager.DuplicateAttrError as exc:
+            return jsonify({"error": "ERR_DUPLICATE_ATTR", "duplicates": exc.names}), 409
         return jsonify({"success": True})
 
     @app.route("/api/state-version/hosts", methods=["GET"])
