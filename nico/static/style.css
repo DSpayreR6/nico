@@ -3325,6 +3325,8 @@ button:disabled {
   transition: background 0.15s, color 0.15s;
   flex-shrink: 0;
 }
+/* The wrench matches eye and floppy beside it (Martin, 2026-11-18). */
+#tools-btn { font-size: 18px; }
 .tab-action-btn:hover {
   background: var(--surface1, #45475a);
   color: var(--text, #cdd6f4);
@@ -3614,7 +3616,7 @@ button:disabled {
 .preview-mode-btn {
   background: transparent;
   border: none;
-  font-size: 14px;
+  font-size: 18px;
   width: 32px;
   height: 32px;
   padding: 0;
