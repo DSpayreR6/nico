@@ -1007,10 +1007,11 @@ def _extract_fields(kv: 'dict[str, str]', clean: str) -> 'tuple[dict, set[str]]'
             if v: r['user_shell'] = _SHELLS.get(v, 'bash')
             if r.get('user_shell') in ('zsh', 'fish'):
                 _mark(f"programs.{r['user_shell']}.enable")
+            # Exactly what is there: an empty list or none at all is no
+            # group. The defaults (wheel!) used to fill both cases in – an
+            # import made users admins (revision 2026-11-18, finding 14).
             m = re.search(r'extraGroups\s*=\s*\[([^\]]*)\]', inner)
-            if m:
-                groups = re.findall(r'"([^"\\$]+)"', m.group(1))
-                if groups: r['user_groups'] = groups
+            r['user_groups'] = re.findall(r'"([^"\\$]+)"', m.group(1)) if m else []
             if rest_nix: r['user_extra_nix'] = rest_nix
         else:
             eu: dict = {'username': uname}
@@ -1023,9 +1024,7 @@ def _extract_fields(kv: 'dict[str, str]', clean: str) -> 'tuple[dict, set[str]]'
             v = _ue(r'\bshell\s*=\s*(pkgs\.\w+)')
             if v: eu['shell'] = _SHELLS.get(v, 'bash')
             m = re.search(r'extraGroups\s*=\s*\[([^\]]*)\]', inner)
-            if m:
-                groups = re.findall(r'"([^"\\$]+)"', m.group(1))
-                if groups: eu['groups'] = groups
+            eu['groups'] = re.findall(r'"([^"\\$]+)"', m.group(1)) if m else []
             if rest_nix: eu['extra_nix'] = rest_nix
             extra_users.append(eu)
 

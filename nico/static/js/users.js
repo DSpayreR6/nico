@@ -3,7 +3,9 @@
 
 // ── Benutzer (einheitliche Karten) ────────────────────────────────────────
 
-const DEFAULT_EXTRA_USER_GROUPS = ['wheel', 'networkmanager'];
+// wheel (admin rights) is never preset: it has to be entered (Martin,
+// 2026-11-18, revision finding 14). The Validator reports a config without one.
+const DEFAULT_EXTRA_USER_GROUPS = ['networkmanager'];
 
 function _userCard(idx, user, isOnly) {
   const uname  = escHtml(user.username      || '');
@@ -149,7 +151,8 @@ function getAllUsers() {
       description:      card.querySelector(`.eu-description[data-eu-idx="${idx}"]`)?.value?.trim() || '',
       initial_password: hasPw ? (card.querySelector(`.eu-password[data-eu-idx="${idx}"]`)?.value || '') : '',
       uid:              card.querySelector(`.eu-uid[data-eu-idx="${idx}"]`)?.value?.trim()        || '',
-      groups:           groupsRaw ? groupsRaw.split(/\s+/) : DEFAULT_EXTRA_USER_GROUPS,
+      // An emptied field means no groups, not the preset.
+      groups:           groupsRaw ? groupsRaw.split(/\s+/) : [],
       shell:            card.querySelector(`.eu-shell[data-eu-idx="${idx}"]`)?.value              || 'bash',
       extra_nix:        card.querySelector(`.eu-extra-nix[data-eu-idx="${idx}"]`)?.value?.trim()  || '',
     };

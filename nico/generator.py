@@ -399,7 +399,10 @@ def _user_block_lines(name: str, description: str, uid: str, password: str,
         lines += [f"    uid = {uid};"]
     if password:
         lines += [f'    initialPassword = "{nix_esc(password)}";']
-    lines += [f"    extraGroups = [ {groups_str} ];"]
+    # No groups: no line – the NixOS default is the empty list, and the
+    # importer reads a missing line as exactly that.
+    if groups:
+        lines += [f"    extraGroups = [ {groups_str} ];"]
     if shell != "bash":
         shell_pkg = _SHELL_PKGS.get(shell, shell)
         lines += [f"    shell = pkgs.{shell_pkg};"]
@@ -412,9 +415,12 @@ def _sec_users(data: dict, brix: dict) -> "list[str]":
     username = data.get("username", "")
     if not username:
         return [_section("USER")] if _has_section_brix(brix, "USER") else []
-    user_groups_list  = data.get("user_groups", ["wheel", "networkmanager"])
+    # No group is ever added here: an empty selection stays empty. `or
+    # ["wheel"]` made every user without groups an admin (revision
+    # 2026-11-18, finding 14); the Validator reports a config without one.
+    user_groups_list  = data.get("user_groups", ["networkmanager"])
     user_groups_extra = [g for g in (data.get("user_groups_extra") or "").split() if g]
-    user_all_groups   = sorted(set(user_groups_list + user_groups_extra)) or ["wheel"]
+    user_all_groups   = sorted(set(user_groups_list + user_groups_extra))
     lines = [_section("USER")]
     lines += _user_block_lines(
         username,
@@ -447,7 +453,7 @@ def _sec_extra_users(data: dict) -> "list[str]":
             (eu.get("description") or "").strip(),
             str(eu.get("uid") or "").strip(),
             (eu.get("initial_password") or "").strip(),
-            eu.get("groups") or ["wheel", "networkmanager"],
+            eu.get("groups") or [],
             (eu.get("shell") or "bash").strip(),
             (eu.get("extra_nix") or "").strip(),
         )

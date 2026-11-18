@@ -198,7 +198,9 @@ DEFAULT_NIXOS_CONFIG = {
     "user_description":      "",
     "user_initial_password": "",
     "user_uid":              "",
-    "user_groups":           ["wheel", "networkmanager"],
+    # wheel is never preset – it has to be chosen (revision 2026-11-18,
+    # finding 14); the Validator reports a config without any admin.
+    "user_groups":           ["networkmanager"],
     "user_groups_extra":     "",
     "user_shell":            "bash",
     "user_extra_nix":        "",

@@ -95,6 +95,11 @@ ALL_RULES: list[Rule] = [
          "Prüft ob jeder Benutzer, den der Rebuild neu anlegt, ein Passwort oder einen "
          "SSH-Schlüssel hat – ohne beides legt NixOS das Konto gesperrt an.",
          "error", host_local=True),
+    Rule("no_admin_user",
+         "Admin vorhanden",
+         "Prüft ob mindestens ein Benutzer in der Gruppe wheel ist – ohne sie darf "
+         "niemand sudo benutzen.",
+         "error"),
     Rule("user_uid_duplicate",
          "uid doppelt vergeben",
          "Meldet dieselbe uid bei mehreren Benutzern in der Config.",
@@ -781,6 +786,7 @@ _RE_USER_LOGIN = re.compile(
 _RE_USER_SSH_KEY = re.compile(r'authorizedKeys\s*\.\s*key(?:s|Files)\s*=\s*\[[^\]]*"')
 _RE_USER_UID = re.compile(r'\buid\s*=\s*(\d+)')
 _RE_USER_SYSTEM = re.compile(r'\bisSystemUser\s*=\s*true')
+_RE_USER_WHEEL = re.compile(r'\bextraGroups\s*=\s*\[[^\]]*"wheel"')
 _RE_MUTABLE_USERS_OFF = re.compile(r'users\s*\.\s*mutableUsers\s*=\s*false')
 
 
@@ -829,6 +835,8 @@ def _scan_user_text(entry: dict, text: str) -> None:
     m = _RE_USER_UID.search(text)
     if m and entry["uid"] is None:
         entry["uid"] = int(m.group(1))
+    if _RE_USER_WHEEL.search(text):
+        entry["is_admin"] = True
 
 
 def _attr_line(content: str, name: str, kind: str = "users") -> int:
@@ -931,6 +939,7 @@ def _declared_users(nixos_dir: str, host: str | None = None,
                 continue
             entry = users.setdefault(name, {
                 "uid": None, "has_login": False, "is_system": False,
+                "is_admin": False,
                 "file": rel, "line": _attr_line(content, name),
             })
             if len(parts) == 3:
@@ -1136,6 +1145,42 @@ def _rule_user_no_password(nixos_dir: str, config: dict, is_flake: bool,
             detail_key=detail_key, detail_params=[name],
         ))
     return findings
+
+
+_RE_WHEEL_MEMBERS = re.compile(r'\[\s*"[^"]+"')
+
+
+def _rule_no_admin_user(nixos_dir: str, config: dict, is_flake: bool,
+                        host: str | None = None) -> list[Finding]:
+    """Report a config in which no user is in the group wheel.
+
+    NiCo used to hand out wheel itself – on import even to users that had an
+    empty group list or none at all (revision 2026-11-18, finding 14). Now it
+    never does, so a config without any admin is possible, and this says so
+    before the rebuild. Red, so the Validator gate stops; but it can be
+    forced: a server run as root or own sudo rules are legitimate (Martin,
+    2026-11-18).
+
+    Both ways to be in wheel count: extraGroups of a user, and
+    users.groups.wheel.members. Bricks and modules are read like the rest.
+    """
+    users = _declared_users(nixos_dir, host)
+    normal = {n: u for n, u in users.items() if not u["is_system"]}
+    if not normal or any(u["is_admin"] for u in normal.values()):
+        return []
+    for _nix_file, _rel, content in _scoped_nix_files(nixos_dir, host):
+        members = _file_bindings(content).get("users.groups.wheel.members")
+        if members and _RE_WHEEL_MEMBERS.search(members):
+            return []
+    return [Finding(
+        rule_id="no_admin_user",
+        severity="error",
+        message="Kein Benutzer hat Admin-Rechte (Gruppe wheel).",
+        message_key="validator.f.no_admin_user",
+        params=[],
+        detail="Ohne die Gruppe wheel darf niemand sudo benutzen.",
+        detail_key="validator.d.no_admin_user", detail_params=[],
+    )]
 
 
 def _rule_user_uid_duplicate(nixos_dir: str, config: dict, is_flake: bool,
@@ -3483,6 +3528,7 @@ _RULE_FNS: dict[str, object] = {
     "user_name_valid":       _rule_user_name_valid,
     "user_extra_conflict":   _rule_user_extra_conflict,
     "user_no_password":      _rule_user_no_password,
+    "no_admin_user":         _rule_no_admin_user,
     "user_uid_duplicate":    _rule_user_uid_duplicate,
     "user_uid_system":       _rule_user_uid_system,
     "group_gid_duplicate":   _rule_group_gid_duplicate,
