@@ -22,6 +22,7 @@
 - A stored host check now goes stale when a shared module changes, not only files of the host itself
 - Two ZIP backups in the same second no longer overwrite each other
 - Importing a config no longer makes users admins: an empty `extraGroups` list, or none at all, came back as `networkmanager` and `wheel`, and an empty selection in the form was written as `wheel`. NiCo never adds `wheel` by itself now, and new users in the form start without it; a new red Validator finding stops the rebuild when no user is in `wheel` (it can be forced, e.g. for a server run as root)
+- Importing a config no longer turns on auto-login when `autoLogin.enable = false` stands next to a user name; such lines stay as they are, as a Nix-Brick
 
 ## 0.19.0 (2026-11-18)
 

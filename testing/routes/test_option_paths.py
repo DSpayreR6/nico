@@ -44,6 +44,9 @@ LEGACY_READ_ONLY = {
     # plasma5 stood here until revision 2026-11-10 (B35): read, consumed and
     # never written – the desktop was gone after the import. It is no longer
     # read and stays a Nix-Brick (test_rev1110_import_values.py).
+    # Parent path only to look up `enable` in block form (revision
+    # 2026-11-18, finding 15: an explicit false keeps auto-login off).
+    "services.xserver.displayManager.autoLogin",
     "services.xserver.displayManager.autoLogin.enable",
     "services.xserver.displayManager.autoLogin.user",
     "services.xserver.displayManager.gdm.enable",

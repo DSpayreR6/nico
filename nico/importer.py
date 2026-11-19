@@ -747,8 +747,20 @@ def _extract_fields(kv: 'dict[str, str]', clean: str) -> 'tuple[dict, set[str]]'
         _mark('services.pulseaudio.enable')
         _mark('security.rtkit.enable')
 
+    # The form only knows a user name, and a name means "on". An explicit
+    # `enable = false` (or an expression) on either path is therefore not
+    # taken in: nothing is read or marked, the lines stay as a Nix-Brick.
+    # Missing `enable` is fine – NixOS then enables it when a user is set.
+    _al_off = False
+    for _al in ('services.displayManager.autoLogin',
+                'services.xserver.displayManager.autoLogin'):
+        _al_en = _vt(_al + '.enable')
+        if _al_en is not None and _np.extract_bool(_al_en) is not True:
+            _al_off = True
     vt = _vt('services.displayManager.autoLogin')
-    if vt:
+    if _al_off:
+        pass
+    elif vt:
         inner = _np.extract_inner_block(vt) or ''
         m = re.search(r'user\s*=\s*"([^"]*)"', inner)
         if m:
