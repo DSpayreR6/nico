@@ -272,6 +272,14 @@ check("keine Meldung „kein Passwort“", not [f for f in found if f.params and
 found = validator._rule_no_admin_user(str(cfg), {}, False)
 check("wheel aus dem Brick zählt", not found, [f.params for f in found])
 
+print("\n15. Text nach der letzten Klammer: Punkt wie Buchstabe (VM-Test)")
+body = mod('  networking.hostName = "box";\n')
+check("Punkt nach }: nicht abbildbar", importer.config_unmappable(body.rstrip() + "\n.\n"))
+check("Buchstabe nach }: nicht abbildbar", importer.config_unmappable(body.rstrip() + "\nx\n"))
+check("Punkt vor }: weiter abbildbar (Fall A, Umbauen lässt ihn weg)",
+      not importer.config_unmappable(body.rstrip()[:-1] + ".\n}\n"))
+check("Kommentar nach }: abbildbar", not importer.config_unmappable(body.rstrip() + "\n# ende\n"))
+
 print()
 if fails:
     print(f"{len(fails)} FEHLER:", *fails, sep="\n  ")

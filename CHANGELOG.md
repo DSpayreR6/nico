@@ -15,6 +15,7 @@
 - Overwriting or restructuring a file changed outside NiCo goes ahead only when its previous state is really secured – the checkpoint is checked against the file, an ignored or never committed file goes into a ZIP, and without git a ZIP is made at all
 - After a ZIP import, foreign host and Home Manager files are no longer marked as written by NiCo; opening them asks before the panel takes them over
 - The Validator no longer reports a missing password for a user whose settings stand partly in a Nix-Brick
+- Text after the last closing brace of a file – also a single dot – now makes it a raw-only file, as a letter there already did, instead of offering a restructure that could not be done
 - Saving the rest of the config no longer rewrites a flake.nix that was changed outside NiCo; it stays as it is, and opening it asks
 - An imported flake.nix is left as it is when NiCo would write it differently (e.g. a home-manager URL without branch)
 - Restructuring a host file no longer drops settings of partly understood blocks (`networking.useDHCP`, static addresses)

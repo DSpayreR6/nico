@@ -181,7 +181,12 @@ def config_unmappable(content: str) -> bool:
     shape = _np.body_shape(content)
     if shape is None:
         return not _rx_plain_body(content)
-    return shape != 'plain'
+    # tree-sitter calls `{ … }.` plain – a stray dot after the last brace is
+    # an error node it reads past – while `{ … }x` is not. Both are text
+    # after the attribute set; the regex check sees it and the two now behave
+    # alike: raw mode with a notice, no Fall A offering a restructure that
+    # the Gegenprobe must refuse (VM test 2026-11-19).
+    return shape != 'plain' or not _rx_plain_body(content)
 
 
 def _split_top_level_stmts(content: str) -> list[str]:
