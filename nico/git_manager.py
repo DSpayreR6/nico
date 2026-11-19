@@ -460,6 +460,55 @@ def auto_commit(nixos_dir: str, label: str = "") -> tuple[bool, str, list[str]]:
     return True, msg, skipped
 
 
+class BackupError(Exception):
+    """The state before a write could not be secured; nothing may be written."""
+
+
+def _head_bytes(nixos_dir: str, rel: str) -> "bytes | None":
+    """The file as the last commit holds it, byte for byte; None if absent."""
+    try:
+        r = subprocess.run(["git"] + _PATHS_VERBATIM + ["show", f"HEAD:./{rel}"],
+                           cwd=nixos_dir, capture_output=True, timeout=10, env=_BASE_ENV)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    return r.stdout if r.returncode == 0 else None
+
+
+def backup_before_write(nixos_dir: str, rels: list[str], label: str) -> "tuple[str, str]":
+    """Secure the current state of `rels` before NiCo overwrites them.
+
+    Returns ("git", message) when the last commit holds every file exactly as
+    it is on disk, ("zip", file name) otherwise. Raises BackupError when
+    neither can be made – the caller must then not write.
+
+    A successful auto_commit alone proved nothing: "nothing to commit" is a
+    success too, and a file git ignores, has never seen or leaves out for
+    its size is in no commit at all (revision 2026-11-18, finding 2). So the
+    commit is checked against the disk, and a ZIP – which takes every
+    visible file – covers what git did not. A commit that fails outright
+    (broken repository, locked index) stops here: the user expects a
+    checkpoint, and a silent ZIP instead would hide that git is not working.
+    """
+    from . import importer
+    root = Path(nixos_dir)
+    if is_git_repo(nixos_dir):
+        ok, msg, _skipped = auto_commit(nixos_dir, label=label)
+        if not ok:
+            raise BackupError(msg)
+        held = True
+        for rel in rels:
+            path = root / rel
+            if path.is_file() and _head_bytes(nixos_dir, rel) != path.read_bytes():
+                held = False
+                break
+        if held:
+            return "git", msg
+    try:
+        return "zip", importer.backup_to_zip(nixos_dir)
+    except OSError as exc:
+        raise BackupError(str(exc)) from exc
+
+
 def _append_gitignore_entries(nixos_dir: str, entries: list[str]) -> None:
     """Append entries to .gitignore (created if missing), skipping duplicates."""
     path = Path(nixos_dir) / ".gitignore"

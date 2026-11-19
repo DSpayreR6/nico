@@ -479,21 +479,17 @@ def register(app, ctx):
         _target, _content, changes = found
         if not changes:
             return jsonify({"success": True, "backup": None})
-        backup, zip_name = None, None
-        if git_manager.is_git_repo(nixos_dir):
-            ok, msg, _skipped = git_manager.auto_commit(
-                nixos_dir, label=f"NiCo: backup before restructuring {rel}")
-            if not ok:
-                # No checkpoint, no restructuring: the state from outside
-                # would be gone for good.
-                return jsonify({"error": "ERR_RESTRUCTURE_BACKUP", "detail": msg}), 500
-            backup = "git"
-        else:
-            try:
-                zip_name = importer.backup_to_zip(nixos_dir)
-            except OSError:
-                return jsonify({"error": "ERR_RESTRUCTURE_BACKUP"}), 500
-            backup = "zip"
+        # No backup, no restructuring: the state from outside would be gone
+        # for good. backup_before_write checks that the commit really holds
+        # the file and takes a ZIP when it does not – an ignored or never
+        # committed file was "secured" by an empty commit before (revision
+        # 2026-11-18, finding 2).
+        try:
+            backup, detail = git_manager.backup_before_write(
+                nixos_dir, [rel], label=f"NiCo: backup before restructuring {rel}")
+        except git_manager.BackupError as exc:
+            return jsonify({"error": "ERR_RESTRUCTURE_BACKUP", "detail": str(exc)}), 500
+        zip_name = detail if backup == "zip" else None
         try:
             _restructure_file(nixos_dir, rel)
         except config_manager.DuplicateAttrError as exc:
@@ -503,7 +499,7 @@ def register(app, ctx):
             return jsonify({"error": "ERR_NOT_MAPPABLE", "file": rel}), 400
         except Exception:
             return jsonify({"error": "ERR_RESTRUCTURE"}), 500
-        if backup == "git":
+        if git_manager.is_git_repo(nixos_dir):
             git_manager.auto_commit(nixos_dir)
         return jsonify({"success": True, "backup": backup, "zip": zip_name})
 

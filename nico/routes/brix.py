@@ -351,11 +351,13 @@ def register(app, ctx):
             return jsonify({"error": "ERR_NO_BRICK_NAME"}), 400
         from .. import config_manager, fidelity, git_manager
         from ..core import adopt_brick
-        if git_manager.is_git_repo(nixos_dir):
-            ok, msg, _skipped = git_manager.auto_commit(
-                nixos_dir, label=f"NiCo: backup before taking brick {name} into the panel")
-            if not ok:
-                return jsonify({"error": "ERR_RESTRUCTURE_BACKUP", "detail": msg}), 500
+        # Same backup as restructuring: the commit must really hold the file,
+        # otherwise a ZIP (revision 2026-11-18, finding 2).
+        try:
+            git_manager.backup_before_write(
+                nixos_dir, [fname], label=f"NiCo: backup before taking brick {name} into the panel")
+        except git_manager.BackupError as exc:
+            return jsonify({"error": "ERR_RESTRUCTURE_BACKUP", "detail": str(exc)}), 500
         try:
             adopt_brick(nixos_dir, fname, name)
         except fidelity.NotFaithful as exc:

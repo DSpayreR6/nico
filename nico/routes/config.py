@@ -44,10 +44,14 @@ def _outside_conflict(nixos_dir: str, rel: str, body: dict):
         return None
     if not overwrite:
         return jsonify({"error": "ERR_CHANGED_OUTSIDE", "file": rel}), 409
+    # The state from outside must be in a checkpoint or a ZIP before the
+    # form replaces it. The result was ignored before, and without git there
+    # was no backup at all (revision 2026-11-18, finding 2).
     try:
-        git_manager.auto_commit(nixos_dir, label=f"NiCo: backup before overwriting {rel}")
-    except Exception:
-        pass
+        git_manager.backup_before_write(
+            nixos_dir, [rel], label=f"NiCo: backup before overwriting {rel}")
+    except git_manager.BackupError as exc:
+        return jsonify({"error": "ERR_RESTRUCTURE_BACKUP", "detail": str(exc)}), 500
     return None
 
 
