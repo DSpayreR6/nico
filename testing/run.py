@@ -27,7 +27,7 @@ CONFIGS_DIR = Path(__file__).resolve().parent / "configs"
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from nico import config_manager, generator, hm_generator, importer  # noqa: E402
+from nico import config_manager, fidelity, generator, hm_generator, importer  # noqa: E402
 from nico.brix import brix_content_to_bricks, extract_brick_blocks, strip_brick_blocks  # noqa: E402
 from nico.core import _merge_notes, get_nico_type, keep_unmodelled  # noqa: E402
 
@@ -149,6 +149,15 @@ def _write_nico_roundtrip(config_dir: Path) -> None:
     if (config_dir / "hardware-configuration.nix").exists():
         data["hardware_config"] = True
 
+    if cfg_content is not None:
+        # The Gegenprobe of the import (server._apply_import_result, 2026-11-19).
+        # A file it cannot settle stays as it came, as in the product.
+        data["_flake_mode"] = flake_path.exists()
+        try:
+            data = fidelity.settle(cfg_content, data, generator.generate_configuration_nix)
+        except fidelity.NotFaithful:
+            keep_cfg = True
+
     if flake_path.exists():
         # As in the app since revision 2026-11-10 (B34): a flake.nix means
         # flake mode; the `flakes` field is only the experimental-features
@@ -172,6 +181,14 @@ def _write_nico_roundtrip(config_dir: Path) -> None:
             hm_blocks, importer.collect_notes(home_content, rest_comments=False),
             render=lambda b: hm_generator.generate_home_nix({**hm, "hm_brick_blocks": b}))
         hm["hm_brick_blocks"] = hm_blocks
+        # Gegenprobe as in core.normalize_hm_content (2026-11-19, phase 3).
+        try:
+            hm = fidelity.settle(home_content, hm, hm_generator.generate_home_nix,
+                                 bricks_key="hm_brick_blocks",
+                                 section=hm_generator.HM_SECTION_END)
+            hm_blocks = hm["hm_brick_blocks"]
+        except fidelity.NotFaithful:
+            keep_home = True
         data["home_manager"] = hm
         data["hm_brick_blocks"] = hm_blocks
 
@@ -187,10 +204,14 @@ def _write_nico_roundtrip(config_dir: Path) -> None:
         cfg_path.write_text(generator.generate_configuration_nix(data), encoding="utf-8")
 
     if flake_path.exists() and not keep_flake:
-        flake_path.write_text(
-            generator.generate_flake_nix(data, nixos_dir=str(config_dir)),
-            encoding="utf-8",
-        )
+        flake_text = generator.generate_flake_nix(data, nixos_dir=str(config_dir))
+        try:
+            # As core.reimport_flake (Gegenprobe, 2026-11-19): a flake NiCo
+            # would write differently stays as it came.
+            fidelity.require_faithful(flake_content, flake_text)
+            flake_path.write_text(flake_text, encoding="utf-8")
+        except fidelity.NotFaithful:
+            pass
 
     hm = dict(data.get("home_manager") or {})
     if (hm.get("enabled") or home_path.exists()) and not keep_home:
@@ -198,9 +219,41 @@ def _write_nico_roundtrip(config_dir: Path) -> None:
         home_path.write_text(hm_generator.generate_home_nix(hm), encoding="utf-8")
 
 
-def _compare_managed_fields(original: Path, result: Path, case: CaseResult) -> None:
+def _check_fidelity(original: Path, result: Path, case: CaseResult) -> bool:
+    """configuration.nix says after the roundtrip what it said before.
+
+    Full attribute path and value, through nico/fidelity.py – the same
+    comparison the import's Gegenprobe uses (2026-11-19). It replaces, for
+    this file, the comparison of form fields: a field the Gegenprobe left in
+    a Nix-Brick is not in the form any more and still not lost. Revision
+    2026-11-18, finding 29: last name segments and skipped empty values hid
+    a changed group list. Returns True when the file is faithful.
+    """
+    faithful = True
+    for name in ("configuration.nix", "home.nix", "flake.nix"):
+        before, after = original / name, result / name
+        if not (before.exists() and after.exists()):
+            continue
+        diff = fidelity.compare(_read_text(before), _read_text(after))
+        bad = sorted(fidelity.offending(diff)) + sorted(p for p, _ in diff.missing)
+        for path in bad[:12]:
+            case.fail(f"{name} says something else after roundtrip: {path}")
+        if bad and name == "configuration.nix":
+            faithful = False
+    return faithful
+
+
+def _compare_managed_fields(original: Path, result: Path, case: CaseResult,
+                            co_faithful: bool = False) -> None:
     expected = _flatten(_managed_fields_from_original(original))
     actual = _flatten(_managed_fields_from_original(result))
+    if co_faithful:
+        # The fidelity check has compared configuration.nix by path and
+        # value already; its fields may have moved into Nix-Bricks.
+        co = original / "configuration.nix"
+        co_keys = set(_flatten(importer.parse_config(strip_brick_blocks(_read_text(co))))) \
+            if co.exists() else set()
+        expected = {k: v for k, v in expected.items() if k not in co_keys}
 
     ignored = {"brick_blocks", "flake_brick_blocks", "hm_brick_blocks"}
     for key, expected_value in sorted(expected.items()):
@@ -559,7 +612,8 @@ def run_case(case_dir: Path, args: argparse.Namespace) -> CaseResult:
             shutil.rmtree(result)
         _copy_tree(work_dir, result)
 
-        _compare_managed_fields(original, result, case)
+        _compare_managed_fields(original, result, case,
+                                co_faithful=_check_fidelity(original, result, case))
         _check_unmanaged_preserved(original, result, case)
         _check_no_lost_attributes(original, result, case)
         _check_no_duplicate_attributes(result, case)

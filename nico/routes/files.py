@@ -29,7 +29,9 @@ from ..core import (
     panel_changes as _panel_changes,
     restructured_text as _restructured_text,
     restructure_file as _restructure_file,
+    restructure_unfaithful as _restructure_unfaithful,
 )
+from ..fidelity import NotFaithful
 
 
 def register(app, ctx):
@@ -455,6 +457,8 @@ def register(app, ctx):
         _target, content, _changes = found
         try:
             after = _restructured_text(nixos_dir, rel, content)
+        except NotFaithful:
+            return jsonify({"error": "ERR_NOT_MAPPABLE", "file": rel}), 400
         except Exception:
             return jsonify({"error": "ERR_RESTRUCTURE"}), 500
         return jsonify(outside.diff_texts(content, after, rel))
@@ -494,6 +498,9 @@ def register(app, ctx):
             _restructure_file(nixos_dir, rel)
         except config_manager.DuplicateAttrError as exc:
             return jsonify({"error": "ERR_DUPLICATE_ATTR", "duplicates": exc.names}), 409
+        except NotFaithful:
+            # The checkpoint above is harmless; the file stays as it is.
+            return jsonify({"error": "ERR_NOT_MAPPABLE", "file": rel}), 400
         except Exception:
             return jsonify({"error": "ERR_RESTRUCTURE"}), 500
         if backup == "git":
@@ -758,6 +765,10 @@ def register(app, ctx):
                 return jsonify({"error": "ERR_BRIX_INCOMPLETE"}), 400
             # … and that there is a panel this file fits into at all
             if mode == 'p' and _file_unmappable(nixos_dir, rel, base, _get_nico_type(base)):
+                return jsonify({"error": "ERR_NOT_MAPPABLE", "file": rel}), 400
+            # … and that the form can hold it without changing what it says
+            # (Gegenprobe, 2026-11-19)
+            if mode == 'p' and _restructure_unfaithful(nixos_dir, rel, base):
                 return jsonify({"error": "ERR_NOT_MAPPABLE", "file": rel}), 400
 
             updated = _set_panel_mode(base, mode)

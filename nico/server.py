@@ -15,7 +15,7 @@ from pathlib import Path
 
 from flask import Flask, jsonify, render_template, request
 
-from . import atomic, config_manager, generator, git_manager, importer, routes, validator
+from . import atomic, config_manager, fidelity, generator, git_manager, importer, routes, validator
 from .brix import brix_content_to_bricks
 from .core import reimport_flake as _reimport_flake_core
 from .core import validate_user_path as _validate_user_path
@@ -176,6 +176,15 @@ def create_app() -> Flask:
             importer.rescue_into_bricks(data, original_content)
         if (Path(nixos_dir) / "hardware-configuration.nix").exists():
             data["hardware_config"] = True
+        if original_content.strip():
+            # Gegenprobe (2026-11-19): what would change or add to the file is
+            # not taken into the form; its lines stay bricks. If that cannot
+            # be done, the file stays exactly as it came (like NotMappable).
+            try:
+                data = fidelity.settle(original_content, data,
+                                       generator.generate_configuration_nix)
+            except fidelity.NotFaithful:
+                return data
         try:
             config_manager.save_config(nixos_dir, data)
         except (config_manager.NotMappableError, config_manager.DuplicateAttrError):

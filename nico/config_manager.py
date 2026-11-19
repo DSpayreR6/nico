@@ -462,6 +462,14 @@ def load_config(nixos_config_dir: str) -> dict:
 
     nix_file = Path(nixos_config_dir) / "configuration.nix"
     if nix_file.exists():
+        # A switch the file does not mention is off. The form's presets are
+        # for a new config; read into an existing one they switched
+        # NetworkManager back on with every /api/write and package change
+        # after the user had turned it off (revision 2026-11-18, finding 18;
+        # NiCo creates nothing the user did not write, 2026-11-19).
+        for key, value in DEFAULT_NIXOS_CONFIG.items():
+            if value is True:
+                data[key] = False
         try:
             content = nix_file.read_text(encoding="utf-8")
             parsed  = _imp.parse_config(strip_brick_blocks(content))

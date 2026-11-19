@@ -2562,18 +2562,35 @@ def _rule_pkg_inactive_brick(nixos_dir: str, config: dict, is_flake: bool,
 
 def _rule_brix_redundant(nixos_dir: str, config: dict, is_flake: bool,
                          host: str | None = None) -> list[Finding]:
-    from . import importer as _imp
+    from . import importer as _imp, fidelity as _fid, generator as _gen
+    from . import config_manager as _cm
     from .brix import extract_brick_blocks
 
-    co = Path(nixos_dir) / "configuration.nix"
-    if not co.exists():
-        return []
+    # configuration.nix and every host default.nix, each with the writer the
+    # panel uses for it (Gegenprobe, 2026-11-19: hosts included).
+    targets = [(Path(nixos_dir) / "configuration.nix", _gen.generate_configuration_nix)]
+    hosts_dir = Path(nixos_dir) / ((_cm.load_config_settings(nixos_dir).get("hosts_dir")
+                                    or "hosts").strip() or "hosts")
+    if hosts_dir.is_dir():
+        for hd in sorted(hosts_dir.iterdir()):
+            if (hd / "default.nix").is_file():
+                hw = (hd / "hardware-configuration.nix").is_file()
+                targets.append((hd / "default.nix",
+                                lambda d, h=hd.name, hw=hw: _gen.generate_host_nix(d, h, hw)))
 
-    try:
-        content = co.read_text(encoding="utf-8")
-    except OSError:
-        return []
+    findings = []
+    for path, render in targets:
+        if not path.exists():
+            continue
+        try:
+            content = path.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        findings += _brix_redundant_in(content, render, _imp, _fid, extract_brick_blocks)
+    return findings
 
+
+def _brix_redundant_in(content, render, _imp, _fid, extract_brick_blocks) -> list[Finding]:
     findings = []
     blocks = extract_brick_blocks(content)
 
@@ -2591,8 +2608,9 @@ def _rule_brix_redundant(nixos_dir: str, config: dict, is_flake: bool,
             recognized = _imp.parse_config(wrapped)
             if not recognized:
                 continue
-            rest = _imp.build_rest_brix(wrapped, recognized)
-            if not rest.strip():
+            # Exactly what the panel would write – same values, nothing more,
+            # nothing less (fidelity.panel_writes_exactly).
+            if _fid.panel_writes_exactly(body, render):
                 hint = _section_hint(recognized)
                 findings.append(Finding(
                     rule_id="brix_redundant",
