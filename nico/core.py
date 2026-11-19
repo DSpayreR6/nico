@@ -1021,7 +1021,12 @@ def _merge_notes(blocks: dict, notes: list, render=None) -> dict:
     if not notes:
         return blocks
     if render is not None:
-        out = {l.strip() for l in render(blocks).splitlines()}
+        rendered = render(blocks).splitlines()
+        out = {l.strip() for l in rendered}
+        # A comment at the end of a line counts as carried along too: a
+        # group list that stays a Nix-Brick keeps `"audio" # why`, and the
+        # same text in imported-notes stood there twice (2026-11-19).
+        out |= {l[l.index("#"):].strip() for l in rendered if "#" in l}
         notes = [n for n in notes
                  if not all(("#" + l).strip() in out or ("# " + l).strip() in out
                             or not l.strip() for l in n.lines)]

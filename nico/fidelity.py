@@ -345,7 +345,7 @@ def _rescue_missing(original: str, data: dict, written: str,
     return names
 
 
-def _attach_hints(data: dict, hints: dict[str, str], new_bricks: list[str],
+def _attach_hints(data: dict, groups: 'list[tuple[set, dict]]', new_bricks: list[str],
                   bricks_key: str = 'brick_blocks') -> None:
     """Write what the panel would have added into the brick it belongs to.
 
@@ -354,11 +354,27 @@ def _attach_hints(data: dict, hints: dict[str, str], new_bricks: list[str],
     changes; uncommented, the brick is what the panel writes and the
     Validator says so (brix_redundant).
     """
-    if not hints:
-        return
     blocks = data.get(bricks_key) or {}
     by_brick: dict[str, list[str]] = {}
-    for path, value in sorted(hints.items()):
+    loose: dict[str, str] = {}
+    for own, hints in groups:
+        if not hints:
+            continue            # the field only differed, it added nothing
+        # The brick that took the field's own lines gets its suggestions:
+        # PipeWire's `security.rtkit` belongs to the PipeWire brick although
+        # the two paths share nothing.
+        home, overlap = None, 0
+        for name in new_bricks:
+            body = _brick_body(blocks[name]['text'])
+            n = len(own & set(leaves('{ ... }:\n{\n' + body + '\n}\n')))
+            if n > overlap:
+                home, overlap = name, n
+        if home:
+            by_brick.setdefault(home, []).extend(
+                f'# {p} = {v};' for p, v in sorted(hints.items()))
+        else:
+            loose.update(hints)
+    for path, value in sorted(loose.items()):
         # The brick sharing the most leading path segments, at least two
         # (`services.avahi`); a bare `services` says nothing about belonging.
         best, best_len = None, 1
@@ -396,7 +412,9 @@ def settle(original: str, data: dict, render, rounds: int = 40,
     Home Manager keeps its bricks under `hm_brick_blocks`, all in TAIL.
     """
     data = dict(data)
-    hints: dict[str, str] = {}
+    # Per withdrawn field: the file's paths it had written (its own lines,
+    # rescued later) and the paths it would have added (the suggestions).
+    groups: list[tuple[set, dict]] = []
     new_bricks: list[str] = []
     before = leaves(original)
     for _ in range(rounds):
@@ -416,8 +434,8 @@ def settle(original: str, data: dict, render, rounds: int = 40,
                         best, best_gone = key, gone
             if best is None:
                 raise NotFaithful(bad)
-            for path in best_gone - set(before):
-                hints[path] = now[path][0]
+            groups.append((best_gone & set(before),
+                           {p: now[p][0] for p in best_gone - set(before)}))
             data = _without(data, best)
             continue
         if diff.missing:
@@ -426,7 +444,7 @@ def settle(original: str, data: dict, render, rounds: int = 40,
                 raise NotFaithful(p for p, _ in diff.missing)
             new_bricks += names
             continue
-        _attach_hints(data, hints, new_bricks, bricks_key)
+        _attach_hints(data, groups, new_bricks, bricks_key)
         return data
     raise NotFaithful(offending(compare(original, render(data))) or {'?'})
 

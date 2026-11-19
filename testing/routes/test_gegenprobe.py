@@ -113,6 +113,23 @@ check("Vorschlagszeile im Brick", fidelity.HINT_LINE in out, out)
 check("nssmdns4 als auskommentierter Vorschlag", "# services.avahi.nssmdns4 = true;" in out, out)
 sound("Avahi", out)
 
+print("\n5b. Vorschläge gehören zum Brick des Feldes (PipeWire)")
+out = imported("  services.pipewire.enable = true;\n")
+check("rtkit als Vorschlag, obwohl kein gemeinsamer Pfad",
+      "# security.rtkit.enable = true;" in out, out)
+check("pulseaudio als Vorschlag", "# services.pulseaudio.enable = false;" in out, out)
+check("einkommentiert: Panel schreibt genau das",
+      fidelity.panel_writes_exactly(
+          "services.pipewire.enable = true;\nsecurity.rtkit.enable = true;\n"
+          "services.pipewire.alsa.enable = true;\nservices.pipewire.pulse.enable = true;\n"
+          "services.pulseaudio.enable = false;", generator.generate_configuration_nix))
+out = imported('  users.users.vk = { isNormalUser = true; extraGroups = [ "audio" ]; };\n')
+check("keine Vorschlags-Überschrift ohne Vorschlag", fidelity.HINT_LINE not in out, out)
+out = imported('  users.users.vk = {\n    isNormalUser = true;\n    extraGroups = [\n'
+               '      "audio" # warum audio\n    ];\n  };\n')
+check("Kommentar am Zeilenende nicht zusätzlich in imported-notes",
+      out.count("warum audio") == 1, out.count("warum audio"))
+
 print("\n6. Kommentar wird keine Gruppe")
 out = imported('  users.users.vk = {\n    isNormalUser = true;\n    extraGroups = [\n'
                '      "wheel" # sudo\n      "docker" # Access to the "/run/docker.sock"\n    ];\n  };\n')
