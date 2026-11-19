@@ -90,7 +90,8 @@ try:
           lambda: "brix-inactive" not in brick_wrap(NAME).get_attribute("class"))
 
     labels = menu_labels(NAME)
-    check("das Menue hat fuenf Eintraege", lambda: len(labels) == 5)
+    # Sechs seit 2026-11-19: „Ins Panel übernehmen" (Gegenprobe Phase 4).
+    check("das Menue hat sechs Eintraege", lambda: len(labels) == 6)
     check("darunter 'Deaktivieren'", lambda: "Deaktivieren" in labels)
     check("und nicht 'Aktivieren'", lambda: "Aktivieren" not in labels)
     check("kein __TODO__ im Menue", lambda: not any("__TODO__" in l for l in labels))

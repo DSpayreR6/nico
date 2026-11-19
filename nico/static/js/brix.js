@@ -166,6 +166,32 @@ async function setBrixInactive(name, inactive, file = 'configuration.nix') {
 }
 
 /**
+ * Take a Nix-Brick into the panel (Gegenprobe phase 4, Martin 2026-11-19).
+ *
+ * The server writes only if the panel produces exactly what the file says –
+ * every statement of the brick with the same value, nothing else changed –
+ * and makes a checkpoint first. Otherwise nothing happens and the toast names
+ * what would change. No confirmation dialog: nothing can be lost.
+ */
+async function adoptBrix(name, file = 'configuration.nix') {
+  const res = await csrfFetch('/api/brick/adopt', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, file }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (data.error) {
+    showToast(_brickErrText(data), 'error');
+    return;
+  }
+  showToast(t('brix.adopted', name), 'success');
+  // The form holds new values now; reload it from the file, then the preview.
+  if (file === 'configuration.nix') await loadConfig();
+  else if (_activeHost) await loadHostConfig(_activeHost);
+  await _refreshPreviewForFile(file);
+}
+
+/**
  * Bricks of one file, read fresh from disk. Single source for every dialog –
  * the lists in /api/config only cover configuration.nix, flake.nix and a
  * legacy root home.nix, so host, module and HM files got the wrong bricks.

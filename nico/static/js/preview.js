@@ -368,6 +368,11 @@ function renderAnnotatedPreview(code, containerId = 'preview-configuration', fil
         { key: 'brix.menuRename', action: () => { _brixContextFile = file; _brixContextFtype = _brixTargetFtype; openBrixRename(seg.name); } },
         { key: 'brix.menuMove',   action: () => { _brixContextFile = file; _brixContextFtype = _brixTargetFtype; openBrixMoveFor(seg.name); } },
         { key: 'brix.menuSplit',  action: () => { _brixContextFile = file; _brixContextFtype = _brixTargetFtype; openBrixSplit(seg.name); } },
+        // Only where a form regenerates the file: configuration.nix and host
+        // files (Gegenprobe phase 4, 2026-11-19). The server decides whether
+        // the panel writes exactly the same.
+        ...(_brixTargetFtype === 'co' && !seg.inactive && (file === 'configuration.nix' || _activeHost)
+          ? [{ key: 'brix.menuAdopt', action: () => adoptBrix(seg.name, file) }] : []),
         { key: seg.inactive ? 'brix.menuActivate' : 'brix.menuDeactivate',
           action: () => setBrixInactive(seg.name, !seg.inactive, file) },
         { key: 'brix.menuDelete', action: () => confirmDeleteBrix(seg.name, file), cls: 'menu-item-danger' },

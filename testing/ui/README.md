@@ -41,7 +41,7 @@ einen Flake mit drei Hosts.
 Tests, die ihre Config selbst anlegen und das Skript nicht brauchen:
 `test_unmappable`, `test_flake_create`, `test_raw_panel_keep`,
 `test_git_menu_remote`, `test_rebuild_preparing`, `test_package_inactive`,
-`test_outside_change`, `test_outside_restructure`.
+`test_outside_change`, `test_outside_restructure`, `test_brick_adopt`.
 
 ## test_collapse.py
 
@@ -214,3 +214,13 @@ Prozess – am 2026-11-01 eine halbe Stunde Suche gekostet. Stand heute:
 
 Die dreifache 8797 und die doppelte 8798 sind Altbestand; ein neuer Test nimmt
 einen freien Port.
+
+## test_brick_adopt.py
+
+„Ins Panel übernehmen" im Punkte-Menü eines Nix-Bricks (Gegenprobe Phase 4,
+2026-11-19), 14 Prüfungen: Eintrag nur bei aktivem Brick in
+configuration.nix bzw. Host-Datei; nach dem Klick Brick weg und Schalter im
+Formular gesetzt; ein Brick, den das Panel anders schreiben würde
+(`openFirewall = false`), bleibt, die Meldung ist übersetzt und nennt den
+Pfad. Legt Config und XDG selbst an. Gegenstück ohne Browser:
+`testing/routes/test_brick_adopt.py`.

@@ -335,6 +335,46 @@ def register(app, ctx):
         return jsonify({"success": True, "new_name": new_name,
                         "nested": [{**f, "file": fname} for f in nested]})
 
+    @app.route("/api/brick/adopt", methods=["POST"])
+    def brick_adopt():
+        """Take a Nix-Brick into the panel, if the panel writes exactly the
+        same (Gegenprobe phase 4, Martin 2026-11-19). Checkpoint first, then
+        write; refused with the attribute paths that would change otherwise."""
+        if err := _check_csrf(): return err
+        nixos_dir, err = _require_setup()
+        if err:
+            return err
+        body  = request.get_json(silent=True) or {}
+        name  = (body.get("name") or "").strip()
+        fname = body.get("file", "configuration.nix")
+        if not name:
+            return jsonify({"error": "ERR_NO_BRICK_NAME"}), 400
+        from .. import config_manager, fidelity, git_manager
+        from ..core import adopt_brick
+        if git_manager.is_git_repo(nixos_dir):
+            ok, msg, _skipped = git_manager.auto_commit(
+                nixos_dir, label=f"NiCo: backup before taking brick {name} into the panel")
+            if not ok:
+                return jsonify({"error": "ERR_RESTRUCTURE_BACKUP", "detail": msg}), 500
+        try:
+            adopt_brick(nixos_dir, fname, name)
+        except fidelity.NotFaithful as exc:
+            paths = ", ".join(exc.paths[:6]) + (" …" if len(exc.paths) > 6 else "")
+            return jsonify({"error": f"ERR_ADOPT_NOT_EXACT\x1f{paths}",
+                            "paths": exc.paths}), 409
+        except config_manager.DuplicateAttrError as exc:
+            return jsonify({"error": "ERR_DUPLICATE_ATTR", "duplicates": exc.names}), 409
+        except ValueError as exc:
+            code = str(exc)
+            if code.startswith("ERR_"):
+                return jsonify({"error": code}), 400
+            return jsonify({"error": "ERR_PATH_OUTSIDE"}), 403
+        except FileNotFoundError:
+            return jsonify({"error": "ERR_FILE_NOT_FOUND"}), 404
+        except OSError:
+            return jsonify({"error": "ERR_WRITE"}), 500
+        return jsonify({"success": True, "name": name})
+
     @app.route("/api/brick/move", methods=["POST"])
     def brick_move():
         if err := _check_csrf(): return err

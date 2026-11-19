@@ -7,6 +7,7 @@
 - A file changed outside NiCo (an editor, Syncthing, `git pull`) or never saved by NiCo is no longer restructured silently. NiCo checks the hash of every file a form writes – `configuration.nix`, `flake.nix`, host and Home Manager files – and asks before the form takes it over: restructure (a checkpoint of the state from outside first, a ZIP without Git), show what restructuring would change, or open it in raw mode, which leaves the file as it is
 
 - Settings the panel would add on its own are written into the Nix-Brick as a commented-out suggestion; uncommented, the Validator reports that the panel can take them over
+- Nix-Brick menu: *Move into panel* takes a brick into the form when the panel writes exactly the same; otherwise it names what would change
 
 ### Bug Fixes
 

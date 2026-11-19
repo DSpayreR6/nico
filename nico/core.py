@@ -1537,3 +1537,64 @@ def _record_host_check(
     except Exception:
         pass                        # a failed bookkeeping write must not break validation
 
+
+# ── Nix-Brick into the panel (Gegenprobe phase 4, 2026-11-19) ──────────────────
+
+def adopt_brick(nixos_dir: str, rel: str, name: str) -> str:
+    """Take a Nix-Brick into the form, if the form writes exactly the same.
+
+    The brick is read like an import, the file written on trial without it,
+    and compared with the file as it is (fidelity.compare): every statement
+    of the brick must come back with the same value, nothing else in the file
+    may change. All or nothing. Returns the new text after writing it; raises
+    ValueError with an error code, or fidelity.NotFaithful with the paths
+    that would change. No checkpoint here – the route makes it first.
+
+    configuration.nix and host files only: the Home Manager panel patches
+    single lines and never regenerates its file from the form.
+    """
+    from .brix import is_reserved_brick
+    target = _resolve_config_rel(Path(nixos_dir).resolve(), rel)
+    content = target.read_text(encoding="utf-8")
+    host = _host_of(nixos_dir, rel)
+    if rel != "configuration.nix" and not host:
+        raise ValueError("ERR_ADOPT_FILE")
+    if file_in_raw_mode(target) or file_unmappable(nixos_dir, rel, content):
+        raise ValueError("ERR_NOT_MAPPABLE")
+    blocks = extract_brick_blocks(content)
+    block = blocks.get(name)
+    if block is None:
+        raise ValueError("ERR_BRICK_NOT_FOUND")
+    if is_reserved_brick(name) or block.get("inactive"):
+        raise ValueError("ERR_BRICK_RESERVED")
+    body = brick_body(block["text"])
+    recognized = importer.parse_config("{ config, pkgs, lib, ... }:\n{\n" + body + "\n}\n")
+    if not recognized:
+        raise fidelity.NotFaithful(fidelity.leaves(
+            "{ config, pkgs, lib, ... }:\n{\n" + body + "\n}\n") or {"?"})
+    if host:
+        data = config_manager.load_host_config(nixos_dir, host) or {}
+        hw = (target.parent / "hardware-configuration.nix").is_file()
+        render = lambda d: generator.generate_host_nix(d, host, hw)  # noqa: E731
+    else:
+        data = config_manager.load_config(nixos_dir)
+        render = generator.generate_configuration_nix
+    trial = dict(data)
+    trial["brick_blocks"] = {k: v for k, v in (data.get("brick_blocks") or {}).items()
+                             if k != name}
+    trial.update(recognized)
+    text = render(trial)
+    fidelity.require_faithful(content, text)
+    # Comments would be lost: the form has no place for them. Asked after
+    # the comparison, so a brick with a suggestion still commented out is
+    # refused for what it is – the panel would write more – not for its
+    # comments. NiCo's own suggestion line does not count.
+    plain = "\n".join(l for l in body.splitlines() if l.strip() != fidelity.HINT_LINE)
+    lines = lambda t: [l.rstrip() for l in t.splitlines() if l.strip()]  # noqa: E731
+    if lines(importer._strip_nix_comments(plain)) != lines(plain):
+        raise ValueError("ERR_ADOPT_COMMENTS")
+    duplicates = validator.duplicate_attrs_in(text)
+    if duplicates:
+        raise config_manager.DuplicateAttrError(duplicates)
+    atomic.write_text(target, text)
+    return text
