@@ -239,6 +239,39 @@ check("abbildbare Flake wird übernommen", took and "nico-version" in after, aft
 d = fidelity.compare(src, after)
 check("… und sagt dasselbe", not fidelity.offending(d) and not d.missing, d)
 
+print("\n13. ZIP-Import + categorize: fremde Host-Datei bleibt ungestempelt (VM-Test)")
+import io, zipfile as _zf  # noqa: E402
+(cfg / "config.json").write_text(json.dumps({"hosts_dir": "hosts"}), encoding="utf-8")
+buf = io.BytesIO()
+with _zf.ZipFile(buf, "w") as z:
+    z.writestr("configuration.nix", mod('  networking.hostName = "box";\n'))
+    z.writestr("config.json", json.dumps({"hosts_dir": "hosts"}))
+    z.writestr("hosts/vm/default.nix",
+               mod('  networking = {\n    hostName = "vm";\n    useDHCP = true;\n  };\n'))
+r = client.post("/api/import/zip/apply", headers={"X-CSRF-Token": csrf},
+                data={"confirmed": "true", "file": (io.BytesIO(buf.getvalue()), "t.zip")},
+                content_type="multipart/form-data")
+check("ZIP importiert", r.status_code == 200, r.get_json())
+post("/api/categorize", {})
+VMH = "hosts/vm/default.nix"
+r = client.get(f"/api/file?path={VMH}", headers=H).get_json()
+check("Host gilt nach categorize nicht als von NiCo geschrieben", r.get("outside") == "no_hash",
+      r.get("outside"))
+s, r = post("/api/file/restructure", {"path": VMH})
+check("Umbauen ok", s == 200 and r.get("success"), r)
+check("useDHCP bleibt", "useDHCP = true" in code((cfg / VMH).read_text(encoding="utf-8")))
+
+print("\n14. Validator: Benutzer in Formular und Nix-Brick zugleich (VM-Test)")
+out = imported('  users.users.tester = {\n    isNormalUser = true;\n    initialPassword = "test";\n'
+               '    extraGroups = [\n      "wheel"\n      "audio" # access to "/run/audio-socket"\n    ];\n  };\n')
+check("Ausgangslage: Benutzer steht in zwei Blöcken",
+      code(out).count("users.users.tester = {") == 2, code(out))
+found = validator._rule_user_no_password(str(cfg), {}, False)
+check("keine Meldung „kein Passwort“", not [f for f in found if f.params and f.params[0] == "tester"],
+      [f.params for f in found])
+found = validator._rule_no_admin_user(str(cfg), {}, False)
+check("wheel aus dem Brick zählt", not found, [f.params for f in found])
+
 print()
 if fails:
     print(f"{len(fails)} FEHLER:", *fails, sep="\n  ")

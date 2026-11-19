@@ -803,26 +803,36 @@ def _file_bindings(content: str) -> dict:
     """
     from . import nix_parser as _np
     from .importer import _rx_top_level_bindings
-    kv: dict = {}
+    pairs: list = []
     try:
         parsed = _np.parse(content)
         if parsed.available:
-            kv = dict(_np.make_kv(parsed))
+            pairs = [(b.key, b.value_text) for b in parsed.known + parsed.unknown]
     except Exception:
-        kv = {}
-    if not kv:
+        pairs = []
+    if not pairs:
         try:
-            kv, _ = _rx_top_level_bindings(content)
+            pairs = list(_rx_top_level_bindings(content)[0].items())
         except Exception:
-            kv = {}
+            pairs = []
     bricks = _brick_bodies(content)
     if bricks.strip():
         try:
-            brick_kv, _ = _rx_top_level_bindings(bricks)
-            for key, value in brick_kv.items():
-                kv.setdefault(key, value)
+            pairs += list(_rx_top_level_bindings(bricks)[0].items())
         except Exception:
             pass
+    # The same block may stand twice – the form's `users.users.x = { … }` and
+    # a Nix-Brick with the part the form does not take (the Gegenprobe leaves
+    # a group list there). Nix merges them; a dict kept only one, and the
+    # password in the other was reported missing (VM test 2026-11-19).
+    kv: dict = {}
+    for key, value in pairs:
+        if key not in kv:
+            kv[key] = value
+        elif value != kv[key] and value not in kv[key]:
+            a, b = _np.extract_inner_block(kv[key]), _np.extract_inner_block(value)
+            if a is not None and b is not None:
+                kv[key] = "{ " + a + "\n" + b + " }"
     return kv
 
 

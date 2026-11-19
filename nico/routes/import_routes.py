@@ -9,6 +9,7 @@ from pathlib import Path
 from flask import jsonify, request
 
 from .. import atomic, config_manager, git_manager, hardware, importer
+from ..generator import check_version_hash as _check_version_hash
 from ..core import (
     classify_filename as _classify_filename,
     get_nico_type as _get_nico_type,
@@ -223,6 +224,17 @@ def register(app, ctx):
                 # angefasst – sonst würde write_files sie als NiCo-managed betrachten.
                 # Pfad-basierte HM-Dateien (home/<hm_dir>/*.nix) werden immer gestempelt.
                 if not is_path_hm and ftype in ("fl", "hm") and _get_nico_type(content) is None:
+                    done.append({"file": str(rel), "type": ftype, "changed": False})
+                    continue
+                # A file a form writes back (configuration.nix, host files,
+                # Home Manager) is stamped only when NiCo wrote it. The stamp
+                # carries a valid hash, and a foreign file stamped here looked
+                # like NiCo's own afterwards: Fall A did not ask, and the
+                # first panel save dropped what the form does not hold –
+                # `networking.useDHCP` from a ZIP import (VM test 2026-11-19).
+                # Unstamped, opening it asks, and restructuring runs the
+                # Gegenprobe.
+                if ftype in ("co", "hm") and _check_version_hash(content) != "ok":
                     done.append({"file": str(rel), "type": ftype, "changed": False})
                     continue
                 new_content = _set_type_in_content(content, ftype)
