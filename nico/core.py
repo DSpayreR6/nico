@@ -1424,9 +1424,22 @@ def write_config_files(
             if flake_brix:
                 data["flake_brick_blocks"] = flake_brix
             flake_text = generator.generate_flake_nix(data, nixos_dir=str(nixos_path))
+            # Carried along only when NiCo wrote the current state (hash) and
+            # the new text says the same. The form of configuration.nix
+            # changes nothing in flake.nix; rewriting it anyway dropped what
+            # had been added from outside, without a question (revision
+            # 2026-11-18, finding 3). Otherwise it stays, and opening it asks
+            # (Fall A).
+            if outside_status(str(nixos_path), "flake.nix", _flake_content) is not None:
+                flake_text = None
+            else:
+                try:
+                    fidelity.require_faithful(_flake_content, flake_text)
+                except fidelity.NotFaithful:
+                    flake_text = None
             # Checked before anything is written: one new file next to one old
             # one would be worse than either.
-            duplicates = validator.duplicate_attrs_in(flake_text)
+            duplicates = validator.duplicate_attrs_in(flake_text) if flake_text else []
             if duplicates:
                 return {
                     "success":    False,

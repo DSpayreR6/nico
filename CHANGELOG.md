@@ -13,6 +13,7 @@
 
 - Importing or restructuring a file no longer changes what it says: a setting the form would write differently, or would add on its own (e.g. `openFirewall = true`, `gdm.enable = true`, NetworkManager), stays in the file as a Nix-Brick instead
 - Overwriting or restructuring a file changed outside NiCo goes ahead only when its previous state is really secured – the checkpoint is checked against the file, an ignored or never committed file goes into a ZIP, and without git a ZIP is made at all
+- Saving the rest of the config no longer rewrites a flake.nix that was changed outside NiCo; it stays as it is, and opening it asks
 - An imported flake.nix is left as it is when NiCo would write it differently (e.g. a home-manager URL without branch)
 - Restructuring a host file no longer drops settings of partly understood blocks (`networking.useDHCP`, static addresses)
 - NetworkManager switched off in the form no longer comes back on with the next save or package change

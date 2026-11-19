@@ -74,10 +74,14 @@ generator.generate_host_nix = lambda *a, **k: DUP_HOST
 print("Speichern: configuration.nix und flake.nix")
 before = snapshot()
 data = dict(config_manager.DEFAULT_NIXOS_CONFIG, flakes=True)
+flake_before = (cfg / "flake.nix").read_text(encoding="utf-8")
 r = core.write_config_files(str(cfg), data, commit=False)
-check("abgewiesen", r.get("error") == "ERR_DUPLICATE_ATTR", r)
-check("Attribut genannt", r.get("duplicates") == ["inputs.a.url"], r.get("duplicates"))
-check("auch configuration.nix unverändert", snapshot() == before)
+# Since 2026-11-19 (revision 2026-11-18, finding 3) a flake.nix is carried
+# along only when the new text says what the old one says. A doubled
+# attribute never does, so it is not written at all; configuration.nix is.
+check("flake.nix mit Doppelung nicht geschrieben", "flake.nix" not in r.get("written", []), r)
+check("flake.nix unverändert", (cfg / "flake.nix").read_text(encoding="utf-8") == flake_before)
+check("configuration.nix trotzdem gespeichert", r.get("success") is True, r)
 
 print("Flake-Panel")
 r = client.post("/api/config/flake", headers=hdr, data=json.dumps({"flake_description": "x"}))
