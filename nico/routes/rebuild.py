@@ -642,13 +642,11 @@ def register(app, ctx):
 
         stage_before_rebuild = False
         if use_flake:
-            if git_manager.is_git_repo(nixos_dir):
-                flake_arg = f".#{hostname}"
-                # Same staging as the SSE rebuild: flake eval in a git repo
-                # only sees tracked files.
-                stage_before_rebuild = True
-            else:
-                flake_arg = f"path:{nixos_path.as_posix()}#{hostname}"
+            is_repo = git_manager.is_git_repo(nixos_dir)
+            # Same staging as the SSE rebuild: flake eval in a git repo
+            # only sees tracked files.
+            stage_before_rebuild = is_repo
+            flake_arg = prebuild.flake_ref(nixos_dir, hostname, is_repo)
             rebuild_cmd = f"sudo nixos-rebuild {mode} --flake {_shlex.quote(flake_arg)}"
         else:
             conf_path = nixos_path / "configuration.nix"
@@ -1501,7 +1499,16 @@ def register(app, ctx):
             else:
                 hosts = [(_get_flake_hosts(nixos_dir, stored) or ["nixos"])[0]]
 
-            flake_ref = f"path:{Path(nixos_dir).resolve().as_posix()}"
+            # The same flake the rebuild reads (prebuild.flake_base), staged
+            # the same way: path: here saw ignored and unstaged files the
+            # rebuild does not (revision 2026-11-18, finding 26).
+            is_repo = git_manager.is_git_repo(nixos_dir)
+            if is_repo:
+                try:
+                    git_manager.stage_all(nixos_dir)
+                except Exception:
+                    pass
+            flake_ref = prebuild.flake_base(nixos_dir, is_repo)
             targets = [
                 f"{flake_ref}#nixosConfigurations.{h}.config.system.build.toplevel"
                 for h in hosts

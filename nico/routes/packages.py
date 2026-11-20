@@ -42,7 +42,11 @@ def register(app, ctx):
                 pass
         try:
             results = pkg_mod.search_nixpkgs(query, channel=channel)
-            return jsonify({"results": results})
+            # The search runs against the nixpkgs of this machine (flake
+            # registry), the links against the channel of the config; the
+            # interface says so next to the versions (revision 2026-11-18,
+            # finding 9, Martin: keep the search local).
+            return jsonify({"results": results, "channel": channel})
         except RuntimeError as e:
             # The message is a code with its data (packages._err); the
             # interface splits and translates it. The old `detail` field was

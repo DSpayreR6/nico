@@ -1624,7 +1624,7 @@ const Sidebar = (() => {
             body: JSON.stringify({ name }),
           });
           const j = await r.json();
-          if (j.error) { showToast(j.error, 'error'); return; }
+          if (j.error) { showToast(tErr(j.error) || t('toast.error'), 'error'); return; }
           await _renderFlakeHosts();
           _scheduleFlakePreviewUpdate();
         });

@@ -418,11 +418,24 @@ def _stash_dir() -> Path:
     return config_manager.HW_STASH_DIR
 
 
-def _stash_name(host: str | None) -> str:
-    """File name for a stashed host. Hosts are directory names, so they are
-    already safe, but a stray separator must never escape the stash dir."""
-    safe = re.sub(r"[^A-Za-z0-9_.-]", "_", host) if host else "_root"
-    return f"{safe or '_root'}.nix"
+def _stash_name(host: str | None, rel: Path | None = None) -> str:
+    """File name for a stashed hardware config.
+
+    A host file is stored as `<host>.nix`. Hosts are directory names, so
+    they are already safe, but a stray separator must never escape the stash
+    dir. A file outside the host scheme is named after its directory,
+    `@root.nix` / `@modules.nix`: before, every such file became `_root.nix`
+    and the second replaced the first (revision 2026-11-18, finding 5). `@`
+    never survives the host sanitising, so the two kinds cannot collide.
+    """
+    def safe(s: str) -> str:
+        return re.sub(r"[^A-Za-z0-9_.-]", "_", s)
+    if host:
+        return f"{safe(host) or '_root'}.nix"
+    if rel is None:
+        return "_root.nix"
+    parts = [safe(p) for p in Path(rel).parent.parts]
+    return "@" + ("@".join(parts) if parts else "root") + ".nix"
 
 
 def stash_hw_files(nixos_dir: str) -> list[dict]:
@@ -447,7 +460,11 @@ def stash_hw_files(nixos_dir: str) -> list[dict]:
             payload = f.path.read_bytes()
         except OSError:
             continue
-        dest = _stash_dir() / _stash_name(f.host)
+        try:
+            rel = Path(f.path).relative_to(nixos_dir)
+        except ValueError:
+            rel = None
+        dest = _stash_dir() / _stash_name(f.host, rel)
         if (f.verdict == UNKNOWN and dest.is_file()
                 and previous.get(dest.name, {}).get("verdict") == MATCH):
             continue

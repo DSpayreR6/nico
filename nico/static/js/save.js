@@ -486,8 +486,25 @@ async function writeFiles() {
 }
 
 // ── Export ZIP ─────────────────────────────────────────────────────────────
-function exportZip() {
-  window.location.href = '/api/export';
+async function exportZip() {
+  // Fetched rather than navigated to: links out of the config directory are
+  // left out of the archive (revision 2026-11-18, finding 6), and the
+  // response header is the only place that says which.
+  const res = await fetch('/api/export').catch(() => null);
+  if (!res || !res.ok) { showToast(t('toast.error'), 'error'); return; }
+  let skipped = [];
+  try { skipped = JSON.parse(res.headers.get('X-NiCo-Skipped-Links') || '[]'); } catch { /* none */ }
+  const name = (res.headers.get('Content-Disposition') || '')
+    .match(/filename="?([^";]+)"?/)?.[1] || 'nico-export.zip';
+  const url = URL.createObjectURL(await res.blob());
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  if (skipped.length) showToast(t('export.skippedLinks', skipped.join(', ')), 'warning');
 }
 
 // ── ZIP-Import ──────────────────────────────────────────────────────────────

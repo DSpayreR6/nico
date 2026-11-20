@@ -250,6 +250,11 @@ def register(app, ctx):
         current_hosts: list[dict] = [
             h for h in (data.get("flake_hosts") or []) if h.get("name") != name
         ]
+        # The generator fills an empty host list with the default host, so
+        # deleting the last one reported success and wrote it back (revision
+        # 2026-11-18, finding 23). A flake without a host builds nothing.
+        if not current_hosts:
+            return jsonify({"error": "ERR_LAST_FLAKE_HOST"}), 409
         data["flake_hosts"] = current_hosts
 
         # Remove host-body bricks for this host

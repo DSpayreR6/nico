@@ -39,6 +39,11 @@
 - An import that cannot read its source completely no longer deletes the old config first; a write error puts the previous files back, and neither case reports success with half a config any more
 - A file changed outside NiCo is asked about also when a second tab has loaded the newer version in the meantime, and a deleted file counts as changed instead of being recreated from the old form
 - Two rebuilds started almost at the same time (two tabs, a double click) no longer both run; the second gets "rebuild already running"
+- Two hardware configs outside the host directories no longer overwrite each other in the copy NiCo keeps before an import
+- ZIP export and ZIP backup no longer pack the content of links that point outside the config directory; the export names what it left out
+- Deleting the last flake host is refused instead of reporting success and writing the host back
+- In a git repository the dry run now reads the same flake as the rebuild, so it no longer passes with files the rebuild does not see
+- Package search says that the versions shown come from this machine's nixpkgs and can differ from the config's channel
 
 ## 0.19.0 (2026-11-18)
 

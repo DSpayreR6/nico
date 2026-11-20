@@ -31,15 +31,25 @@ _RE_FETCHED = re.compile(
 _UNIT_MIB   = {"KiB": 1 / 1024, "MiB": 1, "GiB": 1024, "TiB": 1024 * 1024}
 
 
-def flake_ref(nixos_dir: str, hostname: str, is_git_repo: bool) -> str:
-    """The flake reference nixos-rebuild gets for this host.
+def flake_base(nixos_dir: str, is_git_repo: bool) -> str:
+    """The flake the rebuild reads, without the `#…` part.
 
-    Without git, nix would try to copy through the git index and fail; the
-    path: prefix makes it read straight from the file system.
+    In a git repository a git flake (only tracked and staged files), else
+    path: - without git, nix would try to copy through the git index and
+    fail; the path: prefix makes it read straight from the file system.
+    The only place this is decided: the dry run had its own copy with
+    path: in git repositories too, and so saw files the rebuild does not
+    (revision 2026-11-18, finding 26). Relative `.` - callers run in
+    nixos_dir.
     """
     if is_git_repo:
-        return f".#{hostname}"
-    return f"path:{Path(nixos_dir).resolve().as_posix()}#{hostname}"
+        return "."
+    return f"path:{Path(nixos_dir).resolve().as_posix()}"
+
+
+def flake_ref(nixos_dir: str, hostname: str, is_git_repo: bool) -> str:
+    """The flake reference nixos-rebuild gets for this host."""
+    return f"{flake_base(nixos_dir, is_git_repo)}#{hostname}"
 
 
 def dry_build_cmd(nixos_dir: str, use_flake: bool, flake_arg: str = "",

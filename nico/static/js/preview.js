@@ -796,7 +796,11 @@ async function runPkgSearch(query) {
   if (data.error) { statusEl.textContent = t('pkg.error', tErr(data.error)); return; }
 
   const results = data.results || [];
-  statusEl.textContent = results.length ? t('pkg.results', results.length) : '';
+  // Versions come from the nixpkgs of this machine, the links go to the
+  // channel of the config - said once, not hidden (finding 9).
+  statusEl.textContent = results.length
+    ? `${t('pkg.results', results.length)} · ${t('pkg.versionLocal', data.channel || 'unstable')}`
+    : '';
 
   if (results.length === 0) {
     resultsEl.innerHTML = `<p class="pkg-empty">${escHtml(t('pkg.noResults'))}</p>`;
@@ -817,7 +821,7 @@ async function runPkgSearch(query) {
       </div>
       <div class="pkg-result-actions">
         <a class="pkg-link" href="${escHtml(pkg.url)}" target="_blank" rel="noopener"
-           title="Details auf search.nixos.org">${niIcon('external-link')}</a>
+           title="${escHtml(t('pkg.detailsLink'))}">${niIcon('external-link')}</a>
         <button class="pkg-add-btn" ${already ? 'disabled' : ''}>
           ${already ? escHtml(t('pkg.alreadyAdded')) : escHtml(t('pkg.add'))}
         </button>

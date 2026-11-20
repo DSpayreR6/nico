@@ -620,8 +620,10 @@ def register(app, ctx):
         if err:
             return err
 
+        import json as _json
         root = Path(nixos_dir)
         buf = io.BytesIO()
+        skipped: list[str] = []
         with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
             for f in sorted(root.rglob("*")):
                 if not f.is_file():
@@ -629,12 +631,20 @@ def register(app, ctx):
                 rel = f.relative_to(root)
                 if any(part.startswith('.') for part in rel.parts):
                     continue
+                # A link out of the config directory is not part of the
+                # config; following it packed foreign content (finding 6).
+                if importer.link_leaves_dir(f, root):
+                    skipped.append(rel.as_posix())
+                    continue
                 zf.write(f, rel)
         buf.seek(0)
 
         filename = f"nico-export-{date.today()}.zip"
-        return send_file(buf, mimetype="application/zip",
+        resp = send_file(buf, mimetype="application/zip",
                          as_attachment=True, download_name=filename)
+        # The interface names the skipped files in a notice.
+        resp.headers["X-NiCo-Skipped-Links"] = _json.dumps(skipped)
+        return resp
 
     # ------------------------------------------------- app-settings export/import
 

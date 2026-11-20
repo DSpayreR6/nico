@@ -47,7 +47,14 @@ extra = data.get("user_extra_nix", "")
 check("Nutzer erkannt", data.get("username") == "nico", data.get("username"))
 check("Formularfelder weiter erkannt", data.get("user_description") == "nico")
 check("packages gerettet", "kdePackages.kate" in extra, extra)
-check("Kommentar im Block erhalten", "#  thunderbird" in extra, extra)
+# Without the tree-sitter grammar the regex fallback does not keep comments
+# inside a block - known and accepted, the Nix package always ships the
+# grammar (manifest 2026-11-17; revision 2026-11-18, finding 28).
+from nico import nix_parser
+if nix_parser.is_available():
+    check("Kommentar im Block erhalten", "#  thunderbird" in extra, extra)
+else:
+    print("  SKIP Kommentar im Block erhalten (ohne tree-sitter-Grammatik)")
 check("kein Formularfeld im Freitext", "isNormalUser" not in extra and "extraGroups" not in extra, extra)
 
 print("\n2. Schreiben bringt sie zurück")

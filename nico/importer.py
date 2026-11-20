@@ -1888,6 +1888,22 @@ def dir_has_non_zip_files(nixos_dir: str | Path) -> bool:
     return False
 
 
+def link_leaves_dir(f: Path, root: Path) -> bool:
+    """True for a symlink whose target lies outside `root`.
+
+    Archives used to follow such links and pack the target's content - a
+    link to a secret elsewhere landed in a ZIP meant to be passed on
+    (revision 2026-11-18, finding 6). Links inside the directory stay.
+    """
+    if not f.is_symlink():
+        return False
+    try:
+        f.resolve().relative_to(Path(root).resolve())
+        return False
+    except (ValueError, OSError, RuntimeError):
+        return True
+
+
 def backup_to_zip(nixos_dir: str | Path) -> str:
     """Packt alle relevanten Nicht-ZIP-Dateien in nixos_dir in eine ZIP.
     ZIP-Dateien und versteckte Verzeichnisse werden ausgelassen.
@@ -1905,6 +1921,7 @@ def backup_to_zip(nixos_dir: str | Path) -> str:
         zip_name = f"nixos-config-{ts}-{n}.zip"
         n += 1
     zip_path = root / zip_name
+    skipped: list[str] = []
     with _zipfile.ZipFile(zip_path, "x", _zipfile.ZIP_DEFLATED) as zf:
         for f in sorted(root.rglob("*")):
             if not f.is_file():
@@ -1916,7 +1933,15 @@ def backup_to_zip(nixos_dir: str | Path) -> str:
                 continue
             if str(rel) == "nico.json":
                 continue  # add separately below
+            if link_leaves_dir(f, root):
+                skipped.append(rel.as_posix())
+                continue
             zf.write(f, rel)
+        # The backup runs inside other actions, which have no place for a
+        # message; the archive itself says what is missing.
+        if skipped:
+            zf.comment = ("Skipped links pointing outside the config directory: "
+                          + ", ".join(skipped)).encode("utf-8")[:65535]
         # nico.json als Kopie beifügen (Referenz, wird beim Import nicht angewendet)
         nico_json = root / "nico.json"
         if nico_json.exists():
