@@ -3822,52 +3822,6 @@ button:disabled {
   margin: 0;
 }
 
-/* ── Find-Bar ──────────────────────────────────────────────────────────────── */
-.find-bar {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 8px;
-  background: var(--surface0, #313244);
-  border-bottom: 1px solid var(--overlay0, #6c7086);
-  flex-shrink: 0;
-}
-.find-bar.hidden { display: none; }
-
-.find-input {
-  flex: 1;
-  max-width: 240px;
-  background: var(--base, #1e1e2e);
-  color: var(--text, #cdd6f4);
-  border: 1px solid var(--overlay0, #6c7086);
-  border-radius: 4px;
-  padding: 3px 8px;
-  font-size: 13px;
-  outline: none;
-}
-.find-input:focus { border-color: var(--mauve, #cba6f7); }
-
-.find-count {
-  font-size: 12px;
-  color: var(--subtext0, #a6adc8);
-  min-width: 60px;
-}
-
-.find-nav-btn, .find-close-btn {
-  background: none;
-  border: none;
-  color: var(--subtext0, #a6adc8);
-  cursor: pointer;
-  padding: 2px 6px;
-  border-radius: 4px;
-  font-size: 14px;
-  transition: background 0.1s, color 0.1s;
-}
-.find-nav-btn:hover, .find-close-btn:hover {
-  background: var(--surface1, #45475a);
-  color: var(--text, #cdd6f4);
-}
-
 /* ── Dateityp-Dialog ─────────────────────────────────────────────── */
 .set-type-modal {
   min-width: 340px;

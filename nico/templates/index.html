@@ -1393,16 +1393,6 @@
           </div>
         </div>
 
-        <!-- Find-Bar (innerhalb des Tab-Editors) -->
-        <div id="find-bar" class="find-bar hidden">
-          <input type="text" id="find-input" class="find-input"
-                 placeholder="Suchen …" spellcheck="false" autocomplete="off">
-          <span id="find-count" class="find-count"></span>
-          <button id="find-prev-btn" class="find-nav-btn" title="Vorheriger Treffer"><span class="ni-icon ni-icon-arrow-up" aria-hidden="true"></span></button>
-          <button id="find-next-btn" class="find-nav-btn" title="Nächster Treffer"><span class="ni-icon ni-icon-arrow-down" aria-hidden="true"></span></button>
-          <button id="find-close-btn" class="find-close-btn" title="Suche schließen"><span class="ni-icon ni-icon-x" aria-hidden="true"></span></button>
-        </div>
-
         <!-- Vorschau/Preview -->
         <main class="preview-panel" id="preview-panel">
           <!-- File-Tab-Buttons (sichtbar wenn mehr als eine Datei vorhanden) -->
@@ -2322,22 +2312,6 @@
   </div>
 
 
-  <!-- ── Datei-Viewer / Roh-Editor ─────────────────────────────────────────── -->
-  <div id="file-viewer-overlay" class="overlay hidden">
-    <div class="modal" style="width:min(90vw,900px);max-height:90vh;display:flex;flex-direction:column">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-        <span id="file-viewer-title" class="modal-logo" style="margin-bottom:0"></span>
-        <button id="file-viewer-close" class="btn-secondary" data-i18n="brix.cancelBtn">Schließen</button>
-      </div>
-      <div id="file-viewer-warning" class="setup-error hidden" style="margin-bottom:8px"></div>
-      <textarea id="file-viewer-content"
-                style="flex:1;min-height:400px;font-family:monospace;font-size:0.82rem;resize:vertical;padding:8px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text)"></textarea>
-      <div id="file-viewer-actions" class="confirm-buttons hidden" style="margin-top:12px">
-        <button id="file-viewer-save" class="btn-primary" data-i18n="write.confirm">Speichern</button>
-      </div>
-    </div>
-  </div>
-
   <!-- ── Sektionen-Einstellungen-Overlay ─────────────────────────────────── -->
   <div id="sections-settings-overlay" class="overlay hidden" style="z-index:120">
     <div class="admin-panel" style="max-width:540px">
@@ -2405,6 +2379,7 @@
   <script src="/static/js/brix.js?v={{ static_v }}"></script>
   <script src="/static/js/rebuild.js?v={{ static_v }}"></script>
   <script src="/static/js/form.js?v={{ static_v }}"></script>
+  <script src="/static/js/search.js?v={{ static_v }}"></script>
   <script src="/static/js/ui.js?v={{ static_v }}"></script>
   <script src="/static/js/sidebar.js?v={{ static_v }}"></script>
 </body>

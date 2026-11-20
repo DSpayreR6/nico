@@ -35,14 +35,6 @@ async function updatePreview() {
   // Keep preview-tabs bar always hidden – tabs concept was discarded
   document.getElementById('preview-tabs')?.classList.add('hidden');
 
-  // Update file corpus for search – only configuration.nix is in the visible preview
-  currentFiles = [
-    { name: 'configuration.nix', tabId: 'configuration',
-      containerId: 'preview-configuration', content: data.configuration_nix || '', matchCount: 0 },
-  ];
-
-  // Re-apply active search after re-render
-  if (activeSearch) applySearchHighlights(activeSearch);
 }
 
 async function _refreshPreviewForFile(file = 'configuration.nix') {
@@ -446,9 +438,11 @@ function renderCodePreview(code, containerId = 'preview-configuration', file = '
   container.dataset.sourceFile = file;
   if (plainCodeView) {
     renderPlainPreview(containerId, stripAnnotations(code));
-    return;
+  } else {
+    renderAnnotatedPreview(code, containerId, file);
   }
-  renderAnnotatedPreview(code, containerId, file);
+  // Every preview is drawn here: an open search follows the new content.
+  Search.refresh({ keep: true });
 }
 
 // ── Section collapse (left ↔ right sync) ───────────────────────────────────
@@ -621,8 +615,8 @@ function switchTab(tab) {
     .classList.toggle('hidden', tab !== 'flake');
   document.getElementById('preview-hm')
     ?.classList.toggle('hidden', tab !== 'hm');
-  // Refresh nav to show matches in the newly active tab
-  if (activeSearch) collectSearchMatches();
+  // An open search follows to the view now shown
+  Search.refresh({ keep: true });
 }
 
 // ── Package list ───────────────────────────────────────────────────────────

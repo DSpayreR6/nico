@@ -17,104 +17,6 @@ const Sidebar = (() => {
   // DOM refs (populated after DOMContentLoaded)
   let elSidebar, elToggleBtn, elTree, elPreviewPanel, elSaveAllBtn, elRefreshBtn;
 
-  // ── Find-Bar state ─────────────────────────────────────────────
-  let findMatches  = [];
-  let findIndex    = 0;
-  let elFindBar, elFindInput, elFindCount;
-
-  function initFindBar() {
-    elFindBar   = document.getElementById('find-bar');
-    elFindInput = document.getElementById('find-input');
-    elFindCount = document.getElementById('find-count');
-
-    document.getElementById('find-close-btn').addEventListener('click', closeFindBar);
-    document.getElementById('find-prev-btn').addEventListener('click', () => findStep(-1));
-    document.getElementById('find-next-btn').addEventListener('click', () => findStep(1));
-    elFindInput.addEventListener('input', runFind);
-    elFindInput.addEventListener('keydown', e => {
-      if (e.key === 'Enter') { e.preventDefault(); findStep(e.shiftKey ? -1 : 1); }
-      if (e.key === 'Escape') closeFindBar();
-    });
-  }
-
-  function openFindBar() {
-    if (!activeFile) return;
-    elFindBar.classList.remove('hidden');
-    elFindInput.focus();
-    elFindInput.select();
-    runFind();
-  }
-
-  function closeFindBar() {
-    // Closing is the moment the focus may move into the text: the user is
-    // done searching and wants to edit at the match. Without this the cursor
-    // would stay in a hidden field and the first keystroke go nowhere.
-    const ta = _activeTextarea();
-    elFindBar.classList.add('hidden');
-    elFindInput.value = '';
-    findMatches = [];
-    elFindCount.textContent = '';
-    ta?.focus();
-  }
-
-  // Searching must never type into the file. `_highlightMatch` used to focus
-  // the textarea, and it runs on every keystroke in the search field: after
-  // the first letter the focus sat in the text, and the second letter replaced
-  // the selected match. The search box edited the config.
-  //
-  // So the selection is set without taking the focus, and the focus only
-  // follows deliberately – on Escape, when the user wants to carry on editing
-  // at the match they found.
-  function runFind() {
-    const needle = elFindInput.value;
-    const ta = _activeTextarea();
-    if (!ta || !needle) {
-      findMatches = [];
-      elFindCount.textContent = needle ? '0 / 0' : '';
-      return;
-    }
-    const text  = ta.value;
-    const lower = text.toLowerCase();
-    const q     = needle.toLowerCase();
-    findMatches = [];
-    let pos = 0;
-    while ((pos = lower.indexOf(q, pos)) !== -1) {
-      findMatches.push(pos);
-      pos += q.length;
-    }
-    findIndex = findMatches.length ? 0 : -1;
-    elFindCount.textContent = findMatches.length
-      ? `${findIndex + 1} / ${findMatches.length}`
-      : '0 Treffer';
-    if (findMatches.length) _highlightMatch(ta, findMatches[0], needle.length);
-  }
-
-  function findStep(dir) {
-    if (!findMatches.length) return;
-    findIndex = (findIndex + dir + findMatches.length) % findMatches.length;
-    elFindCount.textContent = `${findIndex + 1} / ${findMatches.length}`;
-    _highlightMatch(_activeTextarea(), findMatches[findIndex], elFindInput.value.length);
-  }
-
-  function _highlightMatch(ta, start, len, { takeFocus = false } = {}) {
-    if (!ta) return;
-    // setSelectionRange works on an unfocused textarea; the browser draws it
-    // as an inactive selection, which style.css makes visible. Scrolling is
-    // done by hand anyway, so nothing here needs the focus.
-    ta.setSelectionRange(start, start + len);
-    const linesBefore = ta.value.substring(0, start).split('\n').length - 1;
-    const lineHeight  = parseInt(getComputedStyle(ta).lineHeight) || 22;
-    ta.scrollTop = Math.max(0, linesBefore * lineHeight - ta.clientHeight / 2);
-    if (takeFocus) ta.focus();
-  }
-
-  function _activeTextarea() {
-    // Find-Bar only makes sense in the raw-view; return null if none active
-    const rawView = document.getElementById('raw-file-view');
-    if (!rawView) return null;
-    return rawView.querySelector('textarea') || null;
-  }
-
   function init() {
     elSidebar      = document.getElementById('sidebar');
     elToggleBtn    = document.getElementById('sidebar-toggle-btn');
@@ -155,8 +57,6 @@ const Sidebar = (() => {
       e.returnValue = '';
     });
 
-    initFindBar();
-
     // Tools-Dropdown
     const toolsBtn      = document.getElementById('tools-btn');
     const toolsDropdown = document.getElementById('tools-dropdown');
@@ -189,7 +89,7 @@ const Sidebar = (() => {
 
     document.getElementById('tool-code-search')?.addEventListener('click', () => {
       toolsDropdown?.classList.add('hidden');
-      openFindBar();
+      Search.open();
     });
 
     document.getElementById('tool-set-type')?.addEventListener('click', () => {
@@ -1851,6 +1751,7 @@ const Sidebar = (() => {
     });
     // Switch mode indicator to pencil; the disk button follows refreshUnsaved
     refreshUnsaved();
+    Search.refresh({ keep: true });
     const modBtn = document.getElementById('preview-mode-btn');
     if (modBtn) { modBtn.innerHTML = niIcon('pencil'); modBtn.dataset.mode = 'edit'; modBtn.title = t('preview.modeRaw'); }
   }
@@ -1882,6 +1783,7 @@ const Sidebar = (() => {
     const lns = flkDiv.querySelector('.raw-line-nums');
     const pre = flkDiv.querySelector('.flk-file-pre');
     pre.addEventListener('scroll', () => { lns.scrollTop = pre.scrollTop; });
+    Search.refresh({ keep: true });
   }
 
   /** After a raw save: is the file (still) shown raw-only for a reason?
@@ -1994,57 +1896,6 @@ const Sidebar = (() => {
     applyPlainCodeViewBtn();
   }
 
-  async function openFileViewer(relPath, forceReadonly = false) {
-    const encoded = relPath.split('/').map(encodeURIComponent).join('/');
-    const res  = await csrfFetch(`/api/file/${encoded}`);
-    const info = await res.json();
-    if (info.error) { showToast(tErr(info.error), 'error'); return; }
-
-    const readonly  = forceReadonly || !info.writable;
-    const isHwConfig = relPath.includes('hardware-configuration');
-
-    document.getElementById('file-viewer-title').textContent = relPath.split('/').pop();
-    const textarea = document.getElementById('file-viewer-content');
-    textarea.value    = info.content;
-    textarea.readOnly = readonly;
-
-    const warning = document.getElementById('file-viewer-warning');
-    if (isHwConfig && !readonly) {
-      warning.textContent = t('file.hwWarning');
-      warning.classList.remove('hidden');
-    } else {
-      warning.classList.add('hidden');
-    }
-
-    document.getElementById('file-viewer-actions').classList.toggle('hidden', readonly);
-    document.getElementById('file-viewer-overlay').classList.remove('hidden');
-
-    document.getElementById('file-viewer-close').onclick = () =>
-      document.getElementById('file-viewer-overlay').classList.add('hidden');
-
-    document.getElementById('file-viewer-save').onclick = async () => {
-      const _save = async (force = false) => {
-        const r = await csrfFetch(`/api/file/${encoded}`, {
-          method:  'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body:    JSON.stringify({ content: textarea.value, force }),
-        });
-        return r.json();
-      };
-      let d = await _save();
-      if (d.error === 'ERR_BRICK_NESTED') {
-        // Not a refusal: the markers are visible in the editor right here, and
-        // keeping them can be deliberate. The user decides.
-        if (!await _showNestedBricksModal(d.nested, 'confirm')) return;
-        d = await _save(true);
-      }
-      if (d.error) { showToast(tErr(d.error), 'error'); return; }
-      reportNestedBricks(d.nested);
-      document.getElementById('file-viewer-overlay').classList.add('hidden');
-      showToast(t('file.saved'));
-    };
-  }
-
   function setActiveFile(path, name) {
     activeFile = { path, name };
     _updateActiveFileLabel();
@@ -2083,7 +1934,6 @@ const Sidebar = (() => {
 
   return {
     init,
-    openFileViewer,
     selectFile,
     flakeSave: _flakeSave,
     setActiveFile,

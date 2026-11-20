@@ -185,9 +185,6 @@
   "search.nextTitle":     "Nächster Treffer (Enter)",
   "search.closeTitle":    "Suche schließen (Esc)",
   "search.noResults":     "Keine Treffer",
-  "search.noResultsHere": "0 hier",
-  "search.also":          "Auch: {0}",
-  "search.inFile":        "in",
 
   "pkg.modalTitle":        "Paket suchen",
   "pkg.searchPlaceholder": "z.B. firefox, vim, htop …",

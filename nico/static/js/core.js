@@ -331,15 +331,6 @@ function matchHostCoPath(path) {
   return path.match(new RegExp(`(?:^|/)${esc}/([^/]+)/default\\.nix$`));
 }
 
-// Search state
-// currentFiles is the source of truth for multi-file search.
-// Each entry: { name, tabId, containerId, content, matchCount }
-// Today: configuration.nix + flake.nix. Later: any number of files.
-let currentFiles   = [];
-let activeSearch   = '';
-let searchMatches  = [];   // visible .search-match elements in active tab
-let searchMatchIdx = -1;
-let searchDebounce = null;
 let pkgDebounce     = null;
 // ASCII spinner state for the package search (see startPkgSpinner in preview.js)
 let pkgSpinTimer    = null;
