@@ -42,6 +42,7 @@
 - An import that cannot read its source completely no longer deletes the old config first; a write error puts the previous files back, and neither case reports success with half a config any more
 - A file changed outside NiCo is asked about also when a second tab has loaded the newer version in the meantime, and a deleted file counts as changed instead of being recreated from the old form
 - Two rebuilds started almost at the same time (two tabs, a double click) no longer both run; the second gets "rebuild already running"
+- A new `.nix` file created in the file tree starts as a valid empty module instead of an empty file Nix cannot read
 - Search (Ctrl+F or the tools menu) now works in every file NiCo shows – panel previews, the raw editor and the flake.lock view; before, in raw mode and for flake.nix or Home Manager files it searched an outdated preview and counted hits that could not be seen
 - A file Nix cannot read (e.g. a stray `};.` in a Nix-Brick) no longer opens in the panel, only to fail on the panel switch, "show differences" or restructuring; it opens in raw mode with the reason, and restructuring no longer drops unreadable text
 - Rebuilding a different host than this machine's own (after deleting it from the flake, or a wrong pick) is stopped by the Validator when that host's hardware config names disks this machine does not have; before, the check only looked at this machine's own host

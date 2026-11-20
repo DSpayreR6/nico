@@ -258,7 +258,10 @@ def register(app, ctx):
             if entry_type == "dir":
                 target.mkdir(parents=False, exist_ok=False)
             else:
-                atomic.write_text(target, "")
+                # An empty .nix is not valid Nix: imported, it stopped the
+                # Validator and the dry run (VM test 2026-11-20). A new module
+                # starts as the smallest one that reads and builds.
+                atomic.write_text(target, "{ ... }:\n{\n}\n" if target.suffix == ".nix" else "")
         except OSError as exc:
             return jsonify({"error": "ERR_FILE_WRITE", "detail": str(exc)}), 500
 

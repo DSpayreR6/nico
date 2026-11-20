@@ -11,7 +11,6 @@ const Sidebar = (() => {
   let activeFile  = null;   // {path, name} oder null
   let _formDirty      = false;  // config-form hat ungespeicherte Änderungen
   let _flakeFormDirty = false;  // flake-form hat ungespeicherte Änderungen
-  let _panelSaveable  = false;  // a form panel (co/fl/hm) is shown for the active file
   let _openUnmappable = false;  // the active file is shown raw-only for a reason (warning left)
 
   // DOM refs (populated after DOMContentLoaded)
@@ -767,12 +766,24 @@ const Sidebar = (() => {
       el.removeAttribute('title');
       el.classList.remove('has-file');
     }
+    refreshUnsaved();
   }
 
   // ── Saving: one button, one check, one routine for panel and raw ─────────
 
   function _rawEditor() {
     return _rawEditPath ? document.getElementById('raw-file-editor') : null;
+  }
+
+  /** Is a form panel (configuration/host, flake, Home Manager) shown? Read
+   *  from the page, not from a flag: the first file after start is loaded
+   *  another way than a click in the tree, and the flag only the click set
+   *  left the disk hidden until the first file switch (VM test 2026-11-20). */
+  function _panelShown() {
+    return ['config-form', 'flake-form', 'panel-hm'].some(id => {
+      const el = document.getElementById(id);
+      return !!el && !el.classList.contains('hidden');
+    });
   }
 
   /** Is anything of the open file not saved yet? Panel and raw alike. */
@@ -787,7 +798,7 @@ const Sidebar = (() => {
     const dirty = hasUnsaved();
     const btn = document.getElementById('save-tab-btn');
     if (btn) {
-      const visible = !!activeFile && (!!_rawEditor() || _panelSaveable);
+      const visible = !!activeFile && (!!_rawEditor() || _panelShown());
       btn.classList.toggle('hidden', !visible);
       btn.classList.toggle('unsaved', visible && dirty);
     }
@@ -802,7 +813,7 @@ const Sidebar = (() => {
     let ok = true;
     if (_rawEditor()) {
       ok = (await _saveRawFile()) === true;
-    } else if (_panelSaveable) {
+    } else if (_panelShown()) {
       try {
         await _hmFlushPendingSave();
         if (_flakeFormDirty) ok = await _flakeSave();
@@ -1007,7 +1018,6 @@ const Sidebar = (() => {
   }
 
   function _showLeftPanel(mode, fileName, { panelOff = false, flagSource = null, unmappable = false, reason = null } = {}) {
-    _panelSaveable = ['form', 'fl', 'hm'].includes(mode);
     // Hide all panels
     document.getElementById('config-form')?.classList.add('hidden');
     document.getElementById('flake-form')?.classList.add('hidden');

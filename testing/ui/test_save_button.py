@@ -91,7 +91,19 @@ try:
     d.get(f"http://127.0.0.1:{PORT}/")
     time.sleep(4)
 
-    print("1. Kopfzeile")
+    print("0. Direkt nach dem Start (configuration.nix ohne Klick im Dateibaum)")
+    st = state()
+    check("Diskette sichtbar", st["visible"], st)
+    d.execute_script("const el=document.getElementById('hostname'); el.value='startwert';"
+                     "el.dispatchEvent(new Event('input',{bubbles:true}));")
+    time.sleep(0.5)
+    st = state()
+    check("nach Änderung: roter Punkt", st["visible"] and st["dot"], st)
+    d.execute_script("document.getElementById('save-tab-btn').click();")
+    time.sleep(2.5)
+    check("gespeichert: Punkt weg", not state()["dot"], state())
+
+    print("\n1. Kopfzeile")
     open_file("hosts/h1/default.nix")
     st = state()
     check("voller relativer Pfad", st["path"] == "hosts/h1/default.nix", st)
