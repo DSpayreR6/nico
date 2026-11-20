@@ -34,6 +34,17 @@ def _stash_hardware(nixos_dir: str) -> None:
         pass
 
 
+def _import_failed(exc: OSError):
+    """Response for an import that stopped (importer.replace_nix_tree)."""
+    if isinstance(exc, importer.ImportWriteError):
+        code = "ERR_IMPORT_WRITE" if exc.restored else "ERR_IMPORT_PARTIAL"
+    elif isinstance(exc, PermissionError) or isinstance(exc.__cause__, PermissionError):
+        code = "ERR_IMPORT_PERMISSION"
+    else:
+        code = "ERR_IMPORT_READ"
+    return jsonify({"error": code, "detail": str(exc)}), 500
+
+
 def register(app, ctx):
     _check_csrf          = ctx["check_csrf"]
     _require_setup       = ctx["require_setup"]
@@ -124,30 +135,27 @@ def register(app, ctx):
             pass
         _stash_hardware(nixos_dir)
 
-        dst = Path(nixos_dir)
+        dst = Path(nixos_dir).resolve()
 
-        # Bestehende .nix/.lock entfernen (nur sichtbare Pfade – nie .git & Co.)
-        for existing in dst.rglob("*"):
-            if (existing.is_file() and existing.suffix in (".nix", ".lock")
-                    and not any(p.startswith('.') for p in existing.relative_to(dst).parts)):
-                try:
-                    existing.unlink()
-                except OSError:
-                    pass
+        # Read every entry before the old config is touched: a damaged entry
+        # used to fail only after the deletion (revision 2026-11-18, finding 1).
+        incoming: dict[str, bytes] = {}
+        try:
+            with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
+                for member in zf.infolist():
+                    if member.is_dir():
+                        continue
+                    dest = _safe_import_dest(dst, member.filename)
+                    if dest is None:  # zip-slip: entry would land outside config dir
+                        continue
+                    incoming[dest.relative_to(dst).as_posix()] = zf.read(member)
+        except (zipfile.BadZipFile, OSError, EOFError) as exc:
+            return jsonify({"error": "ERR_IMPORT_READ", "detail": str(exc)}), 400
 
-        # ZIP extrahieren
-        files_copied = []
-        with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
-            for member in zf.infolist():
-                if member.is_dir():
-                    continue
-                name = member.filename
-                dest = _safe_import_dest(dst, name)
-                if dest is None:  # zip-slip: entry would land outside config dir
-                    continue
-                dest.parent.mkdir(parents=True, exist_ok=True)
-                atomic.write_bytes(dest, zf.read(member))
-                files_copied.append(name)
+        try:
+            files_copied = importer.replace_nix_tree(dst, incoming)
+        except OSError as exc:
+            return _import_failed(exc)
 
         # configuration.nix parsen
         cfg_path = dst / "configuration.nix"
@@ -299,15 +307,11 @@ def register(app, ctx):
             recognized = importer.parse_config(content)
             rest_brix  = importer.build_rest_brix(content, recognized)
 
-            # Clear existing .nix/.lock files for a clean 1:1 copy
-            # (visible paths only – never touch .git/.direnv & Co.)
-            dst = Path(nixos_dir)
-            for existing in dst.rglob("*"):
-                if (existing.is_file() and existing.suffix in (".nix", ".lock")
-                        and not any(p.startswith('.') for p in existing.relative_to(dst).parts)):
-                    existing.unlink()
-
-            files_copied = []
+            # A clean 1:1 copy: the old .nix/.lock files go, the sent ones
+            # come in - through replace_nix_tree, which puts the old state
+            # back if a write fails (revision 2026-11-18, finding 1).
+            dst = Path(nixos_dir).resolve()
+            incoming: dict[str, bytes] = {}
             for file_item in files_data:
                 rel   = file_item.get("path", "")
                 fcont = file_item.get("content", "")
@@ -319,9 +323,11 @@ def register(app, ctx):
                 dest = _safe_import_dest(dst, rel)
                 if dest is None:  # traversal or hidden path segment
                     continue
-                dest.parent.mkdir(parents=True, exist_ok=True)
-                atomic.write_text(dest, fcont)
-                files_copied.append(rel)
+                incoming[dest.relative_to(dst).as_posix()] = str(fcont).encode("utf-8")
+            try:
+                files_copied = importer.replace_nix_tree(dst, incoming)
+            except OSError as exc:
+                return _import_failed(exc)
 
         elif config_path:
             # ── Path mode: server reads directory recursively ─────────────────
@@ -338,13 +344,10 @@ def register(app, ctx):
             recognized = importer.parse_config(content)
             rest_brix  = importer.build_rest_brix(content, recognized)
 
-            files_copied = []
             try:
                 files_copied = importer.copy_nix_tree(cfg_file.parent, nixos_dir)
-            except PermissionError:
-                return jsonify({"error": "ERR_IMPORT_PERMISSION"}), 403
-            except OSError:
-                return jsonify({"error": "ERR_FILE_READ"}), 500
+            except OSError as exc:
+                return _import_failed(exc)
 
         else:
             return jsonify({"error": "ERR_NO_PATH"}), 400
@@ -460,12 +463,13 @@ def register(app, ctx):
         recognized = importer.parse_config(content)
         rest_brix  = importer.build_rest_brix(content, recognized)
 
-        # Copy all .nix/.lock files from /etc/nixos into the config dir
-        files_copied = []
+        # Copy all .nix/.lock files from /etc/nixos into the config dir.
+        # A failure used to be swallowed and the import reported success
+        # with half a config in place (revision 2026-11-18, finding 1).
         try:
             files_copied = importer.copy_nix_tree(importer.ETC_NIXOS, nixos_dir)
-        except Exception:
-            pass  # source might not exist or be readable
+        except OSError as exc:
+            return _import_failed(exc)
 
         _apply_import_result(nixos_dir, recognized, rest_brix, content)
 

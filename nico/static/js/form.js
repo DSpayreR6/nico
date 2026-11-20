@@ -820,12 +820,14 @@ async function _populateCoFormFromFile(path, _content) {
   refreshFlakeCreateRow(path);
   _coFormReady = false;
   _coLoadedPath = path;
+  _coBase = null;
   clearCoForm();
   let loaded = false;
   try {
     const res  = await fetch(`/api/parse/co?path=${encodeURIComponent(path)}`);
     const data = await res.json();
     if (!data.error) {
+      _coBase = data._base || null;
       populateFormFromData(data);
       loaded = true;
     }

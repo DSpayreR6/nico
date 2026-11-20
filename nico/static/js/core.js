@@ -299,6 +299,10 @@ let sectionFilter  = localStorage.getItem('nico-section-filter') || 'all';
 let hiddenSections = [];   // section names to hide when filter = 'settings'
 let _coFormReady   = false;
 let _coLoadedPath  = 'configuration.nix';
+// Digest of the content the CO form was filled from (outside.py). Sent back
+// with every save: a change on disk since then is asked about, also when
+// another tab has loaded the newer file in the meantime.
+let _coBase        = null;
 
 // ── Brix target file – tracks which .nix file brix operations affect ────────
 let _brixTargetFile  = 'configuration.nix';   // changes when flake panel opens

@@ -2572,7 +2572,8 @@ def ensure_flake_host_bricks(content: str, existing_blocks: dict[str, dict] | No
 def copy_nix_tree(source_dir: str | Path, nixos_dir: str | Path) -> list[str]:
     """
     1:1-Kopie aller *.nix- und *.lock-Dateien von source_dir nach nixos_dir.
-    Bestehende *.nix- und *.lock-Dateien in nixos_dir werden zuerst gelöscht.
+    Bestehende *.nix- und *.lock-Dateien in nixos_dir werden ersetzt
+    (replace_nix_tree). Raises ImportReadError / ImportWriteError.
 
     Sonderfall: src == dst oder src liegt innerhalb von dst → kein Löschen,
     Dateien sind schon am richtigen Ort.
@@ -2598,24 +2599,93 @@ def copy_nix_tree(source_dir: str | Path, nixos_dir: str | Path) -> list[str]:
                     copied.append(str(rel))
         return copied
 
-    # Hidden path segments (.git, .direnv, …) are never deleted or copied –
-    # same visibility rules as tree listing and ZIP export.
-    for existing in dst.rglob("*"):
-        if (existing.is_file() and existing.suffix in (".nix", ".lock")
-                and not any(p.startswith('.') for p in existing.relative_to(dst).parts)):
-            existing.unlink()
+    # Everything is read before anything in the target is touched: a file
+    # that cannot be read used to surface only after the old config was
+    # already deleted (revision 2026-11-18, finding 1).
+    try:
+        files = {rel: path.read_bytes() for rel, path in _visible_nix_files(src)}
+    except OSError as exc:
+        raise ImportReadError(str(exc)) from exc
+    return replace_nix_tree(dst, files)
 
-    copied = []
-    for f in sorted(src.rglob("*")):
+
+class ImportReadError(OSError):
+    """The import source could not be read completely; nothing was changed."""
+
+
+class ImportWriteError(OSError):
+    """Writing the imported files failed.
+
+    `restored` tells whether the previous files are back in place. When it
+    is False, the checkpoint and the ZIP made before the import are what is
+    left to go back to.
+    """
+    def __init__(self, msg: str, restored: bool):
+        super().__init__(msg)
+        self.restored = restored
+
+
+def _visible_nix_files(root: Path) -> list[tuple[str, Path]]:
+    """(relative path, path) of every .nix/.lock file below `root`.
+
+    Hidden path segments (.git, .direnv, …) are skipped – same visibility
+    rules as tree listing and ZIP export.
+    """
+    out = []
+    for f in sorted(root.rglob("*")):
         if f.is_file() and f.suffix in (".nix", ".lock"):
-            rel = f.relative_to(src)
-            if any(p.startswith('.') for p in rel.parts):
-                continue
-            dest_file = dst / rel
-            dest_file.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(f, dest_file)
-            copied.append(str(rel))
-    return copied
+            rel = f.relative_to(root)
+            if not any(p.startswith('.') for p in rel.parts):
+                out.append((rel.as_posix(), f))
+    return out
+
+
+def replace_nix_tree(dst: str | Path, files: dict[str, bytes]) -> list[str]:
+    """Replace the visible .nix/.lock files in `dst` with `files`.
+
+    `files` maps paths relative to `dst` (validated by the caller) to their
+    content, all of it already read. Every import goes through here, so the
+    order is the same everywhere: remember the old state, delete, write.
+    If a write fails, the old state is put back and ImportWriteError raised –
+    before, the error was swallowed and the import reported success with
+    half a config in place (revision 2026-11-18, finding 1).
+    """
+    dst = Path(dst)
+    try:
+        old = {rel: path.read_bytes() for rel, path in _visible_nix_files(dst)}
+        # A non-.nix file the import overwrites belongs to the old state, too.
+        for rel in files:
+            p = dst / rel
+            if rel not in old and p.is_file():
+                old[rel] = p.read_bytes()
+    except OSError as exc:
+        # Without the old state there is nothing to restore from - stop
+        # before the first file is deleted.
+        raise ImportReadError(str(exc)) from exc
+
+    written: list[str] = []
+    try:
+        for rel, _path in _visible_nix_files(dst):
+            (dst / rel).unlink()
+        for rel, data in files.items():
+            dest = dst / rel
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            atomic.write_bytes(dest, data)
+            written.append(rel)
+    except OSError as exc:
+        restored = True
+        try:
+            for rel in written:
+                if rel not in old:
+                    (dst / rel).unlink(missing_ok=True)
+            for rel, data in old.items():
+                dest = dst / rel
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                atomic.write_bytes(dest, data)
+        except OSError:
+            restored = False
+        raise ImportWriteError(str(exc), restored) from exc
+    return written
 
 
 def copy_hardware_config(nixos_dir: str, src_path: str | None = None) -> bool:

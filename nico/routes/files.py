@@ -404,7 +404,7 @@ def register(app, ctx):
             target.relative_to(root)
         except ValueError:
             return jsonify({"error": "ERR_SYSTEM_PATH"}), 403
-        return jsonify(outside.diff(target, rel))
+        return jsonify(outside.diff(target, rel, request.args.get("base") or None))
 
     def _outside_target(nixos_dir, rel):
         """(target, content, status) or an error response for the two
@@ -537,9 +537,11 @@ def register(app, ctx):
         if importer.config_unmappable(content):
             return jsonify({"error": "ERR_NOT_MAPPABLE", "file": rel})
 
-        # The form is filled from this content: it is the state a later
-        # form save compares the disk against (outside.py).
-        outside.remember(target, content)
+        # The form is filled from this content: its digest goes to the form,
+        # which sends it back with every save (outside.py). Recording it for
+        # the whole process instead let a second tab hide a change from the
+        # first one (revision 2026-11-18, finding 4).
+        base = outside.loaded(target, content)
         parsed = importer.parse_config(content)
         # Deactivated packages live in a reserved brick, which the parser
         # never sees. Without them the form would show a shorter list and
@@ -551,6 +553,7 @@ def register(app, ctx):
             have = {p.get("attr") for p in parsed.get("packages", [])}
             parsed["packages"] = list(parsed.get("packages", [])) + [
                 p for p in inactive if p["attr"] not in have]
+        parsed["_base"] = base
         return jsonify(parsed)
 
     @app.route("/api/parse/flake", methods=["POST"])

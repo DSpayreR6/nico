@@ -39,8 +39,13 @@ def _outside_conflict(nixos_dir: str, rel: str, body: dict):
     (core.file_in_raw_mode), so there is nothing to ask.
     """
     overwrite = bool(body.pop("_overwrite", False))
+    # The base of this form (outside.loaded), not of the whole process:
+    # a second tab must not hide the change from the first one (revision
+    # 2026-11-18, finding 4).
+    base = body.pop("_base", None)
+    base = base if isinstance(base, str) and base else None
     target = Path(nixos_dir) / rel
-    if _file_in_raw_mode(target) or not outside.changed_outside(target):
+    if _file_in_raw_mode(target) or not outside.changed_outside(target, base):
         return None
     if not overwrite:
         return jsonify({"error": "ERR_CHANGED_OUTSIDE", "file": rel}), 409
@@ -53,6 +58,17 @@ def _outside_conflict(nixos_dir: str, rel: str, body: dict):
     except git_manager.BackupError as exc:
         return jsonify({"error": "ERR_RESTRUCTURE_BACKUP", "detail": str(exc)}), 500
     return None
+
+
+def _saved(nixos_dir: str, rel: str):
+    """Success response carrying the form's new base: the file as the save
+    left it. Without it the next diff for this form would also show the
+    user's own saved changes as coming from outside."""
+    try:
+        content = (Path(nixos_dir) / rel).read_text(encoding="utf-8")
+    except OSError:
+        return jsonify({"success": True})
+    return jsonify({"success": True, "_base": outside.loaded(Path(nixos_dir) / rel, content)})
 
 
 def register(app, ctx):
@@ -99,7 +115,7 @@ def register(app, ctx):
             config_manager.save_config(nixos_dir, incoming)
         except config_manager.DuplicateAttrError as exc:
             return jsonify({"error": "ERR_DUPLICATE_ATTR", "duplicates": exc.names}), 409
-        return jsonify({"success": True})
+        return _saved(nixos_dir, "configuration.nix")
 
     @app.route("/api/state-version/hosts", methods=["GET"])
     def get_state_version_hosts():
@@ -479,7 +495,7 @@ def register(app, ctx):
             config_manager.save_host_config(nixos_dir, host_name, data)
         except config_manager.DuplicateAttrError as exc:
             return jsonify({"error": "ERR_DUPLICATE_ATTR", "duplicates": exc.names}), 409
-        return jsonify({"success": True})
+        return _saved(nixos_dir, expected)
 
     # One implementation for every save path – see core.push_after_save for why
     # the three copies that existed before were a defect and not duplication.

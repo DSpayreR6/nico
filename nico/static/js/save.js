@@ -313,7 +313,7 @@ function askChangedOutside(rel) {
     diffBtn.onclick   = async () => {
       if (!diffEl.classList.contains('hidden')) { diffEl.classList.add('hidden'); return; }
       try {
-        const data = await fetch(`/api/file/outside-diff?path=${encodeURIComponent(rel)}`)
+        const data = await fetch(`/api/file/outside-diff?path=${encodeURIComponent(rel)}&base=${encodeURIComponent(_coBase || '')}`)
           .then(r => r.json());
         diffEl.innerHTML = data.error ? escHtml(tErr(data.error)) : _renderDiff(data);
       } catch {
@@ -334,9 +334,12 @@ async function _postCoForm(url, payload) {
     const res = await csrfFetch(url, {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify(body),
+      body:    JSON.stringify({ ...body, _base: _coBase }),
     }).catch(() => null);
-    return res ? await res.json().catch(() => null) : null;
+    const data = res ? await res.json().catch(() => null) : null;
+    // The file as this save left it is the form's new base.
+    if (data?.success && data._base) _coBase = data._base;
+    return data;
   };
   const data = await send(payload);
   if (data?.error !== 'ERR_CHANGED_OUTSIDE') return data;

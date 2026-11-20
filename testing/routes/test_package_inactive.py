@@ -234,7 +234,8 @@ check("und die aktiven", got.get("git") is True and got.get("htop") is True, got
 form = config_manager.get_defaults()
 form.pop("brick_blocks", None)
 form.update({"packages": [pk("git"), pk("codex", False), pk("htop", False)],
-             KNOWN: True, "_co_ready": True, "_co_path": F})
+             KNOWN: True, "_co_ready": True, "_co_path": F,
+             "_base": parsed.get("_base")})  # as the form sends it (outside.py)
 r = client.post("/api/config", headers=hdr, data=json.dumps(form))
 check("POST /api/config geht", r.status_code == 200, (r.status_code, r.get_json()))
 saved = CONF.read_text(encoding="utf-8")

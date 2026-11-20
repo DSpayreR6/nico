@@ -36,6 +36,9 @@
 - Two ZIP backups in the same second no longer overwrite each other
 - Importing a config no longer makes users admins: an empty `extraGroups` list, or none at all, came back as `networkmanager` and `wheel`, and an empty selection in the form was written as `wheel`. NiCo never adds `wheel` by itself now, and new users in the form start without it; a new red Validator finding stops the rebuild when no user is in `wheel` (it can be forced, e.g. for a server run as root)
 - Importing a config no longer turns on auto-login when `autoLogin.enable = false` stands next to a user name; such lines stay as they are, as a Nix-Brick
+- An import that cannot read its source completely no longer deletes the old config first; a write error puts the previous files back, and neither case reports success with half a config any more
+- A file changed outside NiCo is asked about also when a second tab has loaded the newer version in the meantime, and a deleted file counts as changed instead of being recreated from the old form
+- Two rebuilds started almost at the same time (two tabs, a double click) no longer both run; the second gets "rebuild already running"
 
 ## 0.19.0 (2026-11-18)
 

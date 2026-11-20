@@ -43,6 +43,12 @@ _SWITCH_BUSY_STATES = {"active", "activating", "reloading", "deactivating"}
 
 _job_cv = threading.Condition()
 _job = None
+# Held from the "is a job running?" check until the new job is registered.
+# Both used to be separate sections under _job_cv, about 450 lines apart:
+# two starts close together (two tabs, a double click) both passed the
+# check, and the second replaced the job of the first (revision 2026-11-18,
+# finding 25). Not _job_cv itself: the stream readers wait on it.
+_start_lock = threading.Lock()
 
 # Upper bound for the written rebuild log. nixos-rebuild runs with `--log-format internal-json -v`, which emits one JSON line per evaluated
 # file: a single failed run produced 2.1 GB here, so everything above this is
@@ -764,12 +770,6 @@ def register(app, ctx):
         Architecture note: mode is already a parameter so switch/boot/test
         can be added to the UI later without touching this endpoint.
         """
-        global _job
-
-        import json as _json
-        import subprocess as _sp
-        import re as _re
-
         if err := _check_csrf(): return err
 
         payload = request.get_json(silent=True) or {}
@@ -781,6 +781,23 @@ def register(app, ctx):
         nixos_dir, err = _require_setup()
         if err:
             return err
+
+        # A second start while the first is still being set up gets the
+        # same answer as one during the build.
+        if not _start_lock.acquire(blocking=False):
+            return jsonify({"error": "ERR_REBUILD_RUNNING"}), 409
+        try:
+            return _start_locked(payload, mode, nixos_dir)
+        finally:
+            _start_lock.release()
+
+    def _start_locked(payload, mode, nixos_dir):
+        """rebuild_start from the running-check on; _start_lock is held."""
+        global _job
+
+        import json as _json
+        import subprocess as _sp
+        import re as _re
 
         with _job_cv:
             if _job is not None and _job["running"]:

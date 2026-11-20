@@ -137,8 +137,13 @@ post("/api/file/panel-mode", {"path": CO, "mode": "p"})
 stale = form(CO)
 change_outside(CO, '"rawaussen"', '"unbekannt"')
 outside._known.clear()          # NiCo restarted after the form was loaded
+# Since 2026-11-20 the form carries its own base (finding 4): a restart
+# no longer makes a stale form look current.
 s, r = post("/api/config", stale)
-check("unbekannter Stand (Neustart): keine Rückfrage", s == 200 and r.get("success"), (s, r))
+check("Neustart: Formular mit Basis fragt trotzdem", s == 409, (s, r))
+old_client = {k: v for k, v in stale.items() if k != "_base"}
+s, r = post("/api/config", old_client)
+check("Formular ohne Basis, Stand unbekannt: keine Rückfrage", s == 200 and r.get("success"), (s, r))
 
 stale = form(HOST)
 text = read(HOST)
