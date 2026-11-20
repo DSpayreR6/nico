@@ -1010,7 +1010,9 @@
 
   "sidebar.rawPanelHint":   "Diese Datei wird nicht von NiCo verwaltet. Du kannst sie rechts direkt bearbeiten.",
   "sidebar.panelOffHint":   "Panel deaktiviert. Die Datei kann rechts direkt bearbeitet werden.",
-  "sidebar.unmappableHint": "NiCo kann diese Datei nicht als Formular darstellen, weil sie anders aufgebaut ist als die Dateien, die NiCo selbst schreibt. Sie bleibt deshalb unverändert und kann rechts direkt bearbeitet werden.",
+  "sidebar.unmappableHint": "Nur im Raw-Modus geöffnet: NiCo kann diese Datei nicht als Formular darstellen, weil sie anders aufgebaut ist als die Dateien, die NiCo selbst schreibt. Sie bleibt deshalb unverändert und kann rechts direkt bearbeitet werden.",
+  "sidebar.unmappableParseLine": "Nur im Raw-Modus geöffnet: Syntaxfehler in Zeile {0} – so ist die Datei nicht baubar. Rechts beheben und speichern.",
+  "sidebar.unmappableParse": "Nur im Raw-Modus geöffnet: Nix kann die Datei nicht lesen – so ist sie nicht baubar. Rechts beheben und speichern.",
   "panelToggle.panel":       "Panel ein",
   "panelToggle.off":         "Panels aus",
   "panelToggle.brixError":   "Nix-Brix unvollständig – bitte alle Blöcke schließen bevor das Panel aktiviert wird.",

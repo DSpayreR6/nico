@@ -9,6 +9,7 @@
 - Settings the panel would add on its own are written into the Nix-Brick as a commented-out suggestion; uncommented, the Validator reports that the panel can take them over
 - Nix-Brick menu: *Move into panel* takes a brick into the form when the panel writes exactly the same; otherwise it names what would change
 - Save button for the panel as well as the raw editor, and Ctrl+S in both; a red dot on the button and a star before the file name show unsaved changes, and closing the tab with unsaved changes asks first
+- A file that opens in raw mode only gets a warning on the left with the reason – for a syntax error with the line as the raw editor counts it; after a raw save NiCo checks again, so a fixed file gets its panel switch back (set to raw) and a newly broken one loses it
 - The header shows the path of the open file relative to the config directory instead of only its name (shortened at the front when space is short)
 
 ### Bug Fixes
@@ -41,6 +42,7 @@
 - An import that cannot read its source completely no longer deletes the old config first; a write error puts the previous files back, and neither case reports success with half a config any more
 - A file changed outside NiCo is asked about also when a second tab has loaded the newer version in the meantime, and a deleted file counts as changed instead of being recreated from the old form
 - Two rebuilds started almost at the same time (two tabs, a double click) no longer both run; the second gets "rebuild already running"
+- A file Nix cannot read (e.g. a stray `};.` in a Nix-Brick) no longer opens in the panel, only to fail on the panel switch, "show differences" or restructuring; it opens in raw mode with the reason, and restructuring no longer drops unreadable text
 - Rebuilding a different host than this machine's own (after deleting it from the flake, or a wrong pick) is stopped by the Validator when that host's hardware config names disks this machine does not have; before, the check only looked at this machine's own host
 - Two hardware configs outside the host directories no longer overwrite each other in the copy NiCo keeps before an import
 - ZIP export and ZIP backup no longer pack the content of links that point outside the config directory; the export names what it left out

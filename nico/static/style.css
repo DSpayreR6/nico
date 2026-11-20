@@ -3807,6 +3807,15 @@ button:disabled {
   padding: 10px 12px;
   line-height: 1.5;
 }
+/* Raw only: the reason as a warning, Nix's own message small below it. */
+.unmappable-detail {
+  display: block;
+  margin-top: 6px;
+  font-size: 11px;
+  opacity: 0.85;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
 .raw-panel-hint {
   font-size: 12px;
   color: var(--subtext0);

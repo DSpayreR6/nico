@@ -256,8 +256,11 @@ def modify_brick_in_file(
 
     # Brick actions take the file apart and put it together again around the
     # section markers. A file NiCo cannot represent has none of them where
-    # they are expected; it is edited as text.
-    if file_unmappable(nixos_dir, fname, content, ftype):
+    # they are expected; it is edited as text. Only the structure counts
+    # here, not whether Nix can read it: a brick action is a text edit, and
+    # an already broken file must stay repairable through its bricks
+    # (testing/routes/test_brick_input_guard.py, section 5).
+    if _structure_unmappable(nixos_dir, fname, content, ftype):
         return False, "ERR_NOT_MAPPABLE", []
 
     if ftype == "hm":
@@ -457,32 +460,81 @@ def flake_is_managed(content: str) -> bool:
         importer.flake_unmappable(content) is None
 
 
-def file_unmappable(nixos_dir: str, rel_path: str, content: str,
-                    ftype: "str | None" = None) -> bool:
-    """True when the file at rel_path is one NiCo would regenerate, and cannot.
+def _form_kind(nixos_dir: str, rel_path: str, ftype: "str | None") -> "str | None":
+    """'flake', 'module' or None: is there a form behind this file?
 
-    Covers the files with a form behind them: the root flake.nix, the root
-    configuration.nix, host files, Home Manager files and anything typed 'co'
-    or 'hm'. Every other file is raw anyway.
+    The root flake.nix, the root configuration.nix, host files, Home Manager
+    files and anything typed 'co' or 'hm'. Every other file is raw anyway.
     """
     parts = Path(rel_path).parts
     if not parts:
-        return False
+        return None
     settings = config_manager.load_config_settings(nixos_dir)
     hosts_dir = (settings.get("hosts_dir") or "hosts").strip() or "hosts"
     hm_dir = (settings.get("hm_dir") or "home").strip() or "home"
 
     if rel_path == "flake.nix":
-        return importer.flake_unmappable(content) is not None
+        return "flake"
     if ftype == "fl":
-        return False        # a flake.nix elsewhere is never regenerated
+        return None         # a flake.nix elsewhere is never regenerated
     is_module = (
         rel_path == "configuration.nix"
         or ftype in ("co", "hm")
         or (len(parts) == 3 and parts[0] == hosts_dir and parts[2] == "default.nix")
         or (len(parts) >= 2 and parts[0] == hm_dir)
     )
-    return is_module and importer.config_unmappable(content)
+    return "module" if is_module else None
+
+
+def _structure_unmappable(nixos_dir: str, rel_path: str, content: str,
+                          ftype: "str | None" = None) -> bool:
+    """A file with a form behind it, built differently from what NiCo writes."""
+    kind = _form_kind(nixos_dir, rel_path, ftype)
+    if kind == "flake":
+        return importer.flake_unmappable(content) is not None
+    return kind == "module" and importer.config_unmappable(content)
+
+
+def file_unmappable(nixos_dir: str, rel_path: str, content: str,
+                    ftype: "str | None" = None) -> bool:
+    """True when the file at rel_path has a form behind it and can only be
+    edited as text: Nix cannot read it, or it is built differently from what
+    NiCo writes (unmappable_reason).
+
+    One answer for every place that decides: opening, the raw save
+    permission, the panel switch, brick actions. When opening counted a
+    syntax error and the raw save did not, the raw editor offered to save
+    and the server refused with ERR_MANAGED_FILE (2026-11-20).
+    """
+    return unmappable_reason(nixos_dir, rel_path, content, ftype) is not None
+
+
+def unmappable_reason(nixos_dir: str, rel_path: str, content: str,
+                      ftype: "str | None" = None) -> "dict | None":
+    """Why a file with a form behind it opens in the raw editor only, or None.
+
+    {"kind": "parse", "line": N, "message": "..."} when Nix cannot read it,
+    {"kind": "structure"} when it is readable but built differently from what
+    NiCo writes. Until 2026-11-20 a syntax error, e.g. a
+    stray `};.` inside a Nix-Brick, opened in the panel, and only the panel
+    switch, "show differences" or restructuring failed - with "cannot be shown
+    as a form" and no reason (VM test 2026-11-19, F). Nix is asked, not a
+    text walker: "not buildable" may only be said when it is true. Without
+    nix-instantiate the parse check stays silent (validator.nix_parse_error).
+    """
+    if _form_kind(nixos_dir, rel_path, ftype) is None:
+        return None
+    from . import validator as _val
+    err = _val.nix_parse_error(content)
+    if err is not None:
+        m = re.search(r":(\d+):\d+", err)
+        first = next((l.strip() for l in err.splitlines() if l.strip()), err)
+        first = re.sub(r"^error:\s*", "", first)
+        return {"kind": "parse", "line": int(m.group(1)) if m else None,
+                "message": first}
+    if _structure_unmappable(nixos_dir, rel_path, content, ftype):
+        return {"kind": "structure"}
+    return None
 
 
 def unmappable_files(nixos_dir: str) -> list[str]:
@@ -901,6 +953,7 @@ def read_config_file(nixos_dir: str, rel_path: str, *, persist_stamp: bool = Tru
         except Exception:
             pass
 
+    reason = unmappable_reason(nixos_dir, rel, content, ftype or path_type)
     return {
         "content": content,
         "path": rel,
@@ -909,8 +962,10 @@ def read_config_file(nixos_dir: str, rel_path: str, *, persist_stamp: bool = Tru
         "outside": outside,
         "panel_mode": mode,
         "writable": target.suffix in _WRITABLE_SUFFIXES,
-        # The interface shows such a file in the raw editor instead of a form.
-        "unmappable": file_unmappable(nixos_dir, rel, content, ftype or path_type),
+        # The interface shows such a file in the raw editor instead of a form,
+        # with the reason next to it.
+        "unmappable": reason is not None,
+        "unmappable_reason": reason,
     }
 
 

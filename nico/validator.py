@@ -1533,8 +1533,16 @@ def _rule_duplicate_attrs(nixos_dir: str, config: dict, is_flake: bool,
 _PARSE_TIMEOUT = 20
 
 
+_PARSE_CACHE: dict[str, str | None] = {}
+_PARSE_CACHE_MAX = 64
+
+
 def nix_parse_error(content: str) -> str | None:
     """The Nix message if `content` is not readable Nix, else None.
+
+    Remembered per content: opening one file asks several times (raw-only
+    check, outside status), and the answer for the same text never changes.
+    A missing nix-instantiate is not remembered - it may appear later.
 
     None also when nix-instantiate is missing or too slow: not knowing is not
     the same as being fine, but a caller must not refuse a write over a tool
@@ -1544,6 +1552,19 @@ def nix_parse_error(content: str) -> str | None:
     (vorgaben.txt); its path is cut out of the message, which would otherwise
     point at /tmp instead of the file the user is editing.
     """
+    key = hashlib.sha256(content.encode("utf-8", "surrogatepass")).hexdigest()
+    if key in _PARSE_CACHE:
+        return _PARSE_CACHE[key]
+    result, known = _nix_parse_error_uncached(content)
+    if known:
+        if len(_PARSE_CACHE) >= _PARSE_CACHE_MAX:
+            _PARSE_CACHE.pop(next(iter(_PARSE_CACHE)))
+        _PARSE_CACHE[key] = result
+    return result
+
+
+def _nix_parse_error_uncached(content: str) -> tuple[str | None, bool]:
+    """(message or None, whether Nix actually answered)."""
     import tempfile
     tmp = None
     try:
@@ -1554,13 +1575,13 @@ def nix_parse_error(content: str) -> str | None:
         r = subprocess.run(["nix-instantiate", "--parse", tmp],
                            capture_output=True, text=True, timeout=_PARSE_TIMEOUT)
         if r.returncode == 0:
-            return None
+            return None, True
         # No message from Nix: report the exit code as data, not a sentence –
         # a German fallback here reached every user untranslated.
         return ((r.stderr or "").replace(tmp, "").strip()
-                or f"nix-instantiate --parse: exit {r.returncode}")
+                or f"nix-instantiate --parse: exit {r.returncode}"), True
     except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
-        return None
+        return None, False
     finally:
         if tmp:
             try:

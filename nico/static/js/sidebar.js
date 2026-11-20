@@ -12,6 +12,7 @@ const Sidebar = (() => {
   let _formDirty      = false;  // config-form hat ungespeicherte Änderungen
   let _flakeFormDirty = false;  // flake-form hat ungespeicherte Änderungen
   let _panelSaveable  = false;  // a form panel (co/fl/hm) is shown for the active file
+  let _openUnmappable = false;  // the active file is shown raw-only for a reason (warning left)
 
   // DOM refs (populated after DOMContentLoaded)
   let elSidebar, elToggleBtn, elTree, elPreviewPanel, elSaveAllBtn, elRefreshBtn;
@@ -292,6 +293,9 @@ const Sidebar = (() => {
       const ta = document.getElementById('raw-file-editor');
       // Unsaved raw edits go to disk first, so the check sees them.
       if (ta && ta.value !== _rawEditOrig && !await _saveRawFile()) return 'stay';
+      // The save made it unreadable for Nix: it stays raw, the warning left
+      // already says why and where (rule A, Martin 2026-11-20).
+      if (_openUnmappable) return 'stay';
     }
     let check = null;
     try {
@@ -945,7 +949,7 @@ const Sidebar = (() => {
     return _getPanelModeFromContent(content) ?? _panelDefault;
   }
 
-  function _updatePanelToggle(ftype, content) {
+  function _updatePanelToggle(ftype, content, forceMode = null) {
     const toggle = document.getElementById('panel-toggle');
     const btn    = document.getElementById('panel-toggle-btn');
     const label  = document.getElementById('panel-toggle-label');
@@ -953,7 +957,7 @@ const Sidebar = (() => {
     const supportsPanels = ['co', 'fl', 'hm'].includes(ftype);
     toggle.classList.toggle('hidden', !supportsPanels);
     if (!supportsPanels) return;
-    const mode    = _effectivePanelMode(content);
+    const mode    = forceMode || _effectivePanelMode(content);
     const isPanel = mode !== 'r';
     btn.dataset.mode = mode;
     if (label) label.textContent = isPanel ? t('panelToggle.panel') : t('panelToggle.off');
@@ -977,10 +981,12 @@ const Sidebar = (() => {
     // saving it would replace the file with defaults – so there is only the
     // raw editor, with the reason next to it. No panel switch either: there
     // is no panel to switch to.
+    _openUnmappable = !!data.unmappable;
     if (data.unmappable) {
       _updatePanelToggle('unmappable', '');
       _showRawView(data.content || '', fileName, path);
-      _showLeftPanel('panel-off', fileName, { panelOff: true, unmappable: true });
+      _showLeftPanel('panel-off', fileName, { panelOff: true, unmappable: true,
+                                              reason: data.unmappable_reason });
       _setRawModeUI(true);
       return;
     }
@@ -1080,7 +1086,27 @@ const Sidebar = (() => {
     }
   }
 
-  function _showLeftPanel(mode, fileName, { panelOff = false, flagSource = null, unmappable = false } = {}) {
+  /** The warning left of a raw-only file: why, and for a syntax error where.
+   *  Nix counts the lines of the whole file, the raw editor starts below
+   *  NiCo's header lines - the line is shifted to match what the user sees. */
+  function _setUnmappableText(reason) {
+    const txt = document.getElementById('unmappable-text');
+    const det = document.getElementById('unmappable-detail');
+    if (!txt || !det) return;
+    if (reason?.kind === 'parse') {
+      const hdr  = _rawEditHeader ? _rawEditHeader.split('\n').length : 0;
+      const line = reason.line ? (reason.line > hdr ? reason.line - hdr : reason.line) : null;
+      txt.textContent = line ? t('sidebar.unmappableParseLine', line) : t('sidebar.unmappableParse');
+      det.textContent = reason.message || '';
+      det.classList.toggle('hidden', !reason.message);
+    } else {
+      txt.textContent = t('sidebar.unmappableHint');
+      det.textContent = '';
+      det.classList.add('hidden');
+    }
+  }
+
+  function _showLeftPanel(mode, fileName, { panelOff = false, flagSource = null, unmappable = false, reason = null } = {}) {
     _panelSaveable = ['form', 'fl', 'hm'].includes(mode);
     // Hide all panels
     document.getElementById('config-form')?.classList.add('hidden');
@@ -1103,6 +1129,7 @@ const Sidebar = (() => {
       regularHint?.classList.toggle('hidden', panelOff);
       offHint?.classList.toggle('hidden', !panelOff || unmappable);
       document.getElementById('unmappable-hint')?.classList.toggle('hidden', !unmappable);
+      if (unmappable) _setUnmappableText(reason);
       if (offSource) {
         offSource.classList.toggle('hidden', !panelOff || unmappable);
         if (panelOff && flagSource) {
@@ -1857,6 +1884,51 @@ const Sidebar = (() => {
     pre.addEventListener('scroll', () => { lns.scrollTop = pre.scrollTop; });
   }
 
+  /** After a raw save: is the file (still) shown raw-only for a reason?
+   *  Only the left side and the panel switch change - the raw editor stays
+   *  as it is, cursor and scroll position included (G, VM test 2026-11-19:
+   *  the switch stayed away until the file was opened again). */
+  async function _recheckMappable(path) {
+    if (activeFile?.path !== path) return;
+    const fetchFile = () => csrfFetch(`/api/file?path=${encodeURIComponent(path)}`)
+      .then(r => r.json()).catch(() => null);
+    const fresh = await fetchFile();
+    if (!fresh || fresh.error || activeFile?.path !== path) return;
+    const fileName = path.split('/').pop();
+    if (fresh.unmappable) {
+      // Broken by this save, or a different line now.
+      _openUnmappable = true;
+      _updatePanelToggle('unmappable', '');
+      _showLeftPanel('panel-off', fileName, { panelOff: true, unmappable: true,
+                                              reason: fresh.unmappable_reason });
+      return;
+    }
+    if (!_openUnmappable) return;
+    // Readable again: it stays in the raw editor, marked raw (#r), and the
+    // switch shows "panel off" - switching it on asks as usual before the
+    // file is restructured.
+    _openUnmappable = false;
+    let content = fresh.content || '';
+    try {
+      const r = await csrfFetch('/api/file/panel-mode', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path, mode: 'r' }),
+      });
+      const d = await r.json();
+      if (d && !d.error) {
+        const again = await fetchFile();
+        if (again && !again.error) content = again.content || content;
+      }
+    } catch { /* the switch below still shows "panel off" */ }
+    if (activeFile?.path !== path) return;
+    // The header now carries the flag; the next raw save must keep it.
+    _rawEditHeader = _splitNicoHeader(content).header;
+    _updatePanelToggle(fresh.file_type || 'unknown', content, 'r');
+    _showLeftPanel('panel-off', fileName, {
+      panelOff: true,
+      flagSource: _getPanelModeFromContent(content) !== null ? 'file' : 'settings' });
+  }
+
   async function _saveRawFile() {
     const path = _rawEditPath;
     const body = document.getElementById('raw-file-editor')?.value ?? '';
@@ -1880,6 +1952,7 @@ const Sidebar = (() => {
         _rawEditOrig = body;
         refreshUnsaved();
         showToast(t('sidebar.rawSaveOk'), 'success');
+        await _recheckMappable(path);
         return true;
       } else {
         showToast(tErr(data.error) || t('toast.error'), 'error');

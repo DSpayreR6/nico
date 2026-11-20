@@ -121,14 +121,49 @@ try:
     check("stilles Speichern lässt die Datei stehen",
           strip((cfg / CO).read_text(encoding="utf-8")) == strip(before))
 
-    print("\n3. Raw-Änderung, dann aufs Panel: erst fragen (Martins Punkt)")
+    print("\n3a. Syntaxfehler im Raw, dann aufs Panel: bleibt Raw (Regel A, 2026-11-20)")
+    # Until 2026-11-20 the switch offered to restructure and dropped the
+    # stray dot. A file Nix cannot read is raw-only now: no dialog, the
+    # warning left names the line, the user fixes it.
     ok = d.execute_script("""
       const ta = document.getElementById('raw-file-editor');
       if (!ta) return false;
       const v = ta.value, i = v.trimEnd().lastIndexOf('}');
       ta.value = v.slice(0, i) + '.\\n' + v.slice(i);
+      ta.dispatchEvent(new Event('input', {bubbles: true}));
       return true;""")
     check("Punkt im Raw-Editor eingetragen (ungespeichert)", ok)
+    d.execute_script("document.getElementById('panel-toggle-check').click();")
+    time.sleep(3)
+    check("kein Umbau-Dialog", not dialog_open())
+    warn = d.execute_script("""
+      const w = document.getElementById('unmappable-hint');
+      return w && !w.classList.contains('hidden') ? document.getElementById('unmappable-text').textContent : '';""")
+    check("Warnung links mit Zeile", "Zeile" in warn, warn)
+    check("Schalter weg", d.execute_script(
+        "return document.getElementById('panel-toggle').classList.contains('hidden');"))
+    check("Punkt gespeichert, Datei unverändert sonst",
+          "." in [l.strip() for l in (cfg / CO).read_text(encoding="utf-8").splitlines()])
+    d.execute_script("""
+      const ta = document.getElementById('raw-file-editor');
+      ta.value = ta.value.replace(/\\n\\.\\n/, '\\n');
+      ta.dispatchEvent(new Event('input', {bubbles: true}));
+      document.getElementById('save-tab-btn').click();""")
+    time.sleep(3)
+    check("behoben: Warnung weg", d.execute_script(
+        "return document.getElementById('unmappable-hint').classList.contains('hidden');"))
+    mode = d.execute_script("return document.getElementById('panel-toggle-btn')?.dataset.mode;")
+    check("behoben: Schalter auf Raw", mode == "r", mode)
+
+    print("\n3. Raw-Änderung, dann aufs Panel: erst fragen (Martins Punkt)")
+    ok = d.execute_script("""
+      const ta = document.getElementById('raw-file-editor');
+      if (!ta) return false;
+      const v = ta.value, i = v.trimEnd().lastIndexOf('}');
+      ta.value = v.slice(0, i) + '  services.uitoggle.enable = true;\\n' + v.slice(i);
+      ta.dispatchEvent(new Event('input', {bubbles: true}));
+      return true;""")
+    check("Einstellung im Raw-Editor eingetragen (ungespeichert)", ok)
     d.execute_script("document.getElementById('panel-toggle-check').click();")
     time.sleep(2.5)
     check("Dialog erscheint beim Umschalten", dialog_open())
@@ -137,14 +172,15 @@ try:
     check("… ohne Satz „außerhalb geändert“ (Änderung kam aus dem Raw-Editor)", d.execute_script(
         "return document.getElementById('restructure-outside-note').classList.contains('hidden');"))
     check("ungespeicherte Raw-Änderung wurde vorher gespeichert",
-          "." in [l.strip() for l in (cfg / CO).read_text(encoding="utf-8").splitlines()])
+          "services.uitoggle.enable" in (cfg / CO).read_text(encoding="utf-8"))
     click("restructure-raw-btn")
     time.sleep(1.5)
     check("Im Raw-Modus bleiben: Dialog zu", not dialog_open())
     mode = d.execute_script("return document.getElementById('panel-toggle-btn')?.dataset.mode;")
     check("… Schalter steht weiter auf Raw", mode == "r", mode)
-    check("… Punkt noch in der Datei",
-          "." in [l.strip() for l in (cfg / CO).read_text(encoding="utf-8").splitlines()])
+    check("… Datei nicht umgebaut",
+          not any("services.uitoggle.enable" in b["text"] for b in
+                  extract_brick_blocks((cfg / CO).read_text(encoding="utf-8")).values()))
     d.execute_script("document.getElementById('panel-toggle-check').click();")
     time.sleep(2.5)
     check("zweiter Versuch: Dialog wieder da", dialog_open())
@@ -154,7 +190,8 @@ try:
     text = (cfg / CO).read_text(encoding="utf-8")
     mode = d.execute_script("return document.getElementById('panel-toggle-btn')?.dataset.mode;")
     check("… Panel-Modus", mode == "p", mode)
-    check("… Punkt weg", "." not in [l.strip() for l in text.splitlines()])
+    check("… Raw-Einstellung als Nix-Brick", any(
+        "services.uitoggle.enable" in b["text"] for b in extract_brick_blocks(text).values()))
     check("… Einstellung aus Teil 2 als Nix-Brick", any(
         "services.uiraw.enable" in b["text"] for b in extract_brick_blocks(text).values()))
 

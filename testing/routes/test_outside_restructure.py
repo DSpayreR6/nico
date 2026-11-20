@@ -163,19 +163,38 @@ s, r = post("/api/file", {"files": [{"path": HOST, "content": t[:i] + ".\n" + t[
 check("Raw speichern mit verirrtem Punkt", s == 200 and r.get("success"), r)
 s, r = get(f"/api/file?path={HOST}")
 check("Raw-Speichern setzt die Prüfsumme: outside leer", r.get("outside") is None, r.get("outside"))
+# Since 2026-11-20 (Martin, rule A): a file Nix cannot read is raw-only, with
+# the reason and the line. Before, restructuring dropped the stray dot -
+# harmless here, but for a real syntax error it would discard text that
+# meant something. The user fixes it in raw mode.
+check("Syntaxfehler: nur Raw, mit Grund", r.get("unmappable") is True
+      and (r.get("unmappable_reason") or {}).get("kind") == "parse", r.get("unmappable_reason"))
+s, r = post("/api/file/panel-mode", {"path": HOST, "mode": "p"})
+check("Panel-Schalter verweigert", s == 400 and r.get("error") == "ERR_NOT_MAPPABLE", (s, r))
+check("Punkt steht noch in der Datei", "." in [l.strip() for l in read(HOST).splitlines()])
+t = read(HOST)
+i = t.rstrip().rfind("}")
+fixed = t[:i].rstrip()
+assert fixed.endswith(".")
+s, r = post("/api/file", {"files": [{"path": HOST, "content": fixed[:-1].rstrip() + "\n" + t[i:]}]})
+check("im Raw behoben und gespeichert", s == 200 and r.get("success"), r)
 s, r = get(f"/api/file/panel-check?path={HOST}")
 check("panel-check sieht die Raw-Änderung", r.get("changes") is True, r)
-s, r = get(f"/api/file/restructure-diff?path={HOST}")
-removed = [h["content"] for f in r.get("files", []) for h in f["hunks"] if h["type"] == "removed"]
-check("Unterschiede zeigen den Punkt als entfernt", "." in [x.strip() for x in removed], removed)
 s, r = post("/api/file/panel-mode", {"path": HOST, "mode": "p"})
 check("aufs Panel umgeschaltet", s == 200 and r.get("ok"), r)
+before_restructure = read(HOST)
 s, r = post("/api/file/restructure", {"path": HOST})
 check("Umbauen nach dem Umschalten ok", s == 200 and r.get("success") and r.get("backup") == "git", r)
 check("Raw-Einstellung als Nix-Brick erhalten", in_brick(HOST, "services.rawbleibt.enable"))
 check("Punkt ist weg", "." not in [l.strip() for l in read(HOST).splitlines()])
-log = [c["message"] for c in git_manager.get_log(str(cfg), 6)]
-check("Stand mit Punkt liegt in einem Sicherungspunkt", any("restructuring" in m for m in log), log)
+# The state before restructuring was already committed by the raw save, so
+# no extra labelled checkpoint is needed - what counts is that it is in git.
+import subprocess as _sp
+revs = _sp.run(["git", "rev-list", "-n", "10", "HEAD"], cwd=cfg, capture_output=True,
+               text=True).stdout.split()
+in_git = any(_sp.run(["git", "show", f"{rev}:{HOST}"], cwd=cfg, capture_output=True,
+                     text=True).stdout == before_restructure for rev in revs)
+check("Stand vor dem Umbauen liegt in einem Sicherungspunkt", in_git)
 
 # ── 6. Ohne Versionszeile ───────────────────────────────────────────────────
 print("\n6. configuration.nix ganz ohne Versionszeile (von Hand geschrieben)")
