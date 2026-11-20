@@ -1937,15 +1937,19 @@ def backup_to_zip(nixos_dir: str | Path) -> str:
                 skipped.append(rel.as_posix())
                 continue
             zf.write(f, rel)
+        # nico.json als Kopie beifügen (Referenz, wird beim Import nicht angewendet)
+        nico_json = root / "nico.json"
+        if nico_json.exists():
+            # Same link rule as above (Codex re-check 2026-11-20, finding 6).
+            if link_leaves_dir(nico_json, root):
+                skipped.append("nico.json")
+            else:
+                zf.write(nico_json, "nico.json")
         # The backup runs inside other actions, which have no place for a
         # message; the archive itself says what is missing.
         if skipped:
             zf.comment = ("Skipped links pointing outside the config directory: "
                           + ", ".join(skipped)).encode("utf-8")[:65535]
-        # nico.json als Kopie beifügen (Referenz, wird beim Import nicht angewendet)
-        nico_json = root / "nico.json"
-        if nico_json.exists():
-            zf.write(nico_json, "nico.json")
     return zip_name
 
 

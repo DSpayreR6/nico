@@ -50,7 +50,7 @@ H = {"X-CSRF-Token": csrf, "Content-Type": "application/json"}
 # ── 5 ───────────────────────────────────────────────────────────────────────
 print("5. Zwei Hardware-Dateien außerhalb des Hostschemas")
 check("Hostdatei behält ihren Namen", hardware._stash_name("h1", Path("hosts/h1/x.nix")) == "h1.nix")
-check("Wurzel: @root.nix", hardware._stash_name(None, Path("hardware-configuration.nix")) == "@root.nix")
+check("Wurzel: @.nix", hardware._stash_name(None, Path("hardware-configuration.nix")) == "@.nix")
 check("modules/: @modules.nix",
       hardware._stash_name(None, Path("modules/hardware-configuration.nix")) == "@modules.nix")
 check("tiefer: @a@b.nix", hardware._stash_name(None, Path("a/b/hardware-configuration.nix")) == "@a@b.nix")
@@ -68,9 +68,9 @@ try:
 finally:
     hardware.classify = real_classify
 names = sorted(e["file"] for e in kept)
-check("beide im Zwischenlager, verschiedene Namen", names == ["@modules.nix", "@root.nix"], names)
+check("beide im Zwischenlager, verschiedene Namen", names == ["@.nix", "@modules.nix"], names)
 stash = config_manager.HW_STASH_DIR
-check("beide Inhalte rückholbar", (stash / "@root.nix").read_bytes() == HW_A
+check("beide Inhalte rückholbar", (stash / "@.nix").read_bytes() == HW_A
       and (stash / "@modules.nix").read_bytes() == HW_B)
 (cfg / "hardware-configuration.nix").unlink()
 (cfg / "modules" / "hardware-configuration.nix").unlink()

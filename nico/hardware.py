@@ -424,9 +424,12 @@ def _stash_name(host: str | None, rel: Path | None = None) -> str:
     A host file is stored as `<host>.nix`. Hosts are directory names, so
     they are already safe, but a stray separator must never escape the stash
     dir. A file outside the host scheme is named after its directory,
-    `@root.nix` / `@modules.nix`: before, every such file became `_root.nix`
-    and the second replaced the first (revision 2026-11-18, finding 5). `@`
-    never survives the host sanitising, so the two kinds cannot collide.
+    `@.nix` for the top level, `@modules.nix` for modules/: before, every
+    such file became `_root.nix` and the second replaced the first (revision
+    2026-11-18, finding 5). `@` never survives the host sanitising, so the two
+    kinds cannot collide; the top level has no name of its own, because a
+    directory called `root/` was `@root.nix` as well (Codex re-check
+    2026-11-20).
     """
     def safe(s: str) -> str:
         return re.sub(r"[^A-Za-z0-9_.-]", "_", s)
@@ -435,7 +438,7 @@ def _stash_name(host: str | None, rel: Path | None = None) -> str:
     if rel is None:
         return "_root.nix"
     parts = [safe(p) for p in Path(rel).parent.parts]
-    return "@" + ("@".join(parts) if parts else "root") + ".nix"
+    return "@" + "@".join(parts) + ".nix"
 
 
 def stash_hw_files(nixos_dir: str) -> list[dict]:

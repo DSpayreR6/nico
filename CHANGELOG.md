@@ -36,7 +36,8 @@
 - The permission to edit a config from a newer NiCo no longer carries over to another config directory in the same run
 - The Home Manager file dialog and two labels showed translation keys instead of text
 - Changing a Home Manager value whose old string contained an escaped quote no longer leaves part of the old value behind
-- A commented-out `system.stateVersion` no longer counts as set for the Validator
+- A commented-out `system.stateVersion` no longer counts as set for the Validator, also behind a statement or inside `/* … */`
+- Switching from text mode to the panel with edited text secures the previous state first; if that is not possible, the file is left as it was
 - A stored host check now goes stale when a shared module changes, not only files of the host itself
 - Two ZIP backups in the same second no longer overwrite each other
 - Importing a config no longer makes users admins: an empty `extraGroups` list, or none at all, came back as `networkmanager` and `wheel`, and an empty selection in the form was written as `wheel`. NiCo never adds `wheel` by itself now, and new users in the form start without it; a new red Validator finding stops the rebuild when no user is in `wheel` (it can be forced, e.g. for a server run as root)

@@ -230,7 +230,13 @@ def _check_fidelity(original: Path, result: Path, case: CaseResult) -> bool:
     a changed group list. Returns True when the file is faithful.
     """
     faithful = True
-    for name in ("configuration.nix", "home.nix", "flake.nix"):
+    # Every .nix file, not only the three in the top level: a changed group
+    # list in a host file passed unnoticed (Codex re-check 2026-11-20,
+    # finding 29). The file is named with every hit, so the same attribute
+    # name in another module cannot hide it.
+    names = sorted(p.relative_to(original).as_posix() for p in original.rglob("*.nix")
+                   if not _is_sensitive(p) and ".git" not in p.parts)
+    for name in names:
         before, after = original / name, result / name
         if not (before.exists() and after.exists()):
             continue

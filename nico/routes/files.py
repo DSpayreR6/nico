@@ -780,6 +780,17 @@ def register(app, ctx):
             if ftype:
                 updated = _set_type_in_content(updated, ftype)
 
+            # Text from the editor replaces what is on disk: that state must be
+            # secured first, as for every other overwrite. The commit after the
+            # write used to be the only backup and its failure went unnoticed
+            # (Codex re-check 2026-11-20, finding 2).
+            if content is not None and content != current:
+                try:
+                    git_manager.backup_before_write(
+                        nixos_dir, [rel], label=f"NiCo: backup before switching {rel}")
+                except git_manager.BackupError as exc:
+                    return jsonify({"error": "ERR_RESTRUCTURE_BACKUP", "detail": str(exc)}), 500
+
             try:
                 atomic.write_text(target, updated)
             except OSError:

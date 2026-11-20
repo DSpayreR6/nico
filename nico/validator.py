@@ -2087,11 +2087,12 @@ def _state_version_sites(nixos_dir: str, host: str | None,
         in_hm = hm_dir.exists() and nix_file.is_relative_to(hm_dir)
         if in_hm != home_manager:
             continue
-        for i, line in enumerate(content.split("\n"), 1):
-            # A commented-out definition (or a deactivated brick) is not one
-            # (revision 2026-11-18, finding 20).
-            if line.lstrip().startswith("#"):
-                continue
+        # A commented-out definition (or a deactivated brick) is not one
+        # (revision 2026-11-18, finding 20) – also behind a statement or in
+        # /* … */ (Codex re-check 2026-11-20). Comments are blanked with
+        # length and line breaks kept, so the line numbers stay right.
+        from .importer import _blank_comments
+        for i, line in enumerate(_blank_comments(content).split("\n"), 1):
             m = pattern.search(line)
             if m:
                 prio = (m.group(1) or "").split()[0] if m.group(1) else ""
