@@ -228,8 +228,11 @@ def _sec_system(data: dict, *, host_mode: bool) -> "list[str]":
         lines += [f'  networking.hostName = "{nix_esc(hostname)}";']
     if state_version:
         lines += [f'  system.stateVersion = "{nix_esc(state_version)}";']
-    elif not _state_version_per_host(data):
-        lines += ['  # system.stateVersion = "";  # TODO: set NixOS state version']
+    # No placeholder when it is empty. "# TODO: set NixOS state version" read
+    # like unfinished work in the user's file (Martin, 2026-11-20); dropped
+    # for several hosts on 2026-11-01, now everywhere. The Validator
+    # (state_version_missing) and the hint at the field say where the value
+    # belongs. The importer still recognises the old line as NiCo's own.
     return lines
 
 

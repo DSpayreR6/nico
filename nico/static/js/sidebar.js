@@ -713,6 +713,8 @@ const Sidebar = (() => {
   async function selectFile(path, name, { force = false } = {}) {
     if (!force && activeFile && activeFile.path === path) return;
 
+    // An HM change that is not on disk stops the switch, like the others.
+    if (!await _hmSaveResult()) return;
     if (_formDirty) {
       const ok = await _autoSave();
       if (!ok) return;
@@ -788,7 +790,7 @@ const Sidebar = (() => {
 
   /** Is anything of the open file not saved yet? Panel and raw alike. */
   function hasUnsaved() {
-    if (_formDirty || _flakeFormDirty || _hmSaveTimer) return true;
+    if (_formDirty || _flakeFormDirty || _hmSaveTimer || _hmInFlight || _hmSaveFailed) return true;
     const ta = _rawEditor();
     return !!ta && ta.value !== _rawEditOrig;
   }
@@ -815,8 +817,10 @@ const Sidebar = (() => {
       ok = (await _saveRawFile()) === true;
     } else if (_panelShown()) {
       try {
-        await _hmFlushPendingSave();
-        if (_flakeFormDirty) ok = await _flakeSave();
+        // The result of every save counts; a refused HM save used to be
+        // reported as "saved" (Codex re-check 2026-11-20).
+        ok = await _hmSaveResult();
+        if (ok && _flakeFormDirty) ok = await _flakeSave();
         const isCo = document.querySelector(
           `.tree-file[data-path="${CSS.escape(activeFile.path)}"]`)?.dataset.fileType === 'co';
         if (ok && (_formDirty || (isCo && _canSaveCurrentCoForm()))) {
@@ -1057,11 +1061,26 @@ const Sidebar = (() => {
   let _hmCurrentPath = '';
   let _hmSaveTimer   = null;
   let _hmPendingSave = null;
+  // A Home Manager save the server refused: the change is still unsaved, and
+  // the dot and star have to say so (Codex re-check 2026-11-20).
+  let _hmSaveFailed  = false;
+  let _hmSaveNow     = null;   // saves the HM panel now (set per panel)
+  let _hmInFlight    = null;   // promise of a save already on its way
 
   /** Führt einen noch anstehenden HM-Autosave sofort aus (mit den alten
    *  DOM-Werten), bevor das Panel für eine andere Datei neu befüllt wird.
    *  Verhindert, dass ein verspäteter Timer die Werte der neuen Datei in
    *  die alte Datei schreibt (Vorfall 2026-07-12, guenther.nix). */
+  /** Bring the HM panel's state to disk and say whether it worked: a pending
+   *  autosave runs now, one on its way is waited for, a refused one is
+   *  retried. true when nothing is left unsaved. */
+  async function _hmSaveResult() {
+    if (_hmSaveTimer) return (await _hmFlushPendingSave()) !== false;
+    if (_hmInFlight) return (await _hmInFlight) !== false;
+    if (_hmSaveFailed && _hmSaveNow) return (await _hmSaveNow()) !== false;
+    return true;
+  }
+
   function _hmFlushPendingSave() {
     if (!_hmSaveTimer) return;
     clearTimeout(_hmSaveTimer);
@@ -1159,6 +1178,7 @@ const Sidebar = (() => {
 
   /** Baut das HM-Benutzer-Formular und befüllt es mit geparsten Werten */
   function _populateHmPanel(content, filePath) {
+    _hmSaveFailed = false;
     const container = document.getElementById('panel-hm-content');
     if (!container) return;
 
@@ -1296,7 +1316,13 @@ const Sidebar = (() => {
       return payload;
     }
 
-    async function _doHmSave() {
+    const _doHmSave = () => {
+      _hmInFlight = _doHmSaveInner().finally(() => { _hmInFlight = null; refreshUnsaved(); });
+      return _hmInFlight;
+    };
+    _hmSaveNow = _doHmSave;
+
+    async function _doHmSaveInner() {
       _hmSaveTimer = null;
       refreshUnsaved();
       const payload = _buildHmPatchPayload(filePath);
@@ -1314,13 +1340,16 @@ const Sidebar = (() => {
             renderCodePreview(data.content, 'preview-hm', filePath);
           }
           showToast(t('hm.saved'), 'success');
+          _hmSaveFailed = false;
           return true;
         } else {
           showToast(tErr(data.error) || t('toast.error'), 'error');
+          _hmSaveFailed = true;
           return false;
         }
       } catch (e) {
         showToast(t('toast.error'), 'error');
+        _hmSaveFailed = true;
         return false;
       }
     }

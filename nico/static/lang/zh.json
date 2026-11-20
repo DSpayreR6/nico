@@ -335,6 +335,7 @@
   "rebuild.progBuilt": "已构建 {0} / {1}",
   "rebuild.progLoaded": "已下载 {0}",
   "rebuild.progRemain": "剩余 {0}",
+  "rebuild.dlSizePending": "正在确定下载大小…",
   "rebuild.progCopyRemain": "剩余 {0} / {1}",
   "rebuild.optMode": "模式",
   "rebuild.modeSwitch": "立即应用，并从此以该状态启动 (switch)",

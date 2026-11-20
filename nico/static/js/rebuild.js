@@ -577,6 +577,9 @@ async function _rebuildFlow(mode, preparing) {
 
   // Flake-Formular speichern falls dirty, dann alle Änderungen schreiben
   preparing.step('rebuild.preparing.save');
+  // Whatever is open must be on disk first – a refused save stops here
+  // (Codex re-check 2026-11-20: an HM save could fail unnoticed).
+  if (!await Sidebar.saveActive({ toast: false })) return;
   if (!await Sidebar.flakeSave()) return;
   if (!await _autoSave()) return;
   if (!await _writeNix()) return;
@@ -600,7 +603,8 @@ async function _rebuildFlow(mode, preparing) {
     }).catch(() => null);
     if (!res || !res.ok) {
       const err = res ? (await res.json().catch(() => ({}))).error : null;
-      showToast(err === 'ERR_NO_TERMINAL' ? t('rebuild.terminalError') : t('toast.error'), 'error');
+      showToast(err === 'ERR_NO_TERMINAL' ? t('rebuild.terminalError')
+                                       : (err && tErr(err)) || t('toast.error'), 'error');
     } else {
       showToast(t('rebuild.terminalLaunched'), 'success');
     }
@@ -769,6 +773,10 @@ function attachRebuildMonitor(fromIndex = 0) {
   let maxCopiedTotal    = 0;
   let maxCopiedExpected = 0;
   let prefetchTotalBytes = 0;
+  // The planned size is announced before the first transfer: shown at once,
+  // with the last counts, and a note while it is still being determined.
+  let sizePending        = false;
+  let lastDl             = [0, 0, 0, 0, 0, ''];
 
   function _flushLog() {
     _logRafId = null;
@@ -845,6 +853,7 @@ function attachRebuildMonitor(fromIndex = 0) {
   }
 
   function _setDlProgress(done, expected, copiedDone = 0, copiedTotal = 0, copiedExpected = 0, copiedLabel = '') {
+    lastDl = [done, expected, copiedDone, copiedTotal, copiedExpected, copiedLabel];
     maxDlExpected = Math.max(maxDlExpected, expected || 0);
     maxCopiedTotal = Math.max(maxCopiedTotal, copiedTotal || 0);
     maxCopiedExpected = Math.max(maxCopiedExpected, copiedExpected || 0);
@@ -860,7 +869,8 @@ function attachRebuildMonitor(fromIndex = 0) {
     fetchDoneEl.textContent   = stableExpected > 0
       ? t('rebuild.progLoaded', _fmtBytes(done || 0)) : '';
     fetchRemainEl.textContent = stableExpected > 0
-      ? t('rebuild.progRemain', _fmtBytes(remain)) : '';
+      ? t('rebuild.progRemain', _fmtBytes(remain))
+      : (sizePending ? t('rebuild.dlSizePending') : '');
     if (stableCopiedTotal > 0) {
       let copiedText = t('rebuild.progCopyRemain', copiedRemain, stableCopiedTotal);
       if (stableCopiedExpected > 0) copiedText += ` (${_fmtBytes(Math.max(0, stableCopiedExpected - (done || 0)))})`;
@@ -1002,8 +1012,14 @@ function attachRebuildMonitor(fromIndex = 0) {
       if (hasGlobalProgress) return;
       _setDlProgress(msg.done, msg.expected);
 
+    } else if (msg.type === 'prefetch_pending') {
+      sizePending = true;
+      _setDlProgress(...lastDl);
+
     } else if (msg.type === 'prefetch_total') {
       prefetchTotalBytes = (msg.mib || 0) * 1024 * 1024;
+      sizePending = false;
+      _setDlProgress(...lastDl);
 
     } else if (msg.type === 'global_progress') {
       hasGlobalProgress = true;
@@ -1387,6 +1403,7 @@ async function runDryRun() {
   const spinner = startElapsedSpinner(output);
 
   try {
+    if (!await Sidebar.saveActive({ toast: false })) return;
     if (!await Sidebar.flakeSave()) return;
     if (!await _autoSave()) return;
     if (!await _writeNix()) return;
@@ -1419,6 +1436,9 @@ async function runSaveAndDryRun() {
   const body     = await _buildDryRunBody(hostInfo);
   if (body === null) return;
 
+  // Whatever is open must be on disk first – a refused save stops here
+  // (Codex re-check 2026-11-20: an HM save could fail unnoticed).
+  if (!await Sidebar.saveActive({ toast: false })) return;
   if (!await Sidebar.flakeSave()) return;
   if (!await _autoSave()) return;
   if (!await _writeNix()) return;

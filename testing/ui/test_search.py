@@ -103,7 +103,7 @@ try:
     time.sleep(4)
     d.execute_script("document.querySelectorAll('.overlay').forEach(e => e.classList.add('hidden'))")
 
-    expect_hits("Panel-Vorschau configuration.nix", "configuration.nix", "stateVersion", 1, "code")
+    expect_hits("Panel-Vorschau configuration.nix", "configuration.nix", "experimental-features", 1, "code")
     expect_hits("Panel-Vorschau flake.nix", "flake.nix", "nixosSystem", 1, "code")
     expect_hits("Panel-Vorschau Home Manager", "home/martin.nix", "home.username", 1, "code")
     expect_hits("Raw-Editor nd-Datei", "modules/extra.nix", "wortsuche", 3, "text")

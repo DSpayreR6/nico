@@ -36,7 +36,11 @@
 - The permission to edit a config from a newer NiCo no longer carries over to another config directory in the same run
 - The Home Manager file dialog and two labels showed translation keys instead of text
 - Changing a Home Manager value whose old string contained an escaped quote no longer leaves part of the old value behind
+- An empty `system.stateVersion` no longer leaves a `# TODO: set NixOS state version` line in the file; the Validator and the hint at the field say where the value belongs, and an existing line disappears with the next save
 - A commented-out `system.stateVersion` no longer counts as set for the Validator, also behind a statement or inside `/* … */`
+- The rebuild monitor no longer lets the remaining download size grow again: finished downloads stay counted, and the planned total is shown at once ("determining download size" until it is known)
+- A refused Home Manager save no longer shows as saved: the red dot stays, the save button reports the error, and switching files, dry run and rebuild wait until the file is saved
+- Rebuild in a terminal, dry run and the monitor stage the same files (foreign and oversized files stay out), and a failing git step stops them before Nix runs
 - Switching from text mode to the panel with edited text secures the previous state first; if that is not possible, the file is left as it was
 - A stored host check now goes stale when a shared module changes, not only files of the host itself
 - Two ZIP backups in the same second no longer overwrite each other

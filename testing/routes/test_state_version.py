@@ -338,13 +338,23 @@ check("zwei Hosts: auch keine stateVersion-Zeile",
       "system.stateVersion" not in co_multi)
 check("der SYST-Abschnitt bleibt als Anker stehen", "SYST" in co_multi)
 
+# Seit 2026-11-20 (Martin) überall ohne Platzhalter: die Zeile las sich auch
+# bei einem Host wie eine unfertige Aufgabe. Validator und Feldhinweis sagen,
+# wohin der Wert gehört.
 co_single = generator.generate_configuration_nix(dict(ein_host))
-check("ein Host: TODO-Kommentar bleibt - dort ist die Basis der richtige Ort",
-      "TODO: set NixOS state version" in co_single)
+check("ein Host: kein TODO-Kommentar",
+      "TODO: set NixOS state version" not in co_single)
 
 co_noflake = generator.generate_configuration_nix({})
-check("ohne Flake: TODO-Kommentar bleibt",
-      "TODO: set NixOS state version" in co_noflake)
+check("ohne Flake: kein TODO-Kommentar",
+      "TODO: set NixOS state version" not in co_noflake)
+
+alt = co_noflake.replace("# ── SYST", '  # system.stateVersion = "";  # TODO: set NixOS state version\n# ── SYST', 1) \
+    if "# ── SYST" in co_noflake else co_noflake
+from nico import importer as _imp
+rest = _imp.build_rest_brix(alt, _imp.parse_config(alt))
+check("alte Platzhalterzeile wird beim Einlesen nicht zu Fremdtext",
+      "TODO: set NixOS state version" not in rest, rest[:200])
 
 co_wert = generator.generate_configuration_nix(dict(zwei_hosts, state_version="25.11"))
 check("ein eingetragener Wert wird auch bei zwei Hosts geschrieben",

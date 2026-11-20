@@ -335,6 +335,7 @@
   "rebuild.progBuilt": "собрано {0} из {1}",
   "rebuild.progLoaded": "загружено {0}",
   "rebuild.progRemain": "осталось {0}",
+  "rebuild.dlSizePending": "Определяется объём загрузки…",
   "rebuild.progCopyRemain": "осталось {0} из {1}",
   "rebuild.optMode": "Режим",
   "rebuild.modeSwitch": "Применить сейчас и загружаться так впредь (switch)",

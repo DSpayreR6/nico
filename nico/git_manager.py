@@ -383,38 +383,60 @@ def _unstage_oversized(nixos_dir: str) -> list[str]:
     return skipped
 
 
-def _stage_for_commit(nixos_dir: str) -> list[str]:
+class StageError(Exception):
+    """A git step of the staging failed (strict mode)."""
+
+
+def _stage_for_commit(nixos_dir: str, strict: bool = False) -> list[str]:
     """Stage changes for a NiCo commit.
 
     With the foreign-file guard on, untracked non-config files are left alone –
     the user decides about them in the foreign-file dialog. Everything tracked
     plus new config files is staged. Guard off = plain `git add -A`.
 
+    strict: raise StageError when a git step fails. The rebuild paths need
+    it – a flake built from a half-staged index is not what is on disk, and
+    stage_all reported success after a failed git (Codex re-check 2026-11-20).
+
     Returns the files that were left out for being oversized."""
+    def step(args):
+        rc, out = _run(args, cwd=nixos_dir)
+        if rc != 0 and strict:
+            raise StageError(_err(ERR_GIT_FAILED_OUT, "git " + " ".join(args[:2]), out))
+
     if not foreign_guard_enabled(nixos_dir):
-        _run(["add", "-A"], cwd=nixos_dir)
+        step(["add", "-A"])
         return _unstage_oversized(nixos_dir)
-    _run(["add", "-u"], cwd=nixos_dir)
+    step(["add", "-u"])
     # -z entries are "XY <path>" without a line break; a rename adds a second
     # chunk holding the old path, which cannot start with "??" and is skipped.
     rc, entries = _run_paths(["status", "--porcelain", "-uall"], cwd=nixos_dir)
     if rc != 0:
+        if strict:
+            raise StageError(_err(ERR_GIT_FAILED_OUT, "git status", ""))
         return _unstage_oversized(nixos_dir)
     for entry in entries:
         if not entry.startswith("??"):
             continue
         path = entry[2:].lstrip()
         if path and is_config_file(path):
-            _run(["add", "--", path], cwd=nixos_dir)
+            step(["add", "--", path])
     return _unstage_oversized(nixos_dir)
 
 
 def stage_all(nixos_dir: str) -> tuple[bool, str]:
-    """Stage current files in nixos_dir for rebuild flows.
-    Respects the foreign-file guard (see _stage_for_commit)."""
+    """Stage current files in nixos_dir for rebuild flows – the one routine
+    for the monitor, the terminal script, the dry run and the precheck.
+    Respects the foreign-file guard and the size limit (_stage_for_commit).
+
+    (True, "") staged · (False, ERR_NO_GIT_REPO) nothing to stage · (False,
+    error) a git step failed: the caller must stop before calling nix."""
     if not is_git_repo(nixos_dir):
         return False, ERR_NO_GIT_REPO
-    _stage_for_commit(nixos_dir)
+    try:
+        _stage_for_commit(nixos_dir, strict=True)
+    except StageError as exc:
+        return False, str(exc)
     return True, ""
 
 

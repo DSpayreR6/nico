@@ -436,6 +436,7 @@ async function writeFiles() {
   if (!await checkForeignFilesBeforeCommit()) return;
 
   if (doDryrun) {
+    if (!await Sidebar.saveActive({ toast: false })) return;
     if (!await Sidebar.flakeSave()) return;
     if (!await _autoSave()) return;
     if (!await _writeNix()) return;
@@ -462,6 +463,7 @@ async function writeFiles() {
   }
 
   closeWriteConfirm();
+  if (!await Sidebar.saveActive({ toast: false })) return;
   await Sidebar.flakeSave();
   if (!await saveConfig()) return;
   const writeUrl = _activeHost

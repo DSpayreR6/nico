@@ -335,6 +335,7 @@
   "rebuild.progBuilt": "{1} 件中 {0} 件をビルド",
   "rebuild.progLoaded": "取得済み {0}",
   "rebuild.progRemain": "残り {0}",
+  "rebuild.dlSizePending": "ダウンロードサイズを確認中…",
   "rebuild.progCopyRemain": "残り {1} 件中 {0} 件",
   "rebuild.optMode": "モード",
   "rebuild.modeSwitch": "今すぐ適用し、以後この状態で起動する (switch)",

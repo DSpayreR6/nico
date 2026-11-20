@@ -335,6 +335,7 @@
   "rebuild.progBuilt": "{0} of {1} built",
   "rebuild.progLoaded": "fetched {0}",
   "rebuild.progRemain": "{0} to go",
+  "rebuild.dlSizePending": "Determining download size …",
   "rebuild.progCopyRemain": "{0} of {1} to go",
   "rebuild.optMode": "Mode",
   "rebuild.modeSwitch": "Apply now and boot into it from now on (switch)",

@@ -43,6 +43,34 @@ _SWITCH_BUSY_STATES = {"active", "activating", "reloading", "deactivating"}
 
 _job_cv = threading.Condition()
 _job = None
+
+
+class DownloadTally:
+    """Compressed bytes of the cache downloads in a rebuild.
+
+    Nix reports each download as a FileTransfer activity with (done,
+    expected) progress and a stop at its end. A finished download used to
+    have its bytes subtracted again, so "loaded" shrank and "remaining" grew
+    back while the rebuild ran (Martin, a long-standing observation; cause
+    found by Codex, 2026-11-20). Now every transfer counts once: while it
+    runs with what has arrived, after its end with its final bytes, and its
+    planned size becomes what really arrived.
+    """
+
+    def __init__(self):
+        self._acts: dict = {}
+        self.done = 0
+        self.expected = 0
+
+    def progress(self, act_id, done: int, expected: int) -> None:
+        d0, e0 = self._acts.get(act_id, (0, 0))
+        self.done = max(0, self.done + done - d0)
+        self.expected = max(0, self.expected + expected - e0)
+        self._acts[act_id] = (done, expected)
+
+    def stop(self, act_id) -> None:
+        d, e = self._acts.pop(act_id, (0, 0))
+        self.expected = max(self.done, self.expected + d - e)
 # Held from the "is a job running?" check until the new job is registered.
 # Both used to be separate sections under _job_cv, about 450 lines apart:
 # two starts close together (two tabs, a double click) both passed the
@@ -657,12 +685,18 @@ def register(app, ctx):
                                               config_manager.get_app_settings())
             rebuild_cmd += f" --max-jobs {jobs} --cores {cores}"
 
+        # Staged here, through the same routine as the monitor: the script
+        # used to run a bare `git add -A`, past the foreign-file guard and
+        # the size limit (Codex re-check 2026-11-20).
+        if stage_before_rebuild:
+            staged, stage_msg = git_manager.stage_all(nixos_dir)
+            if not staged:
+                return jsonify({"error": stage_msg}), 500
+
         script_lines = [
             "#!/usr/bin/env bash",
             f"cd {_shlex.quote(str(nixos_path))}",
         ]
-        if stage_before_rebuild:
-            script_lines.append("git add -A")
         if shutdown_after or push_shutdown:
             script_lines.append("_rebuild_ok=0")
             if update_flake:
@@ -863,7 +897,7 @@ def register(app, ctx):
             # Tracks active nix activities: {id: {'phase', 'pkg', 'nix_type', 'dl_done', 'dl_expected'}}
             active_acts = {}
             # Aggregated download bytes across all substitute activities
-            dl_state    = {'done': 0, 'expected': 0}
+            dl_state    = DownloadTally()
             # Build derivation counter; 'aggregate' switches to Builds-activity tracking
             build_state = {'done': 0, 'total': 0, 'aggregate': False}
             # Global CLI-style progress, preferred when present
@@ -907,7 +941,7 @@ def register(app, ctx):
                 return f"data: {_json.dumps({'type': 'progress', 'done': build_state['done'], 'total': build_state['total'], 'pkg': pkg})}\n\n"
 
             def _emit_dl():
-                return f"data: {_json.dumps({'type': 'dl_progress', 'done': dl_state['done'], 'expected': dl_state['expected']})}\n\n"
+                return f"data: {_json.dumps({'type': 'dl_progress', 'done': dl_state.done, 'expected': dl_state.expected})}\n\n"
 
             def _emit_global_progress():
                 payload = {
@@ -1043,9 +1077,10 @@ def register(app, ctx):
                         nix_type = act['nix_type']
 
                         if nix_type == ACT_FILE_TRANSFER:
-                            # Remove this transfer's byte contribution from download totals
-                            dl_state['done']     = max(0, dl_state['done']     - act['dl_done'])
-                            dl_state['expected'] = max(0, dl_state['expected'] - act['dl_expected'])
+                            # Finished: its bytes stay counted (DownloadTally).
+                            dl_state.stop(act_id)
+                            if dl_state.expected > 0:
+                                yield _emit_dl()
 
                         if nix_type == ACT_BUILD:
                             if not build_state['aggregate']:
@@ -1093,13 +1128,10 @@ def register(app, ctx):
                         done, expected = fields[0], fields[1]
                         if act['nix_type'] == ACT_FILE_TRANSFER and isinstance(done, int) and isinstance(expected, int):
                             # Compressed download bytes from HTTP file transfer
-                            dl_state['done']     += done     - act['dl_done']
-                            dl_state['expected'] += expected - act['dl_expected']
-                            dl_state['done']      = max(0, dl_state['done'])
-                            dl_state['expected']  = max(0, dl_state['expected'])
+                            dl_state.progress(act_id, done, expected)
                             act['dl_done']        = done
                             act['dl_expected']    = expected
-                            if dl_state['expected'] > 0:
+                            if dl_state.expected > 0:
                                 yield _emit_dl()
                         elif act['nix_type'] == ACT_BUILDS and isinstance(done, int) and isinstance(expected, int):
                             # Aggregate build counter from Builds activity – available before actBuild starts
@@ -1119,11 +1151,16 @@ def register(app, ctx):
                 if use_flake:
                     try:
                         staged_with_git, stage_msg = git_manager.stage_all(nixos_dir)
-                    except Exception:
-                        staged_with_git, stage_msg = False, ""
+                    except Exception as exc:
+                        staged_with_git, stage_msg = False, str(exc) or "ERR_GIT_FAILED"
 
                 if staged_with_git:
-                    yield f"data: {_json.dumps({'type': 'output', 'line': '── git add -A ──'})}\n\n"
+                    yield f"data: {_json.dumps({'type': 'output', 'line': '── git add ──'})}\n\n"
+                elif stage_msg and stage_msg != git_manager.ERR_NO_GIT_REPO:
+                    # The flake would be built from a half-staged index – stop
+                    # before nix (Codex re-check 2026-11-20).
+                    yield f"data: {_json.dumps({'type': 'error', 'message': stage_msg})}\n\n"
+                    return
                 elif stage_msg:
                     # Log lines are tool output and stay English, like the
                     # ── nixos-rebuild ── headers around them and nix's own
@@ -1151,10 +1188,12 @@ def register(app, ctx):
 
                 # Pre-fetch dry-run: evaluate dependency graph to get stable
                 # total download size. Skipped when the precheck already did.
+                # The planned size goes out as soon as it is known – also 0,
+                # which ends the "being determined" note in the monitor.
                 if prefetch_mib is not None:
-                    if prefetch_mib > 0:
-                        yield f"data: {_json.dumps({'type': 'prefetch_total', 'mib': prefetch_mib})}\n\n"
+                    yield f"data: {_json.dumps({'type': 'prefetch_total', 'mib': prefetch_mib})}\n\n"
                 elif prefetch_dry_run_on:
+                    yield f"data: {_json.dumps({'type': 'prefetch_pending'})}\n\n"
                     # Runs after `nix flake update`, so no lock-file trick here.
                     dr_cmd = prebuild.dry_build_cmd(nixos_dir, use_flake, flake_arg)
                     try:
@@ -1164,10 +1203,10 @@ def register(app, ctx):
                         _, total_mib = prebuild.parse_dry_build(
                             (dr.stdout or "") + "\n" + (dr.stderr or ""))
                         yield _emit_phase('analysing', False)
-                        if total_mib > 0:
-                            yield f"data: {_json.dumps({'type': 'prefetch_total', 'mib': total_mib})}\n\n"
+                        yield f"data: {_json.dumps({'type': 'prefetch_total', 'mib': total_mib})}\n\n"
                     except Exception:
                         yield _emit_phase('analysing', False)
+                        yield f"data: {_json.dumps({'type': 'prefetch_total', 'mib': 0})}\n\n"
 
                 proc = _sp.Popen(
                     cmd,
@@ -1311,10 +1350,9 @@ def register(app, ctx):
             if is_repo:
                 # The flake only sees tracked files; /start stages the same
                 # way right after, so this changes nothing it would not.
-                try:
-                    git_manager.stage_all(nixos_dir)
-                except Exception:
-                    pass
+                staged, stage_msg = git_manager.stage_all(nixos_dir)
+                if not staged:
+                    return jsonify({"error": stage_msg}), 500
             flake_arg = prebuild.flake_ref(nixos_dir, hostname, is_repo)
 
         result = prebuild.precheck(nixos_dir, use_flake, flake_arg,
@@ -1504,10 +1542,9 @@ def register(app, ctx):
             # rebuild does not (revision 2026-11-18, finding 26).
             is_repo = git_manager.is_git_repo(nixos_dir)
             if is_repo:
-                try:
-                    git_manager.stage_all(nixos_dir)
-                except Exception:
-                    pass
+                staged, stage_msg = git_manager.stage_all(nixos_dir)
+                if not staged:
+                    return jsonify({"ok": False, "mode": "flake", "output": stage_msg})
             flake_ref = prebuild.flake_base(nixos_dir, is_repo)
             targets = [
                 f"{flake_ref}#nixosConfigurations.{h}.config.system.build.toplevel"

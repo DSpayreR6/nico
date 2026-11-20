@@ -348,6 +348,7 @@
   "rebuild.progBuilt": "{0} von {1} gebaut",
   "rebuild.progLoaded": "geladen {0}",
   "rebuild.progRemain": "noch {0}",
+  "rebuild.dlSizePending": "Downloadgröße wird ermittelt …",
   "rebuild.progCopyRemain": "noch {0} von {1}",
   "rebuild.optMode": "Modus",
   "rebuild.modeSwitch": "Jetzt umstellen und künftig so starten (switch)",
