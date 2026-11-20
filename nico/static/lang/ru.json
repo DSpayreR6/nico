@@ -404,6 +404,8 @@
   "diff.to": "До",
   "diff.show": "Показать diff",
   "diff.noChanges": "Нет изменений между этими коммитами.",
+  "diff.restructureNone": "Перестройка ничего не меняет в содержимом – обновляется только строка заголовка NiCo.",
+  "diff.outsideNone": "В содержимом ничего не изменилось – отличается только строка заголовка NiCo.",
   "diff.noLines": "Нет строк.",
   "diff.lockUpdated": "flake.lock обновлён – другая версия Nixpkgs (nix flake update).",
   "diff.lastCommitTitle": "Последний коммит vs. HEAD",

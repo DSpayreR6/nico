@@ -404,6 +404,8 @@
   "diff.to": "到",
   "diff.show": "显示差异",
   "diff.noChanges": "这两个提交之间没有变更。",
+  "diff.restructureNone": "重构不会改变内容——只会更新 NiCo 的标题行。",
+  "diff.outsideNone": "内容没有变化——只有 NiCo 的标题行不同。",
   "diff.noLines": "无行。",
   "diff.lockUpdated": "flake.lock 已更新 – Nixpkgs 版本已变更（nix flake update）。",
   "diff.lastCommitTitle": "最近提交 vs. HEAD",

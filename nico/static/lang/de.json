@@ -418,6 +418,8 @@
   "diff.to":              "Bis",
   "diff.show":            "Diff anzeigen",
   "diff.noChanges":       "Keine Änderungen zwischen diesen Commits.",
+  "diff.restructureNone": "Umbauen ändert am Inhalt nichts – nur NiCos Kopfzeile wird erneuert.",
+  "diff.outsideNone": "Am Inhalt hat sich nichts geändert – nur NiCos Kopfzeile ist anders.",
   "diff.noLines":         "Keine Zeilen.",
   "diff.lockUpdated":     "flake.lock aktualisiert – anderer Nixpkgs-Stand (nix flake update).",
   "diff.lastCommitTitle": "Letzter Commit vs. HEAD",

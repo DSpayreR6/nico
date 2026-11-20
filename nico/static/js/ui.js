@@ -7,17 +7,38 @@ function escHtml(str) {
     .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
+// The one notice function for all of NiCo. Notices stack instead of
+// covering each other, stay longer the more they matter, and close on a
+// click (Martin, VM test 2026-11-20: a warning was gone before it was read).
+const _TOAST_MS  = { success: 3000, warning: 8000, error: 10000 };
+const _TOAST_MAX = 5;
+
 function showToast(message, type = 'success') {
+  let stack = document.getElementById('toast-stack');
+  if (!stack) {
+    stack = document.createElement('div');
+    stack.id = 'toast-stack';
+    stack.className = 'toast-stack';
+    document.body.appendChild(stack);
+  }
   const el = document.createElement('div');
   el.className   = `toast toast-${type}`;
   el.textContent = message;
-  document.body.appendChild(el);
-  el.getBoundingClientRect();
-  el.classList.add('visible');
-  setTimeout(() => {
+  el.setAttribute('role', type === 'error' ? 'alert' : 'status');
+  const close = () => {
+    if (!el.isConnected || el.dataset.closing) return;
+    el.dataset.closing = '1';
     el.classList.remove('visible');
     setTimeout(() => el.remove(), 300);
-  }, 3000);
+  };
+  el.addEventListener('click', close);
+  stack.appendChild(el);
+  // Oldest first out when too many are open.
+  const open = [...stack.querySelectorAll('.toast:not([data-closing])')];
+  open.slice(0, Math.max(0, open.length - _TOAST_MAX)).forEach(old => old.click());
+  el.getBoundingClientRect();
+  el.classList.add('visible');
+  setTimeout(close, _TOAST_MS[type] ?? 3000);
 }
 
 // ── Diff viewer ────────────────────────────────────────────────────────────
@@ -33,10 +54,13 @@ async function openDiff(fromHash, toHash, title) {
   }
 }
 
-function _renderDiff(data) {
+/** `emptyText`: what "no differences" means where the diff is shown – the
+ *  git text ("between these commits") read wrong in the restructure and
+ *  changed-outside dialogs (VM test 2026-11-20). */
+function _renderDiff(data, emptyText = null) {
   const files = data.files || [];
   if (!files.length) {
-    return `<div class="diff-empty">${escHtml(t('diff.noChanges'))}</div>`;
+    return `<div class="diff-empty">${escHtml(emptyText || t('diff.noChanges'))}</div>`;
   }
   const statusIcon  = { added: '+', modified: '~', deleted: '−' };
   const statusClass = { added: 'diff-status-added', modified: 'diff-status-modified', deleted: 'diff-status-deleted' };

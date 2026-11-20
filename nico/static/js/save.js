@@ -226,7 +226,8 @@ async function _askRestructure(rel, { switching = false, outside = true } = {}) 
       try {
         const data = await fetch(`/api/file/restructure-diff?path=${encodeURIComponent(rel)}`)
           .then(r => r.json());
-        diffEl.innerHTML = data.error ? escHtml(tErr(data.error)) : _renderDiff(data);
+        diffEl.innerHTML = data.error ? escHtml(tErr(data.error))
+                                      : _renderDiff(data, t('diff.restructureNone'));
       } catch {
         diffEl.textContent = t('toast.error');
       }
@@ -315,7 +316,8 @@ function askChangedOutside(rel) {
       try {
         const data = await fetch(`/api/file/outside-diff?path=${encodeURIComponent(rel)}&base=${encodeURIComponent(_coBase || '')}`)
           .then(r => r.json());
-        diffEl.innerHTML = data.error ? escHtml(tErr(data.error)) : _renderDiff(data);
+        diffEl.innerHTML = data.error ? escHtml(tErr(data.error))
+                                      : _renderDiff(data, t('diff.outsideNone'));
       } catch {
         diffEl.textContent = t('toast.error');
       }

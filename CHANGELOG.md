@@ -10,6 +10,7 @@
 - Nix-Brick menu: *Move into panel* takes a brick into the form when the panel writes exactly the same; otherwise it names what would change
 - Save button for the panel as well as the raw editor, and Ctrl+S in both; a red dot on the button and a star before the file name show unsaved changes, and closing the tab with unsaved changes asks first
 - A file that opens in raw mode only gets a warning on the left with the reason – for a syntax error with the line as the raw editor counts it; after a raw save NiCo checks again, so a fixed file gets its panel switch back (set to raw) and a newly broken one loses it
+- Notices stack instead of covering each other, warnings stay 8 and errors 10 seconds, and a click closes them
 - The header shows the path of the open file relative to the config directory instead of only its name (shortened at the front when space is short)
 
 ### Bug Fixes
@@ -42,6 +43,7 @@
 - An import that cannot read its source completely no longer deletes the old config first; a write error puts the previous files back, and neither case reports success with half a config any more
 - A file changed outside NiCo is asked about also when a second tab has loaded the newer version in the meantime, and a deleted file counts as changed instead of being recreated from the old form
 - Two rebuilds started almost at the same time (two tabs, a double click) no longer both run; the second gets "rebuild already running"
+- "Show differences" in the restructure and changed-outside dialogs no longer says "no changes between these commits" when only NiCo's header line differs
 - A new `.nix` file created in the file tree starts as a valid empty module instead of an empty file Nix cannot read
 - Search (Ctrl+F or the tools menu) now works in every file NiCo shows – panel previews, the raw editor and the flake.lock view; before, in raw mode and for flake.nix or Home Manager files it searched an outdated preview and counted hits that could not be seen
 - A file Nix cannot read (e.g. a stray `};.` in a Nix-Brick) no longer opens in the panel, only to fail on the panel switch, "show differences" or restructuring; it opens in raw mode with the reason, and restructuring no longer drops unreadable text

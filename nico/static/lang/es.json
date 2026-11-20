@@ -404,6 +404,8 @@
   "diff.to": "Hasta",
   "diff.show": "Mostrar diferencias",
   "diff.noChanges": "Sin cambios entre estos commits.",
+  "diff.restructureNone": "Reestructurar no cambia nada del contenido; solo se renueva la línea de cabecera de NiCo.",
+  "diff.outsideNone": "No ha cambiado nada del contenido; solo difiere la línea de cabecera de NiCo.",
   "diff.noLines": "Sin lineas.",
   "diff.lockUpdated": "flake.lock actualizado – versión de Nixpkgs diferente (nix flake update).",
   "diff.lastCommitTitle": "Ultimo commit vs. HEAD",

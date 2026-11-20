@@ -404,6 +404,8 @@
   "diff.to": "まで",
   "diff.show": "差分を表示",
   "diff.noChanges": "このコミット間に変更はありません。",
+  "diff.restructureNone": "再構成しても内容は変わりません。NiCo のヘッダー行だけが更新されます。",
+  "diff.outsideNone": "内容は変わっていません。NiCo のヘッダー行だけが異なります。",
   "diff.noLines": "行なし。",
   "diff.lockUpdated": "flake.lock が更新されました – Nixpkgs バージョンが変わりました (nix flake update)。",
   "diff.lastCommitTitle": "最後のコミット vs. HEAD",
