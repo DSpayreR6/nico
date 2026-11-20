@@ -1748,7 +1748,10 @@ const Sidebar = (() => {
       ${headerHtml}
       <div class="raw-editor-wrap">
         <div class="raw-line-nums" aria-hidden="true">${lineNums}</div>
-        <textarea id="raw-file-editor" class="raw-file-editor" spellcheck="false">${escHtml(body)}</textarea>
+        <div class="text-editor">
+          <pre class="text-editor-view" aria-hidden="true"><code class="language-nix"></code></pre>
+          <textarea id="raw-file-editor" class="raw-file-editor" spellcheck="false" wrap="off">${escHtml(body)}</textarea>
+        </div>
       </div>
     `;
     elPreviewPanel.appendChild(rawDiv);
@@ -1759,11 +1762,54 @@ const Sidebar = (() => {
       const c = _ta.value.split('\n').length;
       _lns.textContent = Array.from({length: c}, (_, i) => i + 1).join('\n');
     });
+    // The header lines are colored like the rest.
+    const _hdr = rawDiv.querySelector('.raw-header-pre');
+    if (_hdr) highlightCode(_hdr, header);
+    _attachTextEditor(_ta);
     // Switch mode indicator to pencil; the disk button follows refreshUnsaved
     refreshUnsaved();
     Search.refresh({ keep: true });
     const modBtn = document.getElementById('preview-mode-btn');
     if (modBtn) { modBtn.innerHTML = niIcon('pencil'); modBtn.dataset.mode = 'edit'; modBtn.title = t('preview.modeRaw'); }
+  }
+
+  /** Text mode: two layers on top of each other (Martin, 2026-11-20).
+   *  Below, the text colored by Prism – the same highlightCode the panel
+   *  preview uses, so colors and search marks look the same everywhere.
+   *  On top, the textarea with transparent text: the caret and the selection
+   *  are its own, what is seen is the layer below. Both use the same font,
+   *  padding and no wrapping (wrap="off"), so every character sits in the
+   *  same place; the view follows the textarea's scrolling, and is cut to
+   *  the textarea's client area so the scrollbars do not shift it. No third-
+   *  party editor on purpose. */
+  function _attachTextEditor(ta) {
+    const view = ta.parentElement.querySelector('.text-editor-view');
+    const code = view?.querySelector('code');
+    if (!view || !code) return;
+    let pending = false;
+    const sync = () => { view.scrollTop = ta.scrollTop; view.scrollLeft = ta.scrollLeft; };
+    const paint = () => {
+      pending = false;
+      // The trailing newline keeps an empty last line as tall as in the
+      // textarea; positions before it are unchanged.
+      highlightCode(code, ta.value + '\n');
+      Search.remark(ta);
+      sync();
+    };
+    const fit = () => {
+      view.style.right  = `${ta.offsetWidth  - ta.clientWidth}px`;
+      view.style.bottom = `${ta.offsetHeight - ta.clientHeight}px`;
+      sync();
+    };
+    ta.addEventListener('input', () => {
+      if (pending) return;
+      pending = true;
+      requestAnimationFrame(paint);
+    });
+    ta.addEventListener('scroll', sync);
+    if (window.ResizeObserver) new ResizeObserver(fit).observe(ta);
+    paint();
+    fit();
   }
 
   function _showFlkView(content) {

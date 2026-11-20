@@ -3748,7 +3748,7 @@ button:disabled {
 .raw-line-nums {
   font-family: var(--mono, monospace);
   font-size: 13px;
-  line-height: 1.6;
+  line-height: 1.65;
   color: var(--overlay0, #6c7086);
   background: var(--mantle, #181825);
   padding: 16px 10px 16px 8px;
@@ -3763,22 +3763,70 @@ button:disabled {
    *inactive* selection – which browsers draw in a pale grey that is close to
    invisible on this background. Stated explicitly, the hit stays readable
    whether the focus is in the text or in the search field. */
+/* The text stays transparent in the selection too: the colored layer
+   below shows through a tinted background. */
 .raw-file-editor::selection {
-  background: var(--mauve, #cba6f7);
-  color: var(--base, #1e1e2e);
+  background: color-mix(in srgb, var(--mauve, #cba6f7) 35%, transparent);
+  color: transparent;
 }
 
+/* Text mode: colored layer below, textarea with transparent text on top.
+   Font, size, line height, padding and tab width must be identical in both,
+   or the caret drifts away from the characters. */
+.text-editor {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  background: var(--base, #1e1e2e);
+}
+/* Line height 1.65 like every Prism view: Prism puts its language class on
+   the <pre> too, and the general rule for that wins over a class selector. */
+#raw-file-view .text-editor-view,
+#raw-file-view .text-editor-view code {
+  font-family: var(--mono, monospace) !important;
+  font-size: 13px !important;
+  line-height: 1.65 !important;
+  tab-size: 2;
+  white-space: pre !important;
+  word-wrap: normal !important;
+  background: transparent !important;
+  text-shadow: none !important;
+}
+#raw-file-view .text-editor-view {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  margin: 0 !important;
+  padding: 16px !important;
+  overflow: hidden !important;
+  border: none;
+  border-radius: 0 !important;
+  box-sizing: border-box;
+  pointer-events: none;
+  color: var(--text);
+}
+#raw-file-view .text-editor-view code { padding: 0 !important; display: block; }
+/* Token styles may not change the width of a character. */
+.text-editor-view .token { font-weight: inherit !important; font-style: inherit !important; }
+
 .raw-file-editor {
+  position: relative;
   flex: 1;
   min-width: 0;
   overflow: auto;
   margin: 0;
   padding: 16px;
-  background: var(--base, #1e1e2e);
-  color: var(--text);
+  background: transparent;
+  color: transparent;
+  caret-color: var(--text, #cdd6f4);
+  white-space: pre;
+  tab-size: 2;
   font-family: var(--mono, monospace);
   font-size: 13px;
-  line-height: 1.6;
+  line-height: 1.65;
   border: none;
   resize: none;
   outline: none;

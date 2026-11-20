@@ -245,5 +245,24 @@ check("de: kein 'History'/'Git-Log' (→ Historie bzw. Sicherungspunkte)", not h
 idx = (ROOT / "nico" / "templates" / "index.html").read_text(encoding="utf-8")
 check("index.html: Ersatztext ohne 'Git-History'", "Git-History" not in idx)
 
+print("\n12. Textmodus statt Raw-Modus (Entscheidung 2026-11-20)")
+# Laienbegriff, übersetzt. Schlüsselnamen (sidebar.rawSave …) sind intern und
+# bleiben; geprüft werden nur die Texte.
+RAW = {
+    "de": r"\bRaw\b|Rohmodus|Texteditor", "en": r"\braw\b|text editor",
+    "es": r"\braw\b|editor de texto", "fr": r"\braw\b|\bbrut\b|éditeur de texte",
+    "ja": r"[Rr]aw|テキストエディタ", "ru": r"\braw\b|текстов\w+ редактор",
+    "zh": r"[Rr]aw|原始模式|原始编辑器|文本编辑器",
+}
+TEXT_MODE = {"de": "Textmodus", "en": "text mode", "es": "modo texto", "fr": "mode texte",
+             "ja": "テキストモード", "ru": "текстов", "zh": "文本模式"}
+for lang, pattern in RAW.items():
+    data = json.loads((LANG / f"{lang}.json").read_text(encoding="utf-8"))
+    hits = [k for k, v in data.items() if isinstance(v, str) and re.search(pattern, v, re.IGNORECASE)]
+    check(f"{lang}: kein Raw-Begriff in der Oberfläche", not hits, hits[:4])
+    check(f"{lang}: Einstellung nennt den Textmodus",
+          TEXT_MODE[lang].lower() in data.get("admin.settings.panelDefault", "").lower(),
+          data.get("admin.settings.panelDefault"))
+
 print("\n" + ("ALLE PRÜFUNGEN BESTANDEN" if not fails else f"FEHLGESCHLAGEN: {fails}"))
 sys.exit(1 if fails else 0)

@@ -10,9 +10,11 @@
  * open, as "copy whole file" does. So: one bar, one entry (Ctrl+F and the
  * tools menu), one matcher over the text of whatever is shown right now. Only
  * the last step differs by display, because a textarea cannot hold marks:
- *   - raw editor: the hit is selected and scrolled to, without taking the
- *     focus from the search field (a focused textarea turned the next typed
- *     letter into an edit of the config);
+ *   - text mode: marked in the colored layer below the textarea, and also
+ *     selected and scrolled to – without taking the focus from the search
+ *     field (a focused textarea turned the next typed letter into an edit of
+ *     the config). The marks are what is seen: Firefox does not draw the
+ *     selection of an unfocused textarea (Martin's test, 2026-11-20);
  *   - code views (previews, flake.lock): the hit is marked.
  */
 'use strict';
@@ -31,10 +33,12 @@ const Search = (() => {
     return !$('search-bar')?.classList.contains('hidden');
   }
 
-  /** What is shown on the right right now. */
+  /** What is shown on the right right now. In text mode the marks go into
+   *  the colored layer below the textarea (sidebar._attachTextEditor). */
   function _currentTarget() {
     const ta = document.querySelector('#raw-file-view textarea');
-    if (ta) return { kind: 'text', el: ta };
+    if (ta) return { kind: 'text', el: ta,
+                     view: ta.parentElement.querySelector('.text-editor-view code') };
     const flk = document.querySelector('#flk-file-view pre');
     if (flk) return { kind: 'code', el: flk };
     const view = [...document.querySelectorAll('#preview-panel .code-view-container')]
@@ -114,18 +118,29 @@ const Search = (() => {
 
   function _show({ scroll = true } = {}) {
     if (!target || idx < 0 || !matches[idx]) return;
+    marks.forEach((group, i) => group.forEach(mk =>
+      mk.classList.toggle('search-match-active', i === idx)));
     if (target.kind === 'text') {
       const ta = target.el, m = matches[idx];
       // Works without focus; style.css makes the inactive selection visible.
       ta.setSelectionRange(m.start, m.end);
       if (!scroll) return;
-      const linesBefore = ta.value.substring(0, m.start).split('\n').length - 1;
-      const lineHeight  = parseInt(getComputedStyle(ta).lineHeight) || 22;
-      ta.scrollTop = Math.max(0, linesBefore * lineHeight - ta.clientHeight / 2);
-    } else {
-      marks.forEach((group, i) => group.forEach(mk =>
-        mk.classList.toggle('search-match-active', i === idx)));
-      if (scroll) marks[idx]?.[0]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      // Where the hit really is: its mark in the layer below, which shares
+      // the textarea's coordinates. Long lines need the sideways scroll too.
+      const mk = marks[idx]?.[0];
+      if (mk) {
+        ta.scrollTop = Math.max(0, mk.offsetTop - ta.clientHeight / 2);
+        const left = mk.offsetLeft, right = left + mk.offsetWidth;
+        if (left < ta.scrollLeft || right > ta.scrollLeft + ta.clientWidth) {
+          ta.scrollLeft = Math.max(0, left - ta.clientWidth / 2);
+        }
+      } else {
+        const linesBefore = ta.value.substring(0, m.start).split('\n').length - 1;
+        const lineHeight  = parseFloat(getComputedStyle(ta).lineHeight) || 22;
+        ta.scrollTop = Math.max(0, linesBefore * lineHeight - ta.clientHeight / 2);
+      }
+    } else if (scroll) {
+      marks[idx]?.[0]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
   }
 
@@ -149,9 +164,30 @@ const Search = (() => {
     target  = _currentTarget();
     matches = target ? _find(_textOf(target), query) : [];
     idx     = !matches.length ? -1 : keep ? Math.min(Math.max(prev, 0), matches.length - 1) : 0;
-    if (target?.kind === 'code') _mark(target.el, matches);
+    _markTarget();
     _count();
     _show({ scroll: !keep });
+  }
+
+  function _markTarget() {
+    if (target?.kind === 'code') _mark(target.el, matches);
+    else if (target?.kind === 'text' && target.view) _mark(target.view, matches);
+  }
+
+  /** The text editor re-colored its layer (typing): the marks are set again
+   *  for the current text. The selection and the caret are left alone – the
+   *  user is typing there. */
+  function remark(ta) {
+    if (!isOpen() || target?.kind !== 'text' || target.el !== ta) return;
+    const prev = idx;
+    _unmark();
+    target.view = ta.parentElement.querySelector('.text-editor-view code');
+    matches = _find(ta.value, query);
+    idx = matches.length ? Math.min(Math.max(prev, 0), matches.length - 1) : -1;
+    _markTarget();
+    marks.forEach((group, i) => group.forEach(mk =>
+      mk.classList.toggle('search-match-active', i === idx)));
+    _count();
   }
 
   /** Next/previous hit. In the raw editor the text may have changed since the
@@ -160,7 +196,9 @@ const Search = (() => {
   function step(dir) {
     if (target?.kind === 'text') {
       const from = target.el.selectionStart;
+      _unmark();
       matches = _find(target.el.value, query);
+      _markTarget();
       if (!matches.length) { idx = -1; _count(); return; }
       if (dir > 0) {
         const next = matches.findIndex(m => m.start > from);
@@ -215,5 +253,5 @@ const Search = (() => {
     $('search-next').addEventListener('click', () => step(1));
   }
 
-  return { init, open, close, refresh, step, isOpen };
+  return { init, open, close, refresh, remark, step, isOpen };
 })();

@@ -167,8 +167,8 @@ try:
     d.execute_script("document.getElementById('panel-toggle-check').click();")
     time.sleep(2.5)
     check("Dialog erscheint beim Umschalten", dialog_open())
-    check("… dritter Knopf heißt „Im Raw-Modus bleiben“", d.execute_script(
-        "return document.getElementById('restructure-raw-btn').textContent;") == "Im Raw-Modus bleiben")
+    check("… dritter Knopf heißt „Im Textmodus bleiben“", d.execute_script(
+        "return document.getElementById('restructure-raw-btn').textContent;") == "Im Textmodus bleiben")
     check("… ohne Satz „außerhalb geändert“ (Änderung kam aus dem Raw-Editor)", d.execute_script(
         "return document.getElementById('restructure-outside-note').classList.contains('hidden');"))
     check("ungespeicherte Raw-Änderung wurde vorher gespeichert",
