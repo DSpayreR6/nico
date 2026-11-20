@@ -145,7 +145,7 @@ try:
       const ta = document.getElementById('raw-file-editor');
       ta.value = arguments[0];
       ta.dispatchEvent(new Event('input', {bubbles: true}));
-      document.getElementById('raw-save-tab-btn').click();""", edited)
+      document.getElementById('save-tab-btn').click();""", edited)
     time.sleep(2.5)
     check("die Datei enthält genau den Text aus dem Editor",
           lambda: (cfg / "configuration.nix").read_text(encoding="utf-8") == edited)

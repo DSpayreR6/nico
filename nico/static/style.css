@@ -3455,10 +3455,6 @@ button:disabled {
   font-weight: 500;
 }
 
-.tree-file.unsaved {
-  color: var(--red, #f38ba8);
-}
-
 .tree-entry-name {
   flex: 1;
   min-width: 0;
@@ -3589,6 +3585,23 @@ button:disabled {
   font-style: normal;
   font-weight: 500;
 }
+/* Unsaved changes: star before the path (Gedit/Kate convention). */
+.active-file-star {
+  color: var(--red, #f38ba8);
+  font-weight: 700;
+  margin-right: 4px;
+  flex-shrink: 0;
+}
+/* Long paths are cut at the front so the file name stays visible: rtl moves
+   the ellipsis to the start, the <bdi> inside keeps the path itself ltr. */
+.active-file-path {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  direction: rtl;
+  text-align: left;
+}
 
 .preview-mode-btn {
   background: transparent;
@@ -3608,6 +3621,19 @@ button:disabled {
   transition: opacity 0.15s;
 }
 .preview-mode-btn:hover  { opacity: 0.75; }
+/* One disk for panel and raw; the red dot marks unsaved changes. */
+.save-tab-btn { position: relative; }
+.save-tab-btn.unsaved::after {
+  content: '';
+  position: absolute;
+  top: 5px;
+  right: 4px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--red, #f38ba8);
+  box-shadow: 0 0 0 2px var(--base, #1e1e2e);
+}
 .preview-mode-btn:active { transform: none; }
 
 .panel-toggle {

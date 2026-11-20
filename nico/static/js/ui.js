@@ -924,6 +924,12 @@ function bindUI() {
       e.preventDefault();
       openSearch();
     }
+    // Ctrl+S saves the open file, panel or raw, instead of the browser's
+    // "save page" - as in every editor.
+    if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 's') {
+      e.preventDefault();
+      Sidebar.saveActive();
+    }
   });
 
   // Brix dialogs

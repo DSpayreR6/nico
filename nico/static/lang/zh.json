@@ -877,6 +877,7 @@
   "sidebar.hwWarnIcon": "⚠",
   "sidebar.hwWarnText": "hardware-configuration.nix 由 NixOS 自动生成。手动更改可能因下次 nixos-generate-config 而被覆盖。",
   "sidebar.rawSave": "保存",
+  "sidebar.save": "保存 (Ctrl+S)",
   "sidebar.rawSaveOk": "文件已保存。",
   "sidebar.hwSaveConfirm": "hardware-configuration.nix 由 NixOS 生成 – 手动更改可能导致系统不稳定。\n\n仍要保存？",
   "sidebar.rootLabel": "配置根目录",

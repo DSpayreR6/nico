@@ -11,6 +11,7 @@ const Sidebar = (() => {
   let activeFile  = null;   // {path, name} oder null
   let _formDirty      = false;  // config-form hat ungespeicherte Änderungen
   let _flakeFormDirty = false;  // flake-form hat ungespeicherte Änderungen
+  let _panelSaveable  = false;  // a form panel (co/fl/hm) is shown for the active file
 
   // DOM refs (populated after DOMContentLoaded)
   let elSidebar, elToggleBtn, elTree, elPreviewPanel, elSaveAllBtn, elRefreshBtn;
@@ -137,6 +138,21 @@ const Sidebar = (() => {
     document.addEventListener('nico:config-dirty', () => { _formDirty = true; });
     document.addEventListener('nico:config-saved', () => { _formDirty = false; });
     document.addEventListener('nico:config-clean', () => { _formDirty = false; });
+    document.getElementById('save-tab-btn')
+      ?.addEventListener('click', () => saveActive());
+    // The unsaved marker follows every edit. Deferred, so the handlers that
+    // set the dirty flags for this very event have run first.
+    const _later = () => setTimeout(refreshUnsaved, 0);
+    ['input', 'change'].forEach(ev => document.addEventListener(ev, _later, true));
+    ['nico:config-dirty', 'nico:config-saved', 'nico:config-clean']
+      .forEach(ev => document.addEventListener(ev, _later));
+    // Leaving with unsaved changes asks - the browser's own dialog, its text
+    // cannot be set.
+    window.addEventListener('beforeunload', e => {
+      if (!hasUnsaved()) return;
+      e.preventDefault();
+      e.returnValue = '';
+    });
 
     initFindBar();
 
@@ -819,19 +835,84 @@ const Sidebar = (() => {
     _updateActiveFileLabel();
     updateTreeHighlights();
     await _loadFileIntoView(path);
+    refreshUnsaved();
   }
 
   function _updateActiveFileLabel() {
     const el = document.getElementById('active-file-label');
     if (!el) return;
+    el.textContent = '';
     if (activeFile) {
-      el.textContent = activeFile.name;
+      // The path relative to the config directory, not only the name:
+      // hosts/a/default.nix and hosts/b/default.nix looked the same. When it
+      // does not fit, the front is cut (CSS), so the name stays visible.
+      // The star marks unsaved changes, as in Gedit and Kate.
+      const star = document.createElement('span');
+      star.className = 'active-file-star';
+      star.textContent = '*';
+      star.hidden = !hasUnsaved();
+      const pathEl = document.createElement('span');
+      pathEl.className = 'active-file-path';
+      const bdi = document.createElement('bdi');
+      bdi.textContent = activeFile.path;
+      pathEl.appendChild(bdi);
+      el.append(star, pathEl);
       el.title = activeFile.path;
       el.classList.add('has-file');
     } else {
-      el.textContent = '';
+      el.removeAttribute('title');
       el.classList.remove('has-file');
     }
+  }
+
+  // ── Saving: one button, one check, one routine for panel and raw ─────────
+
+  function _rawEditor() {
+    return _rawEditPath ? document.getElementById('raw-file-editor') : null;
+  }
+
+  /** Is anything of the open file not saved yet? Panel and raw alike. */
+  function hasUnsaved() {
+    if (_formDirty || _flakeFormDirty || _hmSaveTimer) return true;
+    const ta = _rawEditor();
+    return !!ta && ta.value !== _rawEditOrig;
+  }
+
+  /** Disk button, red dot and star follow hasUnsaved(). */
+  function refreshUnsaved() {
+    const dirty = hasUnsaved();
+    const btn = document.getElementById('save-tab-btn');
+    if (btn) {
+      const visible = !!activeFile && (!!_rawEditor() || _panelSaveable);
+      btn.classList.toggle('hidden', !visible);
+      btn.classList.toggle('unsaved', visible && dirty);
+    }
+    const star = document.querySelector('#active-file-label .active-file-star');
+    if (star) star.hidden = !dirty;
+  }
+
+  /** Save what is open: the raw text, or the panel's form. Disk button,
+   *  Ctrl+S and leaving the file all come here. */
+  async function saveActive({ toast = true } = {}) {
+    if (!activeFile) return true;
+    let ok = true;
+    if (_rawEditor()) {
+      ok = (await _saveRawFile()) === true;
+    } else if (_panelSaveable) {
+      try {
+        await _hmFlushPendingSave();
+        if (_flakeFormDirty) ok = await _flakeSave();
+        const isCo = document.querySelector(
+          `.tree-file[data-path="${CSS.escape(activeFile.path)}"]`)?.dataset.fileType === 'co';
+        if (ok && (_formDirty || (isCo && _canSaveCurrentCoForm()))) {
+          ok = await _autoSave();
+          if (ok) _formDirty = false;
+        }
+      } catch { ok = false; }
+      if (ok && toast) showToast(t('toast.saved'), 'success');
+    }
+    refreshUnsaved();
+    return ok;
   }
 
   // Aktiver Pfad der gerade im Raw-Editor angezeigten Datei
@@ -1000,6 +1081,7 @@ const Sidebar = (() => {
   }
 
   function _showLeftPanel(mode, fileName, { panelOff = false, flagSource = null, unmappable = false } = {}) {
+    _panelSaveable = ['form', 'fl', 'hm'].includes(mode);
     // Hide all panels
     document.getElementById('config-form')?.classList.add('hidden');
     document.getElementById('flake-form')?.classList.add('hidden');
@@ -1279,6 +1361,7 @@ const Sidebar = (() => {
 
     async function _doHmSave() {
       _hmSaveTimer = null;
+      refreshUnsaved();
       const payload = _buildHmPatchPayload(filePath);
       try {
         const res  = await csrfFetch('/api/hm/patch', {
@@ -1675,7 +1758,7 @@ const Sidebar = (() => {
         body:    JSON.stringify(_getFlakeFormData()),
       });
       const data = await res.json().catch(() => null);
-      if (data?.success) { _flakeFormDirty = false; return true; }
+      if (data?.success) { _flakeFormDirty = false; refreshUnsaved(); return true; }
       showToast(tErr(data?.error) || t('toast.error'), 'error');
       return false;
     } catch (e) {
@@ -1739,9 +1822,8 @@ const Sidebar = (() => {
       const c = _ta.value.split('\n').length;
       _lns.textContent = Array.from({length: c}, (_, i) => i + 1).join('\n');
     });
-    // Show raw-save button, switch mode indicator to pencil
-    const rawSaveTabBtn = document.getElementById('raw-save-tab-btn');
-    if (rawSaveTabBtn) { rawSaveTabBtn.classList.remove('hidden'); rawSaveTabBtn.onclick = _saveRawFile; }
+    // Switch mode indicator to pencil; the disk button follows refreshUnsaved
+    refreshUnsaved();
     const modBtn = document.getElementById('preview-mode-btn');
     if (modBtn) { modBtn.innerHTML = niIcon('pencil'); modBtn.dataset.mode = 'edit'; modBtn.title = t('preview.modeRaw'); }
   }
@@ -1796,6 +1878,7 @@ const Sidebar = (() => {
       const data = await res.json();
       if (data.success) {
         _rawEditOrig = body;
+        refreshUnsaved();
         showToast(t('sidebar.rawSaveOk'), 'success');
         return true;
       } else {
@@ -1832,8 +1915,7 @@ const Sidebar = (() => {
     document.querySelectorAll('[data-hidden-by-raw]').forEach(el => {
       el.style.display = ''; delete el.dataset.hiddenByRaw;
     });
-    const rawSaveTabBtn = document.getElementById('raw-save-tab-btn');
-    if (rawSaveTabBtn) { rawSaveTabBtn.classList.add('hidden'); rawSaveTabBtn.onclick = null; }
+    refreshUnsaved();
     const modBtn = document.getElementById('preview-mode-btn');
     if (modBtn) delete modBtn.dataset.mode;
     applyPlainCodeViewBtn();
@@ -1940,5 +2022,8 @@ const Sidebar = (() => {
     clearFlkIfActive,
     refreshPanelToggle: _refreshPanelToggle,
     showIfUnmappable: _showIfUnmappable,
+    hasUnsaved,
+    refreshUnsaved,
+    saveActive,
   };
 })();

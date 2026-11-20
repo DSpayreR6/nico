@@ -877,6 +877,7 @@
   "sidebar.hwWarnIcon": "⚠",
   "sidebar.hwWarnText": "hardware-configuration.nix es generado automáticamente por NixOS. Los cambios manuales pueden desestabilizar el sistema.",
   "sidebar.rawSave": "Guardar",
+  "sidebar.save": "Guardar (Ctrl+S)",
   "sidebar.rawSaveOk": "Archivo guardado.",
   "sidebar.hwSaveConfirm": "hardware-configuration.nix es generado por NixOS – los cambios manuales pueden desestabilizar el sistema.\n\n¿Guardar de todas formas?",
   "sidebar.rootLabel": "Raíz de la config",

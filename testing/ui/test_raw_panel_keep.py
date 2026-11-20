@@ -84,7 +84,7 @@ def user_path(rel, stmt, name):
       const v = ta.value, i = v.trimEnd().lastIndexOf('}');
       ta.value = v.slice(0, i) + arguments[0] + v.slice(i);
       ta.dispatchEvent(new Event('input'));
-      document.getElementById('raw-save-tab-btn').click();
+      document.getElementById('save-tab-btn').click();
       return true;""", stmt)
     check("im Raw-Editor eingetragen und gespeichert", ok)
     time.sleep(1.5)
@@ -127,7 +127,7 @@ def panel_to_raw():
       if (!ta) return false;
       const v = ta.value, i = v.trimEnd().lastIndexOf('}');
       ta.value = v.slice(0, i) + '  services.nachumschalt.enable = true;\\n' + v.slice(i);
-      document.getElementById('raw-save-tab-btn').click();
+      document.getElementById('save-tab-btn').click();
       return true;""")
     time.sleep(1.5)
     check("Raw speichern danach geht", ok and "services.nachumschalt.enable" in (cfg / rel).read_text())
@@ -147,7 +147,7 @@ def switch_without_change():
       const ta = document.getElementById('raw-file-editor');
       if (!ta) return false;
       ta.value = ta.value.replace('  networking.hostName', '  # notiz-ohne-aenderung\\n  networking.hostName');
-      document.getElementById('raw-save-tab-btn').click();
+      document.getElementById('save-tab-btn').click();
       return ta.value.includes('notiz-ohne-aenderung');""")
     time.sleep(1.5)
     check("Kommentar im Raw eingetragen und gespeichert",

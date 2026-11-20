@@ -8,6 +8,8 @@
 
 - Settings the panel would add on its own are written into the Nix-Brick as a commented-out suggestion; uncommented, the Validator reports that the panel can take them over
 - Nix-Brick menu: *Move into panel* takes a brick into the form when the panel writes exactly the same; otherwise it names what would change
+- Save button for the panel as well as the raw editor, and Ctrl+S in both; a red dot on the button and a star before the file name show unsaved changes, and closing the tab with unsaved changes asks first
+- The header shows the path of the open file relative to the config directory instead of only its name (shortened at the front when space is short)
 
 ### Bug Fixes
 
