@@ -1314,6 +1314,11 @@ function _dryRunGateHosts(hostInfo, body) {
  * in here lets the run through.
  */
 async function _validationGate(hosts, mode) {
+  // A rebuild builds for this machine, whatever host is picked: the server
+  // then also checks the picked host's hardware config against it. Not for
+  // the dry run - it activates nothing, and "all hosts" must stay quiet
+  // about the other machines' files.
+  const buildHere = mode !== 'dryrun';
   const targets = (hosts && hosts.length) ? hosts : [null];
   const seen = new Set();
   const findings = [];
@@ -1324,7 +1329,7 @@ async function _validationGate(hosts, mode) {
       const res = await csrfFetch('/api/validate', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ host }),
+        body:    JSON.stringify({ host, build_here: buildHere }),
       });
       list = (await res.json()).findings || [];
     } catch {

@@ -180,7 +180,10 @@ def register(app, ctx):
         config        = config_manager.load_config(nixos_dir)
         body          = request.get_json(silent=True) or {}
         host          = body.get("host") or None
-        findings      = _run_enabled_validation(nixos_dir, config, host=host)
+        # Sent by the rebuild gate only: the host is built on this machine.
+        build_here    = bool(body.get("build_here", False))
+        findings      = _run_enabled_validation(nixos_dir, config, host=host,
+                                                build_here=build_here)
         return jsonify({"findings": findings})
 
     @app.route("/api/app/settings", methods=["GET"])

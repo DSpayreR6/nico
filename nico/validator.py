@@ -122,7 +122,8 @@ ALL_RULES: list[Rule] = [
          "Hardware passt zum System",
          "Hält an, wenn die hardware-configuration.nix dieses Rechners Datenträger "
          "nennt, die es hier nicht gibt, oder sich nicht prüfen lässt. Die Dateien "
-         "anderer Hosts bleiben unberührt – die sollen zu anderen Rechnern passen.",
+         "anderer Hosts bleiben unberührt – die sollen zu anderen Rechnern passen –, "
+         "außer ein solcher Host wird auf diesem Rechner gebaut.",
          "error", host_local=True),
     Rule("duplicate_attrs",
          "Doppelte Attribute",
@@ -263,12 +264,16 @@ def run_validation(
     enabled_rules: dict[str, bool],
     config: dict,
     host: str | None = None,
+    build_here: bool = False,
 ) -> list[dict]:
     """
     Execute all enabled (and applicable) rules and return a list of finding
     dicts: {rule_id, severity, message, detail}.
 
     host: when given, hardware rules check that host's files specifically.
+    build_here: `host` is about to be built and activated on this machine
+    (the rebuild gate). Then its hardware config has to fit this machine,
+    whichever host NiCo takes this machine for.
     """
     is_flake = (Path(nixos_dir) / "flake.nix").exists()
     findings: list[Finding] = []
@@ -290,6 +295,12 @@ def run_validation(
                 message=f"Regel '{rule.id}' konnte nicht ausgefuehrt werden.", message_key="validator.f.rule_failed", params=[rule.id],
                 detail=str(exc),
             ))
+
+    if build_here and host and enabled_rules.get("hardware_matches", True):
+        try:
+            findings.extend(_hardware_built_here(nixos_dir, host))
+        except Exception:
+            pass    # like any rule: a check that cannot run stops nothing
 
     return [
         {"rule_id": f.rule_id, "severity": f.severity,
@@ -1410,6 +1421,49 @@ def _rule_hardware_matches(nixos_dir: str, config: dict, is_flake: bool,
         ),
         detail_key="validator.d.hardware_unknown",
         detail_params=[unres],
+    )]
+
+
+def _hardware_built_here(nixos_dir: str, host: str) -> list[Finding]:
+    """
+    The host being rebuilt on this machine is not the one NiCo takes this
+    machine for - does its hardware config still fit here?
+
+    _rule_hardware_matches judges only this machine's own host, and rightly
+    stays silent when another host is validated: hosts/nix-laptop is meant to
+    not fit the desktop. A rebuild, though, always builds for this machine.
+    After deleting this machine's flake host, a wrong pick in the rebuild
+    dialog or a rename from outside, the rule stayed silent while the desktop
+    was switched to the laptop's disks (Martin, 2026-11-20). Only a clear
+    MISMATCH is reported: a fitting file is a legitimate case (renamed host),
+    and "cannot be checked" would be noise for every foreign host.
+    """
+    from . import hardware as _hw
+
+    decision = _hw.inspect(nixos_dir)
+    if decision.target is not None and decision.target.host == host:
+        return []                       # judged by _rule_hardware_matches
+    built = next((f for f in decision.files if f.host == host), None)
+    if built is None or built.verdict != _hw.MISMATCH or built.acked:
+        return []
+    where = str(built.path.relative_to(Path(nixos_dir)))
+    sample = built.missing[:3]
+    extra = len(built.missing) - len(sample)
+    shown = ", ".join(sample) + (f" (+{extra})" if extra > 0 else "")
+    return [Finding(
+        rule_id="hardware_matches",
+        severity="error",
+        message=f'Gebaut wird Host "{host}" – {where} nennt Datenträger, die es '
+                f"auf diesem Rechner nicht gibt.",
+        message_key="validator.f.hardware_built_here",
+        params=[host, where],
+        detail=(
+            f"Nicht vorhanden: {shown}. Nach dem Rebuild findet dieser Rechner "
+            "seine Festplatte nicht. Den Host dieses Rechners wählen oder seine "
+            "Hardware-Datei eintragen."
+        ),
+        detail_key="validator.d.hardware_built_here",
+        detail_params=[shown],
     )]
 
 

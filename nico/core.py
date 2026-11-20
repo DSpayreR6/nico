@@ -1497,12 +1497,14 @@ def run_enabled_validation(
     nixos_dir: str,
     config: dict | None,
     host: str | None = None,
+    build_here: bool = False,
 ) -> list[dict]:
     """Run all enabled validation rules and return a list of finding dicts."""
     from . import validator as _val
     cfg_settings  = config_manager.load_config_settings(nixos_dir)
     enabled_rules = cfg_settings.get("validation_rules") or _val.default_validation_rules()
-    findings = _val.run_validation(nixos_dir, enabled_rules, config or {}, host=host)
+    findings = _val.run_validation(nixos_dir, enabled_rules, config or {}, host=host,
+                                   build_here=build_here)
     _record_host_check(nixos_dir, host, findings)
     return findings
 
