@@ -519,14 +519,19 @@ function bindUI() {
   on('sections-settings-close', 'click', closeSectionsSettings);
   on('sections-settings-save',  'click', saveSectionsSettings);
 
-  // Admin settings sub-tabs
+  // Admin sub-tabs: one component for every admin tab that has them
+  // (settings: NiCo | Config, time machine: Config | System, 2026-11-21).
+  // Each set switches only within its own admin tab; the event
+  // "subtab-shown" (detail = sub-tab id) lets a tab load its content.
   document.querySelectorAll('.settings-subtab').forEach(btn => {
     btn.addEventListener('click', () => {
-      document.querySelectorAll('.settings-subtab').forEach(b => b.classList.remove('active'));
-      document.querySelectorAll('.settings-subtab-panel').forEach(p => p.classList.add('hidden'));
+      const scope = btn.closest('.admin-tab-panel') || document;
+      scope.querySelectorAll('.settings-subtab').forEach(b => b.classList.remove('active'));
+      scope.querySelectorAll('.settings-subtab-panel').forEach(p => p.classList.add('hidden'));
       btn.classList.add('active');
-      document.querySelector(`.settings-subtab-panel[data-subtab-panel="${btn.dataset.subtab}"]`)
+      scope.querySelector(`.settings-subtab-panel[data-subtab-panel="${btn.dataset.subtab}"]`)
         ?.classList.remove('hidden');
+      btn.dispatchEvent(new CustomEvent('subtab-shown', { bubbles: true, detail: btn.dataset.subtab }));
     });
   });
 

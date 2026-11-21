@@ -482,7 +482,11 @@ function _switchAdminTab(tab) {
   });
   // Lazy-load per-tab data
   if (tab === 'einstellungen') { loadSettingsPath(); }
-  if (tab === 'zeitmaschine') { checkGitStatus(); loadAdminGitLog(); loadGitignoreEditor(); }
+  if (tab === 'zeitmaschine') {
+    checkGitStatus(); loadAdminGitLog(); loadGitignoreEditor();
+    // System is the first side (Martin, 2026-11-21) – load it when it shows.
+    if (!document.getElementById('tm-system')?.classList.contains('hidden')) loadGenerations();
+  }
   if (tab === 'administration') { loadAdminSymlinkStatus(); }
 }
 

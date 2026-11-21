@@ -5,6 +5,7 @@
 ### New Features
 
 - NiCo reads only the config directory unless you allow more: three switches under Settings → NiCo → *Read this machine* (Validator checks of users, groups and file systems; hardware check and search; system generations), all off by default, each with an *Allow* button where it is needed. Without them the Validator says once which checks it left out, the hardware check stays silent, and NiCo looks into `/etc/nixos` only after a click on *Look in /etc/nixos*. The safe rebuild reads the free memory only once it is chosen
+- Time machine with two sides, *System | Config*: the System side lists this machine's system states (generations) with what is running now, what was booted and what comes at the next start; *Use this system state* switches to any of them now or from the next start, in the rebuild monitor. The config files are not touched
 
 - Text mode: a bracket without partner is shown inverted, the caret on or next to a bracket shows its partner; after opening or saving a file Nix cannot read, the error line is tinted and the character Nix stopped at is marked
 

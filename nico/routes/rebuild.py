@@ -1316,6 +1316,136 @@ def register(app, ctx):
                          daemon=True).start()
         return jsonify({"success": True, "job_id": job_id})
 
+    # ── Time machine, System side: generations (2026-11-21) ──────────────────
+
+    @app.route("/api/generations")
+    def generations_list():
+        """The system states (generations) of this machine, newest first.
+
+        Only with the release hostread.GENERATIONS – without it nothing is
+        read and the answer says so, for the release button.
+        """
+        from .. import generations, hostread
+        if not hostread.allowed(hostread.GENERATIONS):
+            return jsonify({"allowed": False, "generations": []})
+        gens = generations.list_generations()
+        return jsonify({"allowed": True, "generations": generations.as_dicts(gens)})
+
+    @app.route("/api/generations/switch", methods=["POST"])
+    def generations_switch():
+        """Make a generation the system state, in the rebuild monitor.
+
+        JSON body: number (a generation from the list), mode "switch" (now
+        and from the next start) or "boot" (from the next start),
+        sudo_nonce. No separate rollback (Martin, 2026-11-21): the previous
+        state is one row in the list like any other.
+
+        Runs as a job like the rebuild – the same lock, so it never runs next
+        to a rebuild, the same monitor, which survives a reload. The config
+        files are not touched; the next rebuild builds from them again.
+        """
+        if err := _check_csrf(): return err
+        nixos_dir, err = _require_setup()
+        if err:
+            return err
+        from .. import generations, hostread
+        if not hostread.allowed(hostread.GENERATIONS):
+            return jsonify({"error": hostread.ERR_OFF}), 403
+        payload = request.get_json(silent=True) or {}
+        mode = payload.get("mode") if payload.get("mode") in generations.MODES else None
+        if mode is None:
+            return jsonify({"error": "ERR_INVALID_ACTION"}), 400
+        gens = generations.list_generations()
+        raw = payload.get("number")
+        number = raw if isinstance(raw, int) and not isinstance(raw, bool) else None
+        if number is None or number not in {g.number for g in gens}:
+            return jsonify({"error": "ERR_GENERATION_UNKNOWN"}), 400
+        with _start_lock:
+            return _start_generation(payload, number, mode, nixos_dir)
+
+    def _start_generation(payload, number: int, mode: str, nixos_dir: str):
+        global _job
+        import json as _json
+        import subprocess as _sp
+        from .. import generations
+
+        with _job_cv:
+            if _job is not None and _job["running"]:
+                return jsonify({"error": "ERR_REBUILD_RUNNING"}), 409
+        if switch_unit_busy():
+            return jsonify({"error": "ERR_SWITCH_RUNNING"}), 409
+
+        sudo_nonce = str(payload.get("sudo_nonce") or "")
+        sudo_password = ""
+        if sudo_nonce and sudo_nonce in _sudo_nonces:
+            pw, expiry = _sudo_nonces.pop(sudo_nonce)
+            if expiry > _time_mod.time():
+                sudo_password = pw
+        commands = generations.switch_commands(number, mode)
+        units_before = failed_unit_names()
+
+        def _out(line):
+            return f"data: {_json.dumps({'type': 'output', 'line': line})}\n\n"
+
+        def _generate():
+            yield _out(f"── system state {number} ({mode}) ──")
+            activation = _Activation()
+            ok = True
+            for cmd in commands:
+                yield _out("$ " + " ".join(c for c in cmd if c != "-S"))
+                if "switch-to-configuration" in cmd[2]:
+                    yield f"data: {_json.dumps({'type': 'phase', 'phase': 'activating', 'active': True, 'pkg': ''})}\n\n"
+                try:
+                    proc = _sp.Popen(cmd, cwd=nixos_dir, stdin=_sp.PIPE, stdout=_sp.PIPE,
+                                     stderr=_sp.STDOUT, text=True, bufsize=1)
+                except FileNotFoundError:
+                    yield f"data: {_json.dumps({'type': 'error', 'message': 'ERR_GENERATION_TOOL'})}\n\n"
+                    return
+                proc.stdin.write((sudo_password + "\n") if sudo_password else "")
+                proc.stdin.flush()
+                proc.stdin.close()
+                for raw_line in proc.stdout:
+                    line = raw_line.rstrip("\r\n")
+                    activation.consider(line)
+                    yield _out(line)
+                proc.wait()
+                if proc.returncode != 0:
+                    ok = False
+                    break
+            activated_warn = (not ok) and activation.partial
+            yield ("data: " + _json.dumps({
+                "type": "done", "success": ok, "kind": "generation",
+                "number": number, "mode": mode,
+                "failed_units": failed_units(exclude=units_before),
+                "error_lines": [], "error_lines_dropped": 0,
+                "activated_with_warnings": activated_warn,
+                "unrestarted_units": activation.units if activated_warn else [],
+            }) + "\n\n")
+
+        job_id = uuid.uuid4().hex
+        with _job_cv:
+            _job = {
+                "id": job_id, "running": True, "events": [], "dropped": 0,
+                "success": None, "acked": False, "mode": f"generation-{mode}",
+                "hostname": "", "verbose": False, "started": time.time(),
+                "finished": None,
+            }
+            _job_cv.notify_all()
+
+        def _run_job():
+            try:
+                for event in _generate():
+                    _job_append(job_id, event)
+            except Exception as exc:
+                _job_append(job_id,
+                            f"data: {_json.dumps({'type': 'error', 'message': str(exc)})}\n\n")
+            finally:
+                _job_finish(job_id)
+
+        threading.Thread(target=_run_job, name=f"generation-{job_id[:8]}",
+                         daemon=True).start()
+        return jsonify({"success": True, "job_id": job_id})
+
     @app.route("/api/rebuild/precheck", methods=["POST"])
     def rebuild_precheck():
         """Forecast for the rebuild about to start: download size and the

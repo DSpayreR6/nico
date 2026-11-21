@@ -1031,3 +1031,113 @@ function showGitWarning(msg, showInitBtn) {
 function hideGitWarning() {
   document.getElementById('git-warning-banner')?.classList.add('hidden');
 }
+
+// ── Time machine, System side: system states (generations) ─────────────────
+// Decision 2026-11-21: the time machine has two sides. Config – checkpoints
+// (commits), Restore – is the list above. System – the generations Nix keeps
+// of the built system, Rollback – is read only with the release
+// read_host_generations (hostread.py) and switched in the rebuild monitor.
+
+// The two sides are the admin sub-tabs everyone uses (ui.js); the System side
+// loads its list when it is shown.
+document.addEventListener('subtab-shown', e => {
+  if (e.detail === 'tm-system') loadGenerations();
+});
+
+document.addEventListener('host-read-released', e => {
+  if (e.detail === 'read_host_generations'
+      && !document.getElementById('tm-system')?.classList.contains('hidden')) {
+    loadGenerations();
+  }
+});
+
+async function loadGenerations() {
+  const body = document.getElementById('generations-body');
+  if (!body) return;
+  body.innerHTML = `<span class="admin-loading">${escHtml(t('admin.loading'))}</span>`;
+  let data;
+  try {
+    data = await fetch('/api/generations').then(r => r.json());
+  } catch {
+    body.innerHTML = `<span class="admin-empty">${escHtml(t('toast.error'))}</span>`;
+    return;
+  }
+  if (!data.allowed) {
+    body.innerHTML = `<p class="admin-hint">${escHtml(t('generations.off'))}</p>`
+                   + hostReadButton('read_host_generations');
+    return;
+  }
+  const gens = data.generations || [];
+  if (!gens.length) {
+    body.innerHTML = `<span class="admin-empty">${escHtml(t('generations.empty'))}</span>`;
+    return;
+  }
+  // The same row as a checkpoint on the Config side (rollback-*), the marks
+  // in the badge style the host cards use – one look for both sides.
+  const badge = key => ` <span class="host-card-brix-badge">${escHtml(t(key))}</span>`;
+  const rows = gens.map(g => {
+    const badges = (g.running ? badge('generations.badgeRunning') : '')
+                 + (g.booted  ? badge('generations.badgeBooted') : '')
+                 + (g.default ? badge('generations.badgeDefault') : '');
+    const what = [g.nixos_version && `NixOS ${g.nixos_version}`, g.kernel && `Linux ${g.kernel}`]
+      .filter(Boolean).join(' · ');
+    // Running now and chosen for the next start: nothing to switch to.
+    const action = (g.running && g.default) ? '' :
+      `<button class="rollback-btn" data-gen="${g.number}">${escHtml(t('generations.useBtn'))}</button>`;
+    return `<div class="rollback-item">
+      <span class="rollback-hash">#${g.number}</span>
+      <span class="rollback-msg" title="${escHtml(what)}">${escHtml(what)}${badges}</span>
+      <span class="rollback-date">${escHtml(g.date)}</span>
+      ${action}
+    </div>`;
+  }).join('');
+  // No separate rollback button (Martin, 2026-11-21): the previous state is
+  // the row below "next start", one click like any other.
+  body.innerHTML = `<div class="rollback-list">${rows}</div>`;
+  body.querySelectorAll('[data-gen]').forEach(btn =>
+    btn.addEventListener('click', () => _useGeneration(Number(btn.dataset.gen))));
+}
+
+/** Ask now / from the next start, then switch in the rebuild monitor. */
+async function _useGeneration(number) {
+  const mode = await new Promise(resolve => {
+    const overlay = document.createElement('div');
+    overlay.className = 'overlay';
+    overlay.innerHTML = `
+      <div class="dialog">
+        <h2 class="dialog-title">${escHtml(t('generations.useTitle', number))}</h2>
+        <p class="dialog-info">${escHtml(t('generations.useInfo'))}</p>
+        <div class="dialog-actions">
+          <button type="button" class="btn-secondary" data-mode="">${escHtml(t('unsaved.cancel'))}</button>
+          <button type="button" class="btn-secondary" data-mode="boot">${escHtml(t('generations.modeBoot'))}</button>
+          <button type="button" class="btn-primary" data-mode="switch">${escHtml(t('generations.modeSwitch'))}</button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+    // Closed by its buttons only, never by a click beside it.
+    overlay.querySelectorAll('[data-mode]').forEach(b => b.addEventListener('click', () => {
+      overlay.remove();
+      resolve(b.dataset.mode || null);
+    }));
+  });
+  if (!mode) return;
+  const sudoNonce = await acquireSudoNonce();
+  if (sudoNonce === null) return;
+  const res = await csrfFetch('/api/generations/switch', {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify({ number, mode, sudo_nonce: sudoNonce }),
+  }).catch(() => null);
+  const data = res ? await res.json().catch(() => null) : null;
+  if (!data?.success) {
+    if (data?.error === 'ERR_REBUILD_RUNNING') {
+      showToast(t('rebuild.alreadyRunning'), 'error');
+      attachRebuildMonitor();
+      return;
+    }
+    showToast(tErr(data?.error) || t('toast.error'), 'error');
+    return;
+  }
+  closeAdmin();
+  attachRebuildMonitor();
+}

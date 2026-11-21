@@ -2256,6 +2256,17 @@
       <!-- ── Tab 3: Zeitmaschine ─────────────────────────────────────── -->
       <div class="admin-tab-panel hidden" data-admin-panel="zeitmaschine">
 
+        <!-- Two sides (decision 2026-11-21): System – system states
+             (generations), first and shown on opening (Martin); Config –
+             checkpoints (commits), Restore. -->
+        <div class="settings-subtabs">
+          <button class="settings-subtab active" data-subtab="tm-system"
+                  data-i18n="tm.sideSystem">System</button>
+          <button class="settings-subtab" data-subtab="tm-config"
+                  data-i18n="tm.sideConfig">Config</button>
+        </div>
+
+        <div id="tm-config" class="settings-subtab-panel hidden" data-subtab-panel="tm-config">
         <!-- Git-Status / Init -->
         <div class="admin-section" id="git-init-section">
           <div class="admin-section-title" data-i18n="admin.gitTitle">Git</div>
@@ -2333,6 +2344,18 @@
             <span class="admin-loading" data-i18n="admin.loading">Wird geladen …</span>
           </div>
         </div>
+        </div><!-- /tm-config -->
+
+        <!-- System side: generations (generations.py, hostread GENERATIONS) -->
+        <div id="tm-system" class="settings-subtab-panel" data-subtab-panel="tm-system">
+          <div class="admin-section">
+            <div class="admin-section-title" data-i18n="generations.title">Systemstände (Generationen)</div>
+            <p class="admin-hint" data-i18n="generations.hint">Jeder Rebuild legt einen Systemstand an. Hier wählst du, welcher läuft – jetzt oder ab dem nächsten Start. Die Config-Dateien bleiben dabei unverändert; der nächste Rebuild baut wieder aus ihnen.</p>
+            <div id="generations-body" style="margin-top:8px">
+              <span class="admin-loading" data-i18n="admin.loading">Wird geladen …</span>
+            </div>
+          </div>
+        </div><!-- /tm-system -->
       </div><!-- /Tab 3 -->
 
     </div>

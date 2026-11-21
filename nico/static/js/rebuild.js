@@ -1051,7 +1051,14 @@ function attachRebuildMonitor(fromIndex = 0) {
     } else if (msg.type === 'done') {
       _flushLog();
       const activatedWarn = !msg.success && !!msg.activated_with_warnings;
-      const label = msg.success
+      // A system state switched in the time machine (System side) is no
+      // build: its own success line, and no checkpoint offer below – the
+      // config files did not change.
+      const isGeneration = msg.kind === 'generation';
+      const label = msg.success && isGeneration
+        ? niIcon('check-circle') + ' ' + escHtml(t(msg.mode === 'boot' ? 'generations.doneBoot'
+                                                                      : 'generations.doneSwitch', msg.number))
+        : msg.success
         ? niIcon('check-circle') + ' ' + t('rebuild.success')
         : activatedWarn
         ? niIcon('alert-triangle') + ' ' + escHtml(t('rebuild.activatedWarn'))
@@ -1086,7 +1093,7 @@ function attachRebuildMonitor(fromIndex = 0) {
       _rebuildES = null;
       // The new system runs in both cases, so the config on disk is the
       // state worth a checkpoint (decided 2026-11-13).
-      if (msg.success || activatedWarn) {
+      if ((msg.success || activatedWarn) && !isGeneration) {
         csrfFetch('/api/config/settings').then(r => r.json()).then(async cfg => {
           // What git can do here decides what is offered: committing needs a
           // repository, pushing needs a remote on top of that. Offering
