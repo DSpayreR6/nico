@@ -205,6 +205,162 @@ def parse_tree(content: str):
         return None
 
 
+# ── Active assignments (whole file, nested) ───────────────────────────────────
+
+@dataclass(frozen=True)
+class Assignment:
+    """One active assignment, with its full attribute path.
+
+    `users.users.anna = { uid = 1000; }` and `users.users.anna.uid = 1000;`
+    both give path ("users", "users", "anna", "uid"). The block itself is an
+    assignment too, so a rule can find where a user starts.
+    """
+    path: tuple        # components in normalized form (quotes only where needed)
+    value_text: str    # raw Nix source of the right-hand side
+    line: int          # 1-based line of the binding
+
+    @property
+    def key(self) -> str:
+        return ".".join(self.path)
+
+
+# Values whose binding sets are attributes of the same path. Descended so
+# that what NixOS merges is seen: mkIf/mkMerge/mkForce, `//`, if/then/else,
+# with, let … in. Not descended: strings and a let's own bindings; a
+# function's body starts a new path (_collect_assignments).
+_ASSIGN_SKIP = frozenset({"string_expression", "indented_string_expression",
+                          "formals", "comment"})
+
+_assign_cache: dict = {}
+_ASSIGN_CACHE_MAX = 256
+
+
+def assignments(content: str) -> tuple:
+    """Every active assignment of a .nix file, nested blocks flattened.
+
+    Comments are not code to tree-sitter, so a commented-out line and a
+    deactivated Nix-Brick (its body commented out) are never part of it;
+    active Nix-Brix are ordinary bindings and are. The values stay text:
+    `uid = 1234 + 1` is an expression, not 1234 - extract_int says None.
+
+    Without tree-sitter a simpler fallback runs on the text with comments
+    blanked (plain `{ … }` blocks only). Remembered per content: the
+    Validator reads the same file once per rule.
+    """
+    hit = _assign_cache.get(content)
+    if hit is not None:
+        return hit
+    tree = parse_tree(content)
+    if tree is None:
+        result = tuple(_rx_assignments(content))
+    else:
+        out: list = []
+        src = content.encode("utf-8")
+        root = tree.root_node
+        # The file itself may be a function ({ pkgs, ... }: { … }) - that body
+        # is the module, unlike a function standing as a value.
+        while root is not None and root.type in ("source_code", "function_expression"):
+            body = None
+            for ch in root.children:
+                if root.type == "source_code" and ch.type != "comment":
+                    body = ch
+                elif root.type == "function_expression" and ch.type not in (
+                        "formals", ":", "identifier", "@", "comment"):
+                    body = ch
+            root = body
+        if root is not None:
+            _collect_assignments(root, (), src, out)
+        result = tuple(out)
+    if len(_assign_cache) >= _ASSIGN_CACHE_MAX:
+        _assign_cache.pop(next(iter(_assign_cache)))
+    _assign_cache[content] = result
+    return result
+
+
+def _collect_assignments(node, prefix: tuple, src: bytes, out: list) -> None:
+    t = node.type
+    if t in _ASSIGN_SKIP:
+        return
+    if t == "binding_set":
+        for b in node.children:
+            if b.type != "binding":
+                continue
+            attr = value = None
+            for ch in b.children:
+                if ch.type == "attrpath":
+                    attr = ch
+                elif ch.type not in ("=", ";", "comment") and attr is not None and value is None:
+                    value = ch
+            if attr is None:
+                continue
+            path = prefix + tuple(_split_attrpath(normalize_attrpath(
+                _node_source(attr, src).strip())))
+            out.append(Assignment(path, _node_source(value, src), b.start_point[0] + 1))
+            if value is not None:
+                _collect_assignments(value, path, src, out)
+        return
+    if t == "function_expression":
+        # A function standing as a value is a module ({ config, ... }: { … }
+        # in a flake's modules list, flake-parts) or a template (genAttrs
+        # names (name: { … })). Its body is read from the top, like a file:
+        # a module's options are found, and a template's attributes do not
+        # turn into users or options under the outer path.
+        kids = [c for c in node.children
+                if c.type not in ("formals", ":", "identifier", "@", "comment")]
+        if kids:
+            _collect_assignments(kids[-1], (), src, out)
+        return
+    if t == "let_expression":
+        # Only the body: the let's own bindings are local names, not options.
+        kids = [c for c in node.children if c.type not in ("let", "in", "comment")]
+        if kids and kids[-1].type != "binding_set":
+            _collect_assignments(kids[-1], prefix, src, out)
+        return
+    for ch in node.children:
+        _collect_assignments(ch, prefix, src, out)
+
+
+def _rx_assignments(content: str) -> list:
+    """Fallback for assignments() without tree-sitter: comments blanked,
+    statements split at depth 0, plain `{ … }` values descended."""
+    from .importer import _blank_comments, _split_top_level_stmts
+    text = _blank_comments(content)
+    body = re.sub(r'^\s*\{[^}]*\}\s*:\s*', '', text, flags=re.DOTALL).strip()
+    if body.startswith("{") and body.endswith("}"):
+        body = body[1:-1]
+    out: list = []
+
+    def walk(part: str, prefix: tuple) -> None:
+        for stmt in _split_top_level_stmts(part):
+            m = re.match(r'\s*([\w."\-]+)\s*=\s*(.*?)\s*;?\s*$', stmt, re.DOTALL)
+            if not m:
+                continue
+            path = prefix + tuple(_split_attrpath(normalize_attrpath(m.group(1))))
+            value = m.group(2)
+            pos = text.find(stmt.strip())
+            out.append(Assignment(path, value, text.count("\n", 0, pos) + 1 if pos >= 0 else 0))
+            inner = extract_inner_block(value)
+            if inner is not None:
+                walk(inner, path)
+
+    walk(body, ())
+    return out
+
+
+_RE_PRIO_WRAP = re.compile(
+    r'^\s*(?:lib\s*\.\s*)?(mkDefault|mkForce|mkOverride\s+\d+)\s+(.*?)\s*$',
+    re.DOTALL)
+
+
+def unwrap_priority(value_text: str) -> tuple:
+    """`lib.mkForce false` → ("false", "mkForce"); a plain value → (value, "").
+    For mkOverride the name alone, as the Validator reports it."""
+    m = _RE_PRIO_WRAP.match(value_text or "")
+    if not m:
+        return (value_text or "").strip(), ""
+    return m.group(2).strip(), m.group(1).split()[0]
+
+
 def body_shape(content: str) -> str | None:
     """How a module file is built: 'plain', 'other', or None without tree-sitter.
 

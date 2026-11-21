@@ -791,80 +791,49 @@ def _rule_user_extra_conflict(nixos_dir: str, config: dict, is_flake: bool,
 # means NixOS creates the account locked ("!" in /etc/shadow) – no password is
 # then accepted, not even an empty one, and the machine needs an installer to
 # get back into.
-_RE_USER_LOGIN = re.compile(
-    r'\b(?:hashedPassword|initialPassword|initialHashedPassword|'
-    r'hashedPasswordFile|passwordFile|password)\s*=')
-_RE_USER_SSH_KEY = re.compile(r'authorizedKeys\s*\.\s*key(?:s|Files)\s*=\s*\[[^\]]*"')
-_RE_USER_UID = re.compile(r'\buid\s*=\s*(\d+)')
-_RE_USER_SYSTEM = re.compile(r'\bisSystemUser\s*=\s*true')
-_RE_USER_WHEEL = re.compile(r'\bextraGroups\s*=\s*\[[^\]]*"wheel"')
-_RE_MUTABLE_USERS_OFF = re.compile(r'users\s*\.\s*mutableUsers\s*=\s*false')
+_USER_LOGIN_ATTRS = frozenset({
+    "hashedPassword", "initialPassword", "initialHashedPassword",
+    "hashedPasswordFile", "passwordFile", "password"})
+_RE_NONEMPTY_LIST = re.compile(r'\[\s*[^\]\s]')
 
 
-def _file_bindings(content: str) -> dict:
-    """attrpath → value text for one file, brick bodies included.
+def _active_value(value_text: str) -> str:
+    """The value as Nix reads it: comments inside it blanked, a priority
+    wrapper (lib.mkForce …) taken off."""
+    from . import nix_parser as _np
+    from .importer import _blank_comments
+    return _np.unwrap_priority(_blank_comments(value_text))[0]
 
-    The same two tracks the importer uses – tree-sitter first, regex fallback –
-    so both see the same bindings. Counting braces by hand is not an option
-    here: a `{` inside a '' … '' string tears the block apart, and user blocks
-    are exactly where such strings turn up (ssh keys, shell aliases).
 
-    Brick bodies are read as well. A freshly imported config keeps everything
-    NiCo does not understand as a Nix brick, and a user block can sit in there.
+def _user_fact(entry: dict, rest: tuple, value_text: str) -> None:
+    """Fold one attribute below users.users.<name> into that user's facts.
+
+    All user and group rules read active assignments only
+    (nix_parser.assignments; revision 2026-11-20 by Codex, built 2026-11-21).
+    Before, a text pattern ran over the user block: a commented-out
+    `# hashedPassword = …` or `# extraGroups = [ "wheel" ];` counted as set,
+    and `uid = 1234 + 1` was read as 1234 - the Validator stayed silent where
+    an account would end up locked or nobody could use sudo.
+
+    Both spellings, the block and the dotted form, arrive the same way, and so
+    does a user split between the form's block and a Nix-Brick (VM test
+    2026-11-19): every attribute is its own assignment.
     """
     from . import nix_parser as _np
-    from .importer import _rx_top_level_bindings
-    pairs: list = []
-    try:
-        parsed = _np.parse(content)
-        if parsed.available:
-            pairs = [(b.key, b.value_text) for b in parsed.known + parsed.unknown]
-    except Exception:
-        pairs = []
-    if not pairs:
-        try:
-            pairs = list(_rx_top_level_bindings(content)[0].items())
-        except Exception:
-            pairs = []
-    bricks = _brick_bodies(content)
-    if bricks.strip():
-        try:
-            pairs += list(_rx_top_level_bindings(bricks)[0].items())
-        except Exception:
-            pass
-    # The same block may stand twice – the form's `users.users.x = { … }` and
-    # a Nix-Brick with the part the form does not take (the Gegenprobe leaves
-    # a group list there). Nix merges them; a dict kept only one, and the
-    # password in the other was reported missing (VM test 2026-11-19).
-    kv: dict = {}
-    for key, value in pairs:
-        if key not in kv:
-            kv[key] = value
-        elif value != kv[key] and value not in kv[key]:
-            a, b = _np.extract_inner_block(kv[key]), _np.extract_inner_block(value)
-            if a is not None and b is not None:
-                kv[key] = "{ " + a + "\n" + b + " }"
-    return kv
-
-
-def _scan_user_text(entry: dict, text: str) -> None:
-    """Fold one piece of a user block into the facts collected for that user."""
-    if _RE_USER_LOGIN.search(text) or _RE_USER_SSH_KEY.search(text):
+    value = _active_value(value_text)
+    attr = rest[0]
+    if len(rest) == 1:
+        if attr in _USER_LOGIN_ATTRS and value != "null":
+            entry["has_login"] = True
+        elif attr == "isSystemUser" and value == "true":
+            entry["is_system"] = True
+        elif attr == "uid" and entry["uid"] is None:
+            entry["uid"] = _np.extract_int(value)   # an expression stays None
+        elif attr == "extraGroups" and '"wheel"' in value:
+            entry["is_admin"] = True
+    elif (len(rest) == 3 and rest[:2] == ("openssh", "authorizedKeys")
+          and rest[2] in ("keys", "keyFiles") and _RE_NONEMPTY_LIST.search(value)):
         entry["has_login"] = True
-    if _RE_USER_SYSTEM.search(text):
-        entry["is_system"] = True
-    m = _RE_USER_UID.search(text)
-    if m and entry["uid"] is None:
-        entry["uid"] = int(m.group(1))
-    if _RE_USER_WHEEL.search(text):
-        entry["is_admin"] = True
-
-
-def _attr_line(content: str, name: str, kind: str = "users") -> int:
-    """Line of the first users.<kind>.<name> mention – for the message only."""
-    m = re.search(r'users\s*\.\s*' + kind + r'\s*\.\s*"?' + re.escape(name) + r'"?',
-                  content)
-    return content[:m.start()].count("\n") + 1 if m else 0
 
 
 def _hosts_dir_path(nixos_dir: str) -> Path:
@@ -951,22 +920,21 @@ def _declared_users(nixos_dir: str, host: str | None = None,
     from . import nix_parser as _np
     users: dict = {}
     for _nix_file, rel, content in _scoped_nix_files(nixos_dir, host, strict):
-        for key, value_text in _file_bindings(content).items():
-            parts = key.split(".")
-            if len(parts) < 3 or parts[0] != "users" or parts[1] != "users":
+        for a in _np.assignments(content):
+            p = a.path
+            if len(p) < 3 or p[0] != "users" or p[1] != "users":
                 continue
-            name = parts[2].strip('"')
-            if not name or name in _EXCL_USERS:
+            name = p[2].strip('"')
+            # "${username}": the real name is only known to Nix - it cannot be
+            # compared with this machine's users, a finding would be a guess.
+            if not name or name in _EXCL_USERS or "${" in name:
                 continue
             entry = users.setdefault(name, {
                 "uid": None, "has_login": False, "is_system": False,
-                "is_admin": False,
-                "file": rel, "line": _attr_line(content, name),
+                "is_admin": False, "file": rel, "line": a.line,
             })
-            if len(parts) == 3:
-                _scan_user_text(entry, _np.extract_inner_block(value_text) or value_text)
-            else:
-                _scan_user_text(entry, f'{".".join(parts[3:])} = {value_text}')
+            if len(p) > 3:
+                _user_fact(entry, p[3:], a.value_text)
     return users
 
 
@@ -977,9 +945,6 @@ def _system_uids() -> dict:
         return {p.pw_name: p.pw_uid for p in pwd.getpwall()}
     except Exception:
         return {}
-
-
-_RE_GROUP_GID = re.compile(r'\bgid\s*=\s*(\d+)')
 
 
 def _declared_groups(nixos_dir: str, host: str | None = None,
@@ -993,23 +958,16 @@ def _declared_groups(nixos_dir: str, host: str | None = None,
     from . import nix_parser as _np
     groups: dict = {}
     for _nix_file, rel, content in _scoped_nix_files(nixos_dir, host, strict):
-        for key, value_text in _file_bindings(content).items():
-            parts = key.split(".")
-            if len(parts) < 3 or parts[0] != "users" or parts[1] != "groups":
+        for a in _np.assignments(content):
+            p = a.path
+            if len(p) < 3 or p[0] != "users" or p[1] != "groups":
                 continue
-            name = parts[2].strip('"')
-            if not name:
+            name = p[2].strip('"')
+            if not name or "${" in name:
                 continue
-            entry = groups.setdefault(name, {
-                "gid": None, "file": rel,
-                "line": _attr_line(content, name, kind="groups"),
-            })
-            text = ((_np.extract_inner_block(value_text) or value_text)
-                    if len(parts) == 3
-                    else f'{".".join(parts[3:])} = {value_text}')
-            m = _RE_GROUP_GID.search(text)
-            if m and entry["gid"] is None:
-                entry["gid"] = int(m.group(1))
+            entry = groups.setdefault(name, {"gid": None, "file": rel, "line": a.line})
+            if p[3:] == ("gid",) and entry["gid"] is None:
+                entry["gid"] = _np.extract_int(_active_value(a.value_text))
     return groups
 
 
@@ -1108,7 +1066,14 @@ def _rule_group_gid_system(nixos_dir: str, config: dict, is_flake: bool,
 
 
 def _mutable_users_off(nixos_dir: str) -> bool:
-    """True if any config file sets users.mutableUsers = false."""
+    """True if any config file sets users.mutableUsers = false.
+
+    Also in the block form `users = { mutableUsers = false; }` and as
+    lib.mkForce false, never in a comment - until 2026-11-21 the block form
+    was missed and a comment counted, and with it the warning that the
+    rebuild drops an existing password went wrong both ways.
+    """
+    from . import nix_parser as _np
     for nix_file in sorted(Path(nixos_dir).rglob("*.nix")):
         if ".git" in nix_file.parts:
             continue
@@ -1116,8 +1081,9 @@ def _mutable_users_off(nixos_dir: str) -> bool:
             content = nix_file.read_text(encoding="utf-8")
         except OSError:
             continue
-        if _RE_MUTABLE_USERS_OFF.search(content):
-            return True
+        for a in _np.assignments(content):
+            if a.path == ("users", "mutableUsers") and _active_value(a.value_text) == "false":
+                return True
     return False
 
 
@@ -1189,10 +1155,12 @@ def _rule_no_admin_user(nixos_dir: str, config: dict, is_flake: bool,
     normal = {n: u for n, u in users.items() if not u["is_system"]}
     if not normal or any(u["is_admin"] for u in normal.values()):
         return []
+    from . import nix_parser as _np
     for _nix_file, _rel, content in _scoped_nix_files(nixos_dir, host):
-        members = _file_bindings(content).get("users.groups.wheel.members")
-        if members and _RE_WHEEL_MEMBERS.search(members):
-            return []
+        for a in _np.assignments(content):
+            if (a.path == ("users", "groups", "wheel", "members")
+                    and _RE_WHEEL_MEMBERS.search(_active_value(a.value_text))):
+                return []
     return [Finding(
         rule_id="no_admin_user",
         severity="error",
@@ -2035,11 +2003,6 @@ def _rule_flake_hm_branch(nixos_dir: str, config: dict, is_flake: bool,
 # one in a host file are two definitions of the same option, and Nix refuses
 # that. With lib.mkDefault on the base, the host's value wins instead – that is
 # the difference between a config that builds and one that stops at evaluation.
-_PRIO = r'(?:(?:lib\s*\.\s*)?(mkDefault|mkForce|mkOverride\s*\d+)\s+)?'
-_RE_SYS_STATE_VERSION = re.compile(
-    r'system\s*\.\s*stateVersion\s*=\s*' + _PRIO + r'"([^"]+)"')
-_RE_HM_STATE_VERSION = re.compile(
-    r'home\s*\.\s*stateVersion\s*=\s*' + _PRIO + r'"([^"]+)"')
 
 
 def _release_tuple(version: str) -> "tuple | None":
@@ -2080,23 +2043,29 @@ def _state_version_sites(nixos_dir: str, host: str | None,
     priority is '' for a plain definition, otherwise the wrapper that was used
     ('mkDefault', 'mkForce', …).
     """
+    from . import nix_parser as _np
+    from .importer import _blank_comments
     hm_dir = _hm_dir_path(nixos_dir)
-    pattern = _RE_HM_STATE_VERSION if home_manager else _RE_SYS_STATE_VERSION
+    suffix = ("home", "stateVersion") if home_manager else ("system", "stateVersion")
     sites = []
     for nix_file, rel, content in _scoped_nix_files(nixos_dir, host):
         in_hm = hm_dir.exists() and nix_file.is_relative_to(hm_dir)
         if in_hm != home_manager:
             continue
-        # A commented-out definition (or a deactivated brick) is not one
-        # (revision 2026-11-18, finding 20) – also behind a statement or in
-        # /* … */ (Codex re-check 2026-11-20). Comments are blanked with
-        # length and line breaks kept, so the line numbers stay right.
-        from .importer import _blank_comments
-        for i, line in enumerate(_blank_comments(content).split("\n"), 1):
-            m = pattern.search(line)
+        # Active assignments only: a commented-out definition or a
+        # deactivated brick is not one (revision 2026-11-18, finding 20),
+        # and the block form `system = { stateVersion = …; }` is one
+        # (2026-11-21; the text pattern knew only the dotted form).
+        for a in _np.assignments(content):
+            if a.path[-2:] != suffix:
+                continue
+            value, prio = _np.unwrap_priority(_blank_comments(a.value_text))
+            # Any one-line string counts, "${stateVersion}" included: it is
+            # set, only its value is unknown (_release_tuple says None) -
+            # as the text pattern had it.
+            m = re.fullmatch(r'"([^"]+)"', value)
             if m:
-                prio = (m.group(1) or "").split()[0] if m.group(1) else ""
-                sites.append((m.group(2), rel, i, prio))
+                sites.append((m.group(1), rel, a.line, prio))
     return sites
 
 

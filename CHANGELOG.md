@@ -8,6 +8,8 @@
 
 ### Bug Fixes
 
+- Validator: user, group and stateVersion checks read only active Nix code – a commented-out password or `wheel` no longer counts as set, `users = { mutableUsers = false; }` and `lib.mkForce false` are recognized, `uid = 1234 + 1` is no longer read as 1234, and modules written as functions (e.g. in a flake's module list) are checked too
+
 ## 0.20.0 (2026-11-20)
 
 ### New Features
