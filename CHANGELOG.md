@@ -4,6 +4,8 @@
 
 ### New Features
 
+- Text mode: a bracket without partner is shown inverted, the caret on or next to a bracket shows its partner; after opening or saving a file Nix cannot read, the error line is tinted and the character Nix stopped at is marked
+
 ### Bug Fixes
 
 ## 0.20.0 (2026-11-20)

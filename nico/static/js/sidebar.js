@@ -838,6 +838,8 @@ const Sidebar = (() => {
   let _rawEditPath   = null;
   // Header-Zeilen (nico-version + NiCo-Kommentare) der aktuellen Raw-Datei
   let _rawEditHeader = '';
+  let _parseErr      = null;   // { line, col } in the text editor, from the last save/open
+  let _paintTextEditor = null; // repaints the text editor's colored layer
   // Editor-Inhalt beim Öffnen der Raw-Ansicht (für Dirty-Erkennung beim Dateiwechsel)
   let _rawEditOrig   = '';
   // Panel-Default aus Config-Settings ('p' oder 'r')
@@ -1044,6 +1046,7 @@ const Sidebar = (() => {
       offHint?.classList.toggle('hidden', !panelOff || unmappable);
       document.getElementById('unmappable-hint')?.classList.toggle('hidden', !unmappable);
       if (unmappable) _setUnmappableText(reason);
+      _markParseError(unmappable ? reason : null);
       if (offSource) {
         offSource.classList.toggle('hidden', !panelOff || unmappable);
         if (panelOff && flagSource) {
@@ -1750,6 +1753,7 @@ const Sidebar = (() => {
   function _showRawView(content, fileName, filePath) {
     _clearRawView();
     _rawEditPath = filePath;
+    _parseErr    = null;
     const previewTabs = elPreviewPanel.querySelector('.preview-tabs');
     if (previewTabs) { previewTabs.dataset.hiddenByRaw = '1'; previewTabs.style.display = 'none'; }
     elPreviewPanel.querySelectorAll('.preview-code-wrap, .preview-content').forEach(el => {
@@ -1816,6 +1820,7 @@ const Sidebar = (() => {
     const code = view?.querySelector('code');
     if (!view || !code) return;
     let pending = false;
+    let brackets = [];
     const sync = () => { view.scrollTop = ta.scrollTop; view.scrollLeft = ta.scrollLeft; };
     const paint = () => {
       pending = false;
@@ -1823,14 +1828,30 @@ const Sidebar = (() => {
       // textarea; positions before it are unchanged.
       highlightCode(code, ta.value + '\n');
       Search.remark(ta);
+      brackets = _pairBrackets(code);
+      _markBracketAtCaret(ta, brackets);
+      _showParseError(ta, view, code);
       sync();
     };
+    _paintTextEditor = paint;
+    // Caret moves without input (arrows, click): only the pair mark follows.
+    let caretPending = false;
+    const caret = () => {
+      if (caretPending) return;
+      caretPending = true;
+      requestAnimationFrame(() => { caretPending = false; _markBracketAtCaret(ta, brackets); });
+    };
+    ['keydown', 'mouseup', 'focus', 'blur'].forEach(ev => ta.addEventListener(ev, caret));
     const fit = () => {
       view.style.right  = `${ta.offsetWidth  - ta.clientWidth}px`;
       view.style.bottom = `${ta.offsetHeight - ta.clientHeight}px`;
       sync();
     };
     ta.addEventListener('input', () => {
+      // Nix's error spot belongs to the saved text; once it is edited the
+      // spot may have moved. It comes back with the next save (Martin,
+      // 2026-11-21: while working on it, no errors).
+      _parseErr = null;
       if (pending) return;
       pending = true;
       requestAnimationFrame(paint);
@@ -1839,6 +1860,110 @@ const Sidebar = (() => {
     if (window.ResizeObserver) new ResizeObserver(fit).observe(ta);
     paint();
     fit();
+  }
+
+  /** Bracket pairs in the text editor (Martin, 2026-11-21, "like in Excel").
+   *  Read from the layer Prism has just colored: only punctuation tokens
+   *  count, so brackets inside strings and comments are left out, while
+   *  those inside ${…} take part like code. A bracket without partner gets
+   *  .bracket-bad; where a closing bracket meets an opener of another kind,
+   *  the closer is the one marked - which bracket is really missing nobody
+   *  can know. Returns [{ pos, el, partner }] in text order. */
+  function _pairBrackets(code) {
+    const OPEN = { '{': '}', '[': ']', '(': ')' };
+    const list = [];
+    const walker = document.createTreeWalker(code, NodeFilter.SHOW_TEXT);
+    let pos = 0, n;
+    while ((n = walker.nextNode())) {
+      const s = n.textContent;
+      if (s.length === 1 && '{}[]()'.includes(s)) {
+        const el = n.parentElement?.closest('.token');
+        if (el?.classList.contains('punctuation')) list.push({ ch: s, pos, el, partner: null });
+      }
+      pos += s.length;
+    }
+    const stack = [];
+    for (const b of list) {
+      if (OPEN[b.ch]) { stack.push(b); continue; }
+      const top = stack[stack.length - 1];
+      if (top && OPEN[top.ch] === b.ch) { stack.pop(); top.partner = b; b.partner = top; }
+      else b.el.classList.add('bracket-bad');
+    }
+    stack.forEach(b => b.el.classList.add('bracket-bad'));
+    return list;
+  }
+
+  /** Where Nix stopped reading (open or save of a file Nix cannot read):
+   *  `reason` is unmappable_reason, its line counted over the whole file.
+   *  The text editor starts below NiCo's header lines, so the line is
+   *  shifted like in _setUnmappableText. null clears the mark. */
+  function _markParseError(reason) {
+    const hdr = _rawEditHeader ? _rawEditHeader.split('\n').length : 0;
+    // Typed on while the check ran: the spot belongs to an older text.
+    const ta = document.getElementById('raw-file-editor');
+    const current = !ta || ta.value === _rawEditOrig;
+    _parseErr = (current && reason?.kind === 'parse' && reason.line > hdr)
+      ? { line: reason.line - hdr, col: reason.col || null }
+      : null;
+    _paintTextEditor?.();
+  }
+
+  /** The error line tinted in the text and the line numbers, the character
+   *  Nix stopped at inverted. The bands sit inside the scrolled layers, so
+   *  they follow the scrolling without their own code. */
+  function _showParseError(ta, view, code) {
+    const wrap = ta.closest('.raw-editor-wrap');
+    const nums = wrap?.querySelector('.raw-line-nums');
+    wrap?.querySelectorAll('.parse-error-line').forEach(el => el.remove());
+    if (!_parseErr) return;
+    const lh  = parseFloat(getComputedStyle(code).lineHeight) || 21.45;
+    const top = `${parseFloat(getComputedStyle(view).paddingTop) + (_parseErr.line - 1) * lh}px`;
+    const band = (parent, width) => {
+      const el = document.createElement('div');
+      el.className = 'parse-error-line';
+      el.style.top = top;
+      el.style.height = `${lh}px`;
+      if (width) el.style.width = `${width}px`;
+      parent.appendChild(el);
+    };
+    band(view, Math.max(view.scrollWidth, view.clientWidth));
+    if (nums) band(nums);
+    if (!_parseErr.col) return;
+    // Offset of the character: start of the line plus the column (1-based).
+    const lines = ta.value.split('\n');
+    if (_parseErr.line > lines.length) return;
+    let at = _parseErr.col - 1;
+    for (let i = 0; i < _parseErr.line - 1; i++) at += lines[i].length + 1;
+    const walker = document.createTreeWalker(code, NodeFilter.SHOW_TEXT);
+    let pos = 0, n;
+    while ((n = walker.nextNode())) {
+      const len = n.textContent.length;
+      if (at < pos + len) {
+        const ch = n.textContent[at - pos];
+        if (ch === '\n') return;   // end of the line: the band says enough
+        const hit = n.splitText(at - pos);
+        hit.splitText(1);
+        const span = document.createElement('span');
+        span.className = 'parse-error-char';
+        hit.parentNode.replaceChild(span, hit);
+        span.appendChild(hit);
+        return;
+      }
+      pos += len;
+    }
+  }
+
+  /** The caret on or right after a bracket with a partner: both are shown.
+   *  The character after the caret wins over the one before. */
+  function _markBracketAtCaret(ta, list) {
+    list.forEach(b => b.el.classList.remove('bracket-pair'));
+    if (document.activeElement !== ta || ta.selectionStart !== ta.selectionEnd) return;
+    const at = ta.selectionStart;
+    const b = list.find(x => x.pos === at && x.partner)
+           || list.find(x => x.pos === at - 1 && x.partner);
+    if (!b) return;
+    b.el.classList.add('bracket-pair');
+    b.partner.el.classList.add('bracket-pair');
   }
 
   function _showFlkView(content) {
@@ -1972,6 +2097,8 @@ const Sidebar = (() => {
     document.getElementById('raw-file-view')?.remove();
     document.getElementById('flk-file-view')?.remove();
     _rawEditPath = null;
+    _parseErr    = null;
+    _paintTextEditor = null;
     document.querySelectorAll('[data-hidden-by-raw]').forEach(el => {
       el.style.display = ''; delete el.dataset.hiddenByRaw;
     });

@@ -527,11 +527,13 @@ def unmappable_reason(nixos_dir: str, rel_path: str, content: str,
     from . import validator as _val
     err = _val.nix_parse_error(content)
     if err is not None:
-        m = re.search(r":(\d+):\d+", err)
+        # The column (1-based, as Nix counts) lets the text editor mark the
+        # character Nix stopped at (2026-11-21).
+        m = re.search(r":(\d+):(\d+)", err)
         first = next((l.strip() for l in err.splitlines() if l.strip()), err)
         first = re.sub(r"^error:\s*", "", first)
         return {"kind": "parse", "line": int(m.group(1)) if m else None,
-                "message": first}
+                "col": int(m.group(2)) if m else None, "message": first}
     if _structure_unmappable(nixos_dir, rel_path, content, ftype):
         return {"kind": "structure"}
     return None

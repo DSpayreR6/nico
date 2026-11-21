@@ -3811,6 +3811,37 @@ button:disabled {
 #raw-file-view .text-editor-view code { padding: 0 !important; display: block; }
 /* Token styles may not change the width of a character. */
 .text-editor-view .token { font-weight: inherit !important; font-style: inherit !important; }
+/* Brackets (2026-11-21): without partner inverted, the pair at the caret
+   framed. Background and outline only - nothing that changes the width. */
+.text-editor-view .token.bracket-bad {
+  background: var(--red, #f38ba8);
+  color: var(--crust, #11111b) !important;
+  border-radius: 2px;
+}
+/* Where Nix stopped reading, shown after open/save (2026-11-21). The bands
+   lie inside the scrolled layers (view, line numbers) and move with them. */
+#raw-file-view .raw-line-nums { position: relative; }
+.parse-error-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  background: #f38ba833;
+  pointer-events: none;
+}
+#raw-file-view .text-editor-view .parse-error-line { right: auto; }
+.raw-line-nums .parse-error-line { box-shadow: inset 3px 0 0 var(--red, #f38ba8); }
+.text-editor-view .parse-error-char {
+  background: var(--red, #f38ba8);
+  color: var(--crust, #11111b) !important;
+  border-radius: 2px;
+}
+.text-editor-view .parse-error-char .token,
+.text-editor-view .token .parse-error-char { color: var(--crust, #11111b) !important; }
+.text-editor-view .token.bracket-pair {
+  background: #89b4fa44;
+  outline: 1px solid var(--blue, #89b4fa);
+  border-radius: 2px;
+}
 
 .raw-file-editor {
   position: relative;
