@@ -101,3 +101,66 @@ def write_bytes(path: str | Path, data: bytes) -> None:
 def write_text(path: str | Path, content: str, encoding: str = "utf-8") -> None:
     """Replace `path` with `content`, atomically."""
     write_bytes(path, content.encode(encoding))
+
+
+class Rollback:
+    """Several files changed as one step: remember them, put them back.
+
+    Each write above is atomic, several are not (see the module text). For
+    the actions that touch more than one file - switching to a flake, adding
+    a flake host - a failed last write left the first ones changed: a
+    rewritten configuration.nix, a new host directory nothing points to
+    (Codex revision 2026-11-20). The same idea as importer.replace_nix_tree,
+    for a handful of named paths:
+
+        rb = Rollback([conf, flake, host_default])   # before the first write
+        try: ...writes...
+        except OSError: restored = rb.restore()
+
+    A file that did not exist is removed again, so is a directory that did
+    not exist, once it is empty. Martin asked (2026-11-21) why not build the
+    new state in a second directory and swap: the files lie in the config
+    root and below it, so only the whole config directory could be swapped -
+    with .git, Syncthing and open editors in it, and two renames are not one.
+    """
+
+    def __init__(self, paths) -> None:
+        self._files: dict = {}
+        self._known: dict = {}
+        self._dirs: list = []
+        for raw in paths:
+            p = Path(raw)
+            # Reading fails here, before anything is written - the caller
+            # stops with nothing changed.
+            self._files[p] = p.read_bytes() if p.is_file() else None
+            self._known[p] = outside.known(p)
+            d = p.parent
+            while not d.exists():
+                self._dirs.append(d)
+                d = d.parent
+
+    def restore(self) -> bool:
+        """Put every path back. False when one of them could not be."""
+        ok = True
+        for p, data in self._files.items():
+            try:
+                if data is None:
+                    p.unlink(missing_ok=True)
+                elif p.is_file() and p.read_bytes() == data:
+                    # Untouched - the failed write was atomic. Writing it
+                    # again would only fail again when the disk is full.
+                    pass
+                else:
+                    p.parent.mkdir(parents=True, exist_ok=True)
+                    write_bytes(p, data)
+                outside.set_known(p, self._known[p])
+            except OSError:
+                ok = False
+        # Deepest first; a directory that is not empty stays (something else
+        # was put there, or a file above could not be removed).
+        for d in sorted(set(self._dirs), key=lambda x: len(x.parts), reverse=True):
+            try:
+                d.rmdir()
+            except OSError:
+                pass
+        return ok

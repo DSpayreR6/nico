@@ -775,6 +775,8 @@
   "errors.ERR_BACKUP_FAILED":    "Sicherungskopie konnte nicht erstellt werden.",
   "errors.ERR_DETACH_FAILED":    "Config konnte nicht aus NiCo gelöst werden.",
   "errors.ERR_FILE_WRITE":       "Datei konnte nicht geschrieben werden.",
+  "errors.ERR_WRITE_RESTORED": "Schreiben fehlgeschlagen. Alle betroffenen Dateien sind wieder im vorherigen Stand.",
+  "errors.ERR_WRITE_PARTIAL": "Schreiben fehlgeschlagen, der vorherige Stand ließ sich nicht vollständig wiederherstellen. Zurück geht es über den Sicherungspunkt von davor (Zeitmaschine).",
   "errors.ERR_MANAGED_FILE":     "Diese Datei wird von NiCo verwaltet.",
   "errors.ERR_NOT_MAPPABLE":     "NiCo kann diese Datei nicht als Formular darstellen. Sie bleibt unverändert und lässt sich nur direkt als Text bearbeiten.",
   "errors.ERR_ADOPT_NOT_EXACT": "Nicht übernommen: Das Panel würde die Datei anders schreiben ({0}). Der Nix-Brick bleibt.",

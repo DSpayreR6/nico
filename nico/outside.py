@@ -69,6 +69,16 @@ def remember(path: str | Path, content: str | bytes) -> None:
         _known[_key(path)] = _text(content)
 
 
+def set_known(path: str | Path, content: str | None) -> None:
+    """Put back what known() said before - for atomic.Rollback, whose
+    restoring write must not make an old state count as written by NiCo."""
+    with _lock:
+        if content is None:
+            _known.pop(_key(path), None)
+        else:
+            _known[_key(path)] = content
+
+
 def known(path: str | Path) -> str | None:
     with _lock:
         return _known.get(_key(path))

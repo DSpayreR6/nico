@@ -16,6 +16,14 @@ from ..core import flake_is_managed as _flake_is_managed
 from ..core import get_flake_hosts as _get_flake_hosts
 
 
+def _rolled_back(rollback):
+    """The answer after a failed multi-file step: everything back in place,
+    or - when even that failed - say so and point to the checkpoint."""
+    if rollback.restore():
+        return jsonify({"error": "ERR_WRITE_RESTORED"}), 500
+    return jsonify({"error": "ERR_WRITE_PARTIAL"}), 500
+
+
 def register(app, ctx):
     _check_csrf     = ctx["check_csrf"]
     _require_setup  = ctx["require_setup"]
@@ -121,7 +129,13 @@ def register(app, ctx):
 
         hw_src = root / "hardware-configuration.nix"
         hw_dst = host_dir / "hardware-configuration.nix"
-        moved = False
+        # Every path this step may change, remembered before the first write:
+        # a failure on the way puts all of them back, not only the hardware
+        # config (Codex revision 2026-11-20).
+        try:
+            rollback = atomic.Rollback([host_default, hw_src, hw_dst, conf_path, flake_path])
+        except OSError:
+            return jsonify({"error": "ERR_FILE_READ"}), 500
         try:
             if not host_default.exists():
                 config_manager.save_host_config(nixos_dir, hostname, {})
@@ -131,19 +145,14 @@ def register(app, ctx):
             elif hw_src.is_file():
                 host_dir.mkdir(parents=True, exist_ok=True)
                 os.replace(hw_src, hw_dst)
-                moved, hardware = True, "moved"
+                hardware = "moved"
             else:
                 hardware = "missing"      # the Validator reports it
             atomic.write_text(conf_path, conf_text)
             atomic.write_text(flake_path, flake_text)
-        except OSError as exc:
-            # Do not leave the hardware config in a directory nothing points to.
-            if moved and not flake_path.exists():
-                try:
-                    os.replace(hw_dst, hw_src)
-                except OSError:
-                    pass
-            return jsonify({"error": str(exc)}), 500
+        except (OSError, config_manager.DuplicateAttrError,
+                config_manager.NotMappableError):
+            return _rolled_back(rollback)
 
         git_manager.auto_commit(nixos_dir, label="NiCo: flake.nix created")
         return jsonify({
@@ -203,19 +212,22 @@ def register(app, ctx):
         # Written before the flake, and a failure stops here: it used to be
         # swallowed, with success reported and a flake pointing at a host
         # without default.nix (revision 2026-11-18, finding 22).
-        if not host_default.exists():
-            try:
-                config_manager.save_host_config(nixos_dir, name, {})
-            except OSError:
-                return jsonify({"error": "ERR_FILE_WRITE"}), 500
-
+        # A failed flake write takes the new default.nix and its directory
+        # away again (Codex revision 2026-11-20).
         try:
+            rollback = atomic.Rollback([host_default, flake_path])
+        except OSError:
+            return jsonify({"error": "ERR_FILE_READ"}), 500
+        try:
+            if not host_default.exists():
+                config_manager.save_host_config(nixos_dir, name, {})
             atomic.write_text(
                 flake_path,
                 generator.generate_flake_nix(data, nixos_dir=nixos_dir)
             )
-        except OSError as exc:
-            return jsonify({"error": str(exc)}), 500
+        except (OSError, config_manager.DuplicateAttrError,
+                config_manager.NotMappableError):
+            return _rolled_back(rollback)
 
         git_manager.auto_commit(nixos_dir)
         return jsonify({"success": True, "hosts": current_hosts})

@@ -1635,7 +1635,7 @@ const Sidebar = (() => {
       });
       const j = await r.json();
       if (j.error === 'ERR_HOST_EXISTS') { showToast(t('fl.hosts.errExists'), 'error'); return; }
-      if (j.error) { showToast(j.error, 'error'); return; }
+      if (j.error) { showToast(tErr(j.error), 'error'); return; }
       await _renderFlakeHosts();
       _scheduleFlakePreviewUpdate();
     }

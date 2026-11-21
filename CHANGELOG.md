@@ -9,6 +9,7 @@
 ### Bug Fixes
 
 - Validator: user, group and stateVersion checks read only active Nix code – a commented-out password or `wheel` no longer counts as set, `users = { mutableUsers = false; }` and `lib.mkForce false` are recognized, `uid = 1234 + 1` is no longer read as 1234, and modules written as functions (e.g. in a flake's module list) are checked too
+- Switching to a flake and adding a flake host put every file back when the last write fails (e.g. disk full) instead of leaving a half-changed config; the message says whether everything was restored
 
 ## 0.20.0 (2026-11-20)
 

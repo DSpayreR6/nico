@@ -653,6 +653,8 @@
   "errors.ERR_BACKUP_FAILED": "バックアップアーカイブを作成できませんでした。",
   "errors.ERR_DETACH_FAILED": "設定をNiCoから切り離せませんでした。",
   "errors.ERR_FILE_WRITE": "ファイルを書き込めませんでした。",
+  "errors.ERR_WRITE_RESTORED": "書き込みに失敗しました。影響を受けたファイルはすべて以前の状態に戻っています。",
+  "errors.ERR_WRITE_PARTIAL": "書き込みに失敗し、以前の状態を完全には復元できませんでした。事前に作成したチェックポイントから戻してください（タイムマシン）。",
   "errors.ERR_MANAGED_FILE": "このファイルはNiCoが管理しています。",
   "errors.ERR_NOT_MAPPABLE": "NiCoはこのファイルをフォームとして表示できません。ファイルは変更されず、テキストとして直接編集することしかできません。",
   "errors.ERR_ADOPT_NOT_EXACT": "取り込みませんでした: パネルはファイルを別の内容で書き込みます（{0}）。Nix-Brick はそのまま残ります。",

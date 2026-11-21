@@ -162,7 +162,9 @@ print("\n22 – Flake-Host: Fehler beim Anlegen der default.nix kommt an")
 flake_before = (cfg / "flake.nix").read_text(encoding="utf-8")
 with mock.patch.object(config_manager, "save_host_config", side_effect=OSError("voll")):
     s, r = post("/api/flake/host/add", {"name": "neu"})
-check("Fehler statt Erfolg", s == 500 and r.get("error") == "ERR_FILE_WRITE", (s, r))
+# Since 2026-11-21 the message also says that everything is back in place
+# (atomic.Rollback, test_multi_file_rollback.py).
+check("Fehler statt Erfolg", s == 500 and r.get("error") == "ERR_WRITE_RESTORED", (s, r))
 check("flake.nix unverändert", (cfg / "flake.nix").read_text(encoding="utf-8") == flake_before)
 
 # ── 24 ───────────────────────────────────────────────────────────────────────

@@ -653,6 +653,8 @@
   "errors.ERR_BACKUP_FAILED": "Impossible de créer l'archive de sauvegarde.",
   "errors.ERR_DETACH_FAILED": "La configuration n'a pas pu être détachée de NiCo.",
   "errors.ERR_FILE_WRITE": "Impossible d'écrire le fichier.",
+  "errors.ERR_WRITE_RESTORED": "L'écriture a échoué. Tous les fichiers concernés sont revenus à leur état précédent.",
+  "errors.ERR_WRITE_PARTIAL": "L'écriture a échoué et l'état précédent n'a pas pu être entièrement restauré. Reviens en arrière via le point de contrôle créé avant (Machine à remonter le temps).",
   "errors.ERR_MANAGED_FILE": "Ce fichier est géré par NiCo.",
   "errors.ERR_NOT_MAPPABLE": "NiCo ne peut pas afficher ce fichier sous forme de formulaire. Il reste inchangé et ne peut être modifié que directement, en tant que texte.",
   "errors.ERR_ADOPT_NOT_EXACT": "Non repris : le panneau écrirait le fichier autrement ({0}). Le Nix-Brick reste.",

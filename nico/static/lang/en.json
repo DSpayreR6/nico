@@ -655,6 +655,8 @@
   "errors.ERR_BACKUP_FAILED": "Could not create backup archive.",
   "errors.ERR_DETACH_FAILED": "The config could not be detached from NiCo.",
   "errors.ERR_FILE_WRITE": "File could not be written.",
+  "errors.ERR_WRITE_RESTORED": "Writing failed. All affected files are back in their previous state.",
+  "errors.ERR_WRITE_PARTIAL": "Writing failed, and the previous state could not be fully restored. Go back via the checkpoint made before (time machine).",
   "errors.ERR_MANAGED_FILE": "This file is managed by NiCo.",
   "errors.ERR_NOT_MAPPABLE": "NiCo cannot show this file as a form. It stays unchanged and can only be edited directly as text.",
   "errors.ERR_ADOPT_NOT_EXACT": "Not moved: the panel would write the file differently ({0}). The Nix-Brick stays.",
