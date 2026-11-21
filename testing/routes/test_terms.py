@@ -264,5 +264,30 @@ for lang, pattern in RAW.items():
           TEXT_MODE[lang].lower() in data.get("admin.settings.panelDefault", "").lower(),
           data.get("admin.settings.panelDefault"))
 
+print("\n13. Rollback nur auf der System-Seite (Entscheidung 2026-11-21)")
+# Zeitmaschine = Oberbegriff mit zwei Seiten. Config: Sicherungspunkte
+# (Commits), Aktion Wiederherstellen (Restore) - so heißt es in git
+# (`git restore --source`). System: Systemstände (Generationen), Rollback -
+# so heißt es in Nix (`nixos-rebuild --rollback`). Bis 2026-11-21 sagte die
+# Config-Seite "Rollback erfolgreich" und "Zurücksetzen".
+ROLLBACK = {"de": r"rollback", "en": r"rollback|roll back", "es": r"rollback",
+            "fr": r"rollback", "ja": r"ロールバック", "ru": r"откат", "zh": r"回滚"}
+RESTORE = {"de": "Wiederherstellen", "en": "Restore", "es": "Restaurar", "fr": "Restaurer",
+           "ja": "復元", "ru": "Восстановить", "zh": "恢复"}
+
+
+def system_side(key: str) -> bool:
+    """Keys of the system generations (Zeitmaschine → System)."""
+    return key.startswith(("generations.", "admin.tm.system"))
+
+
+for lang, pattern in ROLLBACK.items():
+    data = json.loads((LANG / f"{lang}.json").read_text(encoding="utf-8"))
+    hits = [k for k, v in data.items() if isinstance(v, str) and not system_side(k)
+            and re.search(pattern, v, re.IGNORECASE)]
+    check(f"{lang}: 'Rollback' nur bei den Systemständen", not hits, hits[:4])
+    check(f"{lang}: Knopf der Sicherungspunkte heißt '{RESTORE[lang]}'",
+          data.get("admin.rollbackBtn") == RESTORE[lang], data.get("admin.rollbackBtn"))
+
 print("\n" + ("ALLE PRÜFUNGEN BESTANDEN" if not fails else f"FEHLGESCHLAGEN: {fails}"))
 sys.exit(1 if fails else 0)
