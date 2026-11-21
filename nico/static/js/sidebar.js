@@ -408,6 +408,9 @@ const Sidebar = (() => {
             <button id="tree-hw-import-browse" type="button" class="btn-secondary">${t('sidebar.hwImportBrowse')}</button>
           </div>
           <div id="tree-hw-import-status" class="tree-import-status hidden"></div>
+          ${data.allowed === false
+            ? `<div id="tree-hw-import-release" class="hint" style="margin:6px 0">${escHtml(t('hostRead.off.hardwareSearch'))}<br>${hostReadButton('read_host_hardware')}</div>`
+            : ''}
           <select id="tree-hw-import-select" class="brix-select">
             ${renderOptions()}
           </select>
@@ -434,6 +437,16 @@ const Sidebar = (() => {
           : `<option value="">${escHtml(t('sidebar.hwImportEmptyList'))}</option>`;
         selectEl.disabled = !filtered.length;
       };
+      // Released in this dialog: run the search that was left out.
+      overlay.addEventListener('host-read-released', async () => {
+        try {
+          const again = await fetch('/api/files/hardware-configs').then(r => r.json());
+          for (const cfg of (again.configs || [])) {
+            if (!configs.some(item => item.path === cfg.path)) configs.push(cfg);
+          }
+          refreshOptions();
+        } catch { /* the manual path still works */ }
+      });
 
       overlay.querySelector('#tree-hw-import-browse')?.addEventListener('click', async () => {
         const raw = inputEl?.value?.trim() || '';

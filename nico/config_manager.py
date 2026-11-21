@@ -127,6 +127,12 @@ DEFAULT_APP_SETTINGS = {
     # line per evaluated file and store link. Off they are dropped before
     # monitor and log; the switch sits in the rebuild dialog and the monitor.
     "rebuild_verbose": False,
+    # Reading this machine outside the config directory (Martin, 2026-11-21:
+    # "lesen außerhalb ist nicht zulässig" – only with the user's consent).
+    # All off until switched on, see hostread.py.
+    "read_host_validator":   False,
+    "read_host_hardware":    False,
+    "read_host_generations": False,
 }
 
 # Default config settings (travel with the config)

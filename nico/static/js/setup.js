@@ -270,16 +270,10 @@ let _importPreview = null;
  * requireEtcNixos=false → immer zeigen; Apply-Button wird ausgeblendet wenn /etc/nixos fehlt
  */
 async function showImportOverlay(requireEtcNixos = false) {
-  // /etc/nixos verfügbar?
-  let etcAvailable = false;
-  let checkData    = null;
-  try {
-    const res = await csrfFetch('/api/import/check');
-    checkData     = await res.json();
-    etcAvailable  = checkData.available;
-  } catch (e) { /* ignore */ }
-
-  if (requireEtcNixos && !etcAvailable) return;
+  // /etc/nixos lies outside the config directory: NiCo looks there only
+  // after the user's click on "In /etc/nixos nachsehen" (Martin,
+  // 2026-11-21, hostread.py). requireEtcNixos is unused and kept for the
+  // signature only.
 
   // Dialog-Zustand zurücksetzen
   document.getElementById('import-recognized-wrap')?.classList.add('hidden');
@@ -293,7 +287,25 @@ async function showImportOverlay(requireEtcNixos = false) {
   document.getElementById('import-overlay-title').setAttribute('data-i18n', 'import.title');
   document.getElementById('import-overlay-title').textContent = t('import.title');
 
-  // Apply-Button nur wenn /etc/nixos vorhanden
+  // Apply only after a look into /etc/nixos found something.
+  document.getElementById('import-apply-btn')?.classList.add('hidden');
+  const lookBtn = document.getElementById('import-look-btn');
+  lookBtn?.classList.remove('hidden');
+  if (lookBtn) lookBtn.onclick = _lookIntoEtcNixos;
+  document.getElementById('import-intro-text').textContent = t('import.introAsk');
+  document.getElementById('import-overlay').classList.remove('hidden');
+}
+
+/** The user asked NiCo to look into /etc/nixos: check, then preview. */
+async function _lookIntoEtcNixos() {
+  let etcAvailable = false;
+  let checkData    = null;
+  try {
+    const res = await csrfFetch('/api/import/check');
+    checkData     = await res.json();
+    etcAvailable  = checkData.available;
+  } catch (e) { /* ignore */ }
+  document.getElementById('import-look-btn')?.classList.add('hidden');
   const applyBtn = document.getElementById('import-apply-btn');
   if (applyBtn) applyBtn.classList.toggle('hidden', !etcAvailable);
 
@@ -324,8 +336,6 @@ async function showImportOverlay(requireEtcNixos = false) {
   } else {
     document.getElementById('import-intro-text').textContent = t('import.introNoSource');
   }
-
-  document.getElementById('import-overlay').classList.remove('hidden');
 }
 
 /** Resolves once the overlay has the 'hidden' class (immediately if already hidden). */

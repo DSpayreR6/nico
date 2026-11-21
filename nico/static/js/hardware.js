@@ -22,7 +22,10 @@ async function checkHardwareMatch(decision) {
       data = await res.json();
     } catch { return; }
   }
-  if (!data || !data.blocking) return;
+  // Not released (hostread.py): nothing compared, nothing asked. The
+  // Validator says before every build that the hardware check did not run,
+  // with the release button.
+  if (!data || data.allowed === false || !data.blocking) return;
   await _showHardwareDialog(data);
 }
 

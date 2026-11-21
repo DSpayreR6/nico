@@ -46,7 +46,13 @@ class Rule:
     # host_local rules inspect the *running* machine (findmnt, /proc, disk UUIDs)
     # instead of the config text, so they can only speak for the host NiCo runs on.
     host_local: bool = False
+    # Which release (hostread.py) the rule needs to read this machine; ""
+    # when it reads only the config. Without the release it is skipped and
+    # the run says so once, with a button (Martin, 2026-11-21).
+    reads: str = ""
 
+
+from .hostread import HARDWARE as _RH, VALIDATOR as _RV  # noqa: E402
 
 # ── Rule catalogue ─────────────────────────────────────────────────────────────
 
@@ -94,7 +100,7 @@ ALL_RULES: list[Rule] = [
          "Anmeldung möglich",
          "Prüft ob jeder Benutzer, den der Rebuild neu anlegt, ein Passwort oder einen "
          "SSH-Schlüssel hat – ohne beides legt NixOS das Konto gesperrt an.",
-         "error", host_local=True),
+         "error", host_local=True, reads=_RV),
     Rule("no_admin_user",
          "Admin vorhanden",
          "Prüft ob mindestens ein Benutzer in der Gruppe wheel ist – ohne sie darf "
@@ -108,7 +114,7 @@ ALL_RULES: list[Rule] = [
          "uid passt zum Rechner",
          "Vergleicht die uid-Angaben mit den Benutzern dieses Rechners: gewechselte uid "
          "oder eine uid, die schon jemand anderem gehört.",
-         "error", host_local=True),
+         "error", host_local=True, reads=_RV),
     Rule("group_gid_duplicate",
          "gid doppelt vergeben",
          "Meldet dieselbe gid bei mehreren Gruppen in der Config.",
@@ -117,14 +123,14 @@ ALL_RULES: list[Rule] = [
          "gid passt zum Rechner",
          "Vergleicht die gid-Angaben mit den Gruppen dieses Rechners: gewechselte gid "
          "oder eine gid, die schon einer anderen Gruppe gehört.",
-         "error", host_local=True),
+         "error", host_local=True, reads=_RV),
     Rule("hardware_matches",
          "Hardware passt zum System",
          "Hält an, wenn die hardware-configuration.nix dieses Rechners Datenträger "
          "nennt, die es hier nicht gibt, oder sich nicht prüfen lässt. Die Dateien "
          "anderer Hosts bleiben unberührt – die sollen zu anderen Rechnern passen –, "
          "außer ein solcher Host wird auf diesem Rechner gebaut.",
-         "error", host_local=True),
+         "error", host_local=True, reads=_RH),
     Rule("duplicate_attrs",
          "Doppelte Attribute",
          "Meldet doppelte Top-Level-Attribute die Nix nicht akzeptiert.",
@@ -179,7 +185,7 @@ ALL_RULES: list[Rule] = [
          "System-State-Version nicht aus der Zukunft",
          "Meldet eine system.stateVersion, die neuer ist als das Release, das dieser Rechner "
          "läuft.",
-         "warning", host_local=True),
+         "warning", host_local=True, reads=_RV),
     Rule("state_version_missing",
          "System-State-Version gesetzt",
          "Meldet eine Config ohne system.stateVersion – NixOS nimmt dann das gerade gebaute "
@@ -203,16 +209,16 @@ ALL_RULES: list[Rule] = [
     Rule("snapper_btrfs",
          "Snapper-Mountpoints prüfen",
          "Prüft ob die konfigurierten Snapper-Mountpoints existieren und btrfs sind.",
-         "error", host_local=True),
+         "error", host_local=True, reads=_RV),
     Rule("btrfs_without_btrfs",
          "Btrfs-Wartung ohne btrfs",
          "Warnt wenn Btrfs-Scrub oder Auto-Balance aktiv sind, auf diesem Rechner aber kein "
          "btrfs eingebunden ist bzw. / kein btrfs ist.",
-         "warning", host_local=True),
+         "warning", host_local=True, reads=_RV),
     Rule("swap_in_snapshot",
          "Swapfile in Snapshot-Subvolume",
          "Warnt wenn ein Btrfs-Swapfile im selben Subvolume liegt wie eine Snapper-Config – Btrfs kann dieses Subvolume dann nicht mehr snapshotten.",
-         "warning", host_local=True),
+         "warning", host_local=True, reads=_RV),
     Rule("host_checks_pending",
          "Ungeprüfte Hosts",
          "Meldet Hosts, deren rechnerabhängige Prüfungen noch nie oder nur mit einem älteren Config-Stand gelaufen sind.",
@@ -275,13 +281,21 @@ def run_validation(
     (the rebuild gate). Then its hardware config has to fit this machine,
     whichever host NiCo takes this machine for.
     """
+    from . import hostread
     is_flake = (Path(nixos_dir) / "flake.nix").exists()
     findings: list[Finding] = []
+    # Rules that would have to read this machine without the user's release:
+    # skipped, and said once per release at the end (Martin, 2026-11-21).
+    skipped: dict[str, list[str]] = {}
+    released = {k: hostread.allowed(k) for k in hostread.KINDS}
 
     for rule in ALL_RULES:
         if not enabled_rules.get(rule.id, True):
             continue
         if rule.flake_only and not is_flake:
+            continue
+        if rule.reads and not released.get(rule.reads, False):
+            skipped.setdefault(rule.reads, []).append(rule.id)
             continue
         fn = _RULE_FNS.get(rule.id)
         if fn is None:
@@ -296,11 +310,15 @@ def run_validation(
                 detail=str(exc),
             ))
 
-    if build_here and host and enabled_rules.get("hardware_matches", True):
+    if build_here and host and enabled_rules.get("hardware_matches", True) \
+            and released.get(hostread.HARDWARE, False):
         try:
             findings.extend(_hardware_built_here(nixos_dir, host))
         except Exception:
             pass    # like any rule: a check that cannot run stops nothing
+
+    for kind, rule_ids in skipped.items():
+        findings.append(_host_read_off(kind, rule_ids))
 
     return [
         {"rule_id": f.rule_id, "severity": f.severity,
@@ -310,6 +328,38 @@ def run_validation(
          "detail_params": [str(p) for p in f.detail_params]}
         for f in findings
     ]
+
+
+HOST_READ_OFF = "host_read_off"
+
+
+def _host_read_off(kind: str, rule_ids: list) -> Finding:
+    """One notice per release that is off: which checks did not run.
+
+    rule_id "host_read_off"; the message key names the release
+    (validator.f.host_read_off_<validator|hardware>), the frontend puts
+    the release button next to it. Info, not a warning: the
+    user chose not to release, nothing is wrong with the config.
+    """
+    from . import hostread
+    labels = ", ".join(RULE_MAP[r].label for r in rule_ids if r in RULE_MAP)
+    if kind == hostread.HARDWARE:
+        return Finding(
+            rule_id=HOST_READ_OFF, severity="info",
+            message="Hardware-Abgleich nicht geprüft – NiCo darf die Hardware "
+                    "dieses Rechners nicht lesen.",
+            message_key="validator.f.host_read_off_hardware", params=[],
+            detail=f"Übersprungen: {labels}.",
+            detail_key="validator.d.host_read_off", detail_params=[],
+        )
+    return Finding(
+        rule_id=HOST_READ_OFF, severity="info",
+        message=f"{len(rule_ids)} Prüfung(en) dieses Rechners nicht ausgeführt – "
+                "NiCo darf ihn nicht lesen.",
+        message_key="validator.f.host_read_off_validator", params=[len(rule_ids)],
+        detail=f"Übersprungen: {labels}.",
+        detail_key="validator.d.host_read_off", detail_params=[],
+    )
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
@@ -2117,8 +2167,12 @@ def _install_release() -> tuple:
     """(release, date) derived from this machine's install markers.
 
     Returns ('', None) unless several markers agree and the date is far enough
-    from a release turn to be unambiguous.
+    from a release turn to be unambiguous – and without the release to read
+    this machine (hostread.VALIDATOR): the suggestion is then left out.
     """
+    from . import hostread
+    if not hostread.allowed(hostread.VALIDATOR):
+        return "", None
     dates = [d for d in (_birth_date(p) for p in _INSTALL_MARKERS) if d]
     if len(dates) < 2:
         return "", None

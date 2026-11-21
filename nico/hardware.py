@@ -225,9 +225,15 @@ def find_hw_files(nixos_dir: str) -> list[HwFile]:
     from an earlier install is not a second hardware config, and counting it
     would turn a single-host config into the "which host is this machine?" case.
     """
+    from . import hostread
     base = Path(nixos_dir)
     hosts_dir = _hosts_dir(nixos_dir)
-    local_ids = local_device_ids()
+    # Without the release to read this machine's disks (hostread.py) every
+    # file is UNKNOWN: the files themselves lie in the config directory, the
+    # comparison would read /dev/disk. The stash before an import still keeps
+    # them that way (UNKNOWN is kept, only MISMATCH is not).
+    released = hostread.allowed(hostread.HARDWARE)
+    local_ids = local_device_ids() if released else set()
     acks = _load_acks(nixos_dir)
 
     found: list[HwFile] = []
@@ -238,7 +244,10 @@ def find_hw_files(nixos_dir: str) -> list[HwFile]:
         host = None
         if len(rel.parts) == 3 and rel.parts[0] == hosts_dir:
             host = rel.parts[1]
-        verdict, missing, unresolved = classify(path, local_ids)
+        if released:
+            verdict, missing, unresolved = classify(path, local_ids)
+        else:
+            verdict, missing, unresolved = UNKNOWN, [], []
         found.append(HwFile(
             path=path, host=host, verdict=verdict,
             missing=missing, unresolved=unresolved,

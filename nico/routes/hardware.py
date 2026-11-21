@@ -27,10 +27,20 @@ def _file_json(f: hardware.HwFile, root: Path) -> dict:
 
 
 def decision_json(nixos_dir: str) -> dict:
-    """The current hardware situation of a config directory, for the frontend."""
+    """The current hardware situation of a config directory, for the frontend.
+
+    Without the release to read this machine's hardware (hostread.py) nothing
+    is compared: `allowed` false, not blocking - the frontend offers the
+    release instead of a verdict (Martin, 2026-11-21).
+    """
+    from .. import hostread
+    if not hostread.allowed(hostread.HARDWARE):
+        return {"allowed": False, "action": "", "blocking": False,
+                "files": [], "sources": [], "targets": []}
     root = Path(nixos_dir)
     d = hardware.inspect(nixos_dir)
     return {
+        "allowed":          True,
         "action":           d.action,
         "blocking":         d.blocking,
         "this_host":        hardware.running_host(),
@@ -78,6 +88,9 @@ def register(app, ctx):
         nixos_dir, err = _require_setup()
         if err:
             return err
+        from .. import hostread
+        if not hostread.allowed(hostread.HARDWARE):
+            return jsonify({"error": hostread.ERR_OFF}), 403
 
         body   = request.get_json(silent=True) or {}
         action = (body.get("action") or "").strip()

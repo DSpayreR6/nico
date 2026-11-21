@@ -23,6 +23,10 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
 from nico import hardware as hw, validator  # noqa: E402
+# Reading this machine needs the user's release since 2026-11-21 (hostread.py);
+# this test is about what happens with it.
+from nico import hostread as _hostread  # noqa: E402
+_hostread.allowed = lambda kind: True
 
 fails: list[str] = []
 

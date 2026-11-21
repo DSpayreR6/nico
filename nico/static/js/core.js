@@ -206,6 +206,52 @@ function tErr(codeOrText) {
   return t(`errors.${code}`, ...params);
 }
 
+// ── Reading this machine: release (hostread.py) ─────────────────────────────
+// Three releases, all off until the user switches them on (Martin,
+// 2026-11-21): read_host_validator, read_host_hardware,
+// read_host_generations. One way for every place that offers a release: a
+// button with data-host-read="<kind>". The click switches the app setting
+// on, replaces the button by a short confirmation and sends the event
+// "host-read-released" (detail = kind) up the page, so the place can reload.
+
+/** Switch one release on. Resolves true when stored. */
+async function releaseHostRead(kind) {
+  try {
+    const r = await csrfFetch('/api/app/settings', {
+      method:  'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ [kind]: true }),
+    });
+    return r.ok;
+  } catch { return false; }
+}
+
+/** HTML of a release button for `kind`. */
+function hostReadButton(kind) {
+  return `<button type="button" class="btn-surface btn-small" data-host-read="${escHtml(kind)}"
+            style="margin-top:6px">${escHtml(t('hostRead.release'))}</button>`;
+}
+
+document.addEventListener('click', async e => {
+  const btn = e.target.closest?.('[data-host-read]');
+  if (!btn) return;
+  const kind = btn.dataset.hostRead;
+  btn.disabled = true;
+  if (!await releaseHostRead(kind)) {
+    btn.disabled = false;
+    showToast(t('toast.error'), 'error');
+    return;
+  }
+  const note = document.createElement('div');
+  note.className = 'hint';
+  note.style.marginTop = '6px';
+  note.textContent = t('hostRead.released');
+  btn.replaceWith(note);
+  note.dispatchEvent(new CustomEvent('host-read-released', { bubbles: true, detail: kind }));
+  document.querySelectorAll(`input[data-host-read-setting="${kind}"]`)
+    .forEach(cb => { cb.checked = true; });
+});
+
 async function loadLang(code) {
   try {
     const res = await fetch(`/static/lang/${code}.json`);

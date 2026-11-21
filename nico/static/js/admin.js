@@ -39,6 +39,21 @@ function _loadAdminSettings() {
     const cbGitStatusOnly = document.getElementById('setting-git-status-only');
     if (cbGitStatusOnly) cbGitStatusOnly.checked = !!data.git_status_only;
     _updateGitStatusOnlyVisibility();
+    // Reading this machine (hostread.py): three releases, each saved at once.
+    document.querySelectorAll('input[data-host-read-setting]').forEach(cb => {
+      const key = cb.dataset.hostReadSetting;
+      cb.checked = data[key] === true;
+      if (cb.dataset.listenerAttached) return;
+      cb.dataset.listenerAttached = '1';
+      cb.addEventListener('change', () => {
+        csrfFetch('/api/app/settings', {
+          method:  'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ [key]: cb.checked }),
+        }).then(r => { if (!r.ok) throw new Error(); showToast(t('admin.settings.saved'), 'success'); })
+          .catch(() => { cb.checked = !cb.checked; showToast(t('toast.error'), 'error'); });
+      });
+    });
 
     // Standard-Host Dropdown (nur bei Flake-Modus)
     const defaultHostRow = document.getElementById('default-host-row');
@@ -873,11 +888,16 @@ function _showValidationResults(findings, opts = {}) {
       const detail = detailText
         ? `<div class="git-guard-card-desc" style="margin-top:4px;white-space:pre-line">${_esc(detailText)}</div>`
         : '';
+      // Checks that need to read this machine and were not released
+      // (hostread.py): the release right here; the next run checks them.
       const action = f.rule_id === 'git_missing_gitignore'
         ? `<button class="btn-surface btn-small" style="margin-top:6px;font-size:11px"
              onclick="closeValidationResults();openAdmin();_switchAdminTab('zeitmaschine')"
              data-i18n="admin.gitignore.goToSettings">${t('admin.gitignore.goToSettings')}</button>`
-        : '';
+        : f.rule_id === 'host_read_off'
+          ? hostReadButton(f.message_key === 'validator.f.host_read_off_hardware'
+                           ? 'read_host_hardware' : 'read_host_validator')
+          : '';
       return `<div class="git-guard-card" style="align-items:flex-start">
         <span style="color:${color};font-size:16px;flex-shrink:0;margin-top:1px">${icon}</span>
         <div class="git-guard-card-info">

@@ -150,16 +150,26 @@ async function _showRebuildOptions(hostInfo, { hostname = '', mode = 'switch' } 
   // machine (buildlimits.py), `stored*` what the user typed in earlier;
   // null means "automatic", so the suggestion is recalculated every time.
   let safeHint    = { jobs: 1, cores: 4, cpus: 4, measured: false };
+  const _fetchSafeHint = async () => {
+    const hint = await csrfFetch('/api/rebuild/safe-suggest').then(r => r.json()).catch(() => null);
+    if (hint && Number.isInteger(hint.jobs) && Number.isInteger(hint.cores)) safeHint = hint;
+    safeHint.fetched = true;
+  };
+  const _safeHintText = () => safeHint.measured
+    ? t('rebuild.safeHint', safeHint.jobs, safeHint.cores, Math.round(safeHint.available / 1024 ** 3))
+    : t('rebuild.safeHintFallback', safeHint.jobs, safeHint.cores);
   let storedJobs  = null;
   let storedCores = null;
   let configDir = '';
   try {
-    const [cfg, app, hint] = await Promise.all([
+    const [cfg, app] = await Promise.all([
       csrfFetch('/api/config/settings').then(r => r.json()),
       csrfFetch('/api/app/settings').then(r => r.json()),
-      csrfFetch('/api/rebuild/safe-suggest').then(r => r.json()).catch(() => null),
     ]);
-    if (hint && Number.isInteger(hint.jobs) && Number.isInteger(hint.cores)) safeHint = hint;
+    // The suggestion reads /proc/meminfo – only once the safe rebuild is
+    // chosen, which is the user's consent (Martin, 2026-11-21); the line
+    // under it says so. Off, it is fetched when the switch goes on.
+    if (app.rebuild_safe) await _fetchSafeHint();
     if (Number.isInteger(app.rebuild_safe_jobs))  storedJobs  = app.rebuild_safe_jobs;
     if (Number.isInteger(app.rebuild_safe_cores)) storedCores = app.rebuild_safe_cores;
     defaultFlakeUpdate = !!cfg.flake_update_on_rebuild;
@@ -246,10 +256,8 @@ async function _showRebuildOptions(hostInfo, { hostname = '', mode = 'switch' } 
             <input type="number" id="_rbo-safe-cores" min="1" max="${safeHint.cpus}" step="1"
                    placeholder="${safeHint.cores}" value="${storedCores ?? ''}" style="${numStyle}">
           </div>
-          <div class="hint" style="margin:0;padding-left:2px">${escHtml(safeHint.measured
-              ? t('rebuild.safeHint', safeHint.jobs, safeHint.cores,
-                  Math.round(safeHint.available / 1024 ** 3))
-              : t('rebuild.safeHintFallback', safeHint.jobs, safeHint.cores))}</div>
+          <div id="_rbo-safe-hint" class="hint" style="margin:0;padding-left:2px">${escHtml(_safeHintText())}</div>
+          <div class="hint" style="margin:2px 0 0;padding-left:2px">${escHtml(t('rebuild.safeReadsMem'))}</div>
         </div>
         <label class="toggle-row" style="margin:0 0 10px;cursor:pointer">
           <span>${t('rebuild.optVerbose')}</span>
@@ -334,8 +342,15 @@ async function _showRebuildOptions(hostInfo, { hostname = '', mode = 'switch' } 
     updateMode();
     modeSel.addEventListener('change', updateMode);
     flakeToggle.addEventListener('change', updateCmd);
-    safeToggle.addEventListener('change', () => {
+    safeToggle.addEventListener('change', async () => {
       safeOptsEl.style.display = safeToggle.checked ? 'block' : 'none';
+      if (safeToggle.checked && !safeHint.fetched) {
+        await _fetchSafeHint();
+        safeJobsEl.placeholder  = safeHint.jobs;
+        safeCoresEl.placeholder = safeHint.cores;
+        safeJobsEl.max = safeCoresEl.max = safeHint.cpus;
+        overlay.querySelector('#_rbo-safe-hint').textContent = _safeHintText();
+      }
       updateCmd();
     });
     for (const el of [safeJobsEl, safeCoresEl]) {

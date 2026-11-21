@@ -59,6 +59,7 @@ A file changed outside NiCo — an editor, Syncthing, `git pull` — or never sa
 - **Help system** – built-in help (German/English), tooltips, and wiki links
 - **Multi-language** – UI in EN, DE, ES, FR, JA, RU, ZH
 - **Local only** – binds to `127.0.0.1`, no telemetry; the only network access is an optional read-only fetch of the public nixpkgs channel list
+- **Reads only your config directory** unless you allow more: the Validator's checks against this machine's users, groups and file systems, the hardware check against its disks, and the list of system generations each need your permission, under *Settings → NiCo → Read this machine* or with the *Allow* button where they are needed. All three are off by default
 
 ---
 

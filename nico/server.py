@@ -83,7 +83,12 @@ def _load_theme_css(theme_name: str) -> str:
 
 
 def _root_fstype() -> str:
-    """Filesystem type of / on this machine ("" when it cannot be determined)."""
+    """Filesystem type of / on this machine ("" when it cannot be determined,
+    or when reading this machine is not released – the form hint then stays
+    away, hostread.py)."""
+    from . import hostread
+    if not hostread.allowed(hostread.VALIDATOR):
+        return ""
     mount = validator._findmnt_of("/")
     return mount[1] if mount else ""
 
@@ -379,8 +384,11 @@ def create_app() -> Flask:
         hw_copied = False
         hw_src    = Path("/etc/nixos/hardware-configuration.nix")
         hw_dst    = path / "hardware-configuration.nix"
-        # Copy only if source exists and destination doesn't (never overwrite)
-        if hw_src.is_file() and not hw_dst.exists():
+        # Copy only if source exists and destination doesn't (never overwrite),
+        # and only with the release to read this machine's hardware
+        # (hostread.py) – otherwise the hardware check offers it later.
+        from . import hostread
+        if hostread.allowed(hostread.HARDWARE) and hw_src.is_file() and not hw_dst.exists():
             try:
                 import shutil as _shutil
                 _shutil.copy2(hw_src, hw_dst)

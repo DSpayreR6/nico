@@ -111,7 +111,8 @@
       </div>
 
       <div class="confirm-buttons" id="import-main-buttons">
-        <button id="import-apply-btn" class="btn-primary" data-i18n="import.apply"></button>
+        <button id="import-look-btn" class="btn-primary" data-i18n="import.lookEtc"></button>
+        <button id="import-apply-btn" class="btn-primary hidden" data-i18n="import.apply"></button>
         <button id="import-manual-btn" data-i18n="import.manualBtn"></button>
         <button id="import-skip-btn" data-i18n="import.skip"></button>
       </div>
@@ -1949,6 +1950,34 @@
               </span>
             </label>
             <p class="raw-panel-hint" style="margin-top:2px;margin-bottom:0" data-i18n="admin.settings.prefetchDryRunHint">Prüft vor jedem Rebuild, was geladen und was kompiliert werden muss. Muss ein Paket auf diesem Rechner aus dem Quelltext gebaut werden, fragt NiCo vorher nach und bietet den abgesicherten Rebuild an. Ermöglicht außerdem einen echten Fortschrittsbalken für den Download. Verlängert den Start um einige Sekunden.</p>
+
+            <!-- Rubrik: Diesen Rechner lesen (hostread.py, 2026-11-21) -->
+            <div class="settings-rubrik" style="margin-top:24px" data-i18n="admin.settings.rubrikHostRead">Diesen Rechner lesen</div>
+            <p class="raw-panel-hint" style="margin-top:2px;margin-bottom:8px" data-i18n="admin.settings.hostReadHint">NiCo liest standardmäßig nur das Config-Verzeichnis. Hier erlaubst du einzelnen Funktionen, auch diesen Rechner anzusehen – nur lesend, nichts verlässt den Rechner.</p>
+            <label class="toggle-row">
+              <span data-i18n="admin.settings.readValidator">Validator: diesen Rechner prüfen</span>
+              <span class="toggle-wrap">
+                <input type="checkbox" id="setting-read-validator" data-host-read-setting="read_host_validator">
+                <span class="toggle-track"><span class="toggle-thumb"></span></span>
+              </span>
+            </label>
+            <p class="raw-panel-hint" style="margin-top:2px;margin-bottom:8px" data-i18n="admin.settings.readValidatorHint">Benutzer und Gruppen (/etc/passwd, /etc/group), laufende NixOS-Version, Installationsdatum, Swap und Dateisysteme – für die Prüfungen „Konto gesperrt“, „uid/gid vergeben“, „stateVersion“ und Btrfs.</p>
+            <label class="toggle-row">
+              <span data-i18n="admin.settings.readHardware">Hardware dieses Rechners lesen</span>
+              <span class="toggle-wrap">
+                <input type="checkbox" id="setting-read-hardware" data-host-read-setting="read_host_hardware">
+                <span class="toggle-track"><span class="toggle-thumb"></span></span>
+              </span>
+            </label>
+            <p class="raw-panel-hint" style="margin-top:2px;margin-bottom:8px" data-i18n="admin.settings.readHardwareHint">/etc/nixos/hardware-configuration.nix und die Datenträger (/dev/disk) – für den Hardware-Abgleich und die Suche nach Hardware-Dateien.</p>
+            <label class="toggle-row">
+              <span data-i18n="admin.settings.readGenerations">Systemstände (Generationen) lesen</span>
+              <span class="toggle-wrap">
+                <input type="checkbox" id="setting-read-generations" data-host-read-setting="read_host_generations">
+                <span class="toggle-track"><span class="toggle-thumb"></span></span>
+              </span>
+            </label>
+            <p class="raw-panel-hint" style="margin-top:2px;margin-bottom:0" data-i18n="admin.settings.readGenerationsHint">Die Liste der Systemstände dieses Rechners – für die Zeitmaschine, Seite System.</p>
           </div>
         </div>
 

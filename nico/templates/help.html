@@ -343,6 +343,7 @@
             <a href="#k3-1" data-de="3.1 Oberfläche" data-en="3.1 Interface">3.1 Oberfläche</a>
             <a href="#k3-2" data-de="3.2 Vorschau vs. echter Dateistand" data-en="3.2 Preview vs. real file state">3.2 Vorschau vs. echter Dateistand</a>
             <a href="#k3-3" data-de="3.3 Speichern, Dry-Run, Rebuild" data-en="3.3 Save, dry-run, rebuild">3.3 Speichern, Dry-Run, Rebuild</a>
+            <a href="#k3-4" data-de="3.4 Diesen Rechner lesen" data-en="3.4 Read this machine">3.4 Diesen Rechner lesen</a>
           </div>
         </li>
         <li>
@@ -465,6 +466,8 @@
           <p data-de="Findet NiCo eine bestehende NixOS-Konfiguration im gewählten Verzeichnis, bietet es den Import an. Erkannte Felder werden als Formularwerte übernommen; unbekannte Abschnitte landen als Nix-Brick <code>1-imported-config</code> und bleiben vollständig erhalten."
              data-en="If NiCo finds an existing NixOS configuration in the chosen directory, it offers to import it. Recognized fields become form values; unrecognized sections end up in the Nix-Brick <code>1-imported-config</code> and are fully preserved.">Findet NiCo eine bestehende NixOS-Konfiguration im gewählten Verzeichnis, bietet es den Import an. Erkannte Felder werden als Formularwerte übernommen; unbekannte Abschnitte landen als Nix-Brick <code>1-imported-config</code> und bleiben vollständig erhalten.</p>
           <ul class="help-list">
+            <li data-de="Nach &lt;code&gt;/etc/nixos&lt;/code&gt; sieht NiCo erst, wenn du auf &lt;strong&gt;In /etc/nixos nachsehen&lt;/strong&gt; klickst – nicht von selbst"
+                data-en="NiCo looks into &lt;code&gt;/etc/nixos&lt;/code&gt; only when you click &lt;strong&gt;Look in /etc/nixos&lt;/strong&gt; – not on its own">Nach <code>/etc/nixos</code> sieht NiCo erst, wenn du auf <strong>In /etc/nixos nachsehen</strong> klickst – nicht von selbst</li>
             <li data-de="Vor dem Import wird automatisch ein Sicherungspunkt angelegt"
                 data-en="A checkpoint (commit) is created automatically before the import">Vor dem Import wird automatisch ein Sicherungspunkt angelegt</li>
             <li data-de="<code>hardware-configuration.nix</code> wird kopiert, falls vorhanden"
@@ -537,6 +540,22 @@
           </ul>
           <p data-de="Ist im Admin-Bereich die &lt;strong&gt;Analyse vor dem Rebuild&lt;/strong&gt; eingeschaltet, prüft NiCo vorher, was geladen und was kompiliert werden muss. Der Monitor zeigt dann die Download-Größe von Anfang an. Muss ein Paket auf diesem Rechner aus dem Quelltext gebaut werden, fragt NiCo vorher nach und bietet den abgesicherten Rebuild an. Der Start dauert dadurch einige Sekunden länger."
              data-en="If &lt;strong&gt;analysis before the rebuild&lt;/strong&gt; is switched on in the admin area, NiCo first checks what has to be downloaded and what compiled. The monitor then shows the download size from the start. If a package has to be built from source on this machine, NiCo asks first and offers the safe rebuild. Starting takes a few seconds longer.">Ist im Admin-Bereich die <strong>Analyse vor dem Rebuild</strong> eingeschaltet, prüft NiCo vorher, was geladen und was kompiliert werden muss. Der Monitor zeigt dann die Download-Größe von Anfang an. Muss ein Paket auf diesem Rechner aus dem Quelltext gebaut werden, fragt NiCo vorher nach und bietet den abgesicherten Rebuild an. Der Start dauert dadurch einige Sekunden länger.</p>
+        </div>
+
+        <div class="subchapter" id="k3-4">
+          <h3><span class="sub-num">3.4</span><span data-de="Diesen Rechner lesen" data-en="Read this machine">Diesen Rechner lesen</span></h3>
+          <p data-de="NiCo liest standardmäßig nur das Config-Verzeichnis. Einige Prüfungen müssten auch den Rechner selbst ansehen – das erlaubst du einzeln, unter &lt;strong&gt;Einstellungen → NiCo → Diesen Rechner lesen&lt;/strong&gt; oder mit dem Knopf &lt;strong&gt;Freigeben&lt;/strong&gt; an der Stelle, wo die Funktion es braucht. Nur lesend, nichts verlässt den Rechner; ausschalten geht jederzeit in den Einstellungen."
+             data-en="By default NiCo reads only the config directory. Some checks would also have to look at the machine itself – you allow that one by one, under &lt;strong&gt;Settings → NiCo → Read this machine&lt;/strong&gt; or with the &lt;strong&gt;Allow&lt;/strong&gt; button where the function needs it. Read-only, nothing leaves the machine; you can switch it off again in the settings at any time.">NiCo liest standardmäßig nur das Config-Verzeichnis. Einige Prüfungen müssten auch den Rechner selbst ansehen – das erlaubst du einzeln, unter <strong>Einstellungen → NiCo → Diesen Rechner lesen</strong> oder mit dem Knopf <strong>Freigeben</strong> an der Stelle, wo die Funktion es braucht. Nur lesend, nichts verlässt den Rechner; ausschalten geht jederzeit in den Einstellungen.</p>
+          <ul class="help-list">
+            <li data-de="&lt;strong&gt;Validator: diesen Rechner prüfen&lt;/strong&gt; – Benutzer und Gruppen (&lt;code&gt;/etc/passwd&lt;/code&gt;, &lt;code&gt;/etc/group&lt;/code&gt;), laufende NixOS-Version, Installationsdatum, Swap und Dateisysteme. Ohne Freigabe prüft der Validator alles andere und sagt einmal, welche Prüfungen ausgelassen wurden – darunter die, die vor einem gesperrten Konto warnen"
+                data-en="&lt;strong&gt;Validator: check this machine&lt;/strong&gt; – users and groups (&lt;code&gt;/etc/passwd&lt;/code&gt;, &lt;code&gt;/etc/group&lt;/code&gt;), running NixOS version, installation date, swap and file systems. Without it the Validator checks everything else and says once which checks were left out – among them the ones that warn about a locked account"><strong>Validator: diesen Rechner prüfen</strong> – Benutzer und Gruppen (<code>/etc/passwd</code>, <code>/etc/group</code>), laufende NixOS-Version, Installationsdatum, Swap und Dateisysteme. Ohne Freigabe prüft der Validator alles andere und sagt einmal, welche Prüfungen ausgelassen wurden – darunter die, die vor einem gesperrten Konto warnen</li>
+            <li data-de="&lt;strong&gt;Hardware dieses Rechners lesen&lt;/strong&gt; – &lt;code&gt;/etc/nixos/hardware-configuration.nix&lt;/code&gt; und die Datenträger. Ohne Freigabe gibt es keinen Hardware-Abgleich und keine Suche nach Hardware-Dateien; einen Pfad kannst du trotzdem eingeben"
+                data-en="&lt;strong&gt;Read this machine&#x27;s hardware&lt;/strong&gt; – &lt;code&gt;/etc/nixos/hardware-configuration.nix&lt;/code&gt; and the drives. Without it there is no hardware check and no search for hardware files; you can still enter a path"><strong>Hardware dieses Rechners lesen</strong> – <code>/etc/nixos/hardware-configuration.nix</code> und die Datenträger. Ohne Freigabe gibt es keinen Hardware-Abgleich und keine Suche nach Hardware-Dateien; einen Pfad kannst du trotzdem eingeben</li>
+            <li data-de="&lt;strong&gt;Systemstände (Generationen) lesen&lt;/strong&gt; – die Liste der Systemstände für die Zeitmaschine, Seite System"
+                data-en="&lt;strong&gt;Read system states (generations)&lt;/strong&gt; – the list of system states for the time machine, System side"><strong>Systemstände (Generationen) lesen</strong> – die Liste der Systemstände für die Zeitmaschine, Seite System</li>
+          </ul>
+          <p data-de="Der Vorschlag beim abgesicherten Rebuild liest den freien Arbeitsspeicher – erst, wenn du den abgesicherten Rebuild wählst; der Dialog sagt es darunter."
+             data-en="The suggestion for the safe rebuild reads the free memory – only once you choose the safe rebuild; the dialog says so below it.">Der Vorschlag beim abgesicherten Rebuild liest den freien Arbeitsspeicher – erst, wenn du den abgesicherten Rebuild wählst; der Dialog sagt es darunter.</p>
         </div>
       </section>
 

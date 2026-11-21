@@ -1640,6 +1640,8 @@ def _record_host_check(
         return                      # running machine is not part of this config
     if host and host != this_host:
         return                      # a different host was inspected
+    if any(f.get("rule_id") == _val.HOST_READ_OFF for f in findings):
+        return                      # machine checks skipped (no release) – not "checked"
 
     local_ids = {r.id for r in _val.ALL_RULES if r.host_local}
     severities = [f.get("severity") for f in findings if f.get("rule_id") in local_ids]

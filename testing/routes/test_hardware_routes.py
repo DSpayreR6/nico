@@ -53,6 +53,10 @@ src = etc / "hardware-configuration.nix"
 src.write_text(hwtext(HERE), encoding="utf-8")
 
 from nico import hardware as hwmod, server  # noqa: E402
+# Reading this machine needs the user's release since 2026-11-21 (hostread.py);
+# this test is about what happens with it.
+from nico import hostread as _hostread  # noqa: E402
+_hostread.allowed = lambda kind: True
 
 hwmod.local_device_ids = lambda: {HERE}
 hwmod.running_host = lambda: "nix-vm"

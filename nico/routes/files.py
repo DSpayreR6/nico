@@ -84,6 +84,12 @@ def register(app, ctx):
         if err:
             return err
 
+        # The search looks in /etc/nixos, /run/current-system and
+        # /nix/var/nix/profiles – only with the release (hostread.py). A path
+        # the user types in is their own choice and stays possible.
+        from .. import hostread
+        if not hostread.allowed(hostread.HARDWARE):
+            return jsonify({"allowed": False, "configs": []})
         root = Path(nixos_dir).resolve()
         configs = []
         for raw in importer.find_hardware_configs():
