@@ -1,8 +1,7 @@
 # NiCo – NixOS Configurator
 
-> ⚠️ NiCo works — I use it myself to manage my machines.
-> Still, I recommend making a backup of your config first, or letting NiCo work on a copy in a separate directory.
-> That way you can verify that your config is processed correctly and a dry-run passes.
+> ⚠️ NiCo works — I use it myself to manage my machines. Before it changes a file, it makes a checkpoint, checks that the result still says the same thing, and asks if the file was changed outside NiCo (see *Safety nets* below).
+> What it cannot undo is a config that builds but locks you out — a deleted user or a lost password stays lost even in an older system generation. For a first try, letting NiCo work on a copy is still the calmest way.
 
 NiCo is a local, browser-based GUI editor for NixOS configurations. It reads and writes your real `.nix` files directly — no database, no intermediate format, no hidden state. Everything it generates stays a normal Nix file that works without NiCo.
 
@@ -33,9 +32,21 @@ Feedback and discussion: https://discourse.nixos.org/t/nico-nixos-configurator/7
 
 Most GUI config tools only allow what their forms cover. NiCo takes a different approach: anything it doesn't have a form field for, you write as a **Nix brick** — a free Nix section wrapped in marker comments that NiCo **never touches**. Form fields and hand-written Nix coexist in the same file. When importing an existing config, unrecognized sections are preserved as bricks automatically — nothing is ever discarded.
 
-This has one important consequence: every time you write, NiCo regenerates the form-managed file completely from its current state instead of patching the existing text. Nix bricks are copied over unchanged. Your own comments **outside** of Nix bricks are collected into one Nix brick per file, `imported-notes`, each with a note on where it stood (`before networking.hostName`, `inside services.pipewire`, …); a comment directly above a statement that becomes a brick anyway moves into that brick with it. Blank lines and manual formatting outside of bricks are not preserved. Only content inside a Nix brick stays exactly as written, so put anything you want to keep verbatim into a brick.
+This has one important consequence: every time you save, NiCo regenerates the form-managed file completely from its current state instead of patching the existing text. Nix bricks are copied over unchanged. Your own comments **outside** of Nix bricks are collected into one Nix brick per file, `imported-notes`, each with a note on where it stood (`before networking.hostName`, `inside services.pipewire`, …); a comment directly above a statement that becomes a brick anyway moves into that brick with it. Blank lines and manual formatting outside of bricks are not preserved. Only content inside a Nix brick stays exactly as written, so put anything you want to keep verbatim into a brick.
 
-A file changed outside NiCo — an editor, Syncthing, `git pull` — or never saved by NiCo is not rewritten behind your back. NiCo recognises it by the hash in its first lines and asks before it opens the form: **restructure** (a checkpoint of the current state comes first, a ZIP without Git), **show differences** (what restructuring would change), or **open in text mode** (the file stays as it is).
+## Safety nets
+
+NiCo edits real files, so it is built to never lose what is in them:
+
+- **Files changed outside NiCo** – an editor, Syncthing, `git pull` – or never saved by NiCo are not rewritten behind your back. NiCo recognises them by the hash in their first lines and asks first: **restructure** (a checkpoint of the current state comes first, a ZIP without Git), **show differences**, or **open in text mode** (the file stays as it is)
+- **Check before saving** – the new file must say the same as the old one and still be valid Nix; otherwise NiCo does not write it
+- **All or nothing** – every file is written to a temporary file, flushed and renamed into place, so a reset or power cut leaves the complete old or new file; when one of several files fails, the others are put back
+- **Checkpoints** – every restructure and import starts with a Git checkpoint; the time machine's *Config* side restores any of them
+- **Before every build** – the Validator and the hardware check run on what is on disk; a critical finding stops the build
+- **System states** – the time machine's *System* side switches back to an earlier generation, now or from the next start
+- **Reads only your config directory** – anything else on this machine (users, disks, generations, free memory) only after you allow it, under *Settings → NiCo → Read this machine* or with the *Allow* button where it is needed; all off by default
+
+**Where the nets end:** a config that builds but locks you out. Passwords live in `/etc/shadow`, not in a generation, so going back to an older system state does not bring a deleted user or a lost password back. Keep at least one older boot entry, and use `test` mode for risky changes.
 
 ---
 
@@ -43,15 +54,15 @@ A file changed outside NiCo — an editor, Syncthing, `git pull` — or never sa
 
 - **Import existing configs** – from a directory or ZIP; recognized options become form fields, everything else is preserved as Nix bricks, with automatic backups
 - **Split-panel editor** – edit options on the left, see the resulting `.nix` file live on the right
+- **Text mode** – edit any file as plain Nix with syntax colours, search, matching brackets and unmatched ones marked; after saving, a line Nix cannot read is marked at the exact character. Ctrl+S saves in panel and text mode
 - **Nix-Brix** – free Nix sections NiCo never modifies: create, rename, move, split them across hosts and modules
 - **Hardware check** – a config that comes from somewhere else describes somebody else's disks, and a build from it looks for devices that do not exist. NiCo compares the `hardware-configuration.nix` against the devices actually present on this machine and asks before anything is built — after an import, after a restore, and at start, because a config brought in with `git clone` passes no dialog at all. On a multi-host config only the file of the host that *is* this machine is ever touched
-- **Validator** – 38 configurable rules, run by itself before every build on the state written to disk. Hints and warnings never interrupt; a critical error brings its findings up instead of starting the build. It catches what Nix only reports halfway through a rebuild, and some things Nix never reports at all: a `system.stateVersion` newer than the installed release, a user the rebuild would create without a password or an SSH key, uid and gid collisions with accounts that already exist, missing imports, duplicate attributes, btrfs maintenance on a machine without btrfs, a swapfile inside a snapshotted subvolume
+- **Validator** – 42 configurable rules, run by itself before every build on the state written to disk. Hints and warnings never interrupt; a critical error brings its findings up instead of starting the build. It catches what Nix only reports halfway through a rebuild, and some things Nix never reports at all: a `system.stateVersion` newer than the installed release, a user the rebuild would create without a password or an SSH key, uid and gid collisions with accounts that already exist, missing imports, duplicate attributes, btrfs maintenance on a machine without btrfs, a swapfile inside a snapshotted subvolume
 - **Dry-run & rebuild** – run `nixos-rebuild dry-build` / `switch` directly from NiCo with live streaming output, and a report of the services that failed afterwards, each with the last lines of its journal. Only services that were healthy before that build are listed, so what a desktop carries around anyway stays out of it
   - **Modes** `switch`, `boot` and `test` – `test` activates the new system without touching the boot menu, so a restart brings the old one back
-  - **Safe rebuild** limits parallel builds (`--max-jobs`, `--cores`) to save memory; left empty, NiCo suggests values from this machine's free memory. With *analysis before the rebuild* switched on, NiCo shows the download size from the start and asks before a package is compiled from source, offering the safe rebuild
+  - **Safe rebuild** limits parallel builds (`--max-jobs`, `--cores`) to save memory. Off by default; switched on, NiCo suggests values from this machine's free memory. With *analysis before the rebuild* switched on, NiCo shows the download size from the start and asks before a package is compiled from source, offering the safe rebuild
   - **Show all Nix messages** – off by default: the monitor shows phases, progress, warnings and errors instead of every file and store path Nix reports. The switch sits in the rebuild options and in the monitor itself, where it takes effect on the running build
-- **Crash-safe writes** – every config file is written to a temporary file, flushed to the disk and then renamed into place. A reset or a power cut leaves either the complete old file or the complete new one, never a truncated `configuration.nix` that no longer parses
-- **Git integration** – a checkpoint after every write and before every rebuild, restore to any earlier checkpoint ("time machine"), remote push, a guard that detects changes made outside NiCo before writing, and a size guard that keeps an oversized file out of the history instead of blocking every future push
+- **Git integration** – a checkpoint after every save and before every rebuild, restore to any earlier checkpoint ("time machine"), remote push, and a size guard that keeps an oversized file out of the history instead of blocking every future push
 - **System states (generations)** – the time machine's *System* side, first of its two sides, lists this machine's generations – green runs, yellow comes at the next start; *Use this system state* switches to any of them – now or only from the next start. Your config files stay as they are; needs the permission to read system states
 - **Foreign-file guard** – files that don't belong to the config are detected; decide per file whether git tracks or ignores them
 - **Flake & Home Manager support** – multi-host flakes with channel and architecture selection; per-user Home Manager files
@@ -60,7 +71,6 @@ A file changed outside NiCo — an editor, Syncthing, `git pull` — or never sa
 - **Help system** – built-in help (German/English), tooltips, and wiki links
 - **Multi-language** – UI in EN, DE, ES, FR, JA, RU, ZH
 - **Local only** – binds to `127.0.0.1`, no telemetry; the only network access is an optional read-only fetch of the public nixpkgs channel list
-- **Reads only your config directory** unless you allow more: the Validator's checks against this machine's users, groups and file systems, the hardware check against its disks, and the list of system generations each need your permission, under *Settings → NiCo → Read this machine* or with the *Allow* button where they are needed. All three are off by default
 
 ---
 
@@ -68,6 +78,7 @@ A file changed outside NiCo — an editor, Syncthing, `git pull` — or never sa
 
 - NixOS
 - A browser
+- Git – recommended: without it, checkpoints are ZIP files and the time machine's *Config* side stays empty. A fresh NixOS install has none; add `programs.git.enable = true;` to your config by hand and rebuild
 
 Nothing else — Nix fetches what NiCo needs. Only the from-source route uses
 `shell.nix` directly.
@@ -149,15 +160,15 @@ for you.
 You do not have to choose between a test config and your real one. NiCo writes
 only inside the directory you point it at, so you can work on a copy of your
 real config and keep the original untouched. (One exception, and it exists for
-your benefit: before an import NiCo copies this machine's
-`hardware-configuration.nix` to `~/.config/nico/hw-stash/`, so it can offer it
-back if the imported config brings a foreign one.)
+your benefit: before an import NiCo copies the `hardware-configuration.nix`
+files of the config directory to `~/.config/nico/hw-stash/`, so it can offer
+them back if the imported config brings a foreign one.)
 
 1. **Install nothing.** `nix run github:DSpayreR6/nico` leaves nothing behind.
 2. **Give NiCo a new, empty directory** — `~/nico-test`, say. Type the path in
    the setup dialog; it does not have to exist yet.
-3. **Import your own config** from `/etc/nixos`, from a directory, or from a
-   ZIP. Your original is never written to. The *copy* is rewritten straight
+3. **Import your own config** from `/etc/nixos` (button *Look in
+   /etc/nixos*), from a directory, or from a ZIP. Your original is never written to. The *copy* is rewritten straight
    away, though: formatting outside a Nix-Brick is lost there, your comments
    are collected in the Nix-Brick `imported-notes` — and your settings are
    kept, anything NiCo does not recognise becomes a Nix-Brick.
@@ -166,8 +177,9 @@ back if the imported config brings a foreign one.)
    away but leaves the bootloader alone, so **a reboot brings your old system
    back**. That is the whole trick: you see the result without betting your
    boot entry on it.
-5. **The way back** is a rebuild from your real config directory, or simply a
-   reboot after a `test` build.
+5. **The way back** is a rebuild from your real config directory, simply a
+   reboot after a `test` build, or the previous system state on the time
+   machine's *System* side.
 
 Three things a rebuild from the old config does *not* undo, because they are
 not part of a NixOS generation. Worth knowing before you start:
@@ -214,21 +226,21 @@ It is not meant for everyday use — it may change or break at any time, and the
 
 ## Status
 
-NiCo manages my own machines and is at version 0.15.0. Every change runs
-through a headless roundtrip over 18 real-world configurations taken from
-public repositories — imported, written back, and checked that nothing was
-lost — plus 23 rule tests for the Validator, the git layer and the import
-paths, and browser tests for the parts that only show in a real browser.
-Releases are tried in a virtual machine first, by importing a config from
-another machine and booting the result.
+NiCo manages my own machines. Every change runs through a headless roundtrip
+over 18 real-world configurations taken from public repositories — imported
+through the same paths the app uses, saved back, and checked by an independent
+Nix parser that the files still parse, no setting was lost or duplicated and
+every comment is kept — plus more than 70 test suites for the Validator, the
+git layer and the import paths, and browser tests for the parts that only show
+in a real browser. Releases are tried in a virtual machine first, by importing
+a config from another machine and booting the result.
 
 That said, it is still a young tool and the edges show. If something goes
-wrong, the config is what matters, not NiCo — which is why there is a backup
-before every import, a checkpoint before every write, and a one-click way out
-that leaves plain Nix behind.
+wrong, the config is what matters, not NiCo — which is why there is a
+checkpoint before every import and every save, and a one-click way out that
+leaves plain Nix behind (see *Safety nets*).
 
-Contributions, bug reports, and feedback are welcome. Please keep in mind I'm
-only one person, so responses may take some time.
+Contributions, bug reports, and feedback are welcome.
 
 ---
 
