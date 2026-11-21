@@ -342,7 +342,7 @@
           <div class="toc-sub">
             <a href="#k3-1" data-de="3.1 Oberfläche" data-en="3.1 Interface">3.1 Oberfläche</a>
             <a href="#k3-2" data-de="3.2 Vorschau vs. echter Dateistand" data-en="3.2 Preview vs. real file state">3.2 Vorschau vs. echter Dateistand</a>
-            <a href="#k3-3" data-de="3.3 Schreiben, Dry-Run, Rebuild" data-en="3.3 Write, dry-run, rebuild">3.3 Schreiben, Dry-Run, Rebuild</a>
+            <a href="#k3-3" data-de="3.3 Speichern, Dry-Run, Rebuild" data-en="3.3 Save, dry-run, rebuild">3.3 Speichern, Dry-Run, Rebuild</a>
           </div>
         </li>
         <li>
@@ -498,8 +498,8 @@
           <p data-de="Die Schaltfläche <strong>Vorschau</strong> zeigt, welche <code>.nix</code>-Datei beim nächsten Schreiben erzeugt würde – ohne die Datei auf Platte zu verändern. Dry-Run und Rebuild arbeiten immer mit dem <strong>tatsächlichen Dateistand auf Platte</strong>, nicht mit dem Formularinhalt."
              data-en="The <strong>Preview</strong> button shows which <code>.nix</code> file would be produced on the next write – without changing the file on disk. Dry-run and rebuild always work with the <strong>actual file state on disk</strong>, not with the form content.">Die Schaltfläche <strong>Vorschau</strong> zeigt, welche <code>.nix</code>-Datei beim nächsten Schreiben erzeugt würde – ohne die Datei auf Platte zu verändern. Dry-Run und Rebuild arbeiten immer mit dem <strong>tatsächlichen Dateistand auf Platte</strong>, nicht mit dem Formularinhalt.</p>
           <div class="note">
-            <p data-de="<strong>Merksatz:</strong> Formular ändern → Schreiben → Dry-Run/Rebuild. Ohne Schreiben prüft der Dry-Run den alten Stand."
-               data-en="<strong>Rule of thumb:</strong> change form → write → dry-run/rebuild. Without writing, the dry-run checks the old state."><strong>Merksatz:</strong> Formular ändern → Schreiben → Dry-Run/Rebuild. Ohne Schreiben prüft der Dry-Run den alten Stand.</p>
+            <p data-de="<strong>Merksatz:</strong> Formular ändern → Speichern → Dry-Run/Rebuild. Ohne Speichern prüft der Dry-Run den alten Stand."
+               data-en="<strong>Rule of thumb:</strong> change form → save → dry-run/rebuild. Without saving, the dry-run checks the old state."><strong>Merksatz:</strong> Formular ändern → Speichern → Dry-Run/Rebuild. Ohne Speichern prüft der Dry-Run den alten Stand.</p>
           </div>
           <div class="note">
             <p data-de="<strong>Achtung:</strong> Beim Schreiben wird die gesamte formular-verwaltete Datei neu aufgebaut – NiCo bearbeitet nicht den vorhandenen Text, sondern erzeugt ihn komplett neu. Eigene Kommentare <strong>außerhalb</strong> von Nix-Brix sammelt NiCo im Nix-Brick <code>imported-notes</code>, jeweils mit dem Ort, an dem sie standen (<code>before networking.hostName</code>, <code>inside services.pipewire</code> …). Ein Kommentar direkt über einem Befehl, der ohnehin ein Nix-Brick wird, wandert mit in diesen Brick. Leerzeilen und manuelle Formatierung außerhalb von Nix-Brix werden entfernt. Unverändert bleibt nur Inhalt innerhalb eines Nix-Bricks."
@@ -510,19 +510,33 @@
         </div>
 
         <div class="subchapter" id="k3-3">
-          <h3><span class="sub-num">3.3</span><span data-de="Schreiben, Dry-Run, Rebuild" data-en="Write, dry-run, rebuild">Schreiben, Dry-Run, Rebuild</span></h3>
-          <div class="flow" data-de="1. Schreiben   → Formularinhalt wird in die .nix-Dateien auf Platte geschrieben
-2. Dry-Run     → prüft die .nix-Dateien auf Syntaxfehler (nixos-rebuild dry-build)
-3. Rebuild     → baut das System (nixos-rebuild switch) – Live-Ausgabe direkt sichtbar"
-               data-en="1. Write     → form content is written to the .nix files on disk
-2. Dry-run   → checks the .nix files for errors (nixos-rebuild dry-build)
-3. Rebuild   → builds the system (nixos-rebuild switch) – live output visible">1. Schreiben   → Formularinhalt wird in die .nix-Dateien auf Platte geschrieben
-2. Dry-Run     → prüft die .nix-Dateien auf Syntaxfehler (nixos-rebuild dry-build)
-3. Rebuild     → baut das System (nixos-rebuild switch) – Live-Ausgabe direkt sichtbar</div>
-          <p data-de="Bei aktiviertem Git legt NiCo vor jedem Rebuild automatisch einen Sicherungspunkt-Commit an – ein Rollback ist damit immer möglich. Im Flake-Modus wird der Rebuild für den aktiven Host ausgeführt."
-             data-en="With git enabled, NiCo automatically creates a safety commit before every rebuild – a rollback is therefore always possible. In flake mode the rebuild runs for the active host.">Bei aktiviertem Git legt NiCo vor jedem Rebuild automatisch einen Sicherungspunkt-Commit an – ein Rollback ist damit immer möglich. Im Flake-Modus wird der Rebuild für den aktiven Host ausgeführt.</p>
-          <p data-de="Optional: Flake vor Rebuild aktualisieren (<code>nix flake update</code>). Diese Einstellung ist im Admin-Bereich konfigurierbar."
-             data-en="Optional: update the flake before rebuilding (<code>nix flake update</code>). This setting can be configured in the admin area.">Optional: Flake vor Rebuild aktualisieren (<code>nix flake update</code>). Diese Einstellung ist im Admin-Bereich konfigurierbar.</p>
+          <h3><span class="sub-num">3.3</span><span data-de="Speichern, Dry-Run, Rebuild" data-en="Save, dry-run, rebuild">Speichern, Dry-Run, Rebuild</span></h3>
+          <div class="flow" data-de="1. Speichern   → Diskette oder Strg+S schreibt den Stand in die .nix-Dateien auf Platte
+2. Dry-Run     → prüft, ob Nix die Config bauen kann (nixos-rebuild dry-build)
+3. Rebuild     → baut das System – Live-Ausgabe im Rebuild-Monitor"
+               data-en="1. Save      → the disk button or Ctrl+S writes the state to the .nix files on disk
+2. Dry-run   → checks whether Nix can build the config (nixos-rebuild dry-build)
+3. Rebuild   → builds the system – live output in the rebuild monitor">1. Speichern   → Diskette oder Strg+S schreibt den Stand in die .nix-Dateien auf Platte
+2. Dry-Run     → prüft, ob Nix die Config bauen kann (nixos-rebuild dry-build)
+3. Rebuild     → baut das System – Live-Ausgabe im Rebuild-Monitor</div>
+          <p data-de="Vor jedem Dry-Run und Rebuild läuft der &lt;strong&gt;Validator&lt;/strong&gt; auf dem gespeicherten Stand. Findet er einen kritischen Fehler, zeigt er ihn, statt den Bau zu starten. Mit Git legt NiCo vor dem Rebuild einen &lt;strong&gt;Sicherungspunkt (Commit)&lt;/strong&gt; an; zurück geht es jederzeit über die &lt;strong&gt;Zeitmaschine&lt;/strong&gt;. Sie setzt die Dateien zurück – das laufende System startet weiter aus seiner vorhandenen Generation. Im Flake-Modus fragt NiCo, welcher Host gebaut wird."
+             data-en="Before every dry-run and rebuild the &lt;strong&gt;Validator&lt;/strong&gt; runs on the saved state. If it finds a critical error, it shows it instead of starting the build. With git, NiCo creates a &lt;strong&gt;checkpoint (commit)&lt;/strong&gt; before the rebuild; you can always go back through the &lt;strong&gt;time machine&lt;/strong&gt;. It resets the files – the running system keeps booting from its existing generation. In flake mode NiCo asks which host to build.">Vor jedem Dry-Run und Rebuild läuft der <strong>Validator</strong> auf dem gespeicherten Stand. Findet er einen kritischen Fehler, zeigt er ihn, statt den Bau zu starten. Mit Git legt NiCo vor dem Rebuild einen <strong>Sicherungspunkt (Commit)</strong> an; zurück geht es jederzeit über die <strong>Zeitmaschine</strong>. Sie setzt die Dateien zurück – das laufende System startet weiter aus seiner vorhandenen Generation. Im Flake-Modus fragt NiCo, welcher Host gebaut wird.</p>
+          <p data-de="Im Dialog &lt;strong&gt;Rebuild-Optionen&lt;/strong&gt;:"
+             data-en="In the &lt;strong&gt;rebuild options&lt;/strong&gt; dialog:">Im Dialog <strong>Rebuild-Optionen</strong>:</p>
+          <ul class="help-list">
+            <li data-de="&lt;strong&gt;Modus:&lt;/strong&gt; &lt;code&gt;switch&lt;/code&gt; – jetzt umstellen und künftig so starten (der Normalfall); &lt;code&gt;boot&lt;/code&gt; – erst beim nächsten Start; &lt;code&gt;test&lt;/code&gt; – nur jetzt, ein Neustart bringt den alten Stand zurück (der sichere Weg zum Ausprobieren)"
+                data-en="&lt;strong&gt;Mode:&lt;/strong&gt; &lt;code&gt;switch&lt;/code&gt; – switch now and boot like this from now on (the normal case); &lt;code&gt;boot&lt;/code&gt; – only from the next start; &lt;code&gt;test&lt;/code&gt; – only now, a restart brings the old state back (the safe way to try something)"><strong>Modus:</strong> <code>switch</code> – jetzt umstellen und künftig so starten (der Normalfall); <code>boot</code> – erst beim nächsten Start; <code>test</code> – nur jetzt, ein Neustart bringt den alten Stand zurück (der sichere Weg zum Ausprobieren)</li>
+            <li data-de="&lt;strong&gt;Flake aktualisieren&lt;/strong&gt; (&lt;code&gt;nix flake update&lt;/code&gt;) – nur mit Flakes"
+                data-en="&lt;strong&gt;Update flake&lt;/strong&gt; (&lt;code&gt;nix flake update&lt;/code&gt;) – flakes only"><strong>Flake aktualisieren</strong> (<code>nix flake update</code>) – nur mit Flakes</li>
+            <li data-de="&lt;strong&gt;Abgesicherter Rebuild:&lt;/strong&gt; begrenzt, wie viele Pakete gleichzeitig (&lt;code&gt;--max-jobs&lt;/code&gt;) und mit wie vielen Kernen je Paket (&lt;code&gt;--cores&lt;/code&gt;) gebaut werden. Braucht weniger Arbeitsspeicher, dauert aber länger. Leer gelassen, schlägt NiCo Werte aus dem freien Arbeitsspeicher dieses Rechners vor – eine Schätzung, einzelne Pakete brauchen mehr"
+                data-en="&lt;strong&gt;Safe rebuild:&lt;/strong&gt; limits how many packages are built at once (&lt;code&gt;--max-jobs&lt;/code&gt;) and with how many cores each (&lt;code&gt;--cores&lt;/code&gt;). Needs less memory but takes longer. Left empty, NiCo suggests values from this machine&#x27;s free memory – an estimate, some packages need more"><strong>Abgesicherter Rebuild:</strong> begrenzt, wie viele Pakete gleichzeitig (<code>--max-jobs</code>) und mit wie vielen Kernen je Paket (<code>--cores</code>) gebaut werden. Braucht weniger Arbeitsspeicher, dauert aber länger. Leer gelassen, schlägt NiCo Werte aus dem freien Arbeitsspeicher dieses Rechners vor – eine Schätzung, einzelne Pakete brauchen mehr</li>
+            <li data-de="&lt;strong&gt;Alle Meldungen von Nix anzeigen:&lt;/strong&gt; standardmäßig aus. Dann zeigt der Monitor Phasen, Fortschritt, Warnungen und Fehler, aber nicht jede Datei und jeden Store-Pfad, die Nix meldet – darin gingen Warnungen unter. Dieselbe Schaltfläche steht auch &lt;strong&gt;im Rebuild-Monitor&lt;/strong&gt;; dort wirkt sie sofort auf den laufenden Rebuild, schon verworfene Zeilen kommen aber nicht zurück. Ausgeblendete Meldungen fehlen auch in der Logdatei. NiCo merkt sich die Wahl pro Rechner"
+                data-en="&lt;strong&gt;Show all Nix messages:&lt;/strong&gt; off by default. The monitor then shows phases, progress, warnings and errors, but not every file and store path Nix reports – warnings got lost in them. The same switch is also &lt;strong&gt;in the rebuild monitor&lt;/strong&gt;; there it takes effect on the running rebuild at once, but lines already dropped do not come back. Hidden messages are missing from the log file too. NiCo remembers the choice per machine"><strong>Alle Meldungen von Nix anzeigen:</strong> standardmäßig aus. Dann zeigt der Monitor Phasen, Fortschritt, Warnungen und Fehler, aber nicht jede Datei und jeden Store-Pfad, die Nix meldet – darin gingen Warnungen unter. Dieselbe Schaltfläche steht auch <strong>im Rebuild-Monitor</strong>; dort wirkt sie sofort auf den laufenden Rebuild, schon verworfene Zeilen kommen aber nicht zurück. Ausgeblendete Meldungen fehlen auch in der Logdatei. NiCo merkt sich die Wahl pro Rechner</li>
+            <li data-de="&lt;strong&gt;In Terminal-Fenster ausführen&lt;/strong&gt; sowie Herunterfahren nach dem Rebuild (auf Wunsch nach dem Hochladen der Konfiguration)"
+                data-en="&lt;strong&gt;Run in a terminal window&lt;/strong&gt;, and shutting down after the rebuild (optionally after uploading the configuration)"><strong>In Terminal-Fenster ausführen</strong> sowie Herunterfahren nach dem Rebuild (auf Wunsch nach dem Hochladen der Konfiguration)</li>
+          </ul>
+          <p data-de="Ist im Admin-Bereich die &lt;strong&gt;Analyse vor dem Rebuild&lt;/strong&gt; eingeschaltet, prüft NiCo vorher, was geladen und was kompiliert werden muss. Der Monitor zeigt dann die Download-Größe von Anfang an. Muss ein Paket auf diesem Rechner aus dem Quelltext gebaut werden, fragt NiCo vorher nach und bietet den abgesicherten Rebuild an. Der Start dauert dadurch einige Sekunden länger."
+             data-en="If &lt;strong&gt;analysis before the rebuild&lt;/strong&gt; is switched on in the admin area, NiCo first checks what has to be downloaded and what compiled. The monitor then shows the download size from the start. If a package has to be built from source on this machine, NiCo asks first and offers the safe rebuild. Starting takes a few seconds longer.">Ist im Admin-Bereich die <strong>Analyse vor dem Rebuild</strong> eingeschaltet, prüft NiCo vorher, was geladen und was kompiliert werden muss. Der Monitor zeigt dann die Download-Größe von Anfang an. Muss ein Paket auf diesem Rechner aus dem Quelltext gebaut werden, fragt NiCo vorher nach und bietet den abgesicherten Rebuild an. Der Start dauert dadurch einige Sekunden länger.</p>
         </div>
       </section>
 
@@ -666,8 +680,8 @@
 
         <div class="subchapter">
           <h3><span data-de="Dry-Run oder Rebuild schlägt sofort fehl" data-en="Dry-run or rebuild fails immediately">Dry-Run oder Rebuild schlägt sofort fehl</span></h3>
-          <p data-de="Wahrscheinlichste Ursache: Formularinhalt wurde noch nicht geschrieben. Dry-Run und Rebuild arbeiten immer mit dem Stand auf Platte – zuerst <strong>Schreiben</strong>, dann prüfen oder bauen."
-             data-en="Most likely cause: the form content has not been written yet. Dry-run and rebuild always work with the state on disk – <strong>write</strong> first, then check or build.">Wahrscheinlichste Ursache: Formularinhalt wurde noch nicht geschrieben. Dry-Run und Rebuild arbeiten immer mit dem Stand auf Platte – zuerst <strong>Schreiben</strong>, dann prüfen oder bauen.</p>
+          <p data-de="Wahrscheinlichste Ursache: Formularinhalt wurde noch nicht gespeichert. Dry-Run und Rebuild arbeiten immer mit dem Stand auf Platte – zuerst <strong>Speichern</strong> (Diskette oder Strg+S), dann prüfen oder bauen."
+             data-en="Most likely cause: the form content has not been saved yet. Dry-run and rebuild always work with the state on disk – <strong>save</strong> first (disk button or Ctrl+S), then check or build.">Wahrscheinlichste Ursache: Formularinhalt wurde noch nicht gespeichert. Dry-Run und Rebuild arbeiten immer mit dem Stand auf Platte – zuerst <strong>Speichern</strong> (Diskette oder Strg+S), dann prüfen oder bauen.</p>
         </div>
 
         <div class="subchapter">
