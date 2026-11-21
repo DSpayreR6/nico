@@ -27,7 +27,7 @@ CONFIGS_DIR = Path(__file__).resolve().parent / "configs"
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from nico import config_manager, fidelity, generator, hm_generator, importer  # noqa: E402
+from nico import config_manager, core, fidelity, generator, hm_generator, importer  # noqa: E402
 from nico.brix import brix_content_to_bricks, extract_brick_blocks, strip_brick_blocks  # noqa: E402
 from nico.core import _merge_notes, get_nico_type, keep_unmodelled  # noqa: E402
 
@@ -57,6 +57,18 @@ def _is_sensitive(path: Path) -> bool:
         or "credential" in name
         or "secret" in name
     )
+
+
+def _nix_files(root: Path):
+    """The .nix files below root a check may compare: what _copy_tree copies.
+    A sensitive directory (e.g. `secrets/`) is skipped as a whole, so the
+    files in it count as sensitive too - judged by name alone, the original's
+    secrets/rekey/default.nix looked lost in the result (2026-11-21)."""
+    for p in sorted(root.rglob("*.nix")):
+        rel = p.relative_to(root)
+        if ".git" in rel.parts or any(_is_sensitive(Path(part)) for part in rel.parts):
+            continue
+        yield p
 
 
 def _copy_tree(src: Path, dst: Path) -> None:
@@ -117,6 +129,51 @@ def _managed_fields_from_original(config_dir: Path) -> dict[str, Any]:
 
 
 def _write_nico_roundtrip(config_dir: Path) -> None:
+    """What NiCo itself does with a config that was just imported.
+
+    Since 2026-11-21 the product's own functions, no rebuilt steps (Codex
+    revision 2026-11-20): the import of configuration.nix
+    (core.apply_import_result, with save_config and its guards - raw mode,
+    duplicate attributes, things NiCo cannot represent), the take-over of
+    flake.nix (core.reimport_flake), and for every other file with a form
+    behind it - host files, Home Manager files - the restructuring NiCo
+    offers when it is opened (core.restructure_file), as if the user
+    answered yes to each. What a step refuses stays as it came, as in the
+    product. The hand-built version is kept below as _write_nico_roundtrip_old
+    for comparison only (--old).
+    """
+    nixos_dir = str(config_dir)
+    cfg_path = config_dir / "configuration.nix"
+    flake_path = config_dir / "flake.nix"
+
+    data = config_manager.load_config(nixos_dir) or config_manager.get_defaults()
+    if cfg_path.exists():
+        content = _read_text(cfg_path)
+        recognized = importer.parse_config(content)
+        rest_brix = importer.build_rest_brix(content, recognized)
+        data = core.apply_import_result(nixos_dir, recognized, rest_brix, content)
+    if flake_path.exists():
+        core.reimport_flake(nixos_dir, data)
+
+    for path in _nix_files(config_dir):
+        rel = path.relative_to(config_dir).as_posix()
+        if rel in ("configuration.nix", "flake.nix"):
+            continue
+        text = _read_text(path)
+        ftype = get_nico_type(text)
+        if core._form_kind(nixos_dir, rel, ftype) is None:
+            continue
+        if core._structure_unmappable(nixos_dir, rel, text, ftype) \
+                or core.file_in_raw_mode(path):
+            continue                 # opens in text mode, never restructured
+        try:
+            core.restructure_file(nixos_dir, rel)
+        except (fidelity.NotFaithful, config_manager.NotMappableError,
+                config_manager.DuplicateAttrError, ValueError):
+            pass                     # the product leaves it as it is
+
+
+def _write_nico_roundtrip_old(config_dir: Path) -> None:
     data = config_manager.load_config(str(config_dir))
 
     # The same guard the product applies (revision 2026-11-10, package 5a): a
@@ -234,8 +291,7 @@ def _check_fidelity(original: Path, result: Path, case: CaseResult) -> bool:
     # list in a host file passed unnoticed (Codex re-check 2026-11-20,
     # finding 29). The file is named with every hit, so the same attribute
     # name in another module cannot hide it.
-    names = sorted(p.relative_to(original).as_posix() for p in original.rglob("*.nix")
-                   if not _is_sensitive(p) and ".git" not in p.parts)
+    names = [p.relative_to(original).as_posix() for p in _nix_files(original)]
     for name in names:
         before, after = original / name, result / name
         if not (before.exists() and after.exists()):
@@ -412,6 +468,124 @@ def _case_severity(case: CaseResult) -> str:
 
 # Attributes NiCo deliberately writes under their current name – an old
 # spelling missing from the result is a migration, not a loss.
+def _ts_attr_parts(attrpath_node) -> list[str]:
+    """Components of an attrpath node as plain names ("a"."b" → a, b)."""
+    parts = []
+    for ch in attrpath_node.children:
+        if ch.type == ".":
+            continue
+        parts.append(ch.text.decode("utf-8", "replace").strip('"'))
+    return parts
+
+
+def _ts_is_empty(value) -> bool:
+    """[ ], { }, "" - also behind `with x;`."""
+    while value is not None and value.type == "with_expression":
+        value = value.children[-1] if value.children else None
+    if value is None:
+        return False
+    t = value.type
+    named = [c for c in value.children if c.is_named and c.type != "comment"]
+    if t == "list_expression" or t == "attrset_expression":
+        return not named or (t == "attrset_expression" and
+                             all(c.type == "binding_set" and not c.named_children for c in named))
+    if t == "string_expression":
+        return not named
+    return False
+
+
+def _ts_bindings(text: str) -> list:
+    """(attribute path components, value is empty) for every binding in the
+    text, at any depth, read with tree-sitter alone. Empty without it."""
+    from nico import nix_parser
+    tree = nix_parser.parse_tree(text)
+    if tree is None:
+        return []
+    out: list = []
+
+    def walk(node):
+        if node.type == "binding":
+            attr = value = None
+            for ch in node.children:
+                if ch.type == "attrpath":
+                    attr = ch
+                elif attr is not None and value is None and ch.type not in ("=", ";", "comment"):
+                    value = ch
+            if attr is not None:
+                out.append((_ts_attr_parts(attr), _ts_is_empty(value)))
+        for ch in node.children:
+            walk(ch)
+
+    walk(tree.root_node)
+    return out
+
+
+def _ts_duplicates(text: str) -> set:
+    """Attribute paths Nix refuses as defined twice, found with tree-sitter.
+
+    Within one attribute set, nested sets merge (`a.b = 1; a = { c = 2; };`
+    is fine); the same leaf twice, or a leaf where a set is, is an error.
+    Every attribute set that is not itself the value of a binding starts its
+    own namespace (a list element, a function argument, a let body).
+    """
+    from nico import nix_parser
+    tree = nix_parser.parse_tree(text)
+    if tree is None:
+        return set()
+    dups: set = set()
+
+    def namespaces(node):
+        if node.type == "attrset_expression":
+            collect(node, (), {})
+            return
+        for ch in node.children:
+            namespaces(ch)
+
+    def collect(attrset, prefix: tuple, seen: dict) -> None:
+        for bs in (c for c in attrset.children if c.type == "binding_set"):
+            for b in bs.children:
+                if b.type == "inherit":
+                    for ia in (c for c in b.children if c.type == "inherited_attrs"):
+                        for name in ia.named_children:
+                            p = prefix + (name.text.decode("utf-8", "replace"),)
+                            if p in seen:
+                                dups.add(".".join(p))
+                            seen[p] = "leaf"
+                    continue
+                if b.type != "binding":
+                    continue
+                attr = value = None
+                for ch in b.children:
+                    if ch.type == "attrpath":
+                        attr = ch
+                    elif attr is not None and value is None and ch.type not in ("=", ";", "comment"):
+                        value = ch
+                if attr is None:
+                    continue
+                parts = _ts_attr_parts(attr)
+                if any("${" in p for p in parts):
+                    continue                     # name only known to Nix
+                path = prefix + tuple(parts)
+                for k in range(len(prefix) + 1, len(path)):
+                    if seen.get(path[:k]) == "leaf":
+                        dups.add(".".join(path[:k]))
+                    seen.setdefault(path[:k], "set")
+                if value is not None and value.type == "attrset_expression":
+                    if seen.get(path) == "leaf":
+                        dups.add(".".join(path))
+                    seen.setdefault(path, "set")
+                    collect(value, path, seen)
+                else:
+                    if path in seen:
+                        dups.add(".".join(path))
+                    seen[path] = "leaf"
+                    if value is not None:
+                        namespaces(value)
+
+    namespaces(tree.root_node)
+    return dups
+
+
 _RENAMED_AWAY = {
     "tmpOnTmpfs", "tmpOnTmpfsSize", "cleanTmpDir",   # → boot.tmp.*
     "opengl", "driSupport", "driSupport32Bit",       # → hardware.graphics
@@ -427,28 +601,21 @@ def _check_no_lost_attributes(original: Path, result: Path, case: CaseResult) ->
     loss of ssh settings, printer drivers and keyboard options for a long time.
     Files NiCo does not generate are compared as well: it must not drop them.
     """
-    # Comments and strings are blanked first, so a '=' inside either does not
-    # invent an attribute. An option that is empty in the original is skipped:
-    # NiCo does not write empty options, nothing is lost by that.
-    empty_value = re.compile(r'^\s*(?:with\s+[\w.]+\s*;\s*)?(?:\[\s*\]|\{\s*\}|"")\s*;')
-
+    # Read with tree-sitter since 2026-11-21, not with NiCo's own text walker
+    # (importer._mask_literals): a checker that shares the walker shares its
+    # blind spots - that walker cut `"…${f "#"}…"` and so did the check.
+    # Every binding counts, nested and on one line alike; comments and
+    # strings are not code to the parser. An option that is empty in the
+    # original is skipped: NiCo does not write empty options.
     def names(path: Path) -> set[str]:
-        text = path.read_text(encoding="utf-8", errors="replace")
-        masked = importer._mask_literals(text)
-        found = set()
-        for m in re.finditer(r'^\s*([A-Za-z_][\w.\'"-]*)\s*=(?!=)', masked, re.MULTILINE):
-            if empty_value.match(masked[m.end():]):
-                continue
-            found.add(m.group(1).split(".")[-1].strip('"'))
-        return found
+        return {parts[-1] for parts, empty in _ts_bindings(_read_text(path)) if not empty}
 
     # flake.nix is excluded on purpose: its roundtrip restructures inputs and
     # outputs, and whether that loses content is a separate question with its
     # own answer still open (noted in manifest.md). Mixing it in here would
     # bury the loss this check exists for.
     def relevant(root: Path):
-        return (p for p in root.rglob("*.nix")
-                if p.name != "flake.nix" and not _is_sensitive(p))
+        return (p for p in _nix_files(root) if p.name != "flake.nix")
 
     before: set[str] = set()
     after: set[str] = set()
@@ -462,21 +629,87 @@ def _check_no_lost_attributes(original: Path, result: Path, case: CaseResult) ->
         case.fail("attributes lost after roundtrip: " + ", ".join(lost[:12]))
 
 
-def _check_no_duplicate_attributes(result: Path, case: CaseResult) -> None:
-    """No leaf may be defined twice in a file NiCo generated.
+_RE_BRICK_MARK = re.compile(r'^#\s*</?brick:')
+# NiCo's own lines: header, version line and section headings, which a newer
+# NiCo writes anew (e.g. "── Lokalisierung ──" became "── I18N · Localisation ──").
+_RE_NICO_OWN = re.compile(
+    r'^#\s*(?:──.*──|nico-version:|Generated by NiCo|Do not edit manually|'
+    r'Host-specific configuration for |Host-spezifische Konfiguration für )')
+
+
+def _comment_lines(text: str) -> list[str]:
+    """Every comment's text, whitespace collapsed, brick markers left out.
+
+    Read with tree-sitter, so a `#` inside a string is no comment; without
+    the grammar nothing is compared (the fidelity check still runs).
+    """
+    from nico import nix_parser
+    tree = nix_parser.parse_tree(text)
+    if tree is None:
+        return []
+    out: list[str] = []
+
+    def walk(node):
+        if node.type == "comment":
+            for line in node.text.decode("utf-8", "replace").splitlines():
+                s = " ".join(line.split())
+                if not s.startswith("#"):
+                    # /* … */: the text inside counts, the delimiters do not
+                    # (the rescue writes `/* fish */` as a note "fish").
+                    s = re.sub(r'^(?:/\*|\*)\s*', '', s)
+                    s = re.sub(r'\s*\*/$', '', s)
+                if s and s != "#" and not _RE_BRICK_MARK.match(s) \
+                        and not _RE_NICO_OWN.match(s):
+                    out.append(s)
+        for ch in node.children:
+            walk(ch)
+
+    walk(tree.root_node)
+    return out
+
+
+def _check_comments_kept(original: Path, result: Path, case: CaseResult) -> None:
+    """Every comment of the original is still in the same file afterwards.
+
+    Independent of nico/fidelity.py, which the import itself uses to decide
+    what it may take - a test built on the same comparison cannot find its
+    blind spots (Codex revision 2026-11-20). Comments are what NiCo has
+    lost most often (rescue as notes since 2026-11-17). Compared as text
+    with whitespace collapsed; NiCo may move a comment, not drop it.
+    """
+    lost: list[str] = []
+    for before in _nix_files(original):
+        rel = before.relative_to(original)
+        after = result / rel
+        if not after.exists():
+            continue
+        kept = " ".join(_read_text(after).split())
+        for line in _comment_lines(_read_text(before)):
+            body = line.lstrip("#").strip()
+            if body and body not in kept:
+                lost.append(f"{rel.as_posix()}: {line[:60]}")
+    for item in lost[:12]:
+        case.fail(f"comment lost after roundtrip: {item}")
+
+
+def _check_no_duplicate_attributes(original: Path, result: Path, case: CaseResult) -> None:
+    """No leaf defined twice that was not defined twice before.
 
     Nix merges two definitions of the same path but refuses the same leaf,
     so this is what turns a rescued brick colliding with the form's output
-    into a failing test instead of an unbuildable config.
+    into a failing test instead of an unbuildable config. Since 2026-11-21
+    with tree-sitter (_ts_duplicates), not with importer.duplicate_leaf_paths
+    - the guard save_config itself uses, so it could never catch what that
+    guard misses - and for every file, not only those NiCo generated.
     """
-    for nix_file in sorted(result.rglob("*.nix")):
-        text = nix_file.read_text(encoding="utf-8", errors="replace")
-        if get_nico_type(text) is None:
-            continue                 # not generated by NiCo – only copied
-        dupes = importer.duplicate_leaf_paths(text)
+    for nix_file in _nix_files(result):
+        rel = nix_file.relative_to(result)
+        dupes = _ts_duplicates(_read_text(nix_file))
+        before = original / rel
+        if before.exists():
+            dupes -= _ts_duplicates(_read_text(before))
         if dupes:
-            rel = nix_file.relative_to(result)
-            case.fail(f"duplicate attributes in {rel}: " + ", ".join(dupes[:8]))
+            case.fail(f"duplicate attributes in {rel}: " + ", ".join(sorted(dupes)[:8]))
 
 
 def _syntax_check(result: Path, case: CaseResult) -> None:
@@ -612,7 +845,7 @@ def run_case(case_dir: Path, args: argparse.Namespace) -> CaseResult:
     work_dir = work_parent / "work"
     try:
         _copy_tree(original, work_dir)
-        _write_nico_roundtrip(work_dir)
+        (_write_nico_roundtrip_old if args.old else _write_nico_roundtrip)(work_dir)
 
         if result.exists():
             shutil.rmtree(result)
@@ -622,7 +855,8 @@ def run_case(case_dir: Path, args: argparse.Namespace) -> CaseResult:
                                 co_faithful=_check_fidelity(original, result, case))
         _check_unmanaged_preserved(original, result, case)
         _check_no_lost_attributes(original, result, case)
-        _check_no_duplicate_attributes(result, case)
+        _check_no_duplicate_attributes(original, result, case)
+        _check_comments_kept(original, result, case)
 
         if args.syntax:
             _syntax_check(result, case)
@@ -645,6 +879,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--keep-work", action="store_true", help="Keep temporary work dirs.")
     parser.add_argument("--no-syntax", dest="syntax", action="store_false", help="Skip nix parse checks.")
     parser.add_argument("--rebuild-dry-run", action="store_true", help="Run nixos-rebuild dry-run.")
+    parser.add_argument("--old", action="store_true",
+                        help="Use the hand-built import of before 2026-11-21 (comparison only).")
     parser.add_argument("--report-json", default="testing/report-dry-run.json",
                         help="Write structured dry-run report to this JSON path.")
     parser.set_defaults(syntax=True)

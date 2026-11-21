@@ -164,7 +164,7 @@ check("beide kommen deaktiviert zurück",
       d["packages"])
 
 print("\n6. Die Sicherung")
-# What the import does (server._apply_import_result): load, then overwrite
+# What the import does (core.apply_import_result): load, then overwrite
 # `packages` with what the parser found - active entries only.
 CONF.write_text(out, encoding="utf-8")
 d = config_manager.load_config(str(cfg))

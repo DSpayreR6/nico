@@ -445,8 +445,31 @@ def settle(original: str, data: dict, render, rounds: int = 40,
             new_bricks += names
             continue
         _attach_hints(data, groups, new_bricks, bricks_key)
+        if breaks_syntax(original, render(data)):
+            raise NotFaithful({SYNTAX})
         return data
     raise NotFaithful(offending(compare(original, render(data))) or {'?'})
+
+
+SYNTAX = '<syntax>'
+
+
+def breaks_syntax(original: str, written: str) -> bool:
+    """True when `original` is readable Nix and `written` is not.
+
+    The leaf comparison alone cannot tell: it reads both texts with the same
+    walker, and where that walker went wrong it went wrong on both sides
+    alike. On 2026-11-21 the roundtrip found a Home Manager file whose
+    `"rgb(${lib.removePrefix "#" c})"` NiCo cut at the `#` - both sides cut
+    the same, no difference, an unreadable file written. Asked through
+    tree-sitter, a second opinion; without it nothing is judged.
+    """
+    from . import nix_parser
+    before = nix_parser.parse_tree(original)
+    if before is None or before.root_node.has_error:
+        return False
+    after = nix_parser.parse_tree(written)
+    return after is not None and after.root_node.has_error
 
 
 # ── does the panel write exactly this brick? ──────────────────────────────────
@@ -503,5 +526,7 @@ def require_faithful(original: str, written: str) -> None:
     """
     diff = compare(original, written)
     bad = offending(diff) | {p for p, _ in diff.missing}
+    if breaks_syntax(original, written):
+        bad.add(SYNTAX)
     if bad:
         raise NotFaithful(bad)

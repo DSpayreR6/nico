@@ -15,8 +15,8 @@ from pathlib import Path
 
 from flask import Flask, jsonify, render_template, request
 
-from . import atomic, config_manager, fidelity, generator, git_manager, importer, routes, validator
-from .brix import brix_content_to_bricks
+from . import config_manager, git_manager, routes, validator
+from .core import apply_import_result as _apply_import_result_core
 from .core import reimport_flake as _reimport_flake_core
 from .core import validate_user_path as _validate_user_path
 from .version import get_revision, get_version
@@ -153,47 +153,6 @@ def create_app() -> Flask:
             return True
         except ValueError:
             return False
-
-    def _apply_import_result(nixos_dir: str, recognized: dict, rest_brix: str,
-                             original_content: str = "") -> dict:
-        """Merge parsed import data into nico.json: recognized fields, rest
-        content as bricks, hardware_config flag. Saves and returns data.
-
-        original_content: the imported file as it was on disk. Given it, every
-        attribute NiCo would not write back is rescued as a brick – blocks it
-        only partly understands (services.*, boot.*, nix.*) would otherwise
-        lose their remaining fields silently on the first save.
-        """
-        data = config_manager.load_config(nixos_dir) or {}
-        for key, val in recognized.items():
-            data[key] = val
-        if rest_brix.strip():
-            blocks = data.get("brick_blocks", {})
-            rest_blocks = brix_content_to_bricks(rest_brix, section="HEAD", existing_blocks=blocks)
-            blocks.update(rest_blocks)
-            data["brick_blocks"] = blocks
-        if original_content.strip():
-            importer.rescue_into_bricks(data, original_content)
-        if (Path(nixos_dir) / "hardware-configuration.nix").exists():
-            data["hardware_config"] = True
-        if original_content.strip():
-            # Gegenprobe (2026-11-19): what would change or add to the file is
-            # not taken into the form; its lines stay bricks. If that cannot
-            # be done, the file stays exactly as it came (like NotMappable).
-            try:
-                data = fidelity.settle(original_content, data,
-                                       generator.generate_configuration_nix)
-            except fidelity.NotFaithful:
-                return data
-        try:
-            config_manager.save_config(nixos_dir, data)
-        except (config_manager.NotMappableError, config_manager.DuplicateAttrError):
-            # The imported configuration.nix has a form NiCo cannot write
-            # back, or NiCo's version would define an attribute twice. It is
-            # already in place, exactly as it came, and stays so; opening it
-            # asks before restructuring (Fall A).
-            pass
-        return data
 
     def _reimport_flake(nixos_dir: str, data: dict) -> None:
         """Parse an imported flake.nix, merge its fields, regenerate it cleanly.
@@ -480,7 +439,7 @@ def create_app() -> Flask:
         "nixos_dir":           _nixos_dir,
         "hosts_dir_name":      _hosts_dir_name,
         "path_inside":         _path_inside,
-        "apply_import_result": _apply_import_result,
+        "apply_import_result": _apply_import_result_core,
         "reimport_flake":      _reimport_flake,
         "safe_import_dest":    _safe_import_dest,
         "sudo_nonces":         _sudo_nonces,

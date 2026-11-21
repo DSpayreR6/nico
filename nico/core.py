@@ -558,6 +558,53 @@ def flake_mode(nixos_dir: str) -> bool:
     return config_manager.flake_mode(nixos_dir)
 
 
+def apply_import_result(nixos_dir: str, recognized: dict, rest_brix: str,
+                        original_content: str = "") -> dict:
+    """Merge parsed import data into nico.json: recognized fields, rest
+    content as bricks, hardware_config flag. Saves and returns data.
+
+    original_content: the imported file as it was on disk. Given it, every
+    attribute NiCo would not write back is rescued as a brick – blocks it
+    only partly understands (services.*, boot.*, nix.*) would otherwise
+    lose their remaining fields silently on the first save.
+
+    Moved here from server.py unchanged (2026-11-21): inside create_app() it
+    could not be called without a server, so the roundtrip test rebuilt the
+    import by hand and missed what save_config checks (Codex revision
+    2026-11-20). Every import route and testing/run.py call this one.
+    """
+    data = config_manager.load_config(nixos_dir) or {}
+    for key, val in recognized.items():
+        data[key] = val
+    if rest_brix.strip():
+        blocks = data.get("brick_blocks", {})
+        rest_blocks = brix_content_to_bricks(rest_brix, section="HEAD", existing_blocks=blocks)
+        blocks.update(rest_blocks)
+        data["brick_blocks"] = blocks
+    if original_content.strip():
+        importer.rescue_into_bricks(data, original_content)
+    if (Path(nixos_dir) / "hardware-configuration.nix").exists():
+        data["hardware_config"] = True
+    if original_content.strip():
+        # Gegenprobe (2026-11-19): what would change or add to the file is
+        # not taken into the form; its lines stay bricks. If that cannot
+        # be done, the file stays exactly as it came (like NotMappable).
+        try:
+            data = fidelity.settle(original_content, data,
+                                   generator.generate_configuration_nix)
+        except fidelity.NotFaithful:
+            return data
+    try:
+        config_manager.save_config(nixos_dir, data)
+    except (config_manager.NotMappableError, config_manager.DuplicateAttrError):
+        # The imported configuration.nix has a form NiCo cannot write
+        # back, or NiCo's version would define an attribute twice. It is
+        # already in place, exactly as it came, and stays so; opening it
+        # asks before restructuring (Fall A).
+        pass
+    return data
+
+
 def reimport_flake(nixos_dir: str, data: dict) -> bool:
     """Take over an imported flake.nix: merge its fields, regenerate it.
 
@@ -1124,7 +1171,7 @@ def keep_unmodelled(disk_text: str, bricks: dict | None, render=None) -> dict:
     NiCo's own output yields nothing here (measured on the 18 roundtrip
     configs and the defaults, tree-sitter and regex path), so repeated saves
     do not add bricks. A statement already standing in one of the given
-    bricks is skipped: the import (server._apply_import_result) has turned
+    bricks is skipped: the import (core.apply_import_result) has turned
     the same rest into bricks of the same names just before it saves, and
     they must not appear twice. A name already taken by other content gets a
     numbered suffix instead of replacing the existing brick.

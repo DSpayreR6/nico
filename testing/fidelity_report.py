@@ -41,7 +41,7 @@ def copy_config(src: Path) -> Path:
 
 
 def rewrite_co(cfg: Path) -> "str | None":
-    """configuration.nix as the import writes it (server._apply_import_result
+    """configuration.nix as the import writes it (core.apply_import_result
     followed by config_manager.save_config)."""
     path = cfg / "configuration.nix"
     if not path.exists():

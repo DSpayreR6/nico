@@ -44,6 +44,119 @@ _NICO_COMMENT_LINE_RE = re.compile(
 _RE_BRICK_MARKER = re.compile(r'#\s*</?bri(?:x|ck):')
 
 
+def _scan_string(text: str, i: int, indented: bool) -> int:
+    """End (exclusive) of the string literal starting at i.
+
+    Follows `${ … }` with everything Nix allows in there, strings with
+    their own quotes included: `"rgb(${lib.removePrefix "#" c})"` is one
+    string. Until 2026-11-21 every walker ended it at the inner quote, took
+    the `#` for a comment and cut the line - Home Manager files came out
+    as invalid Nix, and the Gegenprobe, using the same walker, saw nothing.
+    """
+    n = len(text)
+    j = i + (2 if indented else 1)
+    while j < n:
+        if indented:
+            if text.startswith("''\\", j):
+                j += 4                       # ''\x escapes one character
+                continue
+            if text.startswith("'''", j) or text.startswith("''$", j):
+                j += 3
+                continue
+            if text.startswith("''", j):
+                return j + 2
+        else:
+            if text[j] == '\\':
+                j += 2
+                continue
+            if text[j] == '"':
+                return j + 1
+            if text.startswith("$${", j):     # literal ${ in a "…" string
+                j += 3
+                continue
+        if text.startswith("${", j):
+            j = _scan_interpolation(text, j + 2)
+            continue
+        j += 1
+    return n
+
+
+def _scan_interpolation(text: str, j: int) -> int:
+    """End (exclusive) of a `${ … }` whose body starts at j."""
+    n = len(text)
+    depth = 1
+    while j < n:
+        c = text[j]
+        if c == '"':
+            j = _scan_string(text, j, False)
+            continue
+        if text.startswith("''", j):
+            j = _scan_string(text, j, True)
+            continue
+        if c == '#':
+            k = text.find('\n', j)
+            j = n if k < 0 else k
+            continue
+        if text.startswith('/*', j):
+            k = text.find('*/', j + 2)
+            j = n if k < 0 else k + 2
+            continue
+        if c == '{':
+            depth += 1
+        elif c == '}':
+            depth -= 1
+            if depth == 0:
+                return j + 1
+        j += 1
+    return n
+
+
+def _nix_segments(text: str) -> list:
+    """The text cut into ('code' | 'string' | 'comment', start, end).
+
+    One walker for every place that has to tell code, strings and comments
+    apart without tree-sitter (_strip_nix_comments, _mask_literals,
+    _blank_comments). There used to be three, each with the same blind spot
+    (see _scan_string).
+    """
+    out: list = []
+    n = len(text)
+    i = code_start = 0
+
+    def flush(upto: int) -> None:
+        if upto > code_start:
+            out.append(("code", code_start, upto))
+
+    while i < n:
+        c = text[i]
+        if c == '"' or text.startswith("''", i):
+            flush(i)
+            end = _scan_string(text, i, c != '"')
+            out.append(("string", i, end))
+            i = code_start = end
+        elif c == '#':
+            flush(i)
+            end = text.find('\n', i)
+            end = n if end < 0 else end
+            out.append(("comment", i, end))
+            i = code_start = end
+        elif text.startswith('/*', i):
+            flush(i)
+            end = text.find('*/', i + 2)
+            end = n if end < 0 else end + 2
+            out.append(("comment", i, end))
+            i = code_start = end
+        else:
+            i += 1
+    flush(n)
+    return out
+
+
+def _blank(text: str, start: int, end: int) -> str:
+    """Spaces for text[start:end], line breaks kept."""
+    return re.sub(r'[^\n]', ' ', text[start:end])
+
+
 def _strip_nix_comments(text: str) -> str:
     """Remove `# …` and `/* … */` comments, brick markers excepted.
 
@@ -52,40 +165,10 @@ def _strip_nix_comments(text: str) -> str:
     `background = "` and the file was no longer valid Nix (revision
     2026-11-10, B37).
     """
-    out, i, n = [], 0, len(text)
-    while i < n:
-        ch = text[i]
-        if ch == '"':
-            j = i + 1
-            while j < n and text[j] != '"':
-                j += 2 if text[j] == '\\' else 1
-            out.append(text[i:j + 1])
-            i = j + 1
-        elif text.startswith("''", i):
-            j = i + 2
-            while j < n:
-                # ''' , ''$ and ''\ are escapes inside an indented string
-                if text.startswith("'''", j) or text.startswith("''$", j) \
-                        or text.startswith("''\\", j):
-                    j += 3
-                elif text.startswith("''", j):
-                    break
-                else:
-                    j += 1
-            out.append(text[i:j + 2])
-            i = j + 2
-        elif ch == '#':
-            j = text.find('\n', i)
-            j = n if j < 0 else j
-            if _RE_BRICK_MARKER.match(text, i):
-                out.append(text[i:j])
-            i = j
-        elif text.startswith('/*', i):
-            j = text.find('*/', i + 2)
-            i = n if j < 0 else j + 2
-        else:
-            out.append(ch)
-            i += 1
+    out = []
+    for kind, a, b in _nix_segments(text):
+        if kind != "comment" or _RE_BRICK_MARKER.match(text, a):
+            out.append(text[a:b])
     return ''.join(out)
 
 
@@ -96,46 +179,10 @@ def _mask_literals(content: str) -> str:
     ';' inside a string or a comment shifts that count and tears statements
     apart in the middle – polybar configs in '' … '' blocks are full of both.
     Masking first keeps the arithmetic honest; the text itself is always cut
-    from the original.
+    from the original. Since 2026-11-21 /* … */ is blanked as well.
     """
-    out = list(content)
-    i, n = 0, len(content)
-    while i < n:
-        ch = content[i]
-        if ch == '#':
-            while i < n and content[i] != '\n':
-                out[i] = ' '
-                i += 1
-        elif content.startswith("''", i):
-            out[i] = out[i + 1] = ' '
-            i += 2
-            while i < n and not content.startswith("''", i):
-                if content[i] != '\n':
-                    out[i] = ' '
-                i += 1
-            if i < n:
-                out[i] = out[i + 1] = ' '
-                i += 2
-        elif ch == '"':
-            out[i] = ' '
-            i += 1
-            while i < n and content[i] != '"':
-                if content[i] == '\\':
-                    out[i] = ' '
-                    i += 1
-                    if i < n and content[i] != '\n':
-                        out[i] = ' '
-                        i += 1
-                    continue
-                if content[i] != '\n':
-                    out[i] = ' '
-                i += 1
-            if i < n:
-                out[i] = ' '
-                i += 1
-        else:
-            i += 1
-    return ''.join(out)
+    return ''.join(content[a:b] if kind == "code" else _blank(content, a, b)
+                   for kind, a, b in _nix_segments(content))
 
 
 def _rx_plain_body(content: str) -> bool:
@@ -2373,36 +2420,11 @@ def build_flake_brix(content: str) -> dict:
 def _blank_comments(content: str) -> str:
     """Blank out `#` and `/* */` comments, keeping strings, length and lines.
 
-    _strip_nix_comments cuts at every `#`, also inside a string – a colour
-    value or a URL fragment ends the line there. This one walks the text and
-    skips string bodies, so what is left is still the same Nix.
+    Strings stay as they are, `${ … }` in them included (_nix_segments), so
+    what is left is still the same Nix.
     """
-    out = list(content)
-    i, n = 0, len(content)
-    while i < n:
-        ch = content[i]
-        if ch == '#':
-            while i < n and content[i] != '\n':
-                out[i] = ' '
-                i += 1
-        elif content.startswith('/*', i):
-            end = content.find('*/', i + 2)
-            end = n if end == -1 else end + 2
-            for j in range(i, end):
-                if content[j] != '\n':
-                    out[j] = ' '
-            i = end
-        elif content.startswith("''", i):
-            end = content.find("''", i + 2)
-            i = n if end == -1 else end + 2
-        elif ch == '"':
-            i += 1
-            while i < n and content[i] != '"':
-                i += 2 if content[i] == '\\' else 1
-            i += 1
-        else:
-            i += 1
-    return ''.join(out)
+    return ''.join(_blank(content, a, b) if kind == "comment" else content[a:b]
+                   for kind, a, b in _nix_segments(content))
 
 
 def _closes_at_end(stmt: str, open_pos: int) -> bool:
