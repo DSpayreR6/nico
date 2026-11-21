@@ -632,7 +632,7 @@ function initSettingsPanel() {
         return;
       }
       if (data.needs_confirmation) {
-        if (!confirm(`${t('setup.confirmPrefix')} ${data.path} ${t('setup.confirmSuffix')}`)) return;
+        if (!(await nicoConfirm(`${t('setup.confirmPrefix')} ${data.path} ${t('setup.confirmSuffix')}`))) return;
         const res2  = await csrfFetch('/api/setup', {
           method:  'POST',
           headers: { 'Content-Type': 'application/json' },

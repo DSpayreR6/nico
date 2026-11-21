@@ -704,7 +704,7 @@ function initSettingsImport() {
 }
 
 async function detachConfig() {
-  if (!confirm(t('admin.detachConfirm'))) return;
+  if (!(await nicoConfirm(t('admin.detachConfirm')))) return;
 
   try {
     await _autoSave();

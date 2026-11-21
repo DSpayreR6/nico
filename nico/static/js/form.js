@@ -127,7 +127,7 @@ async function loadHmFileList() {
 }
 
 async function _hmCreateFile() {
-  const username = (prompt(t('hm.promptUsername') || 'Benutzername (z.B. martin):') || '').trim();
+  const username = ((await nicoPrompt(t('hm.promptUsername'))) || '').trim();
   if (!username) return;
   const stateVersion = document.getElementById('state_version')?.value?.trim() || '';
   const primaryUser  = getAllUsers()[0];
@@ -143,7 +143,7 @@ async function _hmCreateFile() {
     const msg = data.error === 'ERR_FILE_EXISTS'
       ? (t('hm.errorFileExists') || 'Datei existiert bereits.')
       : (t('hm.errorCreate') || 'Fehler beim Erstellen.');
-    alert(msg);
+    await nicoAlert(msg);
     return;
   }
   await loadHmFileList();

@@ -3,11 +3,14 @@
   1. Unterreiter System | Config wie in den Einstellungen: System steht
      vorn und ist beim Öffnen aktiv (Martin, 2026-11-21).
   2. Ohne Freigabe: Hinweis mit Knopf „Freigeben“; danach die Liste.
-  3. Liste: Nummer, Kennzeichen läuft jetzt / gestartet / nächster Start,
-     kein Knopf beim Stand, der läuft und Startstandard ist; kein eigener
-     Rollback-Knopf.
+  3. Liste: Nummer, am Ende jeder Zeile ein Kasten gleicher Breite (VM-Test
+     2026-11-21): grün „läuft“ ohne Knopf, sonst roter Knopf; keine
+     Plaketten, kein eigener Rollback-Knopf.
   4. „Diesen Systemstand verwenden“ fragt jetzt / ab nächstem Start;
      Abbrechen schaltet nichts um.
+  4b. Ein anderer Stand ist für den nächsten Start gewählt: er ist gelb, der
+     laufende grüne wird ein Knopf; Klick fragt im NiCo-Dialog, Abbrechen
+     schaltet nichts um.
   5. Keine JavaScript-Fehler.
 
 Die Liste ist nachgebaut, am echten System wird nichts gelesen oder
@@ -75,9 +78,14 @@ try:
     nums = d.execute_script("return [...document.querySelectorAll('#generations-body .rollback-hash')].map(e => e.textContent);")
     check("drei Stände", nums == ["#3", "#2", "#1"], nums)
     badges = d.execute_script("return document.querySelectorAll('#generations-body .host-card-brix-badge').length;")
-    check("drei Kennzeichen (läuft, gestartet, nächster Start)", badges == 3, badges)
+    check("keine Plaketten mehr", badges == 0, badges)
     use = d.execute_script("return [...document.querySelectorAll('#generations-body [data-gen]')].map(b => b.dataset.gen);")
     check("kein Knopf bei #3 (läuft und Startstandard)", use == ["2", "1"], use)
+    run = d.execute_script("const e=document.querySelector('#generations-body .gen-state-running');"
+                           "return e ? [e.tagName, e.closest('.rollback-item').querySelector('.rollback-hash').textContent] : null;")
+    check("#3 grün, nur Anzeige", run == ["SPAN", "#3"], run)
+    widths = d.execute_script("return [...document.querySelectorAll('#generations-body .gen-state')].map(e => e.offsetWidth);")
+    check("Kästen gleich breit", len(widths) == 3 and len(set(widths)) == 1, widths)
     check("kein eigener Rollback-Knopf",
           not d.execute_script("return !!document.getElementById('gen-rollback-btn');"))
     if os.environ.get("SHOT_DIR"):
@@ -94,6 +102,28 @@ try:
     check("Dialog zu, nichts umgeschaltet",
           not d.execute_script("return !!document.querySelector('.overlay [data-mode]');") and not switched,
           switched)
+
+    print("4b. Anderer Stand für den nächsten Start gewählt")
+    FAKE[0] = generations.Generation(3, "2026-11-21 09:52", "26.11.3", "6.18.63", True, True, False)
+    FAKE[1] = generations.Generation(2, "2026-11-20 20:08", "26.11.2", "6.18.60", False, False, True)
+    d.execute_script("loadGenerations();"); time.sleep(1)
+    nxt = d.execute_script("const e=document.querySelector('#generations-body .gen-state-next');"
+                           "return e ? e.closest('.rollback-item').querySelector('.rollback-hash').textContent : null;")
+    check("#2 gelb (nächster Start)", nxt == "#2", nxt)
+    back = d.execute_script("const e=document.querySelector('#generations-body [data-gen-back]');"
+                            "return e ? [e.tagName, e.dataset.genBack, e.classList.contains('gen-state-running')] : null;")
+    check("#3 grün als Knopf", back == ["BUTTON", "3", True], back)
+    use = d.execute_script("return [...document.querySelectorAll('#generations-body [data-gen]')].map(b => b.dataset.gen);")
+    check("roter Knopf nur bei #1", use == ["1"], use)
+    d.execute_script("document.querySelector('#generations-body [data-gen-back]').click();"); time.sleep(0.5)
+    txt = d.execute_script("const o=[...document.querySelectorAll('.overlay')].pop(); return o ? o.textContent : '';")
+    check("NiCo-Dialog nennt #3 und #2", "#3" in txt and "#2" in txt, txt[:120])
+    d.execute_script("document.querySelector('.overlay [data-nd=\"cancel\"]').click();"); time.sleep(0.5)
+    check("Abbrechen: Dialog zu, nichts umgeschaltet",
+          not d.execute_script("return !!document.querySelector('.overlay [data-nd]');") and not switched,
+          switched)
+    if os.environ.get("SHOT_DIR"):
+        d.save_screenshot(os.path.join(os.environ["SHOT_DIR"], "tm-system-next.png"))
 
     d.execute_script("document.querySelector('.settings-subtab[data-subtab=\"tm-config\"]').click();")
     time.sleep(0.5)

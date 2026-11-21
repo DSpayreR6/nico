@@ -1402,9 +1402,6 @@
   "generations.hint": "Cada rebuild crea un estado del sistema. Aquí eliges cuál se ejecuta: ahora o desde el próximo arranque. Los archivos de la configuración no cambian; el próximo rebuild vuelve a construir a partir de ellos.",
   "generations.off": "NiCo no puede leer los estados del sistema de este equipo.",
   "generations.empty": "No se encontraron estados del sistema.",
-  "generations.badgeRunning": "en ejecución",
-  "generations.badgeBooted": "arrancado",
-  "generations.badgeDefault": "próximo arranque",
   "generations.useBtn": "Usar este estado del sistema",
   "generations.useTitle": "¿Usar el estado del sistema #{0}?",
   "generations.useInfo": "«Cambiar ahora» cambia de inmediato y arranca así en adelante. «Desde el próximo arranque» no cambia nada en el sistema en ejecución. Tus archivos de configuración no cambian: el próximo rebuild vuelve a construir a partir de ellos. Para volver atrás de forma permanente, restaura además un punto de control en el lado Config.",
@@ -1413,5 +1410,11 @@
   "generations.doneSwitch": "El estado del sistema #{0} se ejecuta ahora y arrancará en adelante.",
   "generations.doneBoot": "El estado del sistema #{0} arrancará desde el próximo arranque.",
   "errors.ERR_GENERATION_UNKNOWN": "Este estado del sistema no existe (ya).",
-  "errors.ERR_GENERATION_TOOL": "No se encontró nix-env o switch-to-configuration."
+  "errors.ERR_GENERATION_TOOL": "No se encontró nix-env o switch-to-configuration.",
+  "dialog.ok": "Aceptar",
+  "dialog.cancel": "Cancelar",
+  "generations.stateRunning": "Este estado del sistema está en uso",
+  "generations.stateNext": "Se usará en el próximo arranque",
+  "generations.backTitle": "Volver a usar este estado del sistema en el próximo arranque",
+  "generations.backConfirm": "¿Volver a usar el estado del sistema en uso #{0} en el próximo arranque? Se descarta la elección de #{1}."
 }

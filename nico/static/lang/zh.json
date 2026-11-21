@@ -1402,9 +1402,6 @@
   "generations.hint": "每次 rebuild 都会创建一个系统状态。在这里选择运行哪一个——立即或从下次启动起。配置文件保持不变；下一次 rebuild 会再次从它们构建。",
   "generations.off": "NiCo 无权读取此计算机的系统状态。",
   "generations.empty": "未找到系统状态。",
-  "generations.badgeRunning": "正在运行",
-  "generations.badgeBooted": "已启动",
-  "generations.badgeDefault": "下次启动",
   "generations.useBtn": "使用此系统状态",
   "generations.useTitle": "使用系统状态 #{0}？",
   "generations.useInfo": "“立即切换”会马上切换，并以后都这样启动。“从下次启动起”不改变正在运行的系统。配置文件保持不变——下一次 rebuild 会再次从它们构建。若要永久回退，还需在 Config 一侧恢复一个检查点。",
@@ -1413,5 +1410,11 @@
   "generations.doneSwitch": "系统状态 #{0} 正在运行，以后也会这样启动。",
   "generations.doneBoot": "系统状态 #{0} 将从下次启动起使用。",
   "errors.ERR_GENERATION_UNKNOWN": "此系统状态不存在（或已不存在）。",
-  "errors.ERR_GENERATION_TOOL": "未找到 nix-env 或 switch-to-configuration。"
+  "errors.ERR_GENERATION_TOOL": "未找到 nix-env 或 switch-to-configuration。",
+  "dialog.ok": "确定",
+  "dialog.cancel": "取消",
+  "generations.stateRunning": "此系统状态正在运行",
+  "generations.stateNext": "下次启动时使用",
+  "generations.backTitle": "下次启动时重新使用此系统状态",
+  "generations.backConfirm": "下次启动时重新使用正在运行的系统状态 #{0}？对 #{1} 的选择将被取消。"
 }

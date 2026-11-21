@@ -473,11 +473,10 @@ async function loadAdminGitLog() {
 }
 
 async function rollbackTo(hash, dateStr, message) {
-  if (!confirm(
-    t('git.rollbackConfirm') + '\n\n' +
-    `${hash.slice(0, 7)}  ${dateStr}\n${message}\n\n` +
-    t('git.rollbackDetail')
-  )) return;
+  if (!(await nicoConfirm(
+    `${hash.slice(0, 7)}  ${dateStr}\n${message}\n\n` + t('git.rollbackDetail'),
+    { title: t('git.rollbackConfirm'), okLabel: t('admin.rollbackBtn'), danger: true },
+  ))) return;
 
   const res  = await csrfFetch('/api/git/rollback', {
     method:  'POST',
@@ -1072,30 +1071,53 @@ async function loadGenerations() {
     body.innerHTML = `<span class="admin-empty">${escHtml(t('generations.empty'))}</span>`;
     return;
   }
-  // The same row as a checkpoint on the Config side (rollback-*), the marks
-  // in the badge style the host cards use – one look for both sides.
-  const badge = key => ` <span class="host-card-brix-badge">${escHtml(t(key))}</span>`;
+  // The same row as a checkpoint on the Config side (rollback-*). At the end
+  // of every row one box of the same width with exactly one state (Martin,
+  // 2026-11-21, replaces the badges running / booted / next start):
+  //   green  - this state runs. A plain mark while it also starts next; a
+  //            button when another state is chosen for the next start - one
+  //            click and the next start is this one again, yellow is gone.
+  //   yellow - chosen for the next start, not running.
+  //   red    - button "use this state".
   const rows = gens.map(g => {
-    const badges = (g.running ? badge('generations.badgeRunning') : '')
-                 + (g.booted  ? badge('generations.badgeBooted') : '')
-                 + (g.default ? badge('generations.badgeDefault') : '');
     const what = [g.nixos_version && `NixOS ${g.nixos_version}`, g.kernel && `Linux ${g.kernel}`]
       .filter(Boolean).join(' · ');
-    // Running now and chosen for the next start: nothing to switch to.
-    const action = (g.running && g.default) ? '' :
-      `<button class="rollback-btn" data-gen="${g.number}">${escHtml(t('generations.useBtn'))}</button>`;
+    let state;
+    if (g.running && g.default) {
+      state = `<span class="rollback-btn gen-state gen-state-running">${escHtml(t('generations.stateRunning'))}</span>`;
+    } else if (g.running) {
+      state = `<button type="button" class="rollback-btn gen-state gen-state-running" data-gen-back="${g.number}"
+                 title="${escHtml(t('generations.backTitle'))}">${escHtml(t('generations.stateRunning'))}</button>`;
+    } else if (g.default) {
+      state = `<span class="rollback-btn gen-state gen-state-next">${escHtml(t('generations.stateNext'))}</span>`;
+    } else {
+      state = `<button type="button" class="rollback-btn gen-state" data-gen="${g.number}">${escHtml(t('generations.useBtn'))}</button>`;
+    }
     return `<div class="rollback-item">
       <span class="rollback-hash">#${g.number}</span>
-      <span class="rollback-msg" title="${escHtml(what)}">${escHtml(what)}${badges}</span>
+      <span class="rollback-msg" title="${escHtml(what)}">${escHtml(what)}</span>
       <span class="rollback-date">${escHtml(g.date)}</span>
-      ${action}
+      ${state}
     </div>`;
   }).join('');
   // No separate rollback button (Martin, 2026-11-21): the previous state is
-  // the row below "next start", one click like any other.
+  // a row like any other, one click.
   body.innerHTML = `<div class="rollback-list">${rows}</div>`;
   body.querySelectorAll('[data-gen]').forEach(btn =>
     btn.addEventListener('click', () => _useGeneration(Number(btn.dataset.gen))));
+  body.querySelectorAll('[data-gen-back]').forEach(btn =>
+    btn.addEventListener('click', () => _keepRunningGeneration(Number(btn.dataset.genBack),
+                                                                gens.find(g => g.default)?.number)));
+}
+
+/** Set by a switch started here: when the monitor closes, back to the list. */
+let _returnToGenerations = false;
+
+/** The running state starts next again - the chosen one is dropped. Now or
+ *  from the next start is the same here, so only a short question. */
+async function _keepRunningGeneration(number, chosen) {
+  if (!(await nicoConfirm(t('generations.backConfirm', number, chosen ?? '?')))) return;
+  await _startGenerationSwitch(number, 'boot');
 }
 
 /** Ask now / from the next start, then switch in the rebuild monitor. */
@@ -1121,6 +1143,11 @@ async function _useGeneration(number) {
     }));
   });
   if (!mode) return;
+  await _startGenerationSwitch(number, mode);
+}
+
+/** Switch in the rebuild monitor; the list shows again when it closes. */
+async function _startGenerationSwitch(number, mode) {
   const sudoNonce = await acquireSudoNonce();
   if (sudoNonce === null) return;
   const res = await csrfFetch('/api/generations/switch', {
@@ -1138,6 +1165,7 @@ async function _useGeneration(number) {
     showToast(tErr(data?.error) || t('toast.error'), 'error');
     return;
   }
+  _returnToGenerations = true;
   closeAdmin();
   attachRebuildMonitor();
 }

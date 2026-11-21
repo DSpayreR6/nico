@@ -252,6 +252,72 @@ document.addEventListener('click', async e => {
     .forEach(cb => { cb.checked = true; });
 });
 
+// ── NiCo dialogs instead of the browser's own ─────────────────────────────
+// confirm(), alert() and prompt() look like the browser, not like NiCo, and
+// differ per browser (VM test 2026-11-21). One small dialog for all of them,
+// built like every other dynamic overlay (.overlay > .dialog). Closed by its
+// buttons only, never by a click beside it; Enter confirms, Escape cancels.
+
+/** Text with \n\n as paragraphs and \n as line breaks, escaped. */
+function _dialogText(text) {
+  return String(text ?? '').split(/\n{2,}/)
+    .map(p => `<p class="dialog-info">${escHtml(p).replace(/\n/g, '<br>')}</p>`).join('');
+}
+
+/**
+ * The one dialog behind nicoConfirm/nicoAlert/nicoPrompt. Resolves with
+ * true/false (confirm, alert), the entered text or null (prompt).
+ */
+function _nicoDialog({ title = '', text = '', okLabel, cancel = true, danger = false,
+                       input = null }) {
+  return new Promise(resolve => {
+    const overlay = document.createElement('div');
+    overlay.className = 'overlay';
+    overlay.innerHTML = `
+      <div class="dialog">
+        ${title ? `<h2 class="dialog-title">${escHtml(title)}</h2>` : ''}
+        ${_dialogText(text)}
+        ${input !== null ? `<input type="text" class="nico-dialog-input">` : ''}
+        <div class="dialog-actions">
+          ${cancel ? `<button type="button" class="btn-secondary" data-nd="cancel">${escHtml(t('dialog.cancel'))}</button>` : ''}
+          <button type="button" class="${danger ? 'action-btn btn-red' : 'btn-primary'}" data-nd="ok">${escHtml(okLabel || t('dialog.ok'))}</button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+    const field = overlay.querySelector('.nico-dialog-input');
+    if (field) field.value = input;
+    const done = ok => {
+      document.removeEventListener('keydown', onKey, true);
+      overlay.remove();
+      resolve(input !== null ? (ok ? field.value : null) : ok);
+    };
+    const onKey = e => {
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); done(false); }
+      else if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); done(true); }
+    };
+    document.addEventListener('keydown', onKey, true);
+    overlay.querySelectorAll('[data-nd]').forEach(b =>
+      b.addEventListener('click', () => done(b.dataset.nd === 'ok')));
+    (field || overlay.querySelector('[data-nd="ok"]')).focus();
+    field?.select();
+  });
+}
+
+/** Yes/no question. Resolves true on OK. `danger` paints OK red. */
+function nicoConfirm(text, { title = '', okLabel = '', danger = false } = {}) {
+  return _nicoDialog({ title, text, okLabel, danger });
+}
+
+/** A message with one OK button. */
+function nicoAlert(text, { title = '' } = {}) {
+  return _nicoDialog({ title, text, cancel: false });
+}
+
+/** One line of text. Resolves with it, or null when cancelled. */
+function nicoPrompt(text, value = '', { title = '' } = {}) {
+  return _nicoDialog({ title, text, input: String(value ?? '') });
+}
+
 async function loadLang(code) {
   try {
     const res = await fetch(`/static/lang/${code}.json`);

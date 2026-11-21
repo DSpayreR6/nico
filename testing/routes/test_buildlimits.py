@@ -111,12 +111,16 @@ m = re.search(r'name="csrf-token" content="([^"]+)"', c.get("/").get_data(as_tex
 tok = m.group(1) if m else ""
 H = {"X-CSRF-Token": tok, "Content-Type": "application/json"}
 
-# Standard seit 2026-11-13: an, solange niemand den Schalter umgelegt hat.
-# Die settings.json dieses Tests enthält den Schlüssel nicht.
-check("abgesicherter Rebuild ist ohne gespeicherten Wert an",
-      config_manager.get_app_settings().get("rebuild_safe") is True)
+# Standard seit 2026-11-21 (VM-Test): aus, solange niemand den Schalter
+# umlegt – der Vorschlag liest den freien Arbeitsspeicher, und das erst nach
+# der Wahl des Nutzers. Die settings.json dieses Tests enthält den Schlüssel nicht.
+check("abgesicherter Rebuild ist ohne gespeicherten Wert aus",
+      config_manager.get_app_settings().get("rebuild_safe") is False)
 check("die Oberfläche bekommt das auch so",
-      (c.get("/api/app/settings").get_json() or {}).get("rebuild_safe") is True)
+      (c.get("/api/app/settings").get_json() or {}).get("rebuild_safe") is False)
+c.patch("/api/app/settings", headers=H, data=json.dumps({"rebuild_safe": True}))
+check("eingeschaltet bleibt eingeschaltet",
+      config_manager.get_app_settings().get("rebuild_safe") is True)
 c.patch("/api/app/settings", headers=H, data=json.dumps({"rebuild_safe": False}))
 check("ausgeschaltet bleibt ausgeschaltet",
       config_manager.get_app_settings().get("rebuild_safe") is False)

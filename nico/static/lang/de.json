@@ -1470,9 +1470,6 @@
   "generations.hint": "Jeder Rebuild legt einen Systemstand an. Hier wählst du, welcher läuft – jetzt oder ab dem nächsten Start. Die Config-Dateien bleiben dabei unverändert; der nächste Rebuild baut wieder aus ihnen.",
   "generations.off": "NiCo darf die Systemstände dieses Rechners nicht lesen.",
   "generations.empty": "Keine Systemstände gefunden.",
-  "generations.badgeRunning": "läuft jetzt",
-  "generations.badgeBooted": "gestartet",
-  "generations.badgeDefault": "nächster Start",
   "generations.useBtn": "Diesen Systemstand verwenden",
   "generations.useTitle": "Systemstand #{0} verwenden?",
   "generations.useInfo": "„Jetzt umstellen“ schaltet sofort um und startet künftig so. „Ab dem nächsten Start“ ändert am laufenden System nichts. Deine Config-Dateien bleiben unverändert – der nächste Rebuild baut wieder aus ihnen. Wer dauerhaft zurück will, stellt zusätzlich auf der Seite Config einen Sicherungspunkt wieder her.",
@@ -1481,5 +1478,11 @@
   "generations.doneSwitch": "Systemstand #{0} läuft jetzt und startet künftig.",
   "generations.doneBoot": "Systemstand #{0} startet ab dem nächsten Start.",
   "errors.ERR_GENERATION_UNKNOWN": "Diesen Systemstand gibt es nicht (mehr).",
-  "errors.ERR_GENERATION_TOOL": "nix-env oder switch-to-configuration wurde nicht gefunden."
+  "errors.ERR_GENERATION_TOOL": "nix-env oder switch-to-configuration wurde nicht gefunden.",
+  "dialog.ok": "OK",
+  "dialog.cancel": "Abbrechen",
+  "generations.stateRunning": "Dieser Systemstand läuft",
+  "generations.stateNext": "Wird beim nächsten Start verwendet",
+  "generations.backTitle": "Beim nächsten Start wieder diesen Systemstand verwenden",
+  "generations.backConfirm": "Beim nächsten Start wieder den laufenden Systemstand #{0} verwenden? Die Wahl von #{1} entfällt."
 }

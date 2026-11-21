@@ -523,7 +523,7 @@ const Sidebar = (() => {
 
   async function _createTreeEntry(parentPath, type) {
     const label = type === 'dir' ? t('sidebar.newDirPrompt') : t('sidebar.newFilePrompt');
-    const value = window.prompt(label, type === 'dir' ? '' : 'default.nix');
+    const value = await nicoPrompt(label, type === 'dir' ? '' : 'default.nix');
     if (!value) return;
 
     try {
@@ -552,7 +552,7 @@ const Sidebar = (() => {
   }
 
   async function _renameTreeEntry(entry) {
-    const label = window.prompt(t('sidebar.renamePrompt'), entry.name);
+    const label = await nicoPrompt(t('sidebar.renamePrompt'), entry.name);
     if (!label || label.trim() === entry.name) return;
 
     try {
@@ -580,7 +580,7 @@ const Sidebar = (() => {
   }
 
   async function _deleteTreeEntry(entry) {
-    if (!confirm(t('sidebar.deleteConfirm').replace('{name}', entry.name))) return;
+    if (!(await nicoConfirm(t('sidebar.deleteConfirm').replace('{name}', entry.name), { danger: true }))) return;
 
     try {
       const res = await csrfFetch('/api/files/delete', {
@@ -1683,7 +1683,7 @@ const Sidebar = (() => {
       container.querySelectorAll('.fh-remove-btn').forEach(btn => {
         btn.addEventListener('click', async () => {
           const name = btn.dataset.host;
-          if (!confirm(t('fl.hosts.deleteConfirm').replace('{name}', name))) return;
+          if (!(await nicoConfirm(t('fl.hosts.deleteConfirm').replace('{name}', name), { danger: true }))) return;
           const r = await csrfFetch('/api/flake/host/delete', {
             method: 'POST', headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({ name }),
@@ -2063,7 +2063,7 @@ const Sidebar = (() => {
     const fileName = path.split('/').pop();
     // hardware-configuration.nix: Bestätigungsdialog
     if (fileName === 'hardware-configuration.nix') {
-      if (!confirm(t('sidebar.hwSaveConfirm'))) return;
+      if (!(await nicoConfirm(t('sidebar.hwSaveConfirm')))) return;
     }
 
     try {

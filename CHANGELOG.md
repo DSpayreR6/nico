@@ -5,8 +5,8 @@
 ### New Features
 
 - NiCo reads only the config directory unless you allow more: three switches under Settings → NiCo → *Read this machine* (Validator checks of users, groups and file systems; hardware check and search; system generations), all off by default, each with an *Allow* button where it is needed. Without them the Validator says once which checks it left out, the hardware check stays silent, and NiCo looks into `/etc/nixos` only after a click on *Look in /etc/nixos*. The safe rebuild reads the free memory only once it is chosen
-- Time machine with two sides, *System | Config*: the System side lists this machine's system states (generations) with what is running now, what was booted and what comes at the next start; *Use this system state* switches to any of them now or from the next start, in the rebuild monitor. The config files are not touched
-
+- Time machine with two sides, *System | Config*: the System side lists this machine's system states (generations); at the end of each row one box says what it is – green *This system state is running*, yellow *Used at the next start*, or the button *Use this system state*, which switches now or from the next start, in the rebuild monitor. With another state chosen for the next start, the green box is a button that takes the choice back. After the switch NiCo returns to the list. The config files are not touched
+- First-run import: *Import from ZIP* next to *Look in /etc/nixos*
 - Text mode: a bracket without partner is shown inverted, the caret on or next to a bracket shows its partner; after opening or saving a file Nix cannot read, the error line is tinted and the character Nix stopped at is marked
 
 ### Bug Fixes
@@ -14,6 +14,10 @@
 - Validator: user, group and stateVersion checks read only active Nix code – a commented-out password or `wheel` no longer counts as set, `users = { mutableUsers = false; }` and `lib.mkForce false` are recognized, `uid = 1234 + 1` is no longer read as 1234, and modules written as functions (e.g. in a flake's module list) are checked too
 - Switching to a flake and adding a flake host put every file back when the last write fails (e.g. disk full) instead of leaving a half-changed config; the message says whether everything was restored
 - Restructuring a file no longer cuts a line at a `#` inside a nested string such as `"rgb(${lib.removePrefix "#" color})"` – the result was invalid Nix; NiCo's check before writing now also refuses any result Nix cannot read
+- Validator: a Nix-Brick holding only comments (such as `imported-notes` after an import) is no longer reported as something the panel could take over
+- The safe rebuild is off by default again (a saved choice stays as it is): its suggestion reads the free memory, which NiCo does only once you choose it
+- Questions and messages (restore a checkpoint, create a directory, delete a file or host, quit, …) are NiCo dialogs instead of the browser's own
+- The Validator result uses the full height of the window
 - Time machine: bringing back a checkpoint is called *Restore* in every language, no longer *Reset* or *Rollback* – in Nix, rollback means returning to an earlier system generation, which is a different thing
 
 ## 0.20.0 (2026-11-20)

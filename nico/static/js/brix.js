@@ -114,7 +114,7 @@ async function insertBrix() {
 
 // ── Nix-Brick löschen ───────────────────────────────────────────────────────
 async function confirmDeleteBrix(name, file = 'configuration.nix') {
-  if (!confirm(t('brix.confirmDelete', name))) {
+  if (!(await nicoConfirm(t('brix.confirmDelete', name), { danger: true }))) {
     return;
   }
   const res  = await csrfFetch(`/api/brick/${encodeURIComponent(name)}?file=${encodeURIComponent(file)}`, { method: 'DELETE' });

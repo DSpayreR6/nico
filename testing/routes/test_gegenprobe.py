@@ -280,6 +280,23 @@ check("Punkt vor }: weiter abbildbar (Fall A, Umbauen lässt ihn weg)",
       not importer.config_unmappable(body.rstrip()[:-1] + ".\n}\n"))
 check("Kommentar nach }: abbildbar", not importer.config_unmappable(body.rstrip() + "\n# ende\n"))
 
+print("\n16. brix_redundant: reine Kommentar-Bricks (VM-Test 2026-11-21)")
+from nico import brix as _brix  # noqa: E402
+def redundant(inner):
+    content = mod("  # <brick: MISC / #1 notes>\n" + inner + "  # </brick: notes>\n")
+    return validator._brix_redundant_in(content, render, importer, fidelity,
+                                        _brix.extract_brick_blocks)
+notes = ("  # Enable the X11 windowing system.\n"
+         "  # services.xserver.enable = true;\n"
+         "  # services.printing.enable = true;\n")
+check("nur Kommentare (wie imported-notes): kein Fund", not redundant(notes),
+      [f.params for f in redundant(notes)])
+check("Blockkommentar allein: kein Fund", not redundant("  /* services.printing.enable = true; */\n"))
+check("echter Panel-Brick meldet weiter",
+      bool(redundant("  services.printing.enable = true;\n")))
+check("Panel-Brick mit Kommentar meldet weiter",
+      bool(redundant("  # Drucker\n  services.printing.enable = true;\n")))
+
 print()
 if fails:
     print(f"{len(fails)} FEHLER:", *fails, sep="\n  ")

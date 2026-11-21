@@ -2708,14 +2708,19 @@ def _brix_redundant_in(content, render, _imp, _fid, extract_brick_blocks) -> lis
         # Strip brix/brick markers to get bare Nix content
         body = re.sub(r'^\s*#\s*</?br(?:ix|ick):[^>]*>\s*$', '', text,
                       flags=re.MULTILINE).strip()
-        if not body:
+        # Comments only (imported-notes, commented-out options): nothing the
+        # panel could take over. Without this the panel "writes exactly" an
+        # empty body and the notice appeared (VM test 2026-11-21).
+        if not body or not _imp._strip_nix_comments(body).strip():
             continue
 
         # Wrap in a minimal NixOS module so parse_config + tree-sitter work
         wrapped = f"{{ pkgs, config, lib, ... }}:\n{{\n{body}\n}}"
         try:
             recognized = _imp.parse_config(wrapped)
-            if not recognized:
+            # The function arguments come from the wrapper above, not from
+            # the brick – they alone are no recognized option.
+            if not {k for k in recognized if k != "nix_args"}:
                 continue
             # Exactly what the panel would write – same values, nothing more,
             # nothing less (fidelity.panel_writes_exactly).

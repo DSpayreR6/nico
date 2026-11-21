@@ -376,6 +376,16 @@ function bindUI() {
   on('import-skip-btn', 'click', () => {
     document.getElementById('import-overlay').classList.add('hidden');
   });
+  // From a ZIP (VM test 2026-11-21): the one ZIP import NiCo has, in the
+  // admin panel. Same click, so the browser still opens the file picker.
+  on('import-zip-btn', 'click', () => {
+    document.getElementById('import-overlay').classList.add('hidden');
+    openAdmin();
+    _switchAdminTab('administration');
+    const zipBtn = document.getElementById('admin-zip-import-btn');
+    zipBtn?.scrollIntoView({ block: 'center' });
+    zipBtn?.click();
+  });
 
   // Form → live preview + section visibility update
   on('config-form', 'input',  schedulePreviewUpdate);
@@ -688,7 +698,7 @@ function bindUI() {
 
   // Quit
   on('quit-btn', 'click', async () => {
-    if (!confirm(t('quit.confirm'))) return;
+    if (!(await nicoConfirm(t('quit.confirm')))) return;
     await _autoSave();
     await Sidebar.flakeSave();
 
@@ -704,7 +714,7 @@ function bindUI() {
             const pushRes  = await csrfFetch('/api/git/commit-push', { method: 'POST' });
             const pushData = await pushRes.json();
             if (!pushData.success) {
-              alert(t('git.closePrompt.error', tErr(pushData.message) || ''));
+              await nicoAlert(t('git.closePrompt.error', tErr(pushData.message) || ''));
             }
           }
         }

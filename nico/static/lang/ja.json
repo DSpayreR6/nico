@@ -1402,9 +1402,6 @@
   "generations.hint": "rebuild のたびにシステム状態が作成されます。ここで、どれを動かすかを選びます（今すぐ、または次回の起動から）。設定ファイルは変わらず、次の rebuild は再びそれらからビルドします。",
   "generations.off": "NiCo はこのコンピューターのシステム状態の読み取りを許可されていません。",
   "generations.empty": "システム状態が見つかりません。",
-  "generations.badgeRunning": "実行中",
-  "generations.badgeBooted": "起動時",
-  "generations.badgeDefault": "次回起動",
   "generations.useBtn": "このシステム状態を使う",
   "generations.useTitle": "システム状態 #{0} を使いますか？",
   "generations.useInfo": "「今すぐ切り替え」はすぐに切り替え、以後もこの状態で起動します。「次回の起動から」は実行中のシステムを変えません。設定ファイルは変わらず、次の rebuild は再びそれらからビルドします。恒久的に戻すには、Config 側でチェックポイントも復元してください。",
@@ -1413,5 +1410,11 @@
   "generations.doneSwitch": "システム状態 #{0} が実行中で、今後もこの状態で起動します。",
   "generations.doneBoot": "システム状態 #{0} は次回の起動から使われます。",
   "errors.ERR_GENERATION_UNKNOWN": "このシステム状態は存在しません（もうありません）。",
-  "errors.ERR_GENERATION_TOOL": "nix-env または switch-to-configuration が見つかりません。"
+  "errors.ERR_GENERATION_TOOL": "nix-env または switch-to-configuration が見つかりません。",
+  "dialog.ok": "OK",
+  "dialog.cancel": "キャンセル",
+  "generations.stateRunning": "このシステム状態が実行中",
+  "generations.stateNext": "次回の起動で使用",
+  "generations.backTitle": "次回の起動で再びこのシステム状態を使用",
+  "generations.backConfirm": "次回の起動で実行中のシステム状態 #{0} を再び使用しますか？ #{1} の選択は取り消されます。"
 }

@@ -209,8 +209,10 @@ try:
     check("Brick steht in der Datei", lambda: NAME in disk())
     n_before = js("return document.querySelectorAll('#packages-list .pkg-item').length")
     n_off = js("return document.querySelectorAll('#packages-list .pkg-item.disabled').length")
-    js("window.confirm = () => true;")
     js("""[...arguments[0].querySelectorAll('.brix-menu-item')][0].click();""", brick())
+    time.sleep(0.5)
+    # The question is a NiCo dialog since 2026-11-21, not the browser's confirm().
+    js("document.querySelector('.overlay [data-nd=\"ok\"]').click();")
     time.sleep(3)
     check("Brick ist aus der Vorschau", lambda: NAME not in preview())
     check("Brick ist aus der Datei", lambda: NAME not in disk())
