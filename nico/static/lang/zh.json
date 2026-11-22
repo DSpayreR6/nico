@@ -1421,5 +1421,9 @@
   "selfupdate.confirm": "现在更新 NiCo？将从 {0} 获取最新版本。你的配置保持不变；重启 NiCo 后使用新版本。",
   "selfupdate.done": "NiCo 已更新。退出 NiCo 并重新启动以使用新版本。",
   "errors.ERR_NOT_INSTALLED": "NiCo 未通过 nix profile 安装——这里没有可更新的内容。",
-  "errors.ERR_NIX_MISSING": "未找到 nix 命令。"
+  "errors.ERR_NIX_MISSING": "未找到 nix 命令。",
+  "importMode.title": "你想如何编辑此配置？",
+  "importMode.info": "在文本模式下，NiCo 像编辑器一样工作：导入只复制文件，不会修改任何文件。使用面板时，NiCo 会为表单重建 configuration.nix 和 flake.nix；表单不认识的内容会变成 Nix-Brix。之后你可以把任意单个文件切换到面板——NiCo 会在重建前询问。之后可在 设置 →“默认以文本模式打开文件”中更改此选择。",
+  "importMode.raw": "以文本模式",
+  "importMode.panel": "使用面板"
 }

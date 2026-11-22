@@ -351,8 +351,10 @@ function _waitForOverlayHidden(id) {
 }
 
 async function applyImport(confirmed = false) {
+  if (!confirmed && !(await askImportEditMode())) return;
   try {
-    const body = confirmed ? { confirmed: true } : {};
+    const body = confirmed ? { confirmed: true, edit_mode: _importEditMode }
+                           : { edit_mode: _importEditMode };
     const res  = await csrfFetch('/api/import/apply', {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -481,6 +483,7 @@ function initImportManual() {
   // Schritt 2: Tatsächlich importieren
   on('import-manual-confirm-btn', 'click', async () => {
     if (!_checkedConfigPath) return;
+    if (!(await askImportEditMode())) return;
     const resultEl = document.getElementById('import-manual-result');
     document.getElementById('import-manual-found').classList.add('hidden');
     resultEl.textContent = '…';
@@ -489,7 +492,7 @@ function initImportManual() {
     const res  = await csrfFetch('/api/import/run', {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ config_path: _checkedConfigPath }),
+      body:    JSON.stringify({ config_path: _checkedConfigPath, edit_mode: _importEditMode }),
     });
     const data = await res.json();
 
@@ -521,7 +524,8 @@ function initImportManual() {
     const res  = await csrfFetch('/api/import/run', {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ config_path: _checkedConfigPath, confirmed: true }),
+      body:    JSON.stringify({ config_path: _checkedConfigPath, confirmed: true,
+                                edit_mode: _importEditMode }),
     });
     const data = await res.json();
     if (!res.ok || data.error) {

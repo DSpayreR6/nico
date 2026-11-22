@@ -1489,5 +1489,9 @@
   "selfupdate.confirm": "NiCo jetzt aktualisieren? Geholt wird der neueste Stand von {0}. Deine Config bleibt unverändert; die neue Version gilt nach einem Neustart von NiCo.",
   "selfupdate.done": "NiCo ist aktualisiert. Beende NiCo und starte es neu, um die neue Version zu verwenden.",
   "errors.ERR_NOT_INSTALLED": "NiCo ist nicht über nix profile installiert – hier gibt es nichts zu aktualisieren.",
-  "errors.ERR_NIX_MISSING": "Der Befehl nix wurde nicht gefunden."
+  "errors.ERR_NIX_MISSING": "Der Befehl nix wurde nicht gefunden.",
+  "importMode.title": "Wie willst du diese Config bearbeiten?",
+  "importMode.info": "Im Textmodus arbeitet NiCo wie ein Editor: Der Import kopiert die Dateien nur, keine wird verändert. Mit dem Panel baut NiCo configuration.nix und flake.nix für das Formular um; was das Formular nicht kennt, wird zu Nix-Brix. Später kannst du jede Datei einzeln aufs Panel umschalten – NiCo fragt dann vor dem Umbau. Die Wahl steht danach unter Einstellungen → „Dateien standardmäßig im Textmodus öffnen“.",
+  "importMode.raw": "Im Textmodus",
+  "importMode.panel": "Mit dem Panel"
 }

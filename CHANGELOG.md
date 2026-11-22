@@ -5,6 +5,13 @@
 ### New Features
 
 - *Update NiCo* in the help menu: for a NiCo installed with `nix profile`, runs `nix profile upgrade --refresh` in the rebuild monitor (same branch it was installed from); the config is not touched, the new version is used after a restart. Hidden when NiCo was started with `nix run` or from a git checkout
+- Every import first asks how you want to edit the config: *In text mode* – NiCo works like an editor, the import only copies and changes no file, not even a header line – or *With the panel* as before; the answer becomes the setting *Open files in text mode by default*
+
+### Bug Fixes
+
+- Import: `configuration.nix` and `flake.nix` were rebuilt for the panel even when you then chose *Open in text mode* – the import did it before asking
+- With *Open files in text mode by default* on, a file switched to the panel fell back to text mode after its first panel save, and a background save could still rewrite a file shown in text mode; panel files now carry their mode, and files without a mark follow the setting everywhere
+- Switching a file without a NiCo header line to the panel (or to text mode against the setting) silently did nothing
 
 ## 0.21.0 (2026-11-21)
 

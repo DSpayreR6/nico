@@ -162,6 +162,9 @@ document.addEventListener('DOMContentLoaded', () => {
  * used to forget something else.
  */
 async function refreshAfterImport() {
+  // The answer to askImportEditMode() is the config default from now on;
+  // the sidebar decides by it which files open in text mode.
+  if (_importEditMode) _panelDefault = _importEditMode;
   await categorizeFiles();
   await loadConfig();
   await Sidebar.loadTree();
@@ -173,6 +176,40 @@ async function refreshAfterImport() {
   // so the git buttons are stale either way.
   if (_gitSync || _gitStatusOnly) checkGitStatus();
   if (_gitSync) checkGitRemoteStatus();
+}
+
+// ── How to edit an imported config (Martin, 2026-11-22) ──────────────────
+// Asked once per import, on every import path, before anything is written.
+// Text mode: NiCo works like an editor, the import only copies. Panel:
+// configuration.nix and flake.nix are rebuilt for the form, as before. The
+// answer is sent as `edit_mode` and becomes `panel_default` in config.json.
+// A second request of the same import (after the backup question) sends the
+// remembered answer instead of asking again.
+
+let _importEditMode = null;
+
+/** Resolves 'r', 'p', or null for cancel. Closed by its buttons only. */
+function askImportEditMode() {
+  return new Promise(resolve => {
+    const overlay = document.createElement('div');
+    overlay.className = 'overlay';
+    overlay.innerHTML = `
+      <div class="dialog">
+        <h2 class="dialog-title">${escHtml(t('importMode.title'))}</h2>
+        <p class="dialog-info">${escHtml(t('importMode.info'))}</p>
+        <div class="dialog-actions">
+          <button type="button" class="btn-secondary" data-mode="">${escHtml(t('unsaved.cancel'))}</button>
+          <button type="button" class="btn-secondary" data-mode="r">${escHtml(t('importMode.raw'))}</button>
+          <button type="button" class="btn-primary" data-mode="p">${escHtml(t('importMode.panel'))}</button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+    overlay.querySelectorAll('[data-mode]').forEach(b => b.addEventListener('click', () => {
+      overlay.remove();
+      _importEditMode = b.dataset.mode || null;
+      resolve(_importEditMode);
+    }));
+  });
 }
 
 // ── Before the panel restructures a file (Fall A) ────────────────────────
@@ -592,6 +629,7 @@ function _showZipInvalid(msg) {
 
 async function _doZipApply(confirmed) {
   if (!_pendingZipFile) return;
+  if (!confirmed && !(await askImportEditMode())) return;
 
   document.getElementById('admin-zip-confirm').classList.add('hidden');
   document.getElementById('admin-zip-backup-confirm').classList.add('hidden');
@@ -602,6 +640,7 @@ async function _doZipApply(confirmed) {
   const fd = new FormData();
   fd.append('file', _pendingZipFile);
   fd.append('confirmed', confirmed ? 'true' : 'false');
+  fd.append('edit_mode', _importEditMode || '');
 
   let res, data;
   try {
@@ -754,9 +793,13 @@ async function runAdminImport() {
 }
 
 async function _doAdminImport(configPath, confirmed, resultEl) {
+  if (!confirmed && !(await askImportEditMode())) {
+    resultEl.className = 'import-result hidden';
+    return;
+  }
   const body = confirmed
-    ? { config_path: configPath, confirmed: true }
-    : { config_path: configPath };
+    ? { config_path: configPath, confirmed: true, edit_mode: _importEditMode }
+    : { config_path: configPath, edit_mode: _importEditMode };
 
   const res  = await csrfFetch('/api/import/run', {
     method:  'POST',

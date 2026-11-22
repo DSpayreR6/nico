@@ -157,7 +157,7 @@ def set_panel_mode(content: str, mode: str) -> str:
 
 
 def file_in_raw_mode(path: Path) -> bool:
-    """True if the file on disk carries the raw-mode flag (#r).
+    """True if the file on disk is in raw mode (text mode): flag #r.
 
     Every panel write path asks this before regenerating a file. A file in
     raw mode belongs to the raw editor: a background form save regenerated it
@@ -165,11 +165,38 @@ def file_in_raw_mode(path: Path) -> bool:
     stale form values; the next raw save then hit ERR_MANAGED_FILE
     (measured 2026-11-17). Skipping is reported as success, so rebuild and
     dry-run, which save the form first, still run.
+
+    Without a flag the config default decides (`panel_default` in
+    config.json) – the same rule as the UI (sidebar.js). Until 2026-11-22 a
+    file without flag counted as panel here while the UI showed it in text
+    mode; an import in text mode leaves every file without a NiCo line, so
+    the default is all that protects it from the panel.
     """
     try:
-        return get_panel_mode(path.read_text(encoding="utf-8")) == "r"
+        content = path.read_text(encoding="utf-8")
     except OSError:
         return False
+    flag = get_panel_mode(content)
+    if flag:
+        return flag == "r"
+    nixos_dir = config_manager.get_nixos_config_dir()
+    if not nixos_dir:
+        return False
+    try:
+        path.resolve().relative_to(Path(nixos_dir).resolve())
+    except (OSError, ValueError):
+        return False
+    return panel_default(nixos_dir) == "r"
+
+
+def panel_default(nixos_dir: str) -> str:
+    """'r' when files without flag open in text mode, else 'p'."""
+    return "r" if config_manager.load_config_settings(nixos_dir).get("panel_default") == "r" else "p"
+
+
+def effective_panel_mode(nixos_dir: str, content: str) -> str:
+    """The flag of the file, else the config default."""
+    return get_panel_mode(content) or panel_default(nixos_dir)
 
 
 def check_brix_integrity(content: str) -> bool:

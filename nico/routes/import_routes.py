@@ -12,9 +12,32 @@ from .. import atomic, config_manager, git_manager, hardware, importer
 from ..generator import check_version_hash as _check_version_hash
 from ..core import (
     classify_filename as _classify_filename,
+    effective_panel_mode as _effective_panel_mode,
     get_nico_type as _get_nico_type,
     set_type_in_content as _set_type_in_content,
 )
+
+
+def _take_edit_mode(nixos_dir: str, value) -> bool:
+    """Store the answer to "how do you want to edit this config?" and
+    return True for text mode (Martin, 2026-11-22).
+
+    Text mode: NiCo works like an editor – the import only copies, no file
+    is restructured or stamped, and files without a NiCo line open in text
+    mode (`panel_default` "r" in config.json, the switch under Settings).
+    Panel: as before – configuration.nix and flake.nix are rebuilt for the
+    form. No answer (older callers, tests): the setting stays as it is and
+    the import restructures as before.
+    """
+    if value not in ("r", "p"):
+        return False
+    try:
+        settings = config_manager.load_config_settings(nixos_dir)
+        settings["panel_default"] = value
+        config_manager.save_config_settings(nixos_dir, settings)
+    except OSError:
+        pass
+    return value == "r"
 
 
 def _stash_hardware(nixos_dir: str) -> None:
@@ -101,6 +124,7 @@ def register(app, ctx):
 
         zfile     = request.files.get("file")
         confirmed = request.form.get("confirmed", "false").lower() == "true"
+        edit_mode = request.form.get("edit_mode")
 
         if not zfile:
             return jsonify({"error": "ERR_NO_FILE"}), 400
@@ -156,6 +180,12 @@ def register(app, ctx):
             files_copied = importer.replace_nix_tree(dst, incoming)
         except OSError as exc:
             return _import_failed(exc)
+
+        if _take_edit_mode(nixos_dir, edit_mode):
+            from .hardware import decision_json
+            return jsonify({"success": True, "recognized": {}, "has_brix": False,
+                            "files_copied": files_copied, "edit_mode": "r",
+                            "hardware": decision_json(nixos_dir)})
 
         # configuration.nix parsen
         cfg_path = dst / "configuration.nix"
@@ -227,6 +257,12 @@ def register(app, ctx):
 
             try:
                 content = nix_file.read_text(encoding="utf-8")
+                # Text mode (flag #r, or no flag and the config default):
+                # the file belongs to the editor and stays byte for byte –
+                # a type stamp is a line NiCo adds (Martin, 2026-11-22).
+                if _effective_panel_mode(nixos_dir, content) == "r":
+                    done.append({"file": str(rel), "type": ftype, "changed": False})
+                    continue
                 # flake.nix und filename-basierte home.nix: nur stempeln wenn bereits
                 # von NiCo verwaltet (nico-version Header). Externe Dateien werden nicht
                 # angefasst – sonst würde write_files sie als NiCo-managed betrachten.
@@ -352,6 +388,12 @@ def register(app, ctx):
         else:
             return jsonify({"error": "ERR_NO_PATH"}), 400
 
+        if _take_edit_mode(nixos_dir, body.get("edit_mode")):
+            from .hardware import decision_json
+            return jsonify({"success": True, "recognized": {}, "has_brix": False,
+                            "files_copied": files_copied, "edit_mode": "r",
+                            "hardware": decision_json(nixos_dir)})
+
         # ── Common: merge into nico.json ─────────────────────────────────────
         data = _apply_import_result(nixos_dir, recognized, rest_brix, content)
 
@@ -470,6 +512,12 @@ def register(app, ctx):
             files_copied = importer.copy_nix_tree(importer.ETC_NIXOS, nixos_dir)
         except OSError as exc:
             return _import_failed(exc)
+
+        if _take_edit_mode(nixos_dir, body.get("edit_mode")):
+            from .hardware import decision_json
+            return jsonify({"success": True, "recognized": [], "has_brix": False,
+                            "files_copied": files_copied, "edit_mode": "r",
+                            "hardware": decision_json(nixos_dir)})
 
         _apply_import_result(nixos_dir, recognized, rest_brix, content)
 

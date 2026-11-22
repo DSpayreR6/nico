@@ -1421,5 +1421,9 @@
   "selfupdate.confirm": "Mettre à jour NiCo maintenant ? La dernière version est récupérée depuis {0}. Ta configuration reste inchangée ; la nouvelle version est utilisée après un redémarrage de NiCo.",
   "selfupdate.done": "NiCo est à jour. Quitte NiCo et relance-le pour utiliser la nouvelle version.",
   "errors.ERR_NOT_INSTALLED": "NiCo n'est pas installé avec nix profile – il n'y a rien à mettre à jour ici.",
-  "errors.ERR_NIX_MISSING": "La commande nix est introuvable."
+  "errors.ERR_NIX_MISSING": "La commande nix est introuvable.",
+  "importMode.title": "Comment veux-tu modifier cette configuration ?",
+  "importMode.info": "En mode texte, NiCo fonctionne comme un éditeur : l'import copie seulement les fichiers, aucun n'est modifié. Avec le panneau, NiCo reconstruit configuration.nix et flake.nix pour le formulaire ; ce que le formulaire ne connaît pas devient des Nix-Brix. Plus tard, tu peux passer chaque fichier au panneau séparément – NiCo demande avant de le reconstruire. Ensuite, le choix se trouve dans Paramètres → « Ouvrir les fichiers en mode texte par défaut ».",
+  "importMode.raw": "En mode texte",
+  "importMode.panel": "Avec le panneau"
 }

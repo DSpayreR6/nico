@@ -24,6 +24,8 @@ from ..core import (
     set_type_in_content as _set_type_in_content,
     check_brix_integrity as _check_brix_integrity,
     get_panel_mode as _get_panel_mode,
+    effective_panel_mode as _effective_panel_mode,
+    panel_default as _panel_default,
     set_panel_mode as _set_panel_mode,
     outside_status as _outside_status,
     panel_changes as _panel_changes,
@@ -651,7 +653,7 @@ def register(app, ctx):
                         existing = target.read_text(encoding='utf-8')
                     except OSError:
                         existing = ''
-                    if _get_panel_mode(existing) != 'r' and \
+                    if _effective_panel_mode(nixos_dir, existing) != 'r' and \
                             not _file_unmappable(nixos_dir, rel, existing):
                         return jsonify({"error": "ERR_MANAGED_FILE"}), 400
 
@@ -779,7 +781,22 @@ def register(app, ctx):
             if mode == 'p' and _restructure_unfaithful(nixos_dir, rel, base):
                 return jsonify({"error": "ERR_NOT_MAPPABLE", "file": rel}), 400
 
-            updated = _set_panel_mode(base, mode)
+            if _get_nico_type(base) is None and mode == _panel_default(nixos_dir):
+                # No NiCo line and the config default is this mode already:
+                # nothing to mark, the file stays as it is (text mode keeps
+                # a foreign file byte for byte, Martin 2026-11-22).
+                updated = base
+            elif _get_nico_type(base) is None:
+                # The flag lives in the NiCo line; without one there was
+                # nowhere to put it and the switch silently did nothing –
+                # the file stayed in the default mode (2026-11-22).
+                hm_dir = (config_manager.load_config_settings(nixos_dir).get("hm_dir", "home")
+                          .strip() or "home")
+                is_hm = Path(rel).parts[:1] == (hm_dir,) and len(Path(rel).parts) >= 2
+                stamp = "hm" if is_hm else (_classify_filename(target.name) or "nd")
+                updated = _set_panel_mode(_set_type_in_content(base, stamp), mode)
+            else:
+                updated = _set_panel_mode(base, mode)
 
             # Recompute hash so change-detection stays consistent
             ftype = _get_nico_type(updated)

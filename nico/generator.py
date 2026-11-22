@@ -76,7 +76,13 @@ def _add_version_hash(content: str, ftype: str = "") -> str:
     # FILE_FORMAT here locked a 0.14.0 out of every file a newer NiCo had
     # saved, and disagreed with core.set_type_in_content, which stamped the
     # same file `#f2` after the next brick action (revision 2026-11-10, B42).
-    lines.insert(1, f"# nico-version: {prefix}{h}#f{detect_content_format(content)}")
+    # `#p`: only the panel generates files, so what this writes is a panel
+    # file. Without the flag the file fell back to the config default, and
+    # with "text mode" as default a file the user had just switched to the
+    # panel showed up in text mode again after its first panel save
+    # (Martin, 2026-11-22). Raw-mode files are never regenerated, their `#r`
+    # stays.
+    lines.insert(1, f"# nico-version: {prefix}{h}#p#f{detect_content_format(content)}")
     return "\n".join(lines)
 
 
