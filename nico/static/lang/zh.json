@@ -1425,5 +1425,10 @@
   "importMode.title": "你想如何编辑此配置？",
   "importMode.info": "在文本模式下，NiCo 像编辑器一样工作：导入只复制文件，不会修改任何文件。使用面板时，NiCo 会为表单重建 configuration.nix 和 flake.nix；表单不认识的内容会变成 Nix-Brix。之后你可以把任意单个文件切换到面板——NiCo 会在重建前询问。之后可在 设置 →“默认以文本模式打开文件”中更改此选择。",
   "importMode.raw": "以文本模式",
-  "importMode.panel": "使用面板"
+  "importMode.panel": "使用面板",
+  "validator.rule.boot_loader_missing.label": "已设置引导加载程序",
+  "validator.rule.boot_loader_missing.desc": "报告没有引导加载程序的主机——此时 NixOS 会启用 GRUB，没有目标设备时 rebuild 会中止。",
+  "validator.f.boot_loader_missing": "未设置引导加载程序。",
+  "validator.d.boot_loader_missing": "没有设置时 NixOS 会启用 GRUB，没有目标设备时 rebuild 会中止（“You must set the option boot.loader.grub.devices”）。请在面板的 启动 中选择引导加载程序，或在 {0} 中添加，例如 EFI 下使用 boot.loader.systemd-boot.enable = true;。NiCo 只读取配置目录——如果引导加载程序在外部模块中设置，此提示不适用。",
+  "field.bootConfigLimitHint": "(configurationLimit)"
 }

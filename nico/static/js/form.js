@@ -461,6 +461,7 @@ function getFormData() {
     boot_efi_can_touch:  ch('boot_efi_can_touch'),
     boot_efi_mount_point: v('boot_efi_mount_point') || '/boot',
     boot_config_limit:   parseInt(v('boot_config_limit') || '5', 10),
+    boot_config_limit_enabled: ch('boot_config_limit_enabled'),
     boot_kernel_params:  v('boot_kernel_params'),
     plymouth_enabled:    ch('plymouth_enabled'),
     plymouth_theme:      v('plymouth_theme'),
@@ -634,6 +635,9 @@ function populateFormFromData(data) {
   if ('boot_loader'        in data) v('boot_loader',         data.boot_loader || 'none');
   if ('boot_efi_mount_point' in data) v('boot_efi_mount_point', data.boot_efi_mount_point || '/boot');
   if ('boot_config_limit'  in data) v('boot_config_limit',  data.boot_config_limit ?? 5);
+  // Missing means on: older data and new configs keep the limit of 5.
+  if ('boot_loader' in data || 'boot_config_limit_enabled' in data)
+    ch('boot_config_limit_enabled', data.boot_config_limit_enabled !== false);
   if ('cpu_microcode'      in data) v('cpu_microcode',       data.cpu_microcode || 'none');
 
   if ('guest_user'         in data) ch('guest_user',          data.guest_user);
@@ -744,6 +748,7 @@ function populateFormFromData(data) {
 
   document.getElementById('extra-locale-detail')?.classList.toggle('hidden', !document.getElementById('extra_locale_enable')?.checked);
   document.getElementById('firewall-tcp-detail')?.classList.toggle('hidden', !document.getElementById('firewall_tcp_enable')?.checked);
+  document.getElementById('boot-config-limit-detail')?.classList.toggle('hidden', !document.getElementById('boot_config_limit_enabled')?.checked);
   document.getElementById('firewall-udp-detail')?.classList.toggle('hidden', !document.getElementById('firewall_udp_enable')?.checked);
   document.getElementById('firefox-detail')?.classList.toggle('hidden', !document.getElementById('firefox')?.checked);
   document.getElementById('appimage-detail')?.classList.toggle('hidden', !document.getElementById('appimage')?.checked);
@@ -780,6 +785,8 @@ function clearCoForm() {
   setField('cpu_microcode', 'none');
   setField('boot_efi_mount_point', '/boot');
   setField('boot_config_limit', 5);
+  setCheck('boot_config_limit_enabled', true);
+  document.getElementById('boot-config-limit-detail')?.classList.remove('hidden');
   setField('boot_kernel_params', '');
   setField('plymouth_theme', '');
   setField('nix_gc_frequency', 'weekly');

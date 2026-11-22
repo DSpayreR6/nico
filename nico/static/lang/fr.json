@@ -1425,5 +1425,10 @@
   "importMode.title": "Comment veux-tu modifier cette configuration ?",
   "importMode.info": "En mode texte, NiCo fonctionne comme un éditeur : l'import copie seulement les fichiers, aucun n'est modifié. Avec le panneau, NiCo reconstruit configuration.nix et flake.nix pour le formulaire ; ce que le formulaire ne connaît pas devient des Nix-Brix. Plus tard, tu peux passer chaque fichier au panneau séparément – NiCo demande avant de le reconstruire. Ensuite, le choix se trouve dans Paramètres → « Ouvrir les fichiers en mode texte par défaut ».",
   "importMode.raw": "En mode texte",
-  "importMode.panel": "Avec le panneau"
+  "importMode.panel": "Avec le panneau",
+  "validator.rule.boot_loader_missing.label": "Chargeur d'amorçage défini",
+  "validator.rule.boot_loader_missing.desc": "Signale un hôte sans chargeur d'amorçage – NixOS active alors GRUB, et sans périphérique cible le rebuild s'arrête.",
+  "validator.f.boot_loader_missing": "Aucun chargeur d'amorçage défini.",
+  "validator.d.boot_loader_missing": "Sans entrée, NixOS active GRUB, et sans périphérique cible le rebuild s'arrête (« You must set the option boot.loader.grub.devices »). Choisis un chargeur d'amorçage dans le panneau sous Démarrage ou ajoute-le dans {0}, p. ex. boot.loader.systemd-boot.enable = true; en EFI. NiCo lit seulement le répertoire de la configuration – si le chargeur d'amorçage est défini dans un module externe, ce signalement ne s'applique pas.",
+  "field.bootConfigLimitHint": "(configurationLimit)"
 }

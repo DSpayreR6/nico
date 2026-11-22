@@ -451,6 +451,9 @@ function bindUI() {
   document.getElementById('extra_locale_enable')?.addEventListener('change', function() {
     document.getElementById('extra-locale-detail')?.classList.toggle('hidden', !this.checked);
   });
+  document.getElementById('boot_config_limit_enabled')?.addEventListener('change', function() {
+    document.getElementById('boot-config-limit-detail')?.classList.toggle('hidden', !this.checked);
+  });
   document.getElementById('firewall_tcp_enable')?.addEventListener('change', function() {
     document.getElementById('firewall-tcp-detail')?.classList.toggle('hidden', !this.checked);
   });

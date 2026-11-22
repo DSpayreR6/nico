@@ -1493,5 +1493,10 @@
   "importMode.title": "Wie willst du diese Config bearbeiten?",
   "importMode.info": "Im Textmodus arbeitet NiCo wie ein Editor: Der Import kopiert die Dateien nur, keine wird verändert. Mit dem Panel baut NiCo configuration.nix und flake.nix für das Formular um; was das Formular nicht kennt, wird zu Nix-Brix. Später kannst du jede Datei einzeln aufs Panel umschalten – NiCo fragt dann vor dem Umbau. Die Wahl steht danach unter Einstellungen → „Dateien standardmäßig im Textmodus öffnen“.",
   "importMode.raw": "Im Textmodus",
-  "importMode.panel": "Mit dem Panel"
+  "importMode.panel": "Mit dem Panel",
+  "validator.rule.boot_loader_missing.label": "Bootloader eingestellt",
+  "validator.rule.boot_loader_missing.desc": "Meldet einen Host ohne Bootloader – NixOS schaltet dann GRUB ein, und ohne Zielgerät bricht der Rebuild ab.",
+  "validator.f.boot_loader_missing": "Kein Bootloader eingestellt.",
+  "validator.d.boot_loader_missing": "Ohne Eintrag schaltet NixOS GRUB ein, und ohne Zielgerät bricht der Rebuild ab („You must set the option boot.loader.grub.devices“). Bootloader im Panel unter Boot wählen oder in {0} eintragen, z. B. boot.loader.systemd-boot.enable = true; bei EFI. NiCo liest nur das Config-Verzeichnis – steht der Bootloader in einem Modul von außerhalb, ist diese Meldung gegenstandslos.",
+  "field.bootConfigLimitHint": "(configurationLimit)"
 }

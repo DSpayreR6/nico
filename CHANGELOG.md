@@ -12,6 +12,8 @@
 - Import: `configuration.nix` and `flake.nix` were rebuilt for the panel even when you then chose *Open in text mode* – the import did it before asking
 - With *Open files in text mode by default* on, a file switched to the panel fell back to text mode after its first panel save, and a background save could still rewrite a file shown in text mode; panel files now carry their mode, and files without a mark follow the setting everywhere
 - Switching a file without a NiCo header line to the panel (or to text mode against the setting) silently did nothing
+- Import: the boot loader of a freshly installed NixOS (systemd-boot or GRUB) stayed out of the panel's *Boot loader* field – the panel would have added `configurationLimit = 5` and `canTouchEfiVariables = false`, which the installer does not write. The panel now writes `canTouchEfiVariables` only when ticked, and *Max. configurations* has its own switch (off after importing a config without a limit, so an imported limit can also be removed)
+- Validator: new check *Boot loader set* – a host without one makes NixOS turn on GRUB, and the rebuild stops without a target device
 
 ## 0.21.0 (2026-11-21)
 

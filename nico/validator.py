@@ -191,6 +191,11 @@ ALL_RULES: list[Rule] = [
          "Meldet eine Config ohne system.stateVersion – NixOS nimmt dann das gerade gebaute "
          "Release, was für jede älter installierte Maschine falsch ist.",
          "warning"),
+    Rule("boot_loader_missing",
+         "Bootloader eingestellt",
+         "Meldet einen Host ohne Bootloader – NixOS schaltet dann GRUB ein, und ohne "
+         "Zielgerät bricht der Rebuild ab.",
+         "warning"),
     Rule("state_version_per_host",
          "System-State-Version pro Host",
          "Meldet eine system.stateVersion in der gemeinsamen Basis-Config einer Flake mit "
@@ -1737,6 +1742,7 @@ _FIELD_SECTION: dict[str, str] = {
     # Boot
     "boot_loader": "BOOT", "secure_boot": "BOOT", "lanzaboote": "BOOT",
     "kernel": "BOOT", "boot_efi_can_touch": "BOOT", "boot_config_limit": "BOOT",
+    "boot_config_limit_enabled": "BOOT",
     # System
     "hostname": "SYST", "state_version": "SYST", "allowUnfree": "SYST",
     "nix_args": "SYST",
@@ -2183,6 +2189,70 @@ def _install_release() -> tuple:
         return "", None
     release = _release_for_date(day)
     return (release, day) if release else ("", None)
+
+
+# ── Boot loader ───────────────────────────────────────────────────────────────
+
+# `enable = true` of these is a boot loader. GRUB is the exception: NixOS
+# turns it on by default, and what makes it work is the device it installs to.
+_LOADER_ENABLES = (("systemd-boot",), ("generic-extlinux-compatible",), ("limine",),
+                   ("refind",))
+_GRUB_TARGETS = ("device", "devices", "mirroredBoots")
+
+
+def _rule_boot_loader_missing(nixos_dir: str, config: dict, is_flake: bool,
+                              host: str | None = None) -> list[Finding]:
+    """Report a host without a boot loader (Martin, 2026-11-22).
+
+    With nothing set NixOS turns GRUB on by itself, and without a device the
+    rebuild stops: "You must set the option boot.loader.grub.devices …". A
+    container and WSL boot without one. Only the config directory is read: a
+    loader set in a module from elsewhere (nixos-hardware, an installer
+    module) is not seen – hence a warning, not an error.
+    """
+    from . import nix_parser as _np
+    from .importer import _blank_comments
+    files = list(_scoped_nix_files(nixos_dir, host))
+    # Nothing written yet is the setup case, not a finding.
+    if not files:
+        return []
+    grub_off = grub_target = False
+    for _path, _rel, content in files:
+        for a in _np.assignments(content):
+            p = a.path
+            value, _prio = _np.unwrap_priority(_blank_comments(a.value_text))
+            on = _np.extract_bool(value) is True
+            if p in (("boot", "isContainer"), ("wsl", "enable")) and on:
+                return []
+            if p[:2] != ("boot", "loader") or len(p) < 4:
+                continue
+            if p[-1] == "enable" and p[2:-1] in _LOADER_ENABLES and on:
+                return []
+            if p[2] == "grub" and p[3] in _GRUB_TARGETS:
+                grub_target = True
+            if p[2:] == ("grub", "enable") and _np.extract_bool(value) is False:
+                grub_off = True
+    if grub_target and not grub_off:
+        return []
+
+    hosts_root = _hosts_dir_path(nixos_dir)
+    if host and hosts_root.is_dir() and (hosts_root / host).is_dir():
+        where = f"{hosts_root.name}/{host}/default.nix"
+    else:
+        where = "configuration.nix"
+    return [Finding(
+        rule_id="boot_loader_missing",
+        severity="warning",
+        message="Kein Bootloader eingestellt.",
+        message_key="validator.f.boot_loader_missing",
+        detail="Ohne Eintrag schaltet NixOS GRUB ein, und ohne Zielgerät bricht der "
+               "Rebuild ab („You must set the option boot.loader.grub.devices“). "
+               f"Bootloader im Panel unter Boot wählen oder in {where} eintragen, z. B. "
+               "boot.loader.systemd-boot.enable = true; bei EFI. NiCo liest nur das "
+               "Config-Verzeichnis – steht der Bootloader in einem Modul von außerhalb, "
+               "ist diese Meldung gegenstandslos.",
+        detail_key="validator.d.boot_loader_missing", detail_params=[where],
+    )]
 
 
 def _rule_state_version_missing(nixos_dir: str, config: dict, is_flake: bool,
@@ -3681,6 +3751,7 @@ _RULE_FNS: dict[str, object] = {
     "state_version_match":   _rule_state_version_match,
     "state_version_future":  _rule_state_version_future,
     "state_version_missing": _rule_state_version_missing,
+    "boot_loader_missing":   _rule_boot_loader_missing,
     "state_version_per_host": _rule_state_version_per_host,
     "hm_state_version_match": _rule_hm_state_version_match,
     "hm_duplicate_args":      _rule_hm_duplicate_args,

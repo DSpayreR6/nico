@@ -166,16 +166,24 @@ def _sec_boot(data: dict, brix: dict) -> "list[str]":
     boot_efi_can_touch = data.get("boot_efi_can_touch", False)
     boot_efi_mount     = (data.get("boot_efi_mount_point", "/boot") or "/boot").strip()
     boot_config_limit  = _int_or(data.get("boot_config_limit"), 5)
+    # Only what the form holds (Martin, 2026-11-22). The limit used to be
+    # written always and `canTouchEfiVariables = false` too: an installer
+    # config has neither, so the Gegenprobe kept its boot loader out of the
+    # form and the field "Bootloader" stayed empty. The limit has its own
+    # switch – without one an imported limit could not be removed again;
+    # missing (older callers) counts as on. `false` is the NixOS default
+    # for canTouchEfiVariables, so leaving it out changes nothing.
+    limit_on           = data.get("boot_config_limit_enabled", True) is not False
     lines = [_section("BOOT")]
     if boot_loader != "none":
         if boot_loader == "systemd-boot":
-            lines += [
-                "  boot.loader.systemd-boot.enable = true;",
-                f"  boot.loader.systemd-boot.configurationLimit = {boot_config_limit};",
-            ]
+            lines += ["  boot.loader.systemd-boot.enable = true;"]
+            if limit_on:
+                lines += [f"  boot.loader.systemd-boot.configurationLimit = {boot_config_limit};"]
         elif boot_loader == "grub":
             lines += ["  boot.loader.grub.enable = true;"]
-        lines += [f'  boot.loader.efi.canTouchEfiVariables = {"true" if boot_efi_can_touch else "false"};']
+        if boot_efi_can_touch:
+            lines += ["  boot.loader.efi.canTouchEfiVariables = true;"]
         if boot_efi_mount != "/boot":
             lines += [f'  boot.loader.efi.efiSysMountPoint = "{nix_esc(boot_efi_mount)}";']
     if boot_kernel_params:

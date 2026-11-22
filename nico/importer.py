@@ -728,6 +728,11 @@ def _extract_fields(kv: 'dict[str, str]', clean: str) -> 'tuple[dict, set[str]]'
         v = _np.extract_int(vt)
         if v is not None:
             r['boot_config_limit'] = v; _mark('boot.loader.systemd-boot.configurationLimit')
+            r['boot_config_limit_enabled'] = True
+    elif r.get('boot_loader') == 'systemd-boot':
+        # No limit in the file: the switch is off, so the panel does not
+        # add one (generator._sec_boot, 2026-11-22).
+        r['boot_config_limit_enabled'] = False
 
     # Only a plain list of strings without blanks: the form holds the
     # parameters blank-separated, so `[ "a" ] ++ more` lost its tail and
