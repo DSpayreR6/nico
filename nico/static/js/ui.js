@@ -683,6 +683,31 @@ function bindUI() {
     document.getElementById('help-dropdown').classList.add('hidden');
     document.getElementById('about-overlay').classList.remove('hidden');
   });
+  // Update an installed NiCo (nix profile). Shown only when there is one:
+  // started with `nix run` or from a git checkout there is nothing to update.
+  let _selfupdateUrl = '';
+  fetch('/api/selfupdate/status').then(r => r.json()).then(d => {
+    if (!d.installed) return;
+    _selfupdateUrl = d.url || '';
+    document.getElementById('selfupdate-btn')?.classList.remove('hidden');
+  }).catch(() => {});
+  on('selfupdate-btn', 'click', async () => {
+    document.getElementById('help-dropdown').classList.add('hidden');
+    if (!(await nicoConfirm(t('selfupdate.confirm', _selfupdateUrl),
+                            { okLabel: t('header.helpUpdate') }))) return;
+    const res = await csrfFetch('/api/selfupdate', { method: 'POST' }).catch(() => null);
+    const data = res ? await res.json().catch(() => null) : null;
+    if (!data?.success) {
+      if (data?.error === 'ERR_REBUILD_RUNNING') {
+        showToast(t('rebuild.alreadyRunning'), 'error');
+        attachRebuildMonitor();
+        return;
+      }
+      showToast(tErr(data?.error) || t('toast.error'), 'error');
+      return;
+    }
+    attachRebuildMonitor();
+  });
   on('help-docs-btn', 'click', () => {
     document.getElementById('help-dropdown').classList.add('hidden');
     window.open('/help', '_blank');

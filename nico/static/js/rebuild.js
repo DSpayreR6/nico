@@ -1055,7 +1055,11 @@ function attachRebuildMonitor(fromIndex = 0) {
       // build: its own success line, and no checkpoint offer below – the
       // config files did not change.
       const isGeneration = msg.kind === 'generation';
-      const label = msg.success && isGeneration
+      // An update of NiCo itself: no build of the config either.
+      const isSelfupdate = msg.kind === 'selfupdate';
+      const label = msg.success && isSelfupdate
+        ? niIcon('check-circle') + ' ' + escHtml(t('selfupdate.done'))
+        : msg.success && isGeneration
         ? niIcon('check-circle') + ' ' + escHtml(t(msg.mode === 'boot' ? 'generations.doneBoot'
                                                                       : 'generations.doneSwitch', msg.number))
         : msg.success
@@ -1093,7 +1097,7 @@ function attachRebuildMonitor(fromIndex = 0) {
       _rebuildES = null;
       // The new system runs in both cases, so the config on disk is the
       // state worth a checkpoint (decided 2026-11-13).
-      if ((msg.success || activatedWarn) && !isGeneration) {
+      if ((msg.success || activatedWarn) && !isGeneration && !isSelfupdate) {
         csrfFetch('/api/config/settings').then(r => r.json()).then(async cfg => {
           // What git can do here decides what is offered: committing needs a
           // repository, pushing needs a remote on top of that. Offering

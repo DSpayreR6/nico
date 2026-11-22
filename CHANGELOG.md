@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### New Features
+
+- *Update NiCo* in the help menu: for a NiCo installed with `nix profile`, runs `nix profile upgrade --refresh` in the rebuild monitor (same branch it was installed from); the config is not touched, the new version is used after a restart. Hidden when NiCo was started with `nix run` or from a git checkout
+
 ## 0.21.0 (2026-11-21)
 
 ### New Features

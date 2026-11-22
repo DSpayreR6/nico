@@ -1446,6 +1446,84 @@ def register(app, ctx):
                          daemon=True).start()
         return jsonify({"success": True, "job_id": job_id})
 
+    # ── Updating an installed NiCo (2026-11-22) ──────────────────────────────
+
+    @app.route("/api/selfupdate/status")
+    def selfupdate_status():
+        """Whether this user has NiCo installed with `nix profile` – only
+        then the help menu offers the update."""
+        from .. import selfupdate
+        entry = selfupdate.profile_entry()
+        return jsonify({"installed": entry is not None,
+                        "url": entry[1] if entry else ""})
+
+    @app.route("/api/selfupdate", methods=["POST"])
+    def selfupdate_start():
+        """`nix profile upgrade <name> --refresh` in the rebuild monitor.
+
+        A job like the rebuild – the same lock, so it never runs next to a
+        rebuild or a switch, and the same monitor. No root and no config
+        directory needed: the user profile belongs to the user. The running
+        NiCo keeps running; the new version is used after a restart.
+        """
+        global _job
+        if err := _check_csrf(): return err
+        import json as _json
+        import subprocess as _sp
+        from .. import selfupdate
+
+        entry = selfupdate.profile_entry()
+        if entry is None:
+            return jsonify({"error": "ERR_NOT_INSTALLED"}), 400
+        cmd = selfupdate.upgrade_command(entry[0])
+
+        def _out(line):
+            return f"data: {_json.dumps({'type': 'output', 'line': line})}\n\n"
+
+        def _generate():
+            yield _out("$ " + " ".join(cmd))
+            try:
+                proc = _sp.Popen(cmd, cwd=str(Path.home()), stdin=_sp.DEVNULL,
+                                 stdout=_sp.PIPE, stderr=_sp.STDOUT, text=True, bufsize=1)
+            except FileNotFoundError:
+                yield f"data: {_json.dumps({'type': 'error', 'message': 'ERR_NIX_MISSING'})}\n\n"
+                return
+            for raw_line in proc.stdout:
+                yield _out(raw_line.rstrip("\r\n"))
+            proc.wait()
+            yield ("data: " + _json.dumps({
+                "type": "done", "success": proc.returncode == 0, "kind": "selfupdate",
+                "failed_units": [], "error_lines": [], "error_lines_dropped": 0,
+                "activated_with_warnings": False, "unrestarted_units": [],
+            }) + "\n\n")
+
+        with _start_lock:
+            with _job_cv:
+                if _job is not None and _job["running"]:
+                    return jsonify({"error": "ERR_REBUILD_RUNNING"}), 409
+                job_id = uuid.uuid4().hex
+                _job = {
+                    "id": job_id, "running": True, "events": [], "dropped": 0,
+                    "success": None, "acked": False, "mode": "selfupdate",
+                    "hostname": "", "verbose": False, "started": time.time(),
+                    "finished": None,
+                }
+                _job_cv.notify_all()
+
+        def _run_job():
+            try:
+                for event in _generate():
+                    _job_append(job_id, event)
+            except Exception as exc:
+                _job_append(job_id,
+                            f"data: {_json.dumps({'type': 'error', 'message': str(exc)})}\n\n")
+            finally:
+                _job_finish(job_id)
+
+        threading.Thread(target=_run_job, name=f"selfupdate-{job_id[:8]}",
+                         daemon=True).start()
+        return jsonify({"success": True, "job_id": job_id})
+
     @app.route("/api/rebuild/precheck", methods=["POST"])
     def rebuild_precheck():
         """Forecast for the rebuild about to start: download size and the

@@ -1416,5 +1416,10 @@
   "generations.stateRunning": "このシステム状態が実行中",
   "generations.stateNext": "次回の起動で使用",
   "generations.backTitle": "次回の起動で再びこのシステム状態を使用",
-  "generations.backConfirm": "次回の起動で実行中のシステム状態 #{0} を再び使用しますか？ #{1} の選択は取り消されます。"
+  "generations.backConfirm": "次回の起動で実行中のシステム状態 #{0} を再び使用しますか？ #{1} の選択は取り消されます。",
+  "header.helpUpdate": "NiCoを更新",
+  "selfupdate.confirm": "今すぐNiCoを更新しますか？最新版を {0} から取得します。設定は変わりません。新しいバージョンはNiCoの再起動後に使われます。",
+  "selfupdate.done": "NiCoを更新しました。新しいバージョンを使うには、NiCoを終了して再起動してください。",
+  "errors.ERR_NOT_INSTALLED": "NiCoは nix profile でインストールされていません。ここで更新するものはありません。",
+  "errors.ERR_NIX_MISSING": "nix コマンドが見つかりません。"
 }

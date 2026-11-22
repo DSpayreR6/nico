@@ -1416,5 +1416,10 @@
   "generations.stateRunning": "Cet état du système est actif",
   "generations.stateNext": "Utilisé au prochain démarrage",
   "generations.backTitle": "Réutiliser cet état du système au prochain démarrage",
-  "generations.backConfirm": "Réutiliser l’état du système actif #{0} au prochain démarrage ? Le choix de #{1} est abandonné."
+  "generations.backConfirm": "Réutiliser l’état du système actif #{0} au prochain démarrage ? Le choix de #{1} est abandonné.",
+  "header.helpUpdate": "Mettre à jour NiCo",
+  "selfupdate.confirm": "Mettre à jour NiCo maintenant ? La dernière version est récupérée depuis {0}. Ta configuration reste inchangée ; la nouvelle version est utilisée après un redémarrage de NiCo.",
+  "selfupdate.done": "NiCo est à jour. Quitte NiCo et relance-le pour utiliser la nouvelle version.",
+  "errors.ERR_NOT_INSTALLED": "NiCo n'est pas installé avec nix profile – il n'y a rien à mettre à jour ici.",
+  "errors.ERR_NIX_MISSING": "La commande nix est introuvable."
 }
