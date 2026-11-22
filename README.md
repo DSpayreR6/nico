@@ -52,12 +52,12 @@ NiCo edits real files, so it is built to never lose what is in them:
 
 ## Features
 
-- **Import existing configs** – from a directory or ZIP; recognized options become form fields, everything else is preserved as Nix bricks, with automatic backups
+- **Import existing configs** – from a directory or ZIP; you choose first: *in text mode* (NiCo works like an editor and rewrites nothing) or *with the panel*, where recognized options become form fields, everything else is preserved as Nix bricks, with automatic backups
 - **Split-panel editor** – edit options on the left, see the resulting `.nix` file live on the right
 - **Text mode** – edit any file as plain Nix with syntax colours, search, matching brackets and unmatched ones marked; after saving, a line Nix cannot read is marked at the exact character. Ctrl+S saves in panel and text mode
 - **Nix-Brix** – free Nix sections NiCo never modifies: create, rename, move, split them across hosts and modules
 - **Hardware check** – a config that comes from somewhere else describes somebody else's disks, and a build from it looks for devices that do not exist. NiCo compares the `hardware-configuration.nix` against the devices actually present on this machine and asks before anything is built — after an import, after a restore, and at start, because a config brought in with `git clone` passes no dialog at all. On a multi-host config only the file of the host that *is* this machine is ever touched
-- **Validator** – 42 configurable rules, run by itself before every build on the state written to disk. Hints and warnings never interrupt; a critical error brings its findings up instead of starting the build. It catches what Nix only reports halfway through a rebuild, and some things Nix never reports at all: a `system.stateVersion` newer than the installed release, a user the rebuild would create without a password or an SSH key, uid and gid collisions with accounts that already exist, missing imports, duplicate attributes, btrfs maintenance on a machine without btrfs, a swapfile inside a snapshotted subvolume
+- **Validator** – 43 configurable rules, run by itself before every build on the state written to disk. Hints and warnings never interrupt; a critical error brings its findings up instead of starting the build. It catches what Nix only reports halfway through a rebuild, and some things Nix never reports at all: a `system.stateVersion` newer than the installed release, a user the rebuild would create without a password or an SSH key, uid and gid collisions with accounts that already exist, a host without a boot loader, missing imports, duplicate attributes, btrfs maintenance on a machine without btrfs, a swapfile inside a snapshotted subvolume
 - **Dry-run & rebuild** – run `nixos-rebuild dry-build` / `switch` directly from NiCo with live streaming output, and a report of the services that failed afterwards, each with the last lines of its journal. Only services that were healthy before that build are listed, so what a desktop carries around anyway stays out of it
   - **Modes** `switch`, `boot` and `test` – `test` activates the new system without touching the boot menu, so a restart brings the old one back
   - **Safe rebuild** limits parallel builds (`--max-jobs`, `--cores`) to save memory. Off by default; switched on, NiCo suggests values from this machine's free memory. With *analysis before the rebuild* switched on, NiCo shows the download size from the start and asks before a package is compiled from source, offering the safe rebuild
@@ -126,7 +126,8 @@ nix profile install github:DSpayreR6/nico
 ```
 
 This gives you the `nico` command and an entry in your application menu.
-Update it later with `nix profile upgrade nico`.
+Update it later with `nix profile upgrade nico`, or with *Update NiCo* in the
+help menu.
 
 Nix 2.34 renamed `nix profile install` to `nix profile add`. Both still work —
 the old name only prints a deprecation warning — but older Nix versions do not
@@ -168,8 +169,10 @@ them back if the imported config brings a foreign one.)
 2. **Give NiCo a new, empty directory** — `~/nico-test`, say. Type the path in
    the setup dialog; it does not have to exist yet.
 3. **Import your own config** from `/etc/nixos` (button *Look in
-   /etc/nixos*), from a directory, or from a ZIP. Your original is never written to. The *copy* is rewritten straight
-   away, though: formatting outside a Nix-Brick is lost there, your comments
+   /etc/nixos*), from a directory, or from a ZIP. Your original is never written to.
+   NiCo first asks how you want to edit: *in text mode* the copy stays byte for
+   byte as it was, and NiCo works like an editor. *With the panel* the copy is
+   rewritten straight away: formatting outside a Nix-Brick is lost there, your comments
    are collected in the Nix-Brick `imported-notes` — and your settings are
    kept, anything NiCo does not recognise becomes a Nix-Brick.
 4. **Build with `test` instead of `switch`.** Pick it in the options dialog
