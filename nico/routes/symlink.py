@@ -11,6 +11,9 @@ from flask import jsonify, request
 
 from .. import git_manager, importer
 
+# Module level so the retarget test can point it elsewhere.
+ETC_NIXOS = Path("/etc/nixos")
+
 
 def register(app, ctx):
     _check_csrf    = ctx["check_csrf"]
@@ -31,7 +34,8 @@ def register(app, ctx):
         if etc_nixos.is_symlink():
             target = str(etc_nixos.resolve())
             is_nico = (Path(target).resolve() == Path(nixos_dir).resolve())
-            return jsonify({"status": "symlink", "points_to_nico": is_nico, "target": target})
+            return jsonify({"status": "symlink", "points_to_nico": is_nico, "target": target,
+                            "nico_dir": str(Path(nixos_dir).resolve())})
         if etc_nixos.exists():
             return jsonify({"status": "dir"})
         return jsonify({"status": "missing"})
@@ -112,6 +116,55 @@ def register(app, ctx):
             return jsonify({"error": "ERR_SUDO_MISSING"}), 500
 
         return jsonify({"ok": True, "backup": str(etc_bak), "link": str(etc_nixos)})
+
+    @app.route("/api/symlink/retarget", methods=["POST"])
+    def symlink_retarget():
+        """Point an /etc/nixos symlink that leads to another directory at the
+        config directory (Martin, 2026-11-22).
+
+        Until then creating it failed with ERR_SYMLINK_OTHER_TARGET and there
+        was no way to switch – after trying a second config, /etc/nixos kept
+        pointing at the first one, and "Look in /etc/nixos" read that one.
+        /etc/nixos.bak is left as it is: it holds the original directory, so
+        removing the link later still brings that back.
+        """
+        if err := _check_csrf(): return err
+        nixos_dir, err = _require_setup()
+        if err:
+            return err
+
+        body = request.get_json(silent=True) or {}
+        sudo_password = body.get("sudo_password", "")
+        nonce = body.get("sudo_nonce", "")
+        if not sudo_password and nonce and nonce in _sudo_nonces:
+            pw, expiry = _sudo_nonces.pop(nonce)
+            if expiry > _time_mod.time():
+                sudo_password = pw
+
+        import subprocess as _sp
+        etc_nixos = ETC_NIXOS
+        if not etc_nixos.is_symlink():
+            return jsonify({"error": "ERR_NOT_A_SYMLINK"}), 400
+        old_target = str(etc_nixos.resolve())
+        new_target = str(Path(nixos_dir).resolve())
+        if old_target == new_target:
+            return jsonify({"ok": True, "already_done": True, "target": new_target})
+
+        # -n: replace the link itself, never create one inside the directory
+        # it points to. No shell: the path goes in as one argument.
+        cmd = ["sudo", "-S", "ln", "-sfn", new_target, str(etc_nixos)]
+        try:
+            result = _sp.run(cmd, input=(sudo_password + "\n") if sudo_password else "",
+                             capture_output=True, text=True, timeout=15)
+            if result.returncode != 0:
+                return jsonify({"error": "ERR_SYMLINK_FAILED",
+                                "detail": (result.stderr or result.stdout).strip()}), 500
+        except _sp.TimeoutExpired:
+            return jsonify({"error": "ERR_SYMLINK_TIMEOUT"}), 500
+        except FileNotFoundError:
+            return jsonify({"error": "ERR_SUDO_MISSING"}), 500
+
+        return jsonify({"ok": True, "old_target": old_target, "target": new_target})
 
     @app.route("/api/symlink/remove", methods=["POST"])
     def symlink_remove():

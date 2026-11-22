@@ -1430,5 +1430,8 @@
   "validator.rule.boot_loader_missing.desc": "ブートローダーのないホストを報告します。その場合 NixOS は GRUB を有効にし、インストール先デバイスがないと rebuild が停止します。",
   "validator.f.boot_loader_missing": "ブートローダーが設定されていません。",
   "validator.d.boot_loader_missing": "設定がないと NixOS は GRUB を有効にし、インストール先デバイスがないと rebuild が停止します（「You must set the option boot.loader.grub.devices」）。パネルの ブート でブートローダーを選ぶか、{0} に追加してください（EFI なら例: boot.loader.systemd-boot.enable = true;）。NiCo は Config ディレクトリだけを読みます。外部のモジュールでブートローダーが設定されている場合、この指摘は当てはまりません。",
-  "field.bootConfigLimitHint": "(configurationLimit)"
+  "field.bootConfigLimitHint": "(configurationLimit)",
+  "admin.symlinkRetarget": "シンボリックリンクを切り替え",
+  "symlink.retargetConfirm": "/etc/nixos は {0} を指しています。このディレクトリ（{1}）に切り替えますか？元の内容がある /etc/nixos.bak はそのまま残ります。",
+  "symlink.retargeted": "/etc/nixos は {0} を指すようになりました。"
 }

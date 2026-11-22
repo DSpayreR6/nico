@@ -204,6 +204,18 @@ async function doSetupSymlink(createSymlink) {
     const errEl = document.getElementById('setup-symlink-error');
     errEl.classList.add('hidden');
 
+    // Already a link to another directory: creating would fail – offer to
+    // switch it instead (2026-11-22).
+    let status = null;
+    try { status = await csrfFetch('/api/symlink/status').then(r => r.json()); } catch { /* create reports */ }
+    if (status?.status === 'symlink' && !status.points_to_nico) {
+      if (!(await retargetSymlink(status.target || '', status.nico_dir || '', errEl))) return;
+      document.getElementById('setup-symlink-step').classList.add('hidden');
+      await _finishSetup(_pendingSetupData, true);
+      _pendingSetupData = null;
+      return;
+    }
+
     const nonce = await acquireSudoNonce();
     if (nonce === null) return;  // abgebrochen
 

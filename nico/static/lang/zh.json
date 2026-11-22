@@ -1430,5 +1430,8 @@
   "validator.rule.boot_loader_missing.desc": "报告没有引导加载程序的主机——此时 NixOS 会启用 GRUB，没有目标设备时 rebuild 会中止。",
   "validator.f.boot_loader_missing": "未设置引导加载程序。",
   "validator.d.boot_loader_missing": "没有设置时 NixOS 会启用 GRUB，没有目标设备时 rebuild 会中止（“You must set the option boot.loader.grub.devices”）。请在面板的 启动 中选择引导加载程序，或在 {0} 中添加，例如 EFI 下使用 boot.loader.systemd-boot.enable = true;。NiCo 只读取配置目录——如果引导加载程序在外部模块中设置，此提示不适用。",
-  "field.bootConfigLimitHint": "(configurationLimit)"
+  "field.bootConfigLimitHint": "(configurationLimit)",
+  "admin.symlinkRetarget": "切换符号链接",
+  "symlink.retargetConfirm": "/etc/nixos 指向 {0}。切换到此目录（{1}）？包含原始内容的 /etc/nixos.bak 保持不变。",
+  "symlink.retargeted": "/etc/nixos 现在指向 {0}。"
 }

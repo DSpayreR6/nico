@@ -1430,5 +1430,8 @@
   "validator.rule.boot_loader_missing.desc": "Informa de un host sin gestor de arranque: NixOS activa entonces GRUB y, sin dispositivo de destino, el rebuild se detiene.",
   "validator.f.boot_loader_missing": "No hay gestor de arranque definido.",
   "validator.d.boot_loader_missing": "Sin entrada, NixOS activa GRUB y, sin dispositivo de destino, el rebuild se detiene («You must set the option boot.loader.grub.devices»). Elige un gestor de arranque en el panel, en Arranque, o añádelo en {0}, p. ej. boot.loader.systemd-boot.enable = true; con EFI. NiCo solo lee el directorio de la configuración: si el gestor de arranque está en un módulo externo, este aviso no aplica.",
-  "field.bootConfigLimitHint": "(configurationLimit)"
+  "field.bootConfigLimitHint": "(configurationLimit)",
+  "admin.symlinkRetarget": "Cambiar enlace simbólico",
+  "symlink.retargetConfirm": "/etc/nixos apunta a {0}. ¿Cambiarlo a este directorio ({1})? /etc/nixos.bak con el original no se modifica.",
+  "symlink.retargeted": "/etc/nixos apunta ahora a {0}."
 }

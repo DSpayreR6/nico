@@ -408,15 +408,15 @@ function _loadAdminSettings() {
     if (hmDirInput) hmDirInput.value = data.hm_dir || 'home';
 
     // Panel-Default
-    _panelDefault = data.panel_default || 'p';
+    Sidebar.setPanelDefault(data.panel_default);
     const panelDefaultToggle = document.getElementById('panel-default-toggle');
     if (panelDefaultToggle) {
-      panelDefaultToggle.checked = (_panelDefault === 'r');
+      panelDefaultToggle.checked = (data.panel_default === 'r');
       if (!panelDefaultToggle.dataset.listenerAttached) {
         panelDefaultToggle.dataset.listenerAttached = '1';
         panelDefaultToggle.addEventListener('change', () => {
           const newVal = panelDefaultToggle.checked ? 'r' : 'p';
-          _panelDefault = newVal;
+          Sidebar.setPanelDefault(newVal);
           csrfFetch('/api/config/settings', {
             method: 'PATCH', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ panel_default: newVal }),
@@ -535,9 +535,17 @@ async function loadAdminSymlinkStatus() {
       label.innerHTML = niIcon('alert-triangle') + ' '
                       + escHtml(t('admin.symlinkOther', data.target || ''));
       hint.textContent  = baseHint;
+      // Pointing elsewhere: offer to switch it (2026-11-22).
+      btn.textContent = t('admin.symlinkRetarget');
+      btn.dataset.action = 'retarget';
+      btn.dataset.oldTarget = data.target || '';
+      btn.dataset.nicoDir = data.nico_dir || '';
+      btn.classList.remove('hidden');
     } else if (data.status === 'dir') {
       label.textContent = t('admin.symlinkIsDir');
       hint.textContent  = baseHint;
+      btn.textContent = t('admin.symlinkCreate');
+      btn.dataset.action = 'create';
       btn.classList.remove('hidden');
     } else if (data.status === 'missing') {
       label.textContent = t('admin.symlinkMissing');
@@ -553,10 +561,46 @@ async function loadAdminSymlinkStatus() {
   }
 }
 
+/** /etc/nixos points at another directory: ask, then point it at this
+ *  config directory. Resolves true when switched, false on cancel or error
+ *  (the error is shown in errEl). /etc/nixos.bak stays as it is. */
+async function retargetSymlink(oldTarget, nicoDir, errEl) {
+  if (!(await nicoConfirm(t('symlink.retargetConfirm', oldTarget, nicoDir),
+                          { okLabel: t('admin.symlinkRetarget') }))) return false;
+  const nonce = await acquireSudoNonce();
+  if (nonce === null) return false;
+  try {
+    const res  = await csrfFetch('/api/symlink/retarget', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ sudo_nonce: nonce }),
+    });
+    const data = await res.json();
+    if (!res.ok || data.error) {
+      errEl.textContent = tErr(data.error) || t('toast.error');
+      errEl.classList.remove('hidden');
+      return false;
+    }
+    showToast(t('symlink.retargeted', data.target || nicoDir), 'success');
+    return true;
+  } catch {
+    errEl.textContent = t('toast.error');
+    errEl.classList.remove('hidden');
+    return false;
+  }
+}
+
 async function doAdminSymlink() {
   const errDiv = document.getElementById('admin-symlink-error');
   const btn    = document.getElementById('admin-symlink-btn');
   errDiv.classList.add('hidden');
+  if (btn.dataset.action === 'retarget') {
+    btn.disabled = true;
+    await retargetSymlink(btn.dataset.oldTarget, btn.dataset.nicoDir, errDiv);
+    btn.disabled = false;
+    await loadAdminSymlinkStatus();
+    return;
+  }
   btn.disabled = true;
 
   const nonce = await acquireSudoNonce();

@@ -2173,5 +2173,10 @@ const Sidebar = (() => {
     hasUnsaved,
     refreshUnsaved,
     saveActive,
+    // The config default for files without a #p/#r flag. Private here and
+    // set by nobody until 2026-11-22: admin.js and save.js assigned a
+    // global of the same name (in strict mode a ReferenceError), so the
+    // sidebar always opened files in the panel.
+    setPanelDefault: mode => { _panelDefault = mode === 'r' ? 'r' : 'p'; },
   };
 })();

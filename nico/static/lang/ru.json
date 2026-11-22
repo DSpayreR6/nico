@@ -1430,5 +1430,8 @@
   "validator.rule.boot_loader_missing.desc": "Сообщает о хосте без загрузчика — тогда NixOS включает GRUB, и без целевого устройства rebuild останавливается.",
   "validator.f.boot_loader_missing": "Загрузчик не задан.",
   "validator.d.boot_loader_missing": "Без записи NixOS включает GRUB, и без целевого устройства rebuild останавливается («You must set the option boot.loader.grub.devices»). Выбери загрузчик на панели в разделе Загрузка или добавь его в {0}, например boot.loader.systemd-boot.enable = true; для EFI. NiCo читает только каталог конфигурации — если загрузчик задан в модуле извне, это сообщение неактуально.",
-  "field.bootConfigLimitHint": "(configurationLimit)"
+  "field.bootConfigLimitHint": "(configurationLimit)",
+  "admin.symlinkRetarget": "Переключить символическую ссылку",
+  "symlink.retargetConfirm": "/etc/nixos указывает на {0}. Переключить на этот каталог ({1})? /etc/nixos.bak с оригиналом остаётся без изменений.",
+  "symlink.retargeted": "/etc/nixos теперь указывает на {0}."
 }

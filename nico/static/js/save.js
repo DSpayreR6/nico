@@ -12,10 +12,20 @@ async function loadConfig() {
   // Changed outside NiCo (Fall A): ask before the form takes the file. After
   // "open as raw" – or when restructuring failed – the file view takes over,
   // and asks again if it still has to.
+  // The config default first: it decides which files open in text mode.
+  try {
+    const s = await csrfFetch('/api/config/settings').then(r => r.json());
+    Sidebar.setPanelDefault(s.panel_default);
+  } catch { /* stays panel */ }
   try {
     const f = await csrfFetch('/api/file?path=configuration.nix').then(r => r.json());
-    if (f.outside && f.panel_mode === 'r') {
-      await showOutsideNotice('configuration.nix');
+    if (f.panel_mode === 'r' && !f.error) {
+      // Text mode: the file view, not the form (2026-11-22). Filling the form
+      // showed a panel for a file that belongs to the editor.
+      if (f.outside) await showOutsideNotice('configuration.nix');
+      await Sidebar.selectFile('configuration.nix', 'configuration.nix', { force: true });
+      loadHmFileList();
+      return;
     } else if (f.outside && await resolveOutside('configuration.nix') !== 'restructured') {
       await Sidebar.selectFile('configuration.nix', 'configuration.nix', { force: true });
       loadHmFileList();
@@ -164,7 +174,7 @@ document.addEventListener('DOMContentLoaded', () => {
 async function refreshAfterImport() {
   // The answer to askImportEditMode() is the config default from now on;
   // the sidebar decides by it which files open in text mode.
-  if (_importEditMode) _panelDefault = _importEditMode;
+  if (_importEditMode) Sidebar.setPanelDefault(_importEditMode);
   await categorizeFiles();
   await loadConfig();
   await Sidebar.loadTree();

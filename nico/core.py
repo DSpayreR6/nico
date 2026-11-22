@@ -1020,10 +1020,17 @@ def read_config_file(nixos_dir: str, rel_path: str, *, persist_stamp: bool = Tru
                 except OSError:
                     pass
             ftype = override
+    foreign = ftype is None
+    if foreign:
+        # No NiCo line: the type from name and path, for the view only –
+        # nothing is written. Without it the panel switch stayed hidden for
+        # every file of a config imported in text mode (2026-11-22).
+        ftype = hint_type or path_type or classify_filename(target.name)
 
     # Not for a file changed outside: the user is about to be asked whether
-    # it may be restructured, and has to see it as it is.
-    if ftype == "hm" and not outside:
+    # it may be restructured, and has to see it as it is. Not for a foreign
+    # file either: the editor shows it byte for byte.
+    if ftype == "hm" and not outside and not foreign:
         try:
             content, _ = normalize_hm_content(content)
         except Exception:
@@ -1281,6 +1288,11 @@ def outside_status(nixos_dir: str, rel: str, content: str) -> "str | None":
     if not _panel_file(nixos_dir, rel, content):
         return None
     status = generator.check_version_hash(content)
+    # A file NiCo never wrote, kept in text mode: nothing "changed outside",
+    # it simply is not NiCo's (import in text mode, Martin 2026-11-22). A
+    # NiCo file whose hash is off still counts.
+    if status == "no_hash" and effective_panel_mode(nixos_dir, content) == "r":
+        return None
     return None if status == "ok" else status
 
 

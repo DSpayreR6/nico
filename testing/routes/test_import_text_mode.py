@@ -151,6 +151,9 @@ for rel in SOURCE:
           r.status_code == 200 and r.get_json().get("content") == SOURCE[rel],
           (r.status_code, (r.get_json() or {}).get("content", "")[:60]))
 unchanged("unverändert nach GET /api/file")
+r = client.get("/api/file?path=configuration.nix", headers={"X-CSRF-Token": token})
+check("fremde Datei im Textmodus gilt nicht als „außerhalb geändert“",
+      not r.get_json().get("outside") and r.get_json().get("panel_mode") == "r", r.get_json())
 form = client.get("/api/config", headers=hdr).get_json()
 form.update({"_co_ready": True, "_co_path": "configuration.nix", "hostname": "anders"})
 r = client.post("/api/config", headers=hdr, data=json.dumps(form))
