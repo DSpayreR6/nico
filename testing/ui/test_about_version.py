@@ -53,7 +53,7 @@ try:
         check("ohne Commit nur die Version", shown == expected, shown)
 
     for lang in ("en", "ja"):
-        d.execute_script("localStorage.setItem('nico_lang', arguments[0]);", lang)
+        d.execute_async_script("chooseLang(arguments[0]).then(arguments[1]);", lang)
         d.refresh(); time.sleep(3)
         d.execute_script("document.getElementById('about-btn').click();")
         time.sleep(1)

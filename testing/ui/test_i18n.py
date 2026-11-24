@@ -35,7 +35,7 @@ EXPECT = {"de": "eingeklappt", "en": "collapsed", "es": "plegado",
 try:
     d.get(f"http://127.0.0.1:{PORT}/"); time.sleep(4)
     for lang, word in EXPECT.items():
-        d.execute_script("localStorage.setItem('nico_lang', arguments[0]);", lang)
+        d.execute_async_script("chooseLang(arguments[0]).then(arguments[1]);", lang)
         d.refresh(); time.sleep(3)
         var = d.execute_script(
             "return getComputedStyle(document.documentElement).getPropertyValue('--ni-collapsed-label');")
@@ -54,7 +54,7 @@ try:
         (_gm.ERR_NO_UPSTREAM, []),
     ]
     for lang in EXPECT:
-        d.execute_script("localStorage.setItem('nico_lang', arguments[0]);", lang)
+        d.execute_async_script("chooseLang(arguments[0]).then(arguments[1]);", lang)
         d.refresh(); time.sleep(2.5)
         for roh, muss in FAELLE:
             txt = d.execute_script("return tErr(arguments[0])", roh) or ""
@@ -68,7 +68,34 @@ try:
             check(f"{lang}: {kennung} ohne Trennzeichen im Text",
                   "\x1f" not in txt)
 
-    print("\n" + ("ALLE PRÜFUNGEN BESTANDEN" if not fails else f"FEHLGESCHLAGEN: {fails}"))
+    # Seit 2026-11-24: Die Sprachwahl steht in settings.json, nicht nur im
+    # Browser. Bis 0.23.0 lag sie allein in localStorage.
+    print()
+    import json
+    from nico import config_manager as _cm
+    def saved_lang():
+        return json.loads(_cm.APP_SETTINGS_FILE.read_text(encoding="utf-8")).get("language")
+    check(f"Gewählte Sprache steht in settings.json ({saved_lang()})", saved_lang() == "zh")
+    d.execute_script("localStorage.clear();"); d.refresh(); time.sleep(3)
+    check("Ohne Browserdaten gilt die Sprache aus settings.json",
+          d.execute_script("return currentLang") == "zh")
+    # Alte Installation: Wahl nur im Browser, settings.json mit altem Standard
+    _cm.save_app_settings({"language": "de"})
+    d.execute_script("localStorage.setItem('nico_lang','fr'); localStorage.removeItem('nico_lang_moved');")
+    d.refresh(); time.sleep(3)
+    check("Alte Browser-Wahl gewinnt einmal", d.execute_script("return currentLang") == "fr")
+    check(f"…und steht danach in settings.json ({saved_lang()})", saved_lang() == "fr")
+    d.execute_script("localStorage.setItem('nico_lang','ja');"); d.refresh(); time.sleep(3)
+    check("Danach entscheidet settings.json, nicht der Browser",
+          d.execute_script("return currentLang") == "fr")
+    # Nichts gewählt: Browsersprache
+    _cm.save_app_settings({"language": ""})
+    d.execute_script("localStorage.clear();"); d.refresh(); time.sleep(3)
+    want = d.execute_script("return browserLang(['de','en','es','fr','ja','ru','zh'])")
+    check(f"Leer in settings.json → Browsersprache ({want})",
+          d.execute_script("return currentLang") == want)
+
+    print("\n" +("ALLE PRÜFUNGEN BESTANDEN" if not fails else f"FEHLGESCHLAGEN: {fails}"))
 finally:
     d.quit()
 sys.exit(1 if fails else 0)

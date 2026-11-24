@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Bug Fixes
+
+- The interface language is stored in NiCo's settings instead of only in the browser, so it survives another browser or cleared site data; a choice made before is taken over once
+
 ## 0.23.0 (2026-11-24)
 
 ### New Features

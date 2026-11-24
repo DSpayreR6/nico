@@ -346,6 +346,39 @@ function browserLang(langs) {
   return 'en';
 }
 
+/** A language the user picked: shown at once and kept in the app settings
+ *  (settings.json), so it survives another browser or cleared site data. */
+async function chooseLang(code) {
+  await loadLang(code);
+  await csrfFetch('/api/app/settings', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ language: currentLang }),
+  }).catch(() => {});
+}
+
+/** Start language. The app settings decide; empty there means nothing was
+ *  chosen, then the browser language applies. Up to 0.23.0 the choice lived
+ *  only in localStorage, while settings.json held the old default "de" – so
+ *  a choice found in this browser wins once and moves into the settings.
+ *  The marker keeps a stale value from overriding a later choice made in
+ *  another browser. */
+async function startLang(langs) {
+  const app = await fetch('/api/app/settings').then(r => r.json()).catch(() => ({}));
+  const saved = langs.includes(app.language) ? app.language : '';
+  let stored = null, moved = false;
+  try {
+    stored = localStorage.getItem('nico_lang');
+    moved  = localStorage.getItem('nico_lang_moved') === '1';
+  } catch {}
+  if (stored && !moved && langs.includes(stored)) {
+    await chooseLang(stored);
+  } else {
+    await loadLang(saved || browserLang(langs));
+  }
+  try { localStorage.setItem('nico_lang_moved', '1'); } catch {}
+}
+
 function initLangSwitcher(langs) {
   // EN first, then remaining sorted alphabetically
   const sorted = ['en', ...langs.filter(c => c !== 'en').sort()];
@@ -361,7 +394,7 @@ function initLangSwitcher(langs) {
       b.title          = code.toUpperCase();
       b.textContent    = (LANG_FLAGS[code] || '') + ' ' + code.toUpperCase();
       b.classList.toggle('active', code === currentLang);
-      b.addEventListener('click', () => loadLang(code));
+      b.addEventListener('click', () => chooseLang(code));
       dropdown.appendChild(b);
     });
   }
@@ -377,7 +410,7 @@ function initLangSwitcher(langs) {
       b.title          = code.toUpperCase();
       b.textContent    = LANG_FLAGS[code] || code.toUpperCase();
       b.classList.toggle('active', code === currentLang);
-      b.addEventListener('click', () => loadLang(code));
+      b.addEventListener('click', () => chooseLang(code));
       flagBar.appendChild(b);
     });
   }
@@ -473,7 +506,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Available languages first: they decide the start language and build the
   // lang switcher
   const langs = await fetch('/api/langs').then(r => r.json()).catch(() => ['de', 'en']);
-  await loadLang(localStorage.getItem('nico_lang') || browserLang(langs));
+  await startLang(langs);
   await loadSections();
   initLangSwitcher(langs);
   // Load section documentation links in parallel with the rest of the startup
