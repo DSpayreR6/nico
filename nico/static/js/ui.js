@@ -697,6 +697,27 @@ function bindUI() {
     window.open(`${NICO_REPO}/issues/new?body=${encodeURIComponent(body)}`,
                 '_blank', 'noopener');
   });
+  // Email for beginners without a GitHub account. The address is assembled
+  // at runtime so simple scrapers of the repo do not pick it up.
+  const NICO_MAIL = ['feedback', 'nico4nixos.anonaddy.com'].join('@');
+  on('help-mail-btn', 'click', () => {
+    document.getElementById('help-dropdown').classList.add('hidden');
+    document.getElementById('mail-address').textContent = NICO_MAIL;
+    document.getElementById('mail-overlay').classList.remove('hidden');
+  });
+  on('mail-copy-btn', 'click', () => {
+    navigator.clipboard.writeText(NICO_MAIL).then(
+      () => showToast(t('mail.copied'), 'success'),
+      () => showToast(t('toast.error'), 'error'),
+    );
+  });
+  on('mail-open-btn', 'click', () => {
+    const ver = document.getElementById('about-version')?.textContent.trim() || '';
+    const body = ver ? `NiCo ${ver}\n\n` : '';
+    window.location.href = `mailto:${NICO_MAIL}?subject=${encodeURIComponent('NiCo feedback')}`
+                         + `&body=${encodeURIComponent(body)}`;
+  });
+  on('mail-close-btn', 'click', () => document.getElementById('mail-overlay').classList.add('hidden'));
   on('help-discuss-btn', 'click', () => {
     document.getElementById('help-dropdown').classList.add('hidden');
     window.open(`${NICO_REPO}/discussions`, '_blank', 'noopener');

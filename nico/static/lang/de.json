@@ -642,6 +642,13 @@
   "header.helpDocs":  "Hilfe",
   "header.helpIssue": "Fehler melden (Issue)",
   "header.helpDiscuss": "Frage oder Idee (Discussions)",
+  "header.helpMail": "E-Mail an den Entwickler",
+  "mail.title": "E-Mail an den Entwickler",
+  "mail.text": "Fragen, Fehler, Ideen oder einfach Hallo – jede Rückmeldung hilft.",
+  "mail.copy": "Adresse kopieren",
+  "mail.open": "Im Mailprogramm öffnen",
+  "mail.copied": "Adresse kopiert",
+  "mail.close": "Schließen",
 
   "about.title":      "\u00DCber NiCo",
   "about.version":    "Version",

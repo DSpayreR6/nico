@@ -206,6 +206,7 @@
                     title="Hilfe und Dokumentation öffnen">?</button>
             <div id="help-dropdown" class="help-dropdown hidden">
               <button id="help-docs-btn" data-i18n="header.helpDocs">Hilfe</button>
+              <button id="help-mail-btn" data-i18n="header.helpMail">E-Mail an den Entwickler</button>
               <button id="help-issue-btn" data-i18n="header.helpIssue">Fehler melden (Issue)</button>
               <button id="help-discuss-btn" data-i18n="header.helpDiscuss">Frage oder Idee (Discussions)</button>
               <button id="selfupdate-btn" class="hidden" data-i18n="header.helpUpdate">NiCo aktualisieren</button>
@@ -1524,7 +1525,22 @@
     </div>
   </div>
 
-  <!-- ── Syntax-Prüfung (Dry-Run) ────────────────────────────────────── -->
+  <!-- ── E-Mail an den Entwickler ────────────────────────────────────── -->
+  <div id="mail-overlay" class="overlay hidden">
+    <div class="modal about-modal">
+      <div class="modal-logo">NiCo</div>
+      <h2 class="about-title" data-i18n="mail.title">E-Mail an den Entwickler</h2>
+      <p data-i18n="mail.text">Fragen, Fehler, Ideen oder einfach Hallo – jede Rückmeldung hilft.</p>
+      <p><strong id="mail-address"></strong></p>
+      <div class="confirm-buttons" style="margin-top:20px">
+        <button id="mail-copy-btn" data-i18n="mail.copy">Adresse kopieren</button>
+        <button id="mail-open-btn" data-i18n="mail.open">Im Mailprogramm öffnen</button>
+        <button id="mail-close-btn" data-i18n="mail.close">Schließen</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Syntax-Prüfung (Dry-Run)────────────────────────────────────── -->
   <div id="dryrun-overlay" class="overlay hidden">
     <div class="modal modal-wide">
       <div id="dryrun-logo" class="modal-logo" data-i18n="dryrun.title">Syntax-Prüfung</div>
