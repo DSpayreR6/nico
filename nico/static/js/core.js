@@ -327,13 +327,23 @@ async function loadLang(code) {
     localStorage.setItem('nico_lang', code);
   } catch (e) {
     console.error('loadLang:', e);
-    if (code !== 'de') await loadLang('de');
+    if (code !== 'en') await loadLang('en');
     return;
   }
   applyTranslations();
   const btn = document.getElementById('lang-current-btn');
   if (btn) btn.textContent = LANG_FLAGS[code] || code.toUpperCase();
   document.getElementById('lang-dropdown')?.classList.add('hidden');
+}
+
+/** Start language without a stored choice: the first browser language we
+ *  ship (de-AT → de), otherwise English. */
+function browserLang(langs) {
+  for (const tag of (navigator.languages || [navigator.language || ''])) {
+    const code = String(tag).toLowerCase().split('-')[0];
+    if (langs.includes(code)) return code;
+  }
+  return 'en';
 }
 
 function initLangSwitcher(langs) {
@@ -460,13 +470,12 @@ const collapsedBrix = (() => { try { return new Set(JSON.parse(localStorage.getI
 
 // ── Init ───────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async () => {
-  await loadLang(localStorage.getItem('nico_lang') || 'de');
+  // Available languages first: they decide the start language and build the
+  // lang switcher
+  const langs = await fetch('/api/langs').then(r => r.json()).catch(() => ['de', 'en']);
+  await loadLang(localStorage.getItem('nico_lang') || browserLang(langs));
   await loadSections();
-  // Load available languages and build lang switchers dynamically
-  fetch('/api/langs')
-    .then(r => r.json())
-    .then(langs => initLangSwitcher(langs))
-    .catch(() => initLangSwitcher(['de', 'en']));
+  initLangSwitcher(langs);
   // Load section documentation links in parallel with the rest of the startup
   fetch('/static/data/section_links.json')
     .then(r => r.ok ? r.json() : {})

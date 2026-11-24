@@ -111,7 +111,7 @@ def _migrate_legacy_app_settings() -> None:
 # Default app settings (program-level, stay on the machine)
 DEFAULT_APP_SETTINGS = {
     "nixos_config_dir": "",
-    "language": "de",
+    "language": "en",
     "theme": "auto",
     "code_view_plain": False,
     "rebuild_log": False,

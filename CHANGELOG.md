@@ -6,6 +6,7 @@
 
 - Help menu: links to report a bug (Issue) and ask a question (Discussions); the issue form opens with the NiCo version filled in
 - Help menu: *Email the developer* – no GitHub account needed; shows the address with *Copy address* and *Open in mail app* (subject and version filled in)
+- The interface starts in the browser's language (English if it is not available); a language you chose stays as it is
 
 ## 0.22.0 (2026-11-22)
 
