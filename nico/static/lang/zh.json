@@ -523,6 +523,8 @@
   "quit.done": "NiCo 已停止。您可以关闭此标签页。",
   "header.helpAbout": "关于 NiCo",
   "header.helpDocs": "帮助",
+  "header.helpIssue": "报告问题 (Issue)",
+  "header.helpDiscuss": "提问或建议 (Discussions)",
   "about.title": "关于 NiCo",
   "about.version": "版本",
   "about.author": "创建者",

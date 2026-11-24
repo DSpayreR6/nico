@@ -523,6 +523,8 @@
   "quit.done": "NiCo has been stopped. You can close this tab.",
   "header.helpAbout": "About NiCo",
   "header.helpDocs": "Help",
+  "header.helpIssue": "Report a bug (Issue)",
+  "header.helpDiscuss": "Question or idea (Discussions)",
   "about.title": "About NiCo",
   "about.version": "Version",
   "about.author": "Created by",

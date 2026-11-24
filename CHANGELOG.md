@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### New Features
+
+- Help menu: links to report a bug (Issue) and ask a question (Discussions); the issue form opens with the NiCo version filled in
+
 ## 0.22.0 (2026-11-22)
 
 ### New Features

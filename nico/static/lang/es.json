@@ -523,6 +523,8 @@
   "quit.done": "NiCo se ha detenido. Puedes cerrar esta pestaña.",
   "header.helpAbout": "Acerca de NiCo",
   "header.helpDocs": "Ayuda",
+  "header.helpIssue": "Informar de un error (Issue)",
+  "header.helpDiscuss": "Pregunta o idea (Discussions)",
   "about.title": "Acerca de NiCo",
   "about.version": "Versión",
   "about.author": "Creado por",

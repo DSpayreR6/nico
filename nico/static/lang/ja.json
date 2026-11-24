@@ -523,6 +523,8 @@
   "quit.done": "NiCoが停止しました。このタブを閉じることができます。",
   "header.helpAbout": "NiCoについて",
   "header.helpDocs": "ヘルプ",
+  "header.helpIssue": "不具合を報告 (Issue)",
+  "header.helpDiscuss": "質問・アイデア (Discussions)",
   "about.title": "NiCoについて",
   "about.version": "バージョン",
   "about.author": "作成者",

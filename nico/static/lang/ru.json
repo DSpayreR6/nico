@@ -523,6 +523,8 @@
   "quit.done": "NiCo остановлен. Вы можете закрыть эту вкладку.",
   "header.helpAbout": "О программе NiCo",
   "header.helpDocs": "Справка",
+  "header.helpIssue": "Сообщить об ошибке (Issue)",
+  "header.helpDiscuss": "Вопрос или идея (Discussions)",
   "about.title": "О программе NiCo",
   "about.version": "Версия",
   "about.author": "Создано",

@@ -686,6 +686,21 @@ function bindUI() {
     document.getElementById('help-dropdown').classList.add('hidden');
     document.getElementById('about-overlay').classList.remove('hidden');
   });
+  // Feedback links open GitHub in a new tab – only on click, nothing is sent
+  // by NiCo itself. The issue body carries just the version (as shown in the
+  // About dialog), never config data; the user sees it before submitting.
+  const NICO_REPO = 'https://github.com/DSpayreR6/nico';
+  on('help-issue-btn', 'click', () => {
+    document.getElementById('help-dropdown').classList.add('hidden');
+    const ver = document.getElementById('about-version')?.textContent.trim() || '';
+    const body = ver ? `NiCo ${ver}\n\n` : '';
+    window.open(`${NICO_REPO}/issues/new?body=${encodeURIComponent(body)}`,
+                '_blank', 'noopener');
+  });
+  on('help-discuss-btn', 'click', () => {
+    document.getElementById('help-dropdown').classList.add('hidden');
+    window.open(`${NICO_REPO}/discussions`, '_blank', 'noopener');
+  });
   // Update an installed NiCo (nix profile). Shown only when there is one:
   // started with `nix run` or from a git checkout there is nothing to update.
   let _selfupdateUrl = '';

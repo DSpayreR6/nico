@@ -640,6 +640,8 @@
 
   "header.helpAbout": "\u00DCber NiCo",
   "header.helpDocs":  "Hilfe",
+  "header.helpIssue": "Fehler melden (Issue)",
+  "header.helpDiscuss": "Frage oder Idee (Discussions)",
 
   "about.title":      "\u00DCber NiCo",
   "about.version":    "Version",
