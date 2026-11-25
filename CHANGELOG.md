@@ -7,9 +7,19 @@
 - Nix-Brick editor: syntax colors and bracket pairs while typing, like the text mode; the editor grows with its text
 - Restart NiCo: the quit dialog offers *Cancel*, *Restart* and *Quit*; after an update the monitor offers *Restart NiCo* or *Later*. The open file is saved first, the tab reloads by itself
 - Admin panel: the imports (ZIP, directory, program settings) and changing the config path run in one window, step by step, instead of rows opening below the buttons
+- Admin area redesigned: one line per option with an ⓘ for the explanation, groups that fold (closed on opening), filled buttons – red where something is replaced or removed –, and windows that scroll on small screens; tabs in the order Settings | Time machine | Administration
+- Version control (git) settings and upkeep (remote, .gitignore, foreign files, oversized files) moved from the time machine to the config settings; the clean-ups show what they found before anything is done
+- Texts say *version control (git)* instead of plain *git*; the menu entries read *Upload (push)* and *Download (pull)*
+- Move the config to another directory (Administration), including version control; offers to switch the /etc/nixos symlink
+- Symlink /etc/nixos now sits below the config path in the settings and can also be removed (puts /etc/nixos.bak back)
+- New Validator rule: warns when /etc/nixos is a symlink to another directory (with the release “read this machine: Validator”)
+- Validator rules: one line per rule with an ⓘ and a legend saying what error, warning and note do
+- Time machine: the lists fill the window; checkpoints can be loaded beyond the latest 30 (*Load more*)
 
 ### Bug Fixes
 
+- The Validator settings did not recognise a flake config: flake rules were hidden and *Run Validator* did not ask which host to check
+- The checkpoint list was loaded twice on opening, so the compare selection listed every checkpoint twice
 - Quit no longer loses unsaved edits in text mode: the open file is saved first, as with the disk button; if that fails, NiCo stays open
 - Clicking a Nix-Brick head no longer makes the view jump: the brick stays where it was clicked, also when its section opens
 - Editing a Nix-Brick no longer makes the view jump: the caret goes to the clicked line and that line keeps its place, also after Save or Cancel

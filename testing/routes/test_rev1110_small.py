@@ -270,9 +270,11 @@ check("nichts außerhalb von hosts/ entstanden", not (cfg / "default.nix").exist
 use(cfg, theme=5, language=["de"])
 r = c.get("/")
 check("theme: 5 in den App-Settings: Startseite antwortet", r.status_code == 200, r.status_code)
+# Default language is "" since b72fbf0 (2026-11-24): nothing chosen, the
+# browser language applies. Until then it was "de".
 check("falsche Typen werden zu den Vorgaben",
       isinstance(config_manager.get_app_settings().get("theme"), str)
-      and config_manager.get_app_settings().get("language") == "de", config_manager.get_app_settings())
+      and config_manager.get_app_settings().get("language") == "", config_manager.get_app_settings())
 use(cfg)
 c.patch("/api/app/settings", headers=H, data=json.dumps({"theme": 5, "language": {"a": 1}}))
 st = config_manager.get_app_settings()
