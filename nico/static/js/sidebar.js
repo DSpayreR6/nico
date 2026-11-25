@@ -1819,91 +1819,18 @@ const Sidebar = (() => {
     if (modBtn) { modBtn.innerHTML = niIcon('pencil'); modBtn.dataset.mode = 'edit'; modBtn.title = t('preview.modeRaw'); }
   }
 
-  /** Text mode: two layers on top of each other (Martin, 2026-11-20).
-   *  Below, the text colored by Prism – the same highlightCode the panel
-   *  preview uses, so colors and search marks look the same everywhere.
-   *  On top, the textarea with transparent text: the caret and the selection
-   *  are its own, what is seen is the layer below. Both use the same font,
-   *  padding and no wrapping (wrap="off"), so every character sits in the
-   *  same place; the view follows the textarea's scrolling, and is cut to
-   *  the textarea's client area so the scrollbars do not shift it. No third-
-   *  party editor on purpose. */
+  /** Text mode: the colored two-layer editor shared with the brick editor
+   *  (attachColoredEditor, preview.js), plus what only the text mode has:
+   *  search marks and the spot where Nix stopped reading. */
   function _attachTextEditor(ta) {
-    const view = ta.parentElement.querySelector('.text-editor-view');
-    const code = view?.querySelector('code');
-    if (!view || !code) return;
-    let pending = false;
-    let brackets = [];
-    const sync = () => { view.scrollTop = ta.scrollTop; view.scrollLeft = ta.scrollLeft; };
-    const paint = () => {
-      pending = false;
-      // The trailing newline keeps an empty last line as tall as in the
-      // textarea; positions before it are unchanged.
-      highlightCode(code, ta.value + '\n');
-      Search.remark(ta);
-      brackets = _pairBrackets(code);
-      _markBracketAtCaret(ta, brackets);
-      _showParseError(ta, view, code);
-      sync();
-    };
-    _paintTextEditor = paint;
-    // Caret moves without input (arrows, click): only the pair mark follows.
-    let caretPending = false;
-    const caret = () => {
-      if (caretPending) return;
-      caretPending = true;
-      requestAnimationFrame(() => { caretPending = false; _markBracketAtCaret(ta, brackets); });
-    };
-    ['keydown', 'mouseup', 'focus', 'blur'].forEach(ev => ta.addEventListener(ev, caret));
-    const fit = () => {
-      view.style.right  = `${ta.offsetWidth  - ta.clientWidth}px`;
-      view.style.bottom = `${ta.offsetHeight - ta.clientHeight}px`;
-      sync();
-    };
-    ta.addEventListener('input', () => {
-      // Nix's error spot belongs to the saved text; once it is edited the
-      // spot may have moved. It comes back with the next save (Martin,
-      // 2026-11-21: while working on it, no errors).
-      _parseErr = null;
-      if (pending) return;
-      pending = true;
-      requestAnimationFrame(paint);
+    // Nix's error spot belongs to the saved text; once it is edited the
+    // spot may have moved. It comes back with the next save (Martin,
+    // 2026-11-21: while working on it, no errors).
+    ta.addEventListener('input', () => { _parseErr = null; });
+    _paintTextEditor = attachColoredEditor(ta, {
+      afterHighlight: () => Search.remark(ta),
+      afterBrackets:  (view, code) => _showParseError(ta, view, code),
     });
-    ta.addEventListener('scroll', sync);
-    if (window.ResizeObserver) new ResizeObserver(fit).observe(ta);
-    paint();
-    fit();
-  }
-
-  /** Bracket pairs in the text editor (Martin, 2026-11-21, "like in Excel").
-   *  Read from the layer Prism has just colored: only punctuation tokens
-   *  count, so brackets inside strings and comments are left out, while
-   *  those inside ${…} take part like code. A bracket without partner gets
-   *  .bracket-bad; where a closing bracket meets an opener of another kind,
-   *  the closer is the one marked - which bracket is really missing nobody
-   *  can know. Returns [{ pos, el, partner }] in text order. */
-  function _pairBrackets(code) {
-    const OPEN = { '{': '}', '[': ']', '(': ')' };
-    const list = [];
-    const walker = document.createTreeWalker(code, NodeFilter.SHOW_TEXT);
-    let pos = 0, n;
-    while ((n = walker.nextNode())) {
-      const s = n.textContent;
-      if (s.length === 1 && '{}[]()'.includes(s)) {
-        const el = n.parentElement?.closest('.token');
-        if (el?.classList.contains('punctuation')) list.push({ ch: s, pos, el, partner: null });
-      }
-      pos += s.length;
-    }
-    const stack = [];
-    for (const b of list) {
-      if (OPEN[b.ch]) { stack.push(b); continue; }
-      const top = stack[stack.length - 1];
-      if (top && OPEN[top.ch] === b.ch) { stack.pop(); top.partner = b; b.partner = top; }
-      else b.el.classList.add('bracket-bad');
-    }
-    stack.forEach(b => b.el.classList.add('bracket-bad'));
-    return list;
   }
 
   /** Where Nix stopped reading (open or save of a file Nix cannot read):
@@ -1964,19 +1891,6 @@ const Sidebar = (() => {
       }
       pos += len;
     }
-  }
-
-  /** The caret on or right after a bracket with a partner: both are shown.
-   *  The character after the caret wins over the one before. */
-  function _markBracketAtCaret(ta, list) {
-    list.forEach(b => b.el.classList.remove('bracket-pair'));
-    if (document.activeElement !== ta || ta.selectionStart !== ta.selectionEnd) return;
-    const at = ta.selectionStart;
-    const b = list.find(x => x.pos === at && x.partner)
-           || list.find(x => x.pos === at - 1 && x.partner);
-    if (!b) return;
-    b.el.classList.add('bracket-pair');
-    b.partner.el.classList.add('bracket-pair');
   }
 
   function _showFlkView(content) {

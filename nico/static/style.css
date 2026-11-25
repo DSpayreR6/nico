@@ -1525,24 +1525,47 @@ mark.search-match-active {
   border-top: 1px solid var(--surface2);
 }
 
-.brix-inline-textarea {
-  width: 100%;
-  box-sizing: border-box;
-  background: var(--base);
-  color: var(--text);
+/* Two layers like the text mode (2026-11-25): the border sits on the box,
+   not on the textarea – a border there would shift its text against the
+   colored layer below. Height follows the text (attachColoredEditor, grow),
+   so only horizontal scrolling is left inside. */
+.brix-text-editor {
+  --te-pad: 6px 8px;
   border: 1px solid var(--surface2);
   border-radius: 4px;
+  overflow: hidden;
+}
+
+.brix-text-editor:focus-within {
+  border-color: var(--blue);
+}
+
+.brix-inline-textarea {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
+  margin: 0;
+  background: transparent;
+  color: transparent;
+  caret-color: var(--text);
+  border: none;
   font-family: var(--mono);
   font-size: 13px;
   line-height: 1.65;
-  padding: 6px 8px;
-  resize: vertical;
+  white-space: pre;
+  tab-size: 2;
+  padding: var(--te-pad);
+  overflow-x: auto;
+  overflow-y: hidden;
+  resize: none;
   outline: none;
-  min-height: 80px;
 }
 
-.brix-inline-textarea:focus {
-  border-color: var(--blue);
+.brix-inline-textarea::selection {
+  background: color-mix(in srgb, var(--mauve, #cba6f7) 35%, transparent);
+  color: transparent;
 }
 
 .brix-edit-actions {
@@ -3797,9 +3820,11 @@ button.rollback-btn.gen-state-running:hover { background: rgba(166,227,161,.12);
   background: var(--base, #1e1e2e);
 }
 /* Line height 1.65 like every Prism view: Prism puts its language class on
-   the <pre> too, and the general rule for that wins over a class selector. */
-#raw-file-view .text-editor-view,
-#raw-file-view .text-editor-view code {
+   the <pre> too, and the general rule for that wins over a single class
+   selector. Shared by the text mode and the brick editor (2026-11-25); the
+   padding comes from --te-pad, which each of them sets for its textarea. */
+.text-editor .text-editor-view,
+.text-editor .text-editor-view code {
   font-family: var(--mono, monospace) !important;
   font-size: 13px !important;
   line-height: 1.65 !important;
@@ -3809,14 +3834,14 @@ button.rollback-btn.gen-state-running:hover { background: rgba(166,227,161,.12);
   background: transparent !important;
   text-shadow: none !important;
 }
-#raw-file-view .text-editor-view {
+.text-editor .text-editor-view {
   position: absolute;
   top: 0;
   left: 0;
   right: 0;
   bottom: 0;
   margin: 0 !important;
-  padding: 16px !important;
+  padding: var(--te-pad, 16px) !important;
   overflow: hidden !important;
   border: none;
   border-radius: 0 !important;
@@ -3824,7 +3849,7 @@ button.rollback-btn.gen-state-running:hover { background: rgba(166,227,161,.12);
   pointer-events: none;
   color: var(--text);
 }
-#raw-file-view .text-editor-view code { padding: 0 !important; display: block; }
+.text-editor .text-editor-view code { padding: 0 !important; display: block; }
 /* Token styles may not change the width of a character. */
 .text-editor-view .token { font-weight: inherit !important; font-style: inherit !important; }
 /* Brackets (2026-11-21): without partner inverted, the pair at the caret

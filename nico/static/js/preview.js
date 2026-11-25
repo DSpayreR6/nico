@@ -324,15 +324,21 @@ function renderAnnotatedPreview(code, containerId = 'preview-configuration', fil
       headBar.addEventListener('click', e => {
         if (e.target.closest('.brix-actions')) return;
         const parentSection = wrap.closest('.code-section');
-        if (parentSection?.classList.contains('collapsed')) {
-          // A brick body stays hidden while its section is collapsed, so open
-          // the section and show exactly this brick – other bricks keep their
-          // state. Expanding only the brick would look like a dead click.
-          toggleSection(parentSection.dataset.section);
-          if (collapsedBrix.has(seg.name)) toggleBrix(seg.name, wrap);
-        } else {
-          toggleBrix(seg.name, wrap);
-        }
+        // The clicked head stays where it was clicked (Martin, 2026-11-25).
+        // Opening the section grows everything above it, with a transition,
+        // and the section scrolled itself into view - the brick jumped away.
+        keepOnScreen(headBar, () => {
+          if (parentSection?.classList.contains('collapsed')) {
+            // A brick body stays hidden while its section is collapsed, so
+            // open the section and show exactly this brick – other bricks
+            // keep their state. Expanding only the brick would look like a
+            // dead click.
+            toggleSection(parentSection.dataset.section, { scroll: false });
+            if (collapsedBrix.has(seg.name)) toggleBrix(seg.name, wrap);
+          } else {
+            toggleBrix(seg.name, wrap);
+          }
+        }, 400);
       });
 
       const label = document.createElement('span');
@@ -413,12 +419,21 @@ function renderAnnotatedPreview(code, containerId = 'preview-configuration', fil
       bodyWrapper.appendChild(renderLineNums(seg.startLine, seg.lines.length));
       bodyWrapper.appendChild(bodyPre);
 
-      // Click on body → open inline editor (inner lines, without markers)
-      bodyWrapper.addEventListener('click', () => {
+      // Click on body → open inline editor (inner lines, without markers).
+      // The clicked row is read from the line numbers: the caret goes there
+      // and the row keeps its place on screen (Martin, 2026-11-25).
+      bodyWrapper.addEventListener('click', e => {
         if (reserved) return;
         if (wrap.querySelector('.brix-inline-editor')) return;  // already open
-        const innerContent = seg.lines.slice(1, -1).join('\n');
-        openBrixInlineEdit(seg.name, innerContent, wrap, bodyWrapper, file);
+        const inner = seg.lines.slice(1, -1);
+        const nums  = bodyWrapper.querySelector('.line-nums');
+        const top   = nums.getBoundingClientRect().top;
+        const lh    = parseFloat(getComputedStyle(nums).lineHeight) || 21.45;
+        const row   = Math.floor((e.clientY - top) / lh);
+        // Row 0 and the last row are the marker lines, not editable.
+        const line  = Math.max(0, Math.min(inner.length - 1, row - 1));
+        openBrixInlineEdit(seg.name, inner.join('\n'), wrap, bodyWrapper, file,
+                           { line, y: top + (line + 1) * lh });
       });
 
       wrap.appendChild(headBar);
@@ -451,7 +466,50 @@ function renderCodePreview(code, containerId = 'preview-configuration', file = '
 // – kept as the hook for any future pair that differs again.
 const _SECTION_SYNC_MAP = {};
 
-function toggleSection(name) {
+// ── Keeping a spot on screen while the layout changes ─────────────────────
+
+function _scrollParent(el) {
+  for (let p = el.parentElement; p; p = p.parentElement) {
+    const oy = getComputedStyle(p).overflowY;
+    if (oy === 'auto' || oy === 'scroll') return p;
+  }
+  return document.scrollingElement;
+}
+
+/** Scrolls el's container so that getY() lands on screen position y0 again,
+ *  and keeps doing so for `ms` – a section opens with a transition, so the
+ *  content above the spot grows over several frames. A turn of the mouse
+ *  wheel ends it early: the user's own scrolling wins. */
+function holdAt(el, y0, getY, ms = 0) {
+  const sc = _scrollParent(el);
+  if (!sc) return;
+  const fix = () => {
+    const d = getY() - y0;
+    if (Math.abs(d) >= 1) sc.scrollTop += d;
+  };
+  fix();
+  if (!ms) return;
+  let stop = false;
+  const quit = () => { stop = true; };
+  sc.addEventListener('wheel', quit, { once: true, passive: true });
+  const end = performance.now() + ms;
+  const step = () => {
+    if (stop) return;
+    fix();
+    if (performance.now() < end) requestAnimationFrame(step);
+    else sc.removeEventListener('wheel', quit);
+  };
+  requestAnimationFrame(step);
+}
+
+/** Runs `change` and keeps el at the screen position it had before. */
+function keepOnScreen(el, change, ms = 0) {
+  const y0 = el.getBoundingClientRect().top;
+  change();
+  holdAt(el, y0, () => el.getBoundingClientRect().top, ms);
+}
+
+function toggleSection(name, { scroll = true } = {}) {
   const wasCollapsed = collapsedSections.has(name);
   if (wasCollapsed) collapsedSections.delete(name);
   else              collapsedSections.add(name);
@@ -466,8 +524,9 @@ function toggleSection(name) {
   // state is not persisted – it was written here but never read back.
   applySectionCollapse();
 
-  // Scroll the code section into view when expanding
-  if (wasCollapsed) {
+  // Scroll the code section into view when expanding – unless the caller
+  // keeps its own spot on screen (brick head click).
+  if (wasCollapsed && scroll) {
     const codeSection = document.querySelector(`.code-section[data-section="${name.replace(/"/g, '\\"')}"]`);
     if (codeSection) setTimeout(() => codeSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 50);
   }
@@ -962,3 +1021,119 @@ function initNixosLinks() {
   });
 }
 
+
+// ── Colored editor: text mode and brick editor ─────────────────────────────
+
+/** Two layers on top of each other (Martin, 2026-11-20). Below, the text
+ *  colored by Prism – the same highlightCode the preview uses, so colors and
+ *  search marks look the same everywhere. On top, the textarea with
+ *  transparent text: the caret and the selection are its own, what is seen is
+ *  the layer below. Both use the same font, padding and no wrapping
+ *  (wrap="off"), so every character sits in the same place; the view follows
+ *  the textarea's scrolling, and is cut to the textarea's client area so the
+ *  scrollbars do not shift it. No third-party editor on purpose.
+ *
+ *  Expects `ta` next to a `.text-editor-view > code` in a `.text-editor`.
+ *  Used by the text mode (sidebar.js, with search and Nix's error spot as
+ *  hooks) and by the brick editor (brix.js, with `grow`: as tall as its text,
+ *  so only the preview scrolls – Martin, 2026-11-25). Returns the repaint. */
+function attachColoredEditor(ta, { afterHighlight, afterBrackets, grow = false } = {}) {
+  const view = ta.parentElement.querySelector('.text-editor-view');
+  const code = view?.querySelector('code');
+  if (!view || !code) return null;
+  let pending = false;
+  let brackets = [];
+  const sync = () => { view.scrollTop = ta.scrollTop; view.scrollLeft = ta.scrollLeft; };
+  const fitHeight = () => {
+    if (!grow) return;
+    const cs = getComputedStyle(ta);
+    const lh = parseFloat(cs.lineHeight) || 21.45;
+    const lines = ta.value.split('\n').length;
+    // Border box: padding, border and a horizontal scrollbar on top.
+    const h = lines * lh + parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom)
+            + (ta.offsetHeight - ta.clientHeight);
+    ta.style.height = `${Math.ceil(h)}px`;
+  };
+  const paint = () => {
+    pending = false;
+    // The trailing newline keeps an empty last line as tall as in the
+    // textarea; positions before it are unchanged.
+    highlightCode(code, ta.value + '\n');
+    afterHighlight?.();
+    brackets = pairBrackets(code);
+    markBracketAtCaret(ta, brackets);
+    afterBrackets?.(view, code);
+    sync();
+  };
+  // Caret moves without input (arrows, click): only the pair mark follows.
+  let caretPending = false;
+  const caret = () => {
+    if (caretPending) return;
+    caretPending = true;
+    requestAnimationFrame(() => { caretPending = false; markBracketAtCaret(ta, brackets); });
+  };
+  ['keydown', 'mouseup', 'focus', 'blur'].forEach(ev => ta.addEventListener(ev, caret));
+  const fit = () => {
+    view.style.right  = `${ta.offsetWidth  - ta.clientWidth}px`;
+    view.style.bottom = `${ta.offsetHeight - ta.clientHeight}px`;
+    sync();
+  };
+  ta.addEventListener('input', () => {
+    // Height right away, not in the next frame: otherwise a new line first
+    // scrolls the textarea by one line and the layers are off for a frame.
+    fitHeight();
+    if (pending) return;
+    pending = true;
+    requestAnimationFrame(paint);
+  });
+  ta.addEventListener('scroll', sync);
+  if (window.ResizeObserver) new ResizeObserver(fit).observe(ta);
+  fitHeight();
+  paint();
+  fit();
+  return paint;
+}
+
+/** Bracket pairs in the editor (Martin, 2026-11-21, "like in Excel").
+ *  Read from the layer Prism has just colored: only punctuation tokens
+ *  count, so brackets inside strings and comments are left out, while
+ *  those inside ${…} take part like code. A bracket without partner gets
+ *  .bracket-bad; where a closing bracket meets an opener of another kind,
+ *  the closer is the one marked - which bracket is really missing nobody
+ *  can know. Returns [{ pos, el, partner }] in text order. */
+function pairBrackets(code) {
+  const OPEN = { '{': '}', '[': ']', '(': ')' };
+  const list = [];
+  const walker = document.createTreeWalker(code, NodeFilter.SHOW_TEXT);
+  let pos = 0, n;
+  while ((n = walker.nextNode())) {
+    const s = n.textContent;
+    if (s.length === 1 && '{}[]()'.includes(s)) {
+      const el = n.parentElement?.closest('.token');
+      if (el?.classList.contains('punctuation')) list.push({ ch: s, pos, el, partner: null });
+    }
+    pos += s.length;
+  }
+  const stack = [];
+  for (const b of list) {
+    if (OPEN[b.ch]) { stack.push(b); continue; }
+    const top = stack[stack.length - 1];
+    if (top && OPEN[top.ch] === b.ch) { stack.pop(); top.partner = b; b.partner = top; }
+    else b.el.classList.add('bracket-bad');
+  }
+  stack.forEach(b => b.el.classList.add('bracket-bad'));
+  return list;
+}
+
+/** The caret on or right after a bracket with a partner: both are shown.
+ *  The character after the caret wins over the one before. */
+function markBracketAtCaret(ta, list) {
+  list.forEach(b => b.el.classList.remove('bracket-pair'));
+  if (document.activeElement !== ta || ta.selectionStart !== ta.selectionEnd) return;
+  const at = ta.selectionStart;
+  const b = list.find(x => x.pos === at && x.partner)
+         || list.find(x => x.pos === at - 1 && x.partner);
+  if (!b) return;
+  b.el.classList.add('bracket-pair');
+  b.partner.el.classList.add('bracket-pair');
+}

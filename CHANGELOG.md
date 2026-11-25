@@ -2,8 +2,14 @@
 
 ## Unreleased
 
+### New Features
+
+- Nix-Brick editor: syntax colors and bracket pairs while typing, like the text mode; the editor grows with its text
+
 ### Bug Fixes
 
+- Clicking a Nix-Brick head no longer makes the view jump: the brick stays where it was clicked, also when its section opens
+- Editing a Nix-Brick no longer makes the view jump: the caret goes to the clicked line and that line keeps its place, also after Save or Cancel
 - The interface language is stored in NiCo's settings instead of only in the browser, so it survives another browser or cleared site data; a choice made before is taken over once
 
 ## 0.23.0 (2026-11-24)

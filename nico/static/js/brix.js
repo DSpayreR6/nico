@@ -462,16 +462,30 @@ async function splitBrix() {
 
 // ── Brix inline editing ──────────────────────────────────────────────────────
 
-function openBrixInlineEdit(name, currentContent, wrapEl, bodyWrapper, file = 'configuration.nix') {
+/** `at` = { line, y }: the inner line that was clicked and where it stood on
+ *  screen. The caret goes there and the line keeps its place (Martin,
+ *  2026-11-25) – before, focus() scrolled to the caret at the top of the
+ *  brick, and with a long brick the view jumped. */
+function openBrixInlineEdit(name, currentContent, wrapEl, bodyWrapper, file = 'configuration.nix', at = null) {
   bodyWrapper.style.display = 'none';
 
   const editor = document.createElement('div');
   editor.className = 'brix-inline-editor';
 
+  // Colored while typing: the same two layers as the text mode.
+  const box = document.createElement('div');
+  box.className = 'text-editor brix-text-editor';
+  box.innerHTML = '<pre class="text-editor-view" aria-hidden="true"><code class="language-nix"></code></pre>';
+
   const textarea = document.createElement('textarea');
   textarea.className = 'brix-inline-textarea';
+  textarea.spellcheck = false;
+  textarea.setAttribute('wrap', 'off');
   textarea.value = currentContent;
-  textarea.rows  = Math.max(5, currentContent.split('\n').length + 2);
+  box.appendChild(textarea);
+
+  // After the editor closes, the brick's head goes back where it was.
+  const keepHead = (el, y) => holdAt(el, y, () => el.getBoundingClientRect().top);
 
   const actions = document.createElement('div');
   actions.className = 'brix-edit-actions';
@@ -483,9 +497,14 @@ function openBrixInlineEdit(name, currentContent, wrapEl, bodyWrapper, file = 'c
     saveBtn.disabled = true;
     const ok = await saveBrixInline(name, textarea.value, file);
     if (ok) {
+      const y = wrapEl.getBoundingClientRect().top;
       bodyWrapper.style.display = '';
       editor.remove();
       await _refreshPreviewForFile(file);
+      // The preview was drawn anew: find the brick again, the visible one.
+      const again = [...document.querySelectorAll('.code-brix[data-brick-name]')]
+        .find(el => el.dataset.brickName === name && el.offsetParent);
+      if (again) keepHead(again, y);
     } else {
       saveBtn.disabled = false;
     }
@@ -495,16 +514,31 @@ function openBrixInlineEdit(name, currentContent, wrapEl, bodyWrapper, file = 'c
   cancelBtn.className   = 'btn-secondary';
   cancelBtn.textContent = t('brix.editCancel');
   cancelBtn.addEventListener('click', () => {
+    const y = wrapEl.getBoundingClientRect().top;
     bodyWrapper.style.display = '';
     editor.remove();
+    keepHead(wrapEl, y);
   });
 
   actions.appendChild(saveBtn);
   actions.appendChild(cancelBtn);
-  editor.appendChild(textarea);
+  editor.appendChild(box);
   editor.appendChild(actions);
   wrapEl.appendChild(editor);
-  textarea.focus();
+  attachColoredEditor(textarea, { grow: true });
+
+  const lines = currentContent.split('\n');
+  const line  = Math.max(0, Math.min(at?.line ?? 0, lines.length - 1));
+  let off = 0;
+  for (let i = 0; i < line; i++) off += lines[i].length + 1;
+  textarea.setSelectionRange(off, off);
+  textarea.focus({ preventScroll: true });
+  if (at) {
+    const cs = getComputedStyle(textarea);
+    const lh = parseFloat(cs.lineHeight) || 21.45;
+    holdAt(wrapEl, at.y, () => textarea.getBoundingClientRect().top
+                              + textarea.clientTop + parseFloat(cs.paddingTop) + line * lh);
+  }
 }
 
 async function saveBrixInline(name, content, file = 'configuration.nix') {

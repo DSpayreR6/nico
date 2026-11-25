@@ -49,6 +49,14 @@ Auf- und Zuklappen von Sektionen und Nix-Brix, 14 Prüfungen. Deckt beide
 Fehler von 2026-10-17 ab: "Alles einklappen" ließ die Brix offen, und ein
 Klick auf einen Brick in einer zugeklappten Sektion öffnete nur die Sektion.
 
+## test_brick_stay.py
+
+Nix-Brick bleibt stehen (2026-11-25): Klick auf einen Brick-Kopf in
+zugeklappter Sektion lässt den Kopf an seiner Stelle, ein Klick in einen
+langen Brick setzt den Cursor in die angeklickte Zeile, ohne dass die
+Ansicht springt; Farben im Brick-Editor schon beim Tippen, Abbrechen und
+Speichern ohne Sprung. Profil `standard`, legt den langen Brick selbst an.
+
 ## test_sections.py (ohne Browser, in testing/routes/)
 
 Abschnitts-Kürzel, alte deutsche Namen und der Formatmarker, 38 Prüfungen.
