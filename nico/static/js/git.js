@@ -405,52 +405,65 @@ async function ensureGitStartGuard(configDir) {
   }
 }
 
+// Commits already shown in the time machine list – the offset for "Load
+// more" (Martin, 2026-11-25). The server sends pages of 30.
+let _gitLogShown = 0;
+// Opening the admin area can start two loads at once; only the newest one
+// may write the list, or the offset and the diff selects count twice.
+let _gitLogGen = 0;
+
+/** "2026-04-03 14:23:11 +0200" → "2026-04-03 14:23" */
+function _gitLogDate(date) {
+  const p = (date || '').split(' ');
+  return p.length >= 2 ? `${p[0]} ${p[1].slice(0, 5)}` : date;
+}
+
 async function loadAdminGitLog() {
   const container = document.getElementById('admin-git-log');
   container.innerHTML = `<span class="admin-loading">${escHtml(t('admin.loading'))}</span>`;
+  _gitLogShown = 0;
+  await _loadGitLogPage(container, true, ++_gitLogGen);
+}
 
+async function _loadGitLogPage(container, first, gen = _gitLogGen) {
   try {
-    const res  = await csrfFetch('/api/git/log');
+    const res  = await csrfFetch(`/api/git/log?skip=${_gitLogShown}`);
     const data = await res.json();
+    if (gen !== _gitLogGen) return;   // a newer load took over
     const commits = data.commits || [];
 
-    if (!commits.length) {
+    if (first && !commits.length) {
       container.innerHTML = `<span class="admin-empty">${escHtml(t('admin.noCommits'))}</span>`;
       return;
     }
 
-    // Populate diff selects
     const fromSel = document.getElementById('diff-from-select');
     const toSel   = document.getElementById('diff-to-select');
     if (fromSel && toSel) {
-      fromSel.innerHTML = '';
-      toSel.innerHTML   = `<option value="HEAD">HEAD</option>`;
+      // Diff selects start fresh with the first page; later pages add.
+      if (first) {
+        fromSel.innerHTML = '';
+        toSel.innerHTML   = `<option value="HEAD">HEAD</option>`;
+      }
       for (const c of commits) {
-        const short   = c.hash.slice(0, 7);
-        const dateParts = (c.date || '').split(' ');
-        const dateStr   = dateParts.length >= 2 ? `${dateParts[0]} ${dateParts[1].slice(0, 5)}` : c.date;
-        const label   = `${short}  ${dateStr}  ${c.message.slice(0, 40)}`;
+        const label = `${c.hash.slice(0, 7)}  ${_gitLogDate(c.date)}  ${c.message.slice(0, 40)}`;
         fromSel.appendChild(Object.assign(document.createElement('option'), { value: c.hash, textContent: label }));
         toSel.appendChild(Object.assign(document.createElement('option'),   { value: c.hash, textContent: label }));
       }
       // Default: from = second commit, to = HEAD
-      if (fromSel.options.length > 1) fromSel.selectedIndex = 1;
+      if (first && fromSel.options.length > 1) fromSel.selectedIndex = 1;
     }
 
     // Show diff button in NixOS menu when git repo has commits
-    if (commits.length >= 2) {
+    if (first && commits.length >= 2) {
       document.getElementById('nixos-diff-btn')?.classList.remove('hidden');
     }
 
-    container.innerHTML = '';
+    if (first) container.innerHTML = '';
+    container.querySelector('.git-log-more')?.remove();
     for (const c of commits) {
       const shortHash = c.hash.slice(0, 7);
-      // Format date: "2026-04-03 14:23:11 +0200" → "2026-04-03 14:23"
-      const dateParts = (c.date || '').split(' ');
-      const dateStr   = dateParts.length >= 2
-        ? `${dateParts[0]} ${dateParts[1].slice(0, 5)}`
-        : c.date;
-
+      const dateStr   = _gitLogDate(c.date);
       const row = document.createElement('div');
       row.className = 'rollback-item';
       row.innerHTML = `
@@ -466,8 +479,23 @@ async function loadAdminGitLog() {
       });
       container.appendChild(row);
     }
+    _gitLogShown += commits.length;
+
+    // Older checkpoints exist: one button at the end of the list.
+    if (data.more) {
+      const more = document.createElement('button');
+      more.type = 'button';
+      more.className = 'btn-primary btn-small git-log-more';
+      more.textContent = t('admin.gitLogMore');
+      more.addEventListener('click', () => {
+        more.disabled = true;
+        _loadGitLogPage(container, false, _gitLogGen);
+      });
+      container.appendChild(more);
+    }
   } catch (e) {
-    container.innerHTML = `<span class="admin-empty">${escHtml(t('admin.gitError'))}</span>`;
+    if (first) container.innerHTML = `<span class="admin-empty">${escHtml(t('admin.gitError'))}</span>`;
+    else showToast(t('admin.gitError'), 'error');
     console.error('loadAdminGitLog:', e);
   }
 }
@@ -569,78 +597,78 @@ async function _doGitInit() {
     _gitStatus.has_git = true;
     hideGitWarning();
     _updateGitStatusLabel({ git_installed: true, has_git: true });
+    // Both places that offer "Set up" follow (time machine, config settings).
+    if (typeof _showGitSettingsRows === 'function') _showGitSettingsRows(true);
+    loadAdminGitLog();
     showToast(t('git.initSuccess'), 'success');
   } else {
     showToast(tErr(d.message) || t('git.initError'), 'error');
   }
 }
 
+/** The .gitignore button in the config settings says "Create" or "Edit"
+ *  (2026-11-25). The buttons themselves are bound once at start
+ *  (initSettingsPanel) – bound here they only worked after the time machine
+ *  tab had been opened, where they used to live. */
 async function loadGitignoreEditor() {
-  const missing = document.getElementById('git-gitignore-missing');
-  const editor  = document.getElementById('git-gitignore-editor');
-  const textarea = document.getElementById('git-gitignore-content');
-  if (!missing || !editor || !textarea) return;
-
+  const editBtn = document.getElementById('git-gitignore-edit-btn');
+  if (!editBtn) return;
   try {
-    const res  = await csrfFetch('/api/git/gitignore');
-    const data = await res.json();
-    if (data.exists) {
-      textarea.value = data.content;
-      missing.classList.add('hidden');
-      editor.classList.remove('hidden');
-    } else {
-      missing.classList.remove('hidden');
-      editor.classList.add('hidden');
+    const data = await (await csrfFetch('/api/git/gitignore')).json();
+    editBtn.textContent = t(data.exists ? 'admin.gitignore.editBtn' : 'admin.gitignore.createShortBtn');
+    editBtn.dataset.exists = data.exists ? '1' : '';
+  } catch { /* versioning not set up yet */ }
+
+}
+
+/** No .gitignore yet: create it with the standard entries. Otherwise edit it
+ *  in a window – add the standard entries, save, or cancel. */
+async function _gitignoreFlow() {
+  const btn = document.getElementById('git-gitignore-edit-btn');
+  const post = body => csrfFetch('/api/git/create-gitignore', body
+    ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }
+    : { method: 'POST' }).then(r => r.json());
+
+  if (!btn?.dataset.exists) {
+    const d = await post().catch(() => null);
+    if (d?.success) { showToast(t('admin.gitignore.created'), 'success'); loadGitignoreEditor(); }
+    else showToast(tErr(d?.message) || t('toast.error'), 'error');
+    return;
+  }
+
+  const flow = openFlowDialog(t('admin.gitignore.title'));
+  const node = document.createElement('div');
+  node.innerHTML = `<textarea class="flow-textarea" spellcheck="false"></textarea>`;
+  const ta = node.querySelector('textarea');
+  const load = async () => {
+    const data = await (await csrfFetch('/api/git/gitignore')).json();
+    ta.value = data.content || '';
+  };
+  try { await load(); } catch { return _flowFailed(flow, t('toast.error')); }
+
+  let error = '';
+  for (;;) {
+    const go = await flow.step({ node, error, buttons: [
+      { label: t('dialog.cancel'), value: 'cancel' },
+      { label: t('admin.gitignore.addBtn'), value: 'add' },
+      { label: t('admin.gitignore.saveBtn'), value: 'ok', primary: true }] });
+    if (go === 'cancel') return flow.close();
+    error = '';
+    if (go === 'add') {
+      // The server merges the standard entries into the file on disk; what
+      // was typed here and not saved yet is saved first, so nothing is lost.
+      const saved = await post({ content: ta.value }).catch(() => null);
+      const d = saved?.success ? await post().catch(() => null) : saved;
+      if (!d?.success) { error = tErr(d?.message) || t('toast.error'); continue; }
+      await load().catch(() => {});
+      showToast(t('admin.gitignore.added'), 'success');
+      continue;
     }
-  } catch { /* git not set up yet */ }
-
-  const createBtn = document.getElementById('git-gitignore-create-btn');
-  if (createBtn && !createBtn.dataset.bound) {
-    createBtn.dataset.bound = '1';
-    createBtn.addEventListener('click', async () => {
-      const res  = await csrfFetch('/api/git/create-gitignore', { method: 'POST' });
-      const data = await res.json();
-      if (data.success) { showToast(t('admin.gitignore.created'), 'success'); loadGitignoreEditor(); }
-      else showToast(tErr(data.message), 'error');
-    });
-  }
-
-  const saveBtn = document.getElementById('git-gitignore-save-btn');
-  if (saveBtn && !saveBtn.dataset.bound) {
-    saveBtn.dataset.bound = '1';
-    saveBtn.addEventListener('click', async () => {
-      const res  = await csrfFetch('/api/git/create-gitignore', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: textarea.value }),
-      });
-      const data = await res.json();
-      if (data.success) showToast(t('admin.gitignore.saved'), 'success');
-      else showToast(tErr(data.message), 'error');
-    });
-  }
-
-  const addBtn = document.getElementById('git-gitignore-add-btn');
-  if (addBtn && !addBtn.dataset.bound) {
-    addBtn.dataset.bound = '1';
-    addBtn.addEventListener('click', async () => {
-      const res  = await csrfFetch('/api/git/create-gitignore', { method: 'POST' });
-      const data = await res.json();
-      if (data.success) { showToast(t('admin.gitignore.added'), 'success'); loadGitignoreEditor(); }
-      else showToast(tErr(data.message), 'error');
-    });
-  }
-
-  const cleanupBtn = document.getElementById('git-foreign-cleanup-btn');
-  if (cleanupBtn && !cleanupBtn.dataset.bound) {
-    cleanupBtn.dataset.bound = '1';
-    cleanupBtn.addEventListener('click', openForeignCleanup);
-  }
-
-  const largeBtn = document.getElementById('git-large-cleanup-btn');
-  if (largeBtn && !largeBtn.dataset.bound) {
-    largeBtn.dataset.bound = '1';
-    largeBtn.addEventListener('click', openLargeFileCleanup);
+    const d = await post({ content: ta.value }).catch(() => null);
+    if (!d?.success) { error = tErr(d?.message) || t('toast.error'); continue; }
+    flow.close();
+    showToast(t('admin.gitignore.saved'), 'success');
+    return;
   }
 }
 
@@ -687,9 +715,9 @@ function showForeignFilesDialog(files, mode) {
           <div class="gsi-block-body gsi-file-list">${rows}</div>
         </div></div>
         <p id="ff-err" style="color:var(--red);display:none;margin-top:8px"></p>
-        <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px">
-          <button type="button" id="ff-cancel" class="btn-surface">${escHtml(t('git.foreign.cancel'))}</button>
-          <button type="button" id="ff-ok" class="btn-primary">${escHtml(t('git.foreign.apply'))}</button>
+        <div class="dialog-actions">
+          <button type="button" id="ff-cancel" class="btn-secondary">${escHtml(t('git.foreign.cancel'))}</button>
+          <button type="button" id="ff-ok" class="btn-primary">${escHtml(t(isCleanup ? 'git.upkeep.apply' : 'git.foreign.apply'))}</button>
         </div>
       </div>`;
     document.body.appendChild(overlay);
@@ -733,6 +761,13 @@ function _mb(bytes) { return (bytes / (1024 * 1024)).toFixed(0); }
  * remove it), in local commits (rewritable, nothing published breaks), or
  * already on the server (refused – a rewrite there breaks other machines).
  */
+/** A check found nothing: one window with the result and Close. */
+async function _nothingFound(title, text) {
+  const flow = openFlowDialog(title);
+  await flow.step({ text, buttons: [{ label: t('dialog.close'), value: 'cancel', primary: true }] });
+  flow.close();
+}
+
 async function openLargeFileCleanup() {
   let rep;
   try {
@@ -744,8 +779,10 @@ async function openLargeFileCleanup() {
     ...rep.worktree.map(([p, s]) => ({ path: p, size: s, where: 'worktree' })),
     ...rep.local.map(([p, s])    => ({ path: p, size: s, where: 'local' })),
   ];
+  // Nothing found: said in a window, not a green toast – a toast right
+  // after the click looked as if something had been done (Martin, 2026-11-25).
   if (!fixable.length && !rep.published.length) {
-    showToast(t('git.large.none'), 'success');
+    await _nothingFound(t('git.large.title'), t('git.large.none'));
     return;
   }
 
@@ -772,7 +809,7 @@ async function openLargeFileCleanup() {
         <div class="gsi-block-body">${fixable.map(row).join('')}</div>
       </div></div>
       <label style="display:flex;gap:8px;align-items:center;margin-top:10px;cursor:pointer">
-        <input type="checkbox" id="lf-delete" checked style="margin:0">
+        <input type="checkbox" id="lf-delete" style="margin:0">
         <span>${escHtml(t('git.large.deleteFromDisk'))}</span>
       </label>` : ''}
       ${rep.published.length ? `<p style="margin-top:12px">${escHtml(t('git.large.publishedNote'))}</p>
@@ -780,9 +817,9 @@ async function openLargeFileCleanup() {
         <div class="gsi-block-body">${publishedRows}</div>
       </div></div>` : ''}
       <p id="lf-err" style="color:var(--red);display:none;margin-top:8px"></p>
-      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px">
-        <button type="button" id="lf-cancel" class="btn-surface">${escHtml(t('git.large.cancel'))}</button>
-        ${fixable.length ? `<button type="button" id="lf-ok" class="btn-primary">${escHtml(t('git.large.apply'))}</button>` : ''}
+      <div class="dialog-actions">
+        <button type="button" id="lf-cancel" class="btn-secondary">${escHtml(t('git.large.cancel'))}</button>
+        ${fixable.length ? `<button type="button" id="lf-ok" class="btn-primary">${escHtml(t('git.upkeep.apply'))}</button>` : ''}
       </div>
     </div>`;
   document.body.appendChild(overlay);
@@ -967,7 +1004,7 @@ async function openForeignCleanup() {
     data = await res.json();
   } catch { showToast(t('toast.error'), 'error'); return; }
   if (!data.tracked || !data.tracked.length) {
-    showToast(t('git.foreign.cleanupNone'), 'success');
+    await _nothingFound(t('git.foreign.cleanupTitle'), t('git.foreign.cleanupNone'));
     return;
   }
   const done = await showForeignFilesDialog(data.tracked, 'cleanup');
@@ -982,6 +1019,10 @@ function _updateGitStatusLabel(data) {
   const label   = document.getElementById('git-status-label');
   const initBtn = document.getElementById('git-init-btn');
   if (!label) return;
+  // Only something to say without a working repository (2026-11-25): with
+  // one, the list of checkpoints below says it all.
+  document.getElementById('git-status-row')
+    ?.classList.toggle('hidden', !!(data.git_installed && data.has_git));
   if (!data.git_installed) {
     label.textContent = t('git.notInstalled');
     initBtn?.classList.add('hidden');

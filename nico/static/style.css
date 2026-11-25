@@ -2756,6 +2756,96 @@ button:disabled {
   margin-bottom: 10px;
 }
 
+/* Settings groups that fold (2026-11-25, Martin): one line per option, the
+   heading opens and closes the group, all closed when the admin area opens.
+   The ▾ on the left turns like the section headings in the panel
+   (.sec-toggle), so it reads as something to click. */
+.raw-panel-hint.settings-scope-hint { margin: 4px 0 16px; text-align: center; }
+.settings-group + .settings-group { margin-top: 18px; }
+.settings-group-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  user-select: none;
+}
+.settings-group-toggle::before {
+  content: "▾";
+  font-size: 10px;
+  color: var(--overlay0);
+  transition: transform .2s;
+  flex-shrink: 0;
+}
+.settings-group.collapsed > .settings-group-toggle::before { transform: rotate(-90deg); }
+.settings-group-toggle:hover,
+.settings-group-toggle:focus-visible { color: var(--sapphire, var(--blue)); outline: none; }
+.settings-group.collapsed > .settings-group-body { display: none; }
+.settings-label { display: inline-flex; align-items: center; gap: 4px; }
+/* A heading in the look of the settings groups that does not fold (time
+   machine): same colour and line, no ▾, room for an ⓘ. */
+.settings-rubrik.rubrik-static { display: flex; align-items: center; gap: 4px; }
+/* Label with ⓘ on the left, a read-only value (and maybe a button) on the
+   right: directories, remote. Labels share one width so the boxes line up. */
+.settings-value-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--subtext0);
+}
+.settings-value-row > .settings-label { flex: 0 0 200px; }
+.settings-value-row > .settings-path-input { flex: 1; min-width: 0; }
+.settings-label > label { display: inline; margin: 0; }
+/* State line under an action row (e.g. where /etc/nixos points). */
+.raw-panel-hint.settings-status-line { margin: 4px 0 0; }
+.settings-status-line:empty { display: none; }
+/* Two buttons at the end of one row (export | import). */
+.settings-buttons { display: inline-flex; gap: 6px; flex-shrink: 0; }
+/* action-btn is full width elsewhere; in a row it sits at the end like the others. */
+.settings-action-row > .action-btn,
+.settings-buttons > .action-btn { width: auto; flex-shrink: 0; }
+/* A label with its ⓘ on the left, the button on the right – like a switch row. */
+.settings-action-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 10px;
+  font-size: 12px;            /* as a switch row (global label rule) */
+  color: var(--subtext0);
+}
+
+/* ⓘ and its text (core.js initInfoTips) – look of the section docs popup. */
+.info-tip {
+  background: none;
+  border: none;
+  padding: 0 2px;
+  margin: 0;
+  line-height: 1;
+  font-size: 12px;
+  color: var(--overlay1);
+  cursor: help;
+  text-transform: none;
+  letter-spacing: 0;
+}
+.info-tip:hover,
+.info-tip:focus-visible { color: var(--blue); outline: none; }
+.info-tip-popup {
+  position: fixed;
+  z-index: 300;
+  max-width: 360px;
+  background: var(--surface0);
+  border: 1px solid var(--surface1);
+  border-radius: 7px;
+  padding: 8px 10px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--subtext1);
+  white-space: pre-line;
+  box-shadow: 0 4px 16px rgba(0,0,0,.4);
+}
+
 .settings-path-row {
   display: flex;
   align-items: center;
@@ -2949,6 +3039,32 @@ button.rollback-btn.gen-state-running:hover { background: rgba(166,227,161,.12);
 
 .dialog .nico-dialog-input { width: 100%; margin-top: 4px; }
 
+/* No window taller than the screen (Martin, 2026-11-25: "nicht alle haben
+   einen riesen Monitor"). Plain dialogs scroll as a whole; windows with a
+   list (sections, validator rules) keep title, text and buttons in place
+   and scroll only the list. Before, the list windows cut off at the bottom
+   of the screen – rules and the save button out of reach. */
+.overlay > .dialog,
+.overlay > .dialog-box { max-height: calc(100vh - 32px); overflow-y: auto; box-sizing: border-box; }
+.overlay > .admin-panel.list-dialog {
+  height: auto;
+  max-height: calc(100vh - 32px);
+  border-radius: 12px;
+}
+.list-dialog > .admin-panel-header + div {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.list-dialog .list-dialog-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 6px;
+  scrollbar-width: thin;                         /* theme colours, not the browser grey */
+  scrollbar-color: var(--surface2) transparent;
+}
+
 /* Step window of the admin processes (openFlowDialog, 2026-11-25): the
    existing path row and input styles, only the spacing inside the window. */
 .flow-dialog .import-path-row { margin-top: 8px; }
@@ -2956,6 +3072,96 @@ button.rollback-btn.gen-state-running:hover { background: rgba(166,227,161,.12);
 .flow-dialog .admin-hint,
 .flow-dialog .setup-hint { margin-top: 6px; }
 .flow-dialog .flow-error { margin-top: 8px; }
+/* Time machine, System side (Martin, 2026-11-25): the list of system states
+   reaches down to the bottom of the window instead of stopping at 340px with
+   a third of the window empty. Every level from the tab down passes the
+   height on (flex + min-height:0); the list scrolls inside. On a small
+   screen it keeps a minimum and the tab panel scrolls. */
+.admin-tab-panel[data-admin-panel="zeitmaschine"]:not(.hidden) { display: flex; flex-direction: column; }
+#tm-system:not(.hidden) { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+#tm-system > .admin-section { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+#generations-body { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+/* Config side the same way: the folding tools keep their height, the list
+   of checkpoints takes the rest. */
+#tm-config:not(.hidden) { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+#tm-config > .admin-section { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+#tm-config > .admin-section > .settings-group,
+#tm-config > .admin-section > .tm-list-head,
+#tm-config > .admin-section > #git-status-row { flex-shrink: 0; }
+#tm-config .tm-list-head { margin-top: 18px; }
+#admin-git-log.rollback-list {
+  max-height: none;
+  flex: 0 1 auto;
+  min-height: 160px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--surface2) transparent;
+}
+#generations-body .rollback-list {
+  max-height: none;
+  flex: 0 1 auto;
+  min-height: 160px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--surface2) transparent;
+}
+/* Validator rules: legend below the list and the Flake badge (2026-11-25) */
+.validator-legend {
+  margin-top: 16px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--subtext0);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex-shrink: 0;
+}
+.validator-legend > div { display: flex; align-items: flex-start; gap: 6px; }
+.validator-legend .legend-dot { margin-top: 6px; }   /* first line, also when the text wraps */
+.legend-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.rule-badge {
+  margin-left: 6px;
+  font-size: 10px;
+  padding: 1px 5px;
+  background: var(--surface1);
+  border-radius: 4px;
+}
+.validator-legend .rule-badge { margin-left: 0; }
+/* Directories and remote windows (config settings, 2026-11-25) */
+.flow-dialog .flow-field + .flow-field { margin-top: 10px; }
+.flow-dialog .flow-field-label { font-size: 12px; color: var(--subtext0); margin-bottom: 4px; }
+.flow-dialog .flow-remote-platform,
+.flow-dialog .flow-remote-url { display: block; width: 100%; box-sizing: border-box; margin-top: 8px; }
+.flow-dialog .flow-remote-fields { display: flex; gap: 6px; align-items: center; margin-top: 8px; }
+.flow-dialog .flow-remote-fields input { flex: 1; min-width: 0; }
+.flow-dialog .flow-remote-preview {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--subtext0);
+  margin-top: 8px;
+  min-height: 1.2em;
+}
+.flow-dialog .flow-help-link { color: var(--blue); text-decoration: none; margin-left: 4px; }
+.flow-dialog .flow-textarea {
+  display: block;
+  width: 100%;
+  height: 220px;
+  box-sizing: border-box;
+  font-family: var(--mono);
+  font-size: 12px;
+  background: var(--base);
+  color: var(--text);
+  border: 1px solid var(--surface2);
+  border-radius: 6px;
+  padding: 8px;
+  resize: vertical;
+}
+/* "Load more" at the end of the checkpoints list (2026-11-25) */
+.git-log-more { align-self: center; margin: 6px 0 2px; flex-shrink: 0; }
 
 /* ── Diff-Select-Row ─────────────────────────────────────────────────────── */
 .diff-select-row {

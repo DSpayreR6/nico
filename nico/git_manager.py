@@ -1337,13 +1337,16 @@ def check_close_state(nixos_dir: str) -> dict:
     }
 
 
-def get_log(nixos_dir: str, n: int = 30) -> list[dict]:
-    """Return the last n commits as a list of {hash, message, date} dicts."""
+def get_log(nixos_dir: str, n: int = 30, skip: int = 0) -> list[dict]:
+    """Return n commits as a list of {hash, message, date} dicts, newest
+    first, leaving out the newest `skip` (time machine "Load more",
+    2026-11-25)."""
     if not is_git_repo(nixos_dir):
         return []
     # Use unit separator (\x1f) so messages with spaces don't break parsing
     fmt = "%H\x1f%s\x1f%ai"
-    rc, out = _run(["log", f"-{n}", f"--format={fmt}"], cwd=nixos_dir)
+    rc, out = _run(["log", f"-{n}", f"--skip={max(0, int(skip))}", f"--format={fmt}"],
+                   cwd=nixos_dir)
     if rc != 0 or not out:
         return []
     commits = []

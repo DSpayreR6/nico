@@ -248,6 +248,11 @@ ALL_RULES: list[Rule] = [
          "Referenzierte Datei nicht in Git",
          "Warnt wenn eine .nix-Datei eine Datei referenziert, die nicht in Git erfasst ist – der Flake-Build schlägt dann fehl.",
          "warning", flake_only=True),
+    Rule("etc_nixos_symlink",
+         "/etc/nixos zeigt auf diese Config",
+         "Warnt, wenn /etc/nixos ein Symlink auf ein anderes Verzeichnis ist – ein nixos-rebuild "
+         "im Terminal baut dann eine andere Config.",
+         "warning", host_local=True, reads=_RV),
 ]
 
 RULE_MAP: dict[str, Rule] = {r.id: r for r in ALL_RULES}
@@ -642,6 +647,40 @@ def _rule_host_orphaned(nixos_dir: str, config: dict, is_flake: bool,
         )
         for n in orphans
     ]
+
+
+# /etc/nixos of this machine; a module constant so a test can point it at a
+# stand-in.
+ETC_NIXOS = Path("/etc/nixos")
+
+
+def _rule_etc_nixos_symlink(nixos_dir: str, config: dict, is_flake: bool,
+                            host: str | None = None) -> list[Finding]:
+    """Warn when /etc/nixos is a symlink to another directory (Martin,
+    2026-11-25). NiCo's own rebuild passes the path explicitly and is not
+    affected; a plain `nixos-rebuild switch` in a terminal would build the
+    other config. A real directory /etc/nixos is fine – the symlink is a
+    choice, not a rule. Reads outside the config, so only with the release
+    "read this machine: validator" (reads=_RV)."""
+    link = ETC_NIXOS
+    try:
+        if not link.is_symlink():
+            return []
+        target = link.resolve()
+        own = Path(nixos_dir).resolve()
+    except OSError:
+        return []
+    if target == own:
+        return []
+    return [Finding(
+        rule_id="etc_nixos_symlink",
+        severity="warning",
+        message=f"/etc/nixos zeigt auf {target} statt auf diese Config ({own}).",
+        message_key="validator.f.etc_nixos_symlink", params=[str(target), str(own)],
+        detail="NiCos Rebuild ist nicht betroffen, ein nixos-rebuild im Terminal schon. "
+               "Umstellen: Einstellungen → NiCo → Symlink /etc/nixos.",
+        detail_key="validator.d.etc_nixos_symlink",
+    )]
 
 
 def _rule_flake_arch_matches(nixos_dir: str, config: dict, is_flake: bool,
@@ -3763,5 +3802,6 @@ _RULE_FNS: dict[str, object] = {
     "git_missing_gitignore":  _rule_git_missing_gitignore,
     "git_large_log":          _rule_git_large_log,
     "flake_untracked_reference": _rule_flake_untracked_reference,
+    "etc_nixos_symlink":     _rule_etc_nixos_symlink,
     "git_foreign_files":      _rule_git_foreign_files,
 }

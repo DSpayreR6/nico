@@ -231,14 +231,18 @@ print("\n11. Zeitmaschine ist das Werkzeug, Historie die Datenstruktur")
 ZEITMASCHINE = {"de": "Zeitmaschine", "en": "Time machine", "es": "Máquina del tiempo",
                 "fr": "Machine à remonter le temps", "ja": "タイムマシン",
                 "ru": "Машина времени", "zh": "时间机器"}
+# Since 2026-11-25 there is no area title "Git / ‹Zeitmaschine›" any more:
+# the time machine is a tab of its own, the title only repeated it. The parts
+# of the Config side carry lay term + technical term (vorgaben.txt).
 for lang, term in ZEITMASCHINE.items():
     data = json.loads((LANG / f"{lang}.json").read_text(encoding="utf-8"))
     tab = data.get("admin.tab.zeitmaschine", "")
-    title = data.get("admin.gitTitle", "")
     check(f"{lang}: Tab heißt '{term}'", tab == term, tab)
-    check(f"{lang}: Bereichstitel nennt die Zeitmaschine",
-          term.lower() in title.lower(), title)
-    check(f"{lang}: Bereichstitel ohne 'rollback'", "rollback" not in title.lower(), title)
+    check(f"{lang}: kein doppelter Bereichstitel mehr", "admin.gitTitle" not in data)
+    for key in ("admin.gitLogTitle", "diff.title", "admin.gitignore.title"):
+        val = data.get(key, "")
+        check(f"{lang}: {key} mit Fachbegriff in Klammern", "(" in val or "（" in val, val)
+        check(f"{lang}: {key} ohne 'rollback'", "rollback" not in val.lower(), val)
 hits = [k for k, v in de.items()
         if isinstance(v, str) and re.search(r"History|Git-Log", v)]
 check("de: kein 'History'/'Git-Log' (→ Historie bzw. Sicherungspunkte)", not hits, hits[:4])
@@ -288,6 +292,29 @@ for lang, pattern in ROLLBACK.items():
     check(f"{lang}: 'Rollback' nur bei den Systemständen", not hits, hits[:4])
     check(f"{lang}: Knopf der Sicherungspunkte heißt '{RESTORE[lang]}'",
           data.get("admin.rollbackBtn") == RESTORE[lang], data.get("admin.rollbackBtn"))
+
+print("\n14. Versionierung statt 'Git' (Entscheidung 2026-11-25)")
+# Lay term first, technical term in brackets. "git" stays only where the
+# program itself, a command or a file name is meant – whoever uses Codeberg,
+# GitLab or an own server uses git as well, but need not know the tool.
+GIT_OK = re.compile(r"\((?:git|Git)\)|（git）|\.gitignore|\bgit (?:pull|rebase|merge|push)\b")
+GIT_KEYS_OK = {
+    "pkg.manualPlaceholder",       # the package called git
+    "errors.ERR_GIT_NOT_FOUND",    # the program is missing
+    "git.notInstalled",            # the program is missing
+    "errors.ERR_INSIDE_OTHER_REPO",  # an outer repository, named as such
+}
+VERSIONING = {"de": "Versionierung", "en": "version control", "es": "control de versiones",
+              "fr": "gestion de versions", "ja": "バージョン管理", "ru": "контроль версий",
+              "zh": "版本控制"}
+for lang, term in VERSIONING.items():
+    data = json.loads((LANG / f"{lang}.json").read_text(encoding="utf-8"))
+    hits = [k for k, v in data.items() if isinstance(v, str) and k not in GIT_KEYS_OK
+            and re.search(r"\bgit\b", GIT_OK.sub("", v), re.IGNORECASE)]
+    check(f"{lang}: 'Git' nur in Klammern, Befehlen und Dateinamen", not hits, hits[:6])
+    check(f"{lang}: Rubrik heißt '{term} (git)'",
+          term.lower() in data.get("admin.settings.rubrikGit", "").lower(),
+          data.get("admin.settings.rubrikGit"))
 
 print("\n" + ("ALLE PRÜFUNGEN BESTANDEN" if not fails else f"FEHLGESCHLAGEN: {fails}"))
 sys.exit(1 if fails else 0)

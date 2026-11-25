@@ -277,7 +277,7 @@ def create_app() -> Flask:
 
     _FORMAT_GUARD_EXEMPT = {
         "/api/format/check", "/api/format/proceed", "/api/format/safety-commit",
-        "/api/shutdown", "/api/restart", "/api/status", "/api/sections",
+        "/api/shutdown", "/api/restart", "/api/config/move", "/api/status", "/api/sections",
         "/api/app/settings",
     }
 
@@ -467,6 +467,32 @@ def create_app() -> Flask:
         # Delay exit slightly so the HTTP response can be sent back first
         threading.Thread(target=lambda: (threading.Event().wait(0.3), os._exit(0)), daemon=True).start()
         return jsonify({"ok": True})
+
+    @app.route("/api/config/move", methods=["POST"])
+    def move_config():
+        """Move the config directory (nico/configmove.py) and point the app
+        settings to the new place. The browser has saved before calling.
+        `symlink_old`: /etc/nixos pointed to the old place – the window offers
+        to switch it."""
+        if err := _check_csrf(): return err
+        from . import configmove
+        from .routes.rebuild import job_running
+        old = _nixos_dir()
+        if not old or not Path(old).is_dir():
+            return jsonify({"error": "ERR_NOT_SETUP"}), 400
+        if job_running():
+            return jsonify({"error": "ERR_REBUILD_RUNNING"}), 409
+        raw = str((request.get_json(silent=True) or {}).get("target", "")).strip()
+        target, path_err = _validate_user_path(raw)
+        if path_err:
+            return jsonify({"error": path_err}), 400
+        err = configmove.move(Path(old), target)
+        if err:
+            return jsonify({"error": err}), 400
+        new = str(target.resolve())
+        config_manager.save_app_settings({"nixos_config_dir": new})
+        return jsonify({"success": True, "target": new,
+                        "symlink_old": configmove.symlink_pointed_to(Path(old))})
 
     @app.route("/api/restart", methods=["POST"])
     def restart():

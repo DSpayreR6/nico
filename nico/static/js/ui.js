@@ -424,6 +424,8 @@ function bindUI() {
     openAdmin();
     _switchAdminTab('administration');
     const zipBtn = document.getElementById('admin-zip-import-btn');
+    // The groups of the admin tabs start closed (2026-11-25): open its group.
+    zipBtn?.closest('.settings-group')?.classList.remove('collapsed');
     zipBtn?.scrollIntoView({ block: 'center' });
     zipBtn?.click();
   });
@@ -572,6 +574,7 @@ function bindUI() {
   on('sections-settings-btn',   'click', openSectionsSettings);
   on('sections-settings-close', 'click', closeSectionsSettings);
   on('sections-settings-save',  'click', saveSectionsSettings);
+  on('sections-settings-cancel', 'click', closeSectionsSettings);
 
   // Admin sub-tabs: one component for every admin tab that has them
   // (settings: NiCo | Config, time machine: Config | System, 2026-11-21).
@@ -682,11 +685,14 @@ function bindUI() {
   on('admin-close-btn', 'click', closeAdmin);
   on('admin-export-btn',   'click', exportZip);
   on('admin-symlink-btn',  'click', doAdminSymlink);
+  on('admin-symlink-remove-btn', 'click', doAdminSymlinkRemove);
+  on('admin-move-btn', 'click', _moveConfigFlow);
 
   // Validierungseinstellungen
   on('validation-settings-btn',   'click', openValidationSettings);
   on('validation-settings-close', 'click', closeValidationSettings);
   on('validation-settings-save',  'click', saveValidationSettings);
+  on('validation-settings-cancel', 'click', closeValidationSettings);
   on('validation-results-close',  'click', closeValidationResults);
 
   initDirImport();
@@ -696,7 +702,6 @@ function bindUI() {
   on('admin-detach-btn', 'click', detachConfig);
   initAdminTabs();
   initSettingsPanel();
-  initAdminImportCollapse();
 
   // Rebuild output modal – closes only via its button. A background click must
   // not tear down the running rebuild stream: the user would lose the output

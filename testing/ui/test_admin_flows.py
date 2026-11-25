@@ -103,7 +103,10 @@ def pick_file(input_id, path):
     d.execute_script("arguments[0].classList.add('hidden')", el)
 
 def admin(tab):
-    d.execute_script("openAdmin(); _switchAdminTab(arguments[0]);", tab)
+    # The groups start closed (2026-11-25); the flows below need their buttons.
+    d.execute_script("""openAdmin(); _switchAdminTab(arguments[0]);
+      document.querySelectorAll(`[data-admin-panel=${arguments[0]}] .settings-group`)
+        .forEach(g => g.classList.remove('collapsed'));""", tab)
     time.sleep(0.5)
 
 def inline_rows():
@@ -117,9 +120,30 @@ def disk():
 try:
     d.get(f"http://127.0.0.1:{PORT}/")
     time.sleep(4)
-    d.execute_script("document.querySelectorAll('.overlay:not(.hidden) .btn-primary').forEach(b => b.click());")
+    d.execute_script("document.querySelectorAll('.overlay:not(.hidden):not(#admin-overlay) .btn-primary').forEach(b => b.click());")
     time.sleep(1)
     check("keine alten Zeilen im Admin-Bereich", inline_rows() == [], inline_rows())
+
+    print("0. Aufbau der Administration")
+    d.execute_script("openAdmin(); _switchAdminTab('administration');"); time.sleep(0.5)
+    st = d.execute_script("""const p = document.querySelector('[data-admin-panel=administration]');
+      return { groups: [...p.querySelectorAll('.settings-group')].map(g =>
+                 [g.querySelector('.settings-group-toggle').textContent.trim(), g.classList.contains('collapsed')]),
+               titles: p.querySelectorAll('.admin-section-title').length,
+               prose: [...p.querySelectorAll('.raw-panel-hint, .admin-hint')].filter(e => !e.classList.contains('settings-status-line')).length,
+               missing: [...p.querySelectorAll('.info-tip')].map(b => b.dataset.tip).filter(k => !t(k) || t(k) === k),
+               plain: [...p.querySelectorAll('button:not(.info-tip)')].filter(b => !b.classList.contains('btn-primary') && !b.classList.contains('btn-red')).map(b => b.id) };""")
+    check("drei Rubriken, alle zu", [g[0] for g in st["groups"]] == ["Config übertragen",
+          "Programmeinstellungen", "Aus NiCo lösen"] and all(g[1] for g in st["groups"]), st["groups"])
+    check("keine Abschnittstitel, kein Fließtext", st["titles"] == 0 and st["prose"] == 0, st)
+    check("jedes ⓘ hat einen Text", st["missing"] == [], st["missing"])
+    check("alle Knöpfe ausgefüllt", st["plain"] == [], st["plain"])
+    red = d.execute_script("""return [...document.querySelectorAll('[data-admin-panel=administration] .btn-red')].map(b => b.id)""")
+    # What replaces or removes something is red (Martin, 2026-11-25).
+    check("rot: alle Importe, Lösen", sorted(red) == sorted([
+        "admin-zip-import-btn", "admin-import-btn",
+        "admin-settings-import-btn", "admin-detach-btn"]), red)
+    d.execute_script("closeAdmin()")
 
     print("1. ZIP-Import")
     admin("administration")
@@ -143,7 +167,7 @@ try:
     time.sleep(1)
 
     print("2. Ungültige ZIP → Manuell suchen")
-    d.execute_script("document.querySelectorAll('.overlay:not(.hidden) .btn-primary').forEach(b => b.click());")
+    d.execute_script("document.querySelectorAll('.overlay:not(.hidden):not(#admin-overlay) .btn-primary').forEach(b => b.click());")
     admin("administration")
     pick_file("admin-zip-input", bad_zip)
     st = wait_flow(lambda s: s and s["error"])
@@ -195,7 +219,7 @@ try:
     time.sleep(1)
 
     print("4. Einstellungs-Import")
-    d.execute_script("document.querySelectorAll('.overlay:not(.hidden) .btn-primary').forEach(b => b.click());")
+    d.execute_script("document.querySelectorAll('.overlay:not(.hidden):not(#admin-overlay) .btn-primary').forEach(b => b.click());")
     admin("administration")
     broken = work / "kaputt.json"
     broken.write_text("{ nicht json", encoding="utf-8")
@@ -220,8 +244,10 @@ try:
     time.sleep(3)
 
     print("5. Config-Pfad ändern")
-    d.execute_script("document.querySelectorAll('.overlay:not(.hidden) .btn-primary').forEach(b => b.click());")
+    d.execute_script("document.querySelectorAll('.overlay:not(.hidden):not(#admin-overlay) .btn-primary').forEach(b => b.click());")
     admin("einstellungen")
+    # Since 2026-11-25 the groups start closed: open "Allgemein" first.
+    d.execute_script("document.getElementById('settings-change-btn').closest('.settings-group').classList.remove('collapsed')")
     d.find_element(By.ID, "settings-change-btn").click()
     st = wait_flow(lambda s: s and s["input"] is not None)
     check("Fenster mit aktuellem Pfad", st and st["title"] == "Config-Pfad ändern"
@@ -251,6 +277,36 @@ try:
     time.sleep(2)
     check("Übernehmen schreibt den neuen Pfad",
           json.loads(SETTINGS.read_text(encoding="utf-8"))["nixos_config_dir"] == str(newdir))
+
+    print("6. Config verschieben")
+    time.sleep(2)
+    d.get(f"http://127.0.0.1:{PORT}/"); time.sleep(4)
+    d.execute_script("document.querySelectorAll('.overlay:not(.hidden):not(#admin-overlay) .btn-primary').forEach(b => b.click());")
+    time.sleep(1)
+    src = pathlib.Path(json.loads(SETTINGS.read_text(encoding="utf-8"))["nixos_config_dir"])
+    (src / "merkmal.nix").write_text("{ }\n", encoding="utf-8")
+    admin("administration")
+    d.find_element(By.ID, "admin-move-btn").click(); time.sleep(0.8)
+    st = flow()
+    check("Fenster nennt den jetzigen Ort", st and st["title"] == "Config verschieben" and str(src) in st["text"], st)
+    press("ok")
+    st = flow()
+    check("ohne Ziel: Meldung", st and "Verzeichnis angeben" in st["error"], st)
+    dest = work / "verschoben"
+    set_input(str(dest))
+    press("ok")
+    st = flow()
+    check("Rückfrage nennt alt und neu", st and str(src) in st["text"] and str(dest) in st["text"], st)
+    d.execute_script("window._marker = 1;")
+    press("ok")
+    for _ in range(30):
+        time.sleep(0.3)
+        if d.execute_script("return window._marker === undefined"):
+            break
+    check("verschoben, alter Ort weg", (dest / "merkmal.nix").exists() and not src.exists())
+    check("Config-Pfad umgestellt",
+          json.loads(SETTINGS.read_text(encoding="utf-8"))["nixos_config_dir"] == str(dest.resolve()))
+    check("Seite neu geladen", d.execute_script("return window._marker === undefined"))
 
     print("\n" + ("Alle Prüfungen bestanden." if not fails else f"FEHLGESCHLAGEN: {fails}"))
 finally:

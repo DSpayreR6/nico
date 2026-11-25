@@ -16,7 +16,6 @@ async function updatePreview() {
 
   renderCodePreview(data.configuration_nix || '', 'preview-configuration', _brixTargetFile || 'configuration.nix');
 
-  _isFlakeConfig = !!data.flake_nix;
 
   const flakeTab = document.getElementById('flake-tab');
   if (data.flake_nix) {

@@ -523,6 +523,9 @@ function applyTranslations() {
   document.querySelectorAll('[data-i18n-label]').forEach(el => {
     el.label = t(el.dataset.i18nLabel);
   });
+  document.querySelectorAll('[data-i18n-aria-label]').forEach(el => {
+    el.setAttribute('aria-label', t(el.dataset.i18nAriaLabel));
+  });
   // CSS pseudo-elements cannot call t(), so hand the label over as a variable
   document.documentElement.style.setProperty(
     '--ni-collapsed-label', JSON.stringify('  ' + t('preview.collapsedHint')));
@@ -624,3 +627,63 @@ document.addEventListener('DOMContentLoaded', async () => {
   restoreRebuildMonitor();
 });
 
+
+// ── Info tips (ⓘ) ──────────────────────────────────────────────────────────
+// Explanations behind a small ⓘ instead of text under every option (Martin,
+// 2026-11-25): one line per option, the details where you look for them.
+// <button class="info-tip" data-tip="lang.key"> anywhere; the text is read
+// from the language file when shown, so a language switch needs nothing.
+// Hover or keyboard focus shows it, a click keeps it until a click elsewhere
+// or Escape. One implementation for all of NiCo.
+(function initInfoTips() {
+  let pop = null, owner = null, pinned = false;
+
+  const hide = () => {
+    pop?.remove();
+    pop = null; owner = null; pinned = false;
+  };
+  const show = btn => {
+    if (owner === btn && pop) return;
+    pop?.remove();
+    owner = btn;
+    pop = document.createElement('div');
+    pop.className = 'info-tip-popup';
+    pop.setAttribute('role', 'tooltip');
+    pop.textContent = t(btn.dataset.tip);
+    document.body.appendChild(pop);
+    // Below the ⓘ, kept inside the window.
+    const r = btn.getBoundingClientRect(), w = pop.offsetWidth, h = pop.offsetHeight;
+    let left = Math.min(r.left, window.innerWidth - w - 8);
+    let top  = r.bottom + 6;
+    if (top + h > window.innerHeight - 8) top = Math.max(8, r.top - h - 6);
+    pop.style.left = `${Math.max(8, left)}px`;
+    pop.style.top  = `${top}px`;
+  };
+  const tipOf = e => e.target instanceof Element ? e.target.closest('.info-tip') : null;
+
+  document.addEventListener('mouseover', e => { const b = tipOf(e); if (b && !pinned) show(b); });
+  document.addEventListener('mouseout', e => {
+    const b = tipOf(e);
+    if (b && !pinned && !b.contains(e.relatedTarget)) hide();
+  });
+  document.addEventListener('focusin',  e => { const b = tipOf(e); if (b && !pinned) show(b); });
+  document.addEventListener('focusout', e => { if (tipOf(e) && !pinned) hide(); });
+  // Capture: the ⓘ sits inside labels and fold headers – its click must
+  // neither flip the switch nor fold the group.
+  document.addEventListener('click', e => {
+    const b = tipOf(e);
+    if (b) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (pinned && owner === b) { hide(); return; }
+      show(b);
+      pinned = true;
+      return;
+    }
+    if (pinned && !pop?.contains(e.target)) hide();
+  }, true);
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && pop) { e.stopPropagation(); hide(); }
+  }, true);
+  window.addEventListener('scroll', () => { if (pop) hide(); }, true);
+})();

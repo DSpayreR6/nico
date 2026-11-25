@@ -7,6 +7,8 @@ let _activeAdminTab = 'einstellungen';
 function openAdmin() {
   _autoSave();
   Sidebar.flakeSave();
+  // Groups in the settings start closed on every opening (Martin, 2026-11-25).
+  document.querySelectorAll('.settings-group').forEach(g => g.classList.add('collapsed'));
   document.getElementById('admin-overlay').classList.remove('hidden');
   _switchAdminTab(_activeAdminTab);
   _loadAdminSettings();
@@ -255,109 +257,13 @@ function _loadAdminSettings() {
       }
     }
 
-    // Push-Toggles + NixOS-Push-Button – nur anzeigen wenn Remote vorhanden
+    // Remote: a read-only line with "Set up"; the form is a window
+    // (_remoteFlow, 2026-11-25). Push toggles only with a remote.
     csrfFetch('/api/git/remote-status').then(r => r.json()).then(rs => {
-      const setRemoteRow = document.getElementById('git-set-remote-row');
-      if (setRemoteRow && rs.has_git) {
-        setRemoteRow.classList.remove('hidden');
-
-        function _buildRemoteUrl() {
-          const platform = document.getElementById('git-remote-platform')?.value || 'github';
-          if (platform === 'custom') {
-            return document.getElementById('git-remote-url-input')?.value.trim() || '';
-          }
-          const user = document.getElementById('git-remote-user')?.value.trim() || '';
-          const repo = document.getElementById('git-remote-repo')?.value.trim() || '';
-          if (!user || !repo) return '';
-          const hosts = { github: 'github.com', gitlab: 'gitlab.com', codeberg: 'codeberg.org' };
-          return `git@${hosts[platform]}:${user}/${repo}.git`;
-        }
-
-        function _applyRemoteUrl(url) {
-          const platformEl = document.getElementById('git-remote-platform');
-          const userEl = document.getElementById('git-remote-user');
-          const repoEl = document.getElementById('git-remote-repo');
-          const customEl = document.getElementById('git-remote-url-input');
-          if (!platformEl || !userEl || !repoEl || !customEl) return;
-
-          const sshMatch = url.match(/^git@(github\.com|gitlab\.com|codeberg\.org):([^/]+)\/(.+?)(?:\.git)?$/);
-          const httpsMatch = url.match(/^https?:\/\/(github\.com|gitlab\.com|codeberg\.org)\/([^/]+)\/(.+?)(?:\.git)?$/);
-          const match = sshMatch || httpsMatch;
-          const platformByHost = {
-            'github.com': 'github',
-            'gitlab.com': 'gitlab',
-            'codeberg.org': 'codeberg',
-          };
-          if (!match) {
-            platformEl.value = 'custom';
-            customEl.value = url;
-            userEl.value = '';
-            repoEl.value = '';
-            return;
-          }
-          platformEl.value = platformByHost[match[1]] || 'custom';
-          userEl.value = match[2];
-          repoEl.value = match[3];
-          customEl.value = platformEl.value === 'custom' ? url : '';
-        }
-
-        function _updateRemotePreview() {
-          const url = _buildRemoteUrl();
-          const el = document.getElementById('git-remote-preview');
-          if (el) el.textContent = url;
-        }
-
-        function _onPlatformChange() {
-          const platform = document.getElementById('git-remote-platform')?.value;
-          const fields = document.getElementById('git-remote-fields');
-          const customField = document.getElementById('git-remote-custom-field');
-          if (fields) fields.style.display = platform === 'custom' ? 'none' : 'flex';
-          if (customField) customField.style.display = platform === 'custom' ? 'block' : 'none';
-          _updateRemotePreview();
-        }
-
-        document.getElementById('git-remote-platform')?.addEventListener('change', _onPlatformChange);
-        document.getElementById('git-remote-user')?.addEventListener('input', _updateRemotePreview);
-        document.getElementById('git-remote-repo')?.addEventListener('input', _updateRemotePreview);
-        document.getElementById('git-remote-url-input')?.addEventListener('input', _updateRemotePreview);
-
-        const checkBtn  = document.getElementById('git-remote-check-btn');
-        const statusEl  = document.getElementById('git-remote-status');
-        if (rs.remote_url) _applyRemoteUrl(rs.remote_url);
-        _onPlatformChange();
-        if (checkBtn && !checkBtn.dataset.listenerAttached) {
-          checkBtn.dataset.listenerAttached = '1';
-          checkBtn.addEventListener('click', async () => {
-            const url = _buildRemoteUrl();
-            if (!url) return;
-            checkBtn.disabled = true;
-            statusEl.textContent = t('git.setRemoteSaving');
-            statusEl.style.color = 'var(--fg-muted)';
-            const setRes = await csrfFetch('/api/git/set-remote', {
-              method: 'POST', headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ url }),
-            }).catch(() => null);
-            checkBtn.disabled = false;
-            if (!setRes || !setRes.ok) {
-              statusEl.textContent = t('git.setRemoteError');
-              statusEl.style.color = 'var(--red)';
-              showToast(t('git.setRemoteError'), 'error');
-              return;
-            }
-            statusEl.textContent = t('git.setRemoteSavedRestart');
-            statusEl.style.color = 'var(--green)';
-            showToast(t('git.setRemoteSavedRestart'), 'success');
-            // Only with a repository: a remote URL can be entered without one,
-            // and push/pull would then fail (see the check in line 341).
-            if (rs.has_git) {
-              document.getElementById('nixos-git-push-btn')?.classList.remove('hidden');
-              document.getElementById('nixos-git-pull-btn')?.classList.remove('hidden');
-              document.getElementById('nixos-git-noremote')?.classList.add('hidden');
-            }
-            document.getElementById('git-push-settings-row')?.classList.remove('hidden');
-          });
-        }
-      }
+      _remoteState = rs;
+      _showGitSettingsRows(!!rs.has_git);
+      const cur = document.getElementById('git-remote-current');
+      if (cur) cur.value = rs.remote_url || t('git.remoteNone');
       if (!rs.has_git || !rs.has_remote) return;
       // NixOS-Menü Push- und Pull-Eintrag einblenden
       document.getElementById('nixos-git-push-btn')?.classList.remove('hidden');
@@ -426,29 +332,181 @@ function _loadAdminSettings() {
       }
     }
   }).catch(() => {});
+}
 
-  // Config-Einstellungen speichern
-  const saveBtn = document.getElementById('settings-config-save');
-  if (saveBtn && !saveBtn.dataset.listenerAttached) {
-    saveBtn.dataset.listenerAttached = '1';
-    saveBtn.addEventListener('click', () => {
-      const hostsDir   = document.getElementById('settings-hosts-dir')?.value.trim() || 'hosts';
-      const modulesDir = document.getElementById('settings-modules-dir')?.value.trim() || 'modules';
-      const hmDir      = document.getElementById('settings-hm-dir')?.value.trim() || 'home';
-      csrfFetch('/api/config/settings', {
+// ── Config settings: windows for directories and remote (2026-11-25) ───────
+
+/** Versioning rows of the config settings: remote and upkeep only with a
+ *  repository, otherwise one line with "Set up" (2026-11-25). */
+function _showGitSettingsRows(hasGit) {
+  document.getElementById('git-set-remote-row')?.classList.toggle('hidden', !hasGit);
+  document.getElementById('git-maint-rows')?.classList.toggle('hidden', !hasGit);
+  document.getElementById('git-settings-nogit')?.classList.toggle('hidden', hasGit);
+}
+
+let _remoteState = null;   // last /api/git/remote-status answer
+
+const _DIR_FIELDS = [
+  // key in config.json, read-only box in the tab, label key, default
+  ['hosts_dir',   'settings-hosts-dir',   'admin.settings.hostsDir',   'hosts'],
+  ['modules_dir', 'settings-modules-dir', 'admin.settings.modulesDir', 'modules'],
+  ['hm_dir',      'settings-hm-dir',      'admin.settings.hmDir',      'home'],
+];
+
+/** "Change" below the directories: the three names in a window, each with
+ *  a browser that starts in the config directory. They are stored as names
+ *  relative to the config, so a choice outside it is refused. */
+async function _dirsFlow() {
+  const flow = openFlowDialog(t('admin.settings.dirsTitle'));
+  const base = (document.getElementById('settings-current-path')?.value || '').replace(/\/+$/, '');
+  const node = document.createElement('div');
+  const msg  = document.createElement('p');
+  msg.className = 'dialog-info import-err flow-error hidden';
+  const inputs = {};
+  for (const [key, boxId, labelKey, def] of _DIR_FIELDS) {
+    const row = document.createElement('div');
+    row.className = 'flow-field';
+    row.innerHTML = `
+      <div class="flow-field-label">${escHtml(t(labelKey))}</div>
+      <div class="import-path-row">
+        <input type="text" spellcheck="false" autocomplete="off">
+        <button type="button" class="btn-browse" title="${escHtml(t('admin.importBrowse'))}">…</button>
+      </div>`;
+    const input = row.querySelector('input');
+    input.value = document.getElementById(boxId)?.value || def;
+    input.placeholder = def;
+    row.querySelector('.btn-browse').addEventListener('click', () => {
+      openDirBrowser(`${base}/${input.value.trim() || def}`, picked => {
+        const p = String(picked || '').replace(/\/+$/, '');
+        msg.classList.add('hidden');
+        if (base && p.startsWith(base + '/')) {
+          input.value = p.slice(base.length + 1);
+        } else {
+          msg.textContent = t('admin.settings.dirOutside');
+          msg.classList.remove('hidden');
+        }
+      });
+    });
+    inputs[key] = input;
+    node.appendChild(row);
+  }
+  node.appendChild(msg);
+
+  let error = '';
+  for (;;) {
+    const go = await flow.step({ node, error, buttons: [
+      { label: t('admin.settingsCancelBtn'), value: 'cancel' },
+      { label: t('admin.settings.save'), value: 'ok', primary: true }] });
+    if (go !== 'ok') return flow.close();
+    const patch = {};
+    for (const [key, , , def] of _DIR_FIELDS) patch[key] = inputs[key].value.trim() || def;
+    let res, data;
+    try {
+      res  = await csrfFetch('/api/config/settings', {
         method:  'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({
-          hosts_dir: hostsDir,
-          modules_dir: modulesDir,
-          hm_dir: hmDir,
-        }),
-      }).then(() => {
-        _hostsDir = hostsDir;
-        showToast(t('admin.settings.saved'), 'success');
-      })
-        .catch(() => showToast(t('toast.error'), 'error'));
-    });
+        body:    JSON.stringify(patch),
+      });
+      data = await res.json();
+    } catch {
+      error = t('toast.error');
+      continue;
+    }
+    if (!res.ok || data.error) { error = tErr(data.error); continue; }
+    flow.close();
+    for (const [key, boxId] of _DIR_FIELDS) {
+      const box = document.getElementById(boxId);
+      if (box) box.value = patch[key];
+    }
+    _hostsDir = patch.hosts_dir;
+    showToast(t('admin.settings.saved'), 'success');
+    return;
+  }
+}
+
+/** "Set up" next to the remote: platform, user and repository – or an own
+ *  URL – in a window, with the address it will use shown below. */
+async function _remoteFlow() {
+  const rs   = _remoteState || {};
+  const flow = openFlowDialog(t('git.setRemoteTitle'));
+  const node = document.createElement('div');
+  node.innerHTML = `
+    <p class="dialog-info">${rs.remote_url ? '' : escHtml(t('git.setRemoteHint'))}
+      <a href="/help#k7-3" target="_blank" class="flow-help-link">${escHtml(t('git.setRemoteHelpLink'))}</a></p>
+    <select class="settings-path-input flow-remote-platform">
+      <option value="github">GitHub</option>
+      <option value="gitlab">GitLab</option>
+      <option value="codeberg">Codeberg</option>
+      <option value="custom">${escHtml(t('git.setRemoteCustomOption'))}</option>
+    </select>
+    <div class="flow-remote-fields">
+      <input type="text" class="settings-path-input flow-remote-user" placeholder="benutzername" spellcheck="false" autocomplete="off">
+      <span>/</span>
+      <input type="text" class="settings-path-input flow-remote-repo" placeholder="nixos-config" spellcheck="false" autocomplete="off">
+    </div>
+    <input type="text" class="settings-path-input flow-remote-url" placeholder="git@github.com:user/nixos-config.git" spellcheck="false" autocomplete="off">
+    <div class="flow-remote-preview"></div>
+    <p class="admin-hint">${escHtml(t('git.setRemoteRestartHint'))}</p>`;
+  const $ = sel => node.querySelector(sel);
+  const HOSTS = { github: 'github.com', gitlab: 'gitlab.com', codeberg: 'codeberg.org' };
+  const build = () => {
+    const platform = $('.flow-remote-platform').value;
+    if (platform === 'custom') return $('.flow-remote-url').value.trim();
+    const user = $('.flow-remote-user').value.trim();
+    const repo = $('.flow-remote-repo').value.trim();
+    return user && repo ? `git@${HOSTS[platform]}:${user}/${repo}.git` : '';
+  };
+  const refresh = () => {
+    const custom = $('.flow-remote-platform').value === 'custom';
+    $('.flow-remote-fields').classList.toggle('hidden', custom);
+    $('.flow-remote-url').classList.toggle('hidden', !custom);
+    $('.flow-remote-preview').textContent = build();
+  };
+  // Prefill from the current remote: a known host is split into user and
+  // repository, anything else goes into the own-URL field.
+  const url = rs.remote_url || '';
+  const m = url.match(/^git@(github\.com|gitlab\.com|codeberg\.org):([^/]+)\/(.+?)(?:\.git)?$/)
+         || url.match(/^https?:\/\/(github\.com|gitlab\.com|codeberg\.org)\/([^/]+)\/(.+?)(?:\.git)?$/);
+  if (m) {
+    $('.flow-remote-platform').value = Object.keys(HOSTS).find(k => HOSTS[k] === m[1]);
+    $('.flow-remote-user').value = m[2];
+    $('.flow-remote-repo').value = m[3];
+  } else if (url) {
+    $('.flow-remote-platform').value = 'custom';
+    $('.flow-remote-url').value = url;
+  }
+  node.addEventListener('input', refresh);
+  node.addEventListener('change', refresh);
+  refresh();
+
+  let error = '';
+  for (;;) {
+    const go = await flow.step({ node, error, buttons: [
+      { label: t('admin.settingsCancelBtn'), value: 'cancel' },
+      { label: t('git.setRemoteSave'), value: 'ok', primary: true }] });
+    if (go !== 'ok') return flow.close();
+    const newUrl = build();
+    if (!newUrl) { error = t('git.remoteMissing'); continue; }
+    flow.busy(t('git.setRemoteSaving'));
+    const res = await csrfFetch('/api/git/set-remote', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url: newUrl }),
+    }).catch(() => null);
+    if (!res || !res.ok) { error = t('git.setRemoteError'); continue; }
+    flow.close();
+    showToast(t('git.setRemoteSavedRestart'), 'success');
+    const cur = document.getElementById('git-remote-current');
+    if (cur) cur.value = newUrl;
+    _remoteState = { ...rs, remote_url: newUrl, has_remote: true };
+    // Only with a repository: a remote URL can be entered without one,
+    // and push/pull would then fail.
+    if (rs.has_git) {
+      document.getElementById('nixos-git-push-btn')?.classList.remove('hidden');
+      document.getElementById('nixos-git-pull-btn')?.classList.remove('hidden');
+      document.getElementById('nixos-git-noremote')?.classList.add('hidden');
+    }
+    document.getElementById('git-push-settings-row')?.classList.remove('hidden');
+    return;
   }
 }
 
@@ -481,13 +539,13 @@ function _switchAdminTab(tab) {
     panel.classList.toggle('hidden', panel.dataset.adminPanel !== tab);
   });
   // Lazy-load per-tab data
-  if (tab === 'einstellungen') { loadSettingsPath(); }
+  if (tab === 'einstellungen') { loadSettingsPath(); loadGitignoreEditor(); loadAdminSymlinkStatus(); }
   if (tab === 'zeitmaschine') {
-    checkGitStatus(); loadAdminGitLog(); loadGitignoreEditor();
+    checkGitStatus(); loadAdminGitLog();
     // System is the first side (Martin, 2026-11-21) – load it when it shows.
     if (!document.getElementById('tm-system')?.classList.contains('hidden')) loadGenerations();
   }
-  if (tab === 'administration') { loadAdminSymlinkStatus(); }
+  // (administration: nothing to load since the symlink moved to the settings)
 }
 
 function initAdminTabs() {
@@ -511,30 +569,29 @@ async function loadSettingsPath() {
 
 async function loadAdminSymlinkStatus() {
   const label   = document.getElementById('admin-symlink-status-label');
-  const hint    = document.getElementById('admin-symlink-hint');
   const btn     = document.getElementById('admin-symlink-btn');
   const errDiv  = document.getElementById('admin-symlink-error');
   if (!label) return;
 
-  // Die sieben admin.symlink*-Schlüssel lagen seit Langem unbenutzt in allen
-  // Sprachdateien, während hier deutscher Text hartkodiert stand - ein
-  // englischsprachiger Nutzer las also Deutsch. Verdrahtet am 2026-11-01.
-  const baseHint = t('admin.symlinkBackupHint');
+  // The explanation (incl. the backup to /etc/nixos.bak) is behind the ⓘ of
+  // the row since 2026-11-25; here only the state and the button.
   errDiv.classList.add('hidden');
   btn.classList.add('hidden');
+  const removeBtn = document.getElementById('admin-symlink-remove-btn');
+  removeBtn?.classList.add('hidden');
   label.textContent = '…';
 
   try {
     const res  = await csrfFetch('/api/symlink/status');
     const data = await res.json();
+    // Remove: for any symlink with a backup to put back (2026-11-25).
+    if (data.status === 'symlink' && data.has_backup) removeBtn?.classList.remove('hidden');
     if (data.status === 'symlink' && data.points_to_nico) {
       label.innerHTML = niIcon('check-circle') + ' '
                       + escHtml(t('admin.symlinkActive', data.target || ''));
-      hint.textContent  = baseHint;
     } else if (data.status === 'symlink') {
       label.innerHTML = niIcon('alert-triangle') + ' '
                       + escHtml(t('admin.symlinkOther', data.target || ''));
-      hint.textContent  = baseHint;
       // Pointing elsewhere: offer to switch it (2026-11-22).
       btn.textContent = t('admin.symlinkRetarget');
       btn.dataset.action = 'retarget';
@@ -543,20 +600,16 @@ async function loadAdminSymlinkStatus() {
       btn.classList.remove('hidden');
     } else if (data.status === 'dir') {
       label.textContent = t('admin.symlinkIsDir');
-      hint.textContent  = baseHint;
       btn.textContent = t('admin.symlinkCreate');
       btn.dataset.action = 'create';
       btn.classList.remove('hidden');
     } else if (data.status === 'missing') {
       label.textContent = t('admin.symlinkMissing');
-      hint.textContent  = baseHint;
     } else {
       label.textContent = '';
-      hint.textContent  = baseHint;
     }
   } catch (e) {
     label.textContent = '';
-    hint.textContent  = baseHint;
     console.error('loadAdminSymlinkStatus:', e);
   }
 }
@@ -564,6 +617,35 @@ async function loadAdminSymlinkStatus() {
 /** /etc/nixos points at another directory: ask, then point it at this
  *  config directory. Resolves true when switched, false on cancel or error
  *  (the error is shown in errEl). /etc/nixos.bak stays as it is. */
+/** "Remove": /etc/nixos becomes its own directory again – the symlink goes,
+ *  /etc/nixos.bak is put back (Martin, 2026-11-25). Needs sudo. */
+async function doAdminSymlinkRemove() {
+  const errDiv = document.getElementById('admin-symlink-error');
+  errDiv.classList.add('hidden');
+  if (!(await nicoConfirm(t('admin.adm.symlinkRemoveConfirm'),
+                          { okLabel: t('admin.adm.symlinkRemoveBtn'), danger: true }))) return;
+  const nonce = await acquireSudoNonce();
+  if (nonce === null) return;
+  try {
+    const res  = await csrfFetch('/api/symlink/remove', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ sudo_nonce: nonce }),
+    });
+    const data = await res.json();
+    if (!res.ok || data.error) {
+      errDiv.textContent = tErr(data.error) || t('toast.error');
+      errDiv.classList.remove('hidden');
+      return;
+    }
+    showToast(t('admin.symlinkRemoved'), 'success');
+  } catch {
+    errDiv.textContent = t('toast.error');
+    errDiv.classList.remove('hidden');
+  }
+  await loadAdminSymlinkStatus();
+}
+
 async function retargetSymlink(oldTarget, nicoDir, errEl) {
   if (!(await nicoConfirm(t('symlink.retargetConfirm', oldTarget, nicoDir),
                           { okLabel: t('admin.symlinkRetarget') }))) return false;
@@ -632,6 +714,20 @@ async function doAdminSymlink() {
  *  and any error (Martin, 2026-11-25 – until then a row opened below). */
 function initSettingsPanel() {
   on('settings-change-btn', 'click', _changeConfigPathFlow);
+  on('settings-dirs-change-btn', 'click', _dirsFlow);
+  on('git-remote-setup-btn', 'click', _remoteFlow);
+  on('git-settings-init-btn', 'click', () => _doGitInit());
+  on('git-gitignore-edit-btn', 'click', _gitignoreFlow);
+  on('git-foreign-cleanup-btn', 'click', openForeignCleanup);
+  on('git-large-cleanup-btn', 'click', openLargeFileCleanup);
+  // Fold headers of the settings groups: click, Enter or Space.
+  document.querySelectorAll('.settings-group-toggle').forEach(h => {
+    const flip = () => h.closest('.settings-group').classList.toggle('collapsed');
+    h.addEventListener('click', flip);
+    h.addEventListener('keydown', e => {
+      if (e.target === h && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); flip(); }
+    });
+  });
 }
 
 async function _changeConfigPathFlow() {
@@ -686,7 +782,7 @@ async function _changeConfigPathFlow() {
 // ── Validierung ────────────────────────────────────────────────────────────────
 
 let _validationRules = [];     // Rule metadata from /api/validate/rules
-let _isFlakeConfig   = false;  // Set on config load
+let _isFlakeConfig   = false;  // from /api/flake/hosts (flake_mode) when needed
 
 /** Load rule metadata once (cached in _validationRules). */
 async function _ensureValidationRules() {
@@ -700,6 +796,8 @@ async function _ensureValidationRules() {
 /** Open the validation-settings overlay and render rule toggles. */
 async function openValidationSettings() {
   await _ensureValidationRules();
+  // Flake rules only for a flake config – asked from the server, see runValidation.
+  _isFlakeConfig = !!(await _fetchFlakeHosts()).flake_mode;
 
   // Load current settings
   let enabled = {};
@@ -725,24 +823,36 @@ async function openValidationSettings() {
                  background:${severityColors[rule.severity] || 'var(--subtext0)'};
                  margin-right:6px;flex-shrink:0;margin-top:6px"></span>`;
 
+    // One line per rule, the description behind an ⓘ (Martin, 2026-11-25).
+    // `for` on the label: without it the ⓘ button would be the labelled
+    // control and a click on the line would open the text, not the switch.
+    const cbId = `vrule-${rule.id}`;
     const row = document.createElement('label');
     row.className = 'toggle-row';
-    row.style.cssText = 'margin-bottom:10px;align-items:flex-start;' + (hidden ? 'display:none' : '');
+    row.htmlFor = cbId;
+    row.style.cssText = 'margin-bottom:8px;' + (hidden ? 'display:none' : '');
     row.dataset.ruleId = rule.id;
+    const descKey = `validator.rule.${rule.id}.desc`;
+    const tip = t(descKey) !== descKey
+      ? `<button type="button" class="info-tip" data-tip="${_esc(descKey)}" aria-label="${_esc(t('info.label'))}"><span class="ni-icon ni-icon-info" aria-hidden="true"></span></button>`
+      : '';
     row.innerHTML = `
-      <span style="display:flex;flex-direction:column;gap:2px;flex:1;min-width:0">
-        <span style="display:flex;align-items:center">${dot}<strong>${_esc(tOr(`validator.rule.${rule.id}.label`, rule.label))}</strong>
-          ${rule.flake_only ? '<span class="badge" style="margin-left:6px;font-size:10px;padding:1px 5px;background:var(--surface1);border-radius:4px">Flake</span>' : ''}
-        </span>
-        <span class="raw-panel-hint" style="margin:0 0 0 14px">${_esc(tOr(`validator.rule.${rule.id}.desc`, rule.description))}</span>
+      <span class="settings-label" style="flex:1;min-width:0">
+        ${dot.replace('margin-top:6px', 'margin-top:0')}<span>${_esc(tOr(`validator.rule.${rule.id}.label`, rule.label))}</span>
+        ${rule.flake_only ? '<span class="rule-badge">Flake</span>' : ''}
+        ${tip}
       </span>
       <span class="toggle-wrap" style="margin-left:12px;flex-shrink:0">
-        <input type="checkbox" data-rule="${rule.id}" ${checked ? 'checked' : ''}>
+        <input type="checkbox" id="${cbId}" data-rule="${rule.id}" ${checked ? 'checked' : ''}>
         <span class="toggle-track"><span class="toggle-thumb"></span></span>
       </span>`;
     list.appendChild(row);
   }
 
+  // The Flake line of the legend only where a rule carries the badge – a
+  // config without flake shows no flake rules (Martin, 2026-11-25).
+  document.getElementById('validator-legend-flake')?.classList.toggle('hidden',
+    ![...list.querySelectorAll('.toggle-row')].some(r => r.style.display !== 'none' && r.querySelector('.rule-badge')));
   document.getElementById('validation-settings-overlay').classList.remove('hidden');
 }
 
@@ -783,11 +893,15 @@ function openSectionsSettings() {
 
   for (const name of _ALL_SECTIONS) {
     const hidden = hiddenSections.includes(name);
+    // Code plus its name in the interface language (Martin, 2026-11-25).
+    // No per-section "has content" mark: the panel decides that anew for
+    // every file it shows, host files included – the note below the list
+    // says so once.
     const row = document.createElement('label');
     row.className = 'toggle-row';
     row.style.cssText = 'margin-bottom:8px';
     row.innerHTML = `
-      <span style="flex:1">${_esc(name)}</span>
+      <span style="flex:1">${_esc(name)} – ${_esc(secLabel(name))}</span>
       <span class="toggle-wrap" style="margin-left:12px;flex-shrink:0">
         <input type="checkbox" data-section-name="${_esc(name)}" ${hidden ? '' : 'checked'}>
         <span class="toggle-track"><span class="toggle-thumb"></span></span>
@@ -827,10 +941,14 @@ async function runValidation() {
   await _autoSave();
   await _writeNix();
 
-  // For flake configs with multiple hosts, ask which host to validate
+  // For flake configs with multiple hosts, ask which host to validate.
+  // Flake or not comes from the server (2026-11-25): the old flag was set
+  // from a preview field the server stopped sending, so it was always false
+  // and the host was never asked.
   let host = null;
+  const hostInfo = await _fetchFlakeHosts();
+  _isFlakeConfig = !!hostInfo.flake_mode;
   if (_isFlakeConfig) {
-    const hostInfo = await _fetchFlakeHosts();
     if (hostInfo.hosts && hostInfo.hosts.length > 1) {
       host = await _showHostPicker(hostInfo.hosts, { allowAll: false });
       if (host === null) return; // cancelled
@@ -967,32 +1085,79 @@ function _esc(s) {
   return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
-// ── Admin: Import section collapse ─────────────────────────────────────────────
-function initAdminImportCollapse() {
-  const toggle  = document.getElementById('admin-import-toggle');
-  const body    = document.getElementById('admin-import-body');
-  const section = document.getElementById('admin-import-section');
-  if (!toggle || !body) return;
+// ── Moving the config (Martin, 2026-11-25) ──────────────────────────────────
 
-  const LS_KEY = 'nico_admin_import_collapsed';
+/** "Move": target, question, move (configmove.py), then – if /etc/nixos
+ *  pointed to the old place – the offer to switch it; at the end a reload,
+ *  like after changing the config path. Everything in one window. */
+async function _moveConfigFlow() {
+  const flow = openFlowDialog(t('admin.adm.moveTitle'));
+  let current = '';
+  try { current = (await (await fetch('/api/app/settings')).json()).nixos_config_dir || ''; } catch { /* shown empty */ }
 
-  function applyState(collapsed) {
-    if (collapsed) {
-      body.classList.add('hidden');
-      section.classList.add('import-collapsed');
-    } else {
-      body.classList.remove('hidden');
-      section.classList.remove('import-collapsed');
+  const node = document.createElement('div');
+  node.innerHTML = `
+    <p class="dialog-info"></p>
+    <div class="import-path-row">
+      <input type="text" spellcheck="false" autocomplete="off">
+      <button type="button" class="btn-browse" title="${escHtml(t('admin.importBrowse'))}">…</button>
+    </div>
+    <p class="admin-hint">${escHtml(t('admin.adm.moveHint'))}</p>`;
+  node.querySelector('.dialog-info').textContent = t('admin.adm.moveFrom', current);
+  const input = node.querySelector('input');
+  node.querySelector('.btn-browse').addEventListener('click', () =>
+    openDirBrowser(input.value.trim() || '~', p => { input.value = p; }, null, { newHint: true }));
+
+  let error = '';
+  for (;;) {
+    const go = await flow.step({ node, error, buttons: [
+      { label: t('dialog.cancel'), value: 'cancel' },
+      { label: t('admin.adm.moveBtn'), value: 'ok', primary: true }] });
+    if (go !== 'ok') return flow.close();
+    const target = input.value.trim();
+    if (!target) { error = t('setup.errNoDir'); continue; }
+    const sure = await flow.step({ text: t('admin.adm.moveConfirm', current, target), buttons: [
+      { label: t('dialog.cancel'), value: 'cancel' },
+      { label: t('admin.adm.moveBtn'), value: 'ok', primary: true }] });
+    if (sure !== 'ok') { error = ''; continue; }
+    if (!(await saveBeforeLeave())) return flow.close();
+
+    flow.busy(t('admin.adm.moving'));
+    let res, data;
+    try {
+      res  = await csrfFetch('/api/config/move', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ target }),
+      });
+      data = await res.json();
+    } catch {
+      error = t('toast.error');
+      continue;
     }
+    if (!res.ok || data.error) { error = tErr(data.error); continue; }
+
+    if (data.symlink_old) {
+      const sw = await flow.step({ text: t('admin.adm.moveSymlink'), buttons: [
+        { label: t('admin.adm.moveLater'), value: 'cancel' },
+        { label: t('admin.symlinkRetarget'), value: 'ok', primary: true }] });
+      if (sw === 'ok') {
+        const nonce = await acquireSudoNonce();
+        if (nonce !== null) {
+          const r = await csrfFetch('/api/symlink/retarget', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sudo_nonce: nonce }),
+          }).then(x => x.json()).catch(() => null);
+          if (!r || r.error) {
+            await flow.step({ error: tErr(r?.error) || t('toast.error'),
+                              buttons: [{ label: t('dialog.close'), value: 'cancel', primary: true }] });
+          }
+        }
+      }
+    }
+    flow.close();
+    showToast(t('admin.adm.moved', data.target), 'success');
+    setTimeout(() => location.reload(), 900);
+    return;
   }
-
-  // Default: open (collapsed only when user explicitly collapsed it)
-  const stored = localStorage.getItem(LS_KEY);
-  applyState(stored === 'collapsed');
-
-  toggle.addEventListener('click', () => {
-    const isCollapsed = body.classList.contains('hidden');
-    applyState(!isCollapsed);
-    localStorage.setItem(LS_KEY, isCollapsed ? 'open' : 'collapsed');
-  });
 }

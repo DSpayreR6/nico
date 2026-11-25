@@ -187,12 +187,12 @@
               <button id="nixos-rebuild-btn"  class="nixos-action nixos-red"
                       data-i18n="header.nixosRebuild">System-Neubau</button>
               <button id="nixos-git-push-btn" class="nixos-action nixos-blue hidden"
-                      data-i18n="header.nixosGitPush">Git Push</button>
+                      data-i18n="header.nixosGitPush">Hochladen (Push)</button>
               <button id="nixos-git-pull-btn" class="nixos-action nixos-blue hidden"
-                      data-i18n="header.nixosGitPull">Git Pull</button>
+                      data-i18n="header.nixosGitPull">Holen (Pull)</button>
               <button id="nixos-git-noremote" class="nixos-action nixos-blue hidden" disabled
                       style="opacity:.55;cursor:default"
-                      data-i18n="header.nixosGitNoRemote">Git Push/Pull: kein Remote eingerichtet</button>
+                      data-i18n="header.nixosGitNoRemote">Hochladen/Holen: kein Remote eingerichtet</button>
               <button id="nixos-diff-btn" class="nixos-action nixos-blue hidden"
                       data-i18n="header.nixosDiff">Diff (letzter Commit)</button>
             </div>
@@ -1849,10 +1849,12 @@
       <div class="admin-tabs">
         <button class="admin-tab active" data-admin-tab="einstellungen"
                 data-i18n="admin.tab.einstellungen">Einstellungen</button>
-        <button class="admin-tab" data-admin-tab="administration"
-                data-i18n="admin.tab.administration">Administration</button>
+        <!-- Order 2026-11-25 (Martin): what is used often first, what is
+             rare and has consequences last. -->
         <button class="admin-tab" data-admin-tab="zeitmaschine"
                 data-i18n="admin.tab.zeitmaschine">Zeitmaschine</button>
+        <button class="admin-tab" data-admin-tab="administration"
+                data-i18n="admin.tab.administration">Administration</button>
       </div>
 
       <!-- ── Tab 1: Einstellungen ───────────────────────────────────── -->
@@ -1866,16 +1868,20 @@
                   data-i18n="admin.settings.subtabConfig">Config-Einstellungen</button>
         </div>
 
-        <!-- Sub-Tab: NiCo-Einstellungen (bleiben am Rechner) -->
+        <!-- Sub-Tab: NiCo-Einstellungen (bleiben am Rechner).
+             Layout 2026-11-25 (Martin): one line per option, explanations
+             behind an ⓘ (.info-tip, core.js), groups fold and start closed
+             (.settings-group, admin.js openAdmin). -->
         <div class="settings-subtab-panel" data-subtab-panel="nico">
           <div class="admin-section">
-            <div class="admin-section-title" data-i18n="admin.settings.nicoTitle">NiCo-Einstellungen</div>
-            <p class="raw-panel-hint" style="margin-top:4px;margin-bottom:12px" data-i18n="admin.settings.nicoHint">
-              Programmeinstellungen – bleiben auf diesem Rechner.
-            </p>
+            <p class="raw-panel-hint settings-scope-hint" data-i18n="admin.settings.nicoHint">(bleiben auf diesem Rechner)</p>
 
             <!-- Rubrik: Allgemein -->
-            <div class="settings-rubrik" data-i18n="admin.settings.rubrikGeneral">Allgemein</div>
+            <div class="settings-group">
+              <div class="settings-rubrik settings-group-toggle" role="button" tabindex="0">
+                <span data-i18n="admin.settings.rubrikGeneral">Allgemein</span>
+              </div>
+              <div class="settings-group-body">
 
             <!-- Config-Pfad -->
             <div class="settings-path-row">
@@ -1884,28 +1890,53 @@
                      class="settings-path-input"
                      data-i18n-placeholder="admin.settingsPathLoading"
                      placeholder="Wird geladen …">
-              <button type="button" id="settings-change-btn" class="btn-surface btn-small"
+              <button type="button" id="settings-change-btn" class="btn-primary btn-small"
                       data-i18n="admin.settingsChangeBtn">Ändern</button>
             </div>
 
+            <!-- /etc/nixos symlink: belongs to this machine and follows the
+                 config path, so it sits right below it (Martin, 2026-11-25). -->
+            <div class="settings-action-row">
+              <span class="settings-label">
+                <span data-i18n="admin.adm.symlinkLabel">Symlink /etc/nixos</span>
+                <button type="button" class="info-tip" data-tip="admin.adm.symlinkInfo" data-i18n-aria-label="info.label" aria-label="Info"><span class="ni-icon ni-icon-info" aria-hidden="true"></span></button>
+              </span>
+              <span class="settings-buttons">
+                <button type="button" id="admin-symlink-btn" class="btn-primary btn-small hidden"></button>
+                <button type="button" id="admin-symlink-remove-btn" class="action-btn btn-red btn-small hidden"
+                        data-i18n="admin.adm.symlinkRemoveBtn">Entfernen</button>
+              </span>
+            </div>
+            <p id="admin-symlink-status-label" class="raw-panel-hint settings-status-line"></p>
+            <div id="admin-symlink-error" class="settings-error hidden"></div>
+
             <div style="margin-top:8px" id="default-host-row" class="hidden">
               <div style="display:flex;align-items:center;gap:8px">
-                <label for="setting-default-host" style="white-space:nowrap;font-size:0.9em" data-i18n="admin.settings.defaultHost">Standard-Host für Rebuild</label>
+                <span class="settings-label">
+                  <label for="setting-default-host" style="white-space:nowrap;font-size:0.9em" data-i18n="admin.settings.defaultHost">Standard-Host für Rebuild</label>
+                  <button type="button" class="info-tip" data-tip="admin.settings.defaultHostInfo" data-i18n-aria-label="info.label" aria-label="Info"><span class="ni-icon ni-icon-info" aria-hidden="true"></span></button>
+                </span>
                 <select id="setting-default-host" class="settings-path-input" style="flex:1"></select>
               </div>
             </div>
 
             <!-- Git-Sync -->
-            <label class="toggle-row" style="margin-top:10px">
-              <span data-i18n="admin.settings.gitSync">Mit Remote abgleichen (Pull, Push)</span>
+            <label class="toggle-row" for="setting-git-sync" style="margin-top:10px">
+              <span class="settings-label">
+                <span data-i18n="admin.settings.gitSync">Mit Remote abgleichen (Pull, Push)</span>
+                <button type="button" class="info-tip" data-tip="admin.settings.gitSyncInfo" data-i18n-aria-label="info.label" aria-label="Info"><span class="ni-icon ni-icon-info" aria-hidden="true"></span></button>
+              </span>
               <span class="toggle-wrap">
                 <input type="checkbox" id="setting-git-sync" checked>
                 <span class="toggle-track"><span class="toggle-thumb"></span></span>
               </span>
             </label>
             <div id="setting-git-status-only-row" class="hidden" style="margin-left:20px;margin-top:4px">
-              <label class="toggle-row">
-                <span data-i18n="admin.settings.gitStatusOnly">Git-Status trotzdem prüfen</span>
+              <label class="toggle-row" for="setting-git-status-only">
+                <span class="settings-label">
+                  <span data-i18n="admin.settings.gitStatusOnly">Stand der Versionierung trotzdem prüfen</span>
+                  <button type="button" class="info-tip" data-tip="admin.settings.gitStatusOnlyInfo" data-i18n-aria-label="info.label" aria-label="Info"><span class="ni-icon ni-icon-info" aria-hidden="true"></span></button>
+                </span>
                 <span class="toggle-wrap">
                   <input type="checkbox" id="setting-git-status-only">
                   <span class="toggle-track"><span class="toggle-thumb"></span></span>
@@ -1913,187 +1944,241 @@
               </label>
             </div>
 
+              </div>
+            </div>
+
             <!-- Rubrik: Darstellung -->
-            <div class="settings-rubrik" style="margin-top:24px" data-i18n="admin.settings.rubrikAppearance">Darstellung</div>
+            <div class="settings-group">
+              <div class="settings-rubrik settings-group-toggle" role="button" tabindex="0">
+                <span data-i18n="admin.settings.rubrikAppearance">Darstellung</span>
+              </div>
+              <div class="settings-group-body">
 
             <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
               <label for="setting-theme" data-i18n="admin.settings.theme">Theme</label>
               <select id="setting-theme" class="settings-path-input" style="width:auto;flex-shrink:0"></select>
             </div>
-            <label class="toggle-row" style="margin-top:10px">
-              <span data-i18n="admin.settings.codeViewPlain">Code-Ansicht beim Start: Plain (ohne Brix-Annotationen)</span>
+            <label class="toggle-row" for="setting-code-view-plain" style="margin-top:10px">
+              <span class="settings-label">
+                <span data-i18n="admin.settings.codeViewPlain">Vorschau ohne Markierungen starten</span>
+                <button type="button" class="info-tip" data-tip="admin.settings.codeViewPlainInfo" data-i18n-aria-label="info.label" aria-label="Info"><span class="ni-icon ni-icon-info" aria-hidden="true"></span></button>
+              </span>
               <span class="toggle-wrap">
                 <input type="checkbox" id="setting-code-view-plain">
                 <span class="toggle-track"><span class="toggle-thumb"></span></span>
               </span>
             </label>
-            <label class="toggle-row" style="margin-top:8px">
-              <span data-i18n="admin.settings.showFlakeLock">flake.lock im Dateibaum anzeigen</span>
+            <label class="toggle-row" for="setting-show-flake-lock" style="margin-top:8px">
+              <span class="settings-label">
+                <span data-i18n="admin.settings.showFlakeLock">flake.lock im Dateibaum anzeigen</span>
+                <button type="button" class="info-tip" data-tip="admin.settings.showFlakeLockInfo" data-i18n-aria-label="info.label" aria-label="Info"><span class="ni-icon ni-icon-info" aria-hidden="true"></span></button>
+              </span>
               <span class="toggle-wrap">
                 <input type="checkbox" id="setting-show-flake-lock">
                 <span class="toggle-track"><span class="toggle-thumb"></span></span>
               </span>
             </label>
-            <div style="margin-top:10px">
-              <button id="sections-settings-btn" class="btn-surface btn-small"
-                      data-i18n="admin.sections.settingsBtn">Sektionen anpassen</button>
-              <p class="raw-panel-hint" style="margin-top:4px"
-                 data-i18n="admin.sections.settingsHint">
-                Sektionen die standardmäßig sichtbar sein sollen. Sektionen mit Inhalt werden immer angezeigt.
-              </p>
+            <div class="settings-action-row">
+              <span class="settings-label">
+                <span data-i18n="admin.sections.rowLabel">Sichtbare Sektionen im Panel</span>
+                <button type="button" class="info-tip" data-tip="admin.sections.rowInfo" data-i18n-aria-label="info.label" aria-label="Info"><span class="ni-icon ni-icon-info" aria-hidden="true"></span></button>
+              </span>
+              <button id="sections-settings-btn" class="btn-primary btn-small"
+                      data-i18n="admin.sections.settingsBtn">Anpassen</button>
+            </div>
+
+              </div>
             </div>
 
             <!-- Rubrik: Rebuild -->
-            <div class="settings-rubrik" style="margin-top:24px" data-i18n="admin.settings.rubrikRebuild">Rebuild</div>
+            <div class="settings-group">
+              <div class="settings-rubrik settings-group-toggle" role="button" tabindex="0">
+                <span data-i18n="admin.settings.rubrikRebuild">Rebuild</span>
+              </div>
+              <div class="settings-group-body">
 
-            <label class="toggle-row">
-              <span data-i18n="admin.settings.rebuildLog">Rebuild-Log immer schreiben (nixos-rebuild.log)</span>
+            <label class="toggle-row" for="setting-rebuild-log">
+              <span class="settings-label">
+                <span data-i18n="admin.settings.rebuildLog">Rebuild-Log immer schreiben</span>
+                <button type="button" class="info-tip" data-tip="admin.settings.rebuildLogInfo" data-i18n-aria-label="info.label" aria-label="Info"><span class="ni-icon ni-icon-info" aria-hidden="true"></span></button>
+              </span>
               <span class="toggle-wrap">
                 <input type="checkbox" id="setting-rebuild-log">
                 <span class="toggle-track"><span class="toggle-thumb"></span></span>
               </span>
             </label>
-            <label class="toggle-row" style="margin-top:8px">
-              <span data-i18n="admin.settings.rebuildTerminal">Rebuild in Terminal-Fenster öffnen</span>
+            <label class="toggle-row" for="setting-rebuild-terminal" style="margin-top:8px">
+              <span class="settings-label">
+                <span data-i18n="admin.settings.rebuildTerminal">Rebuild in Terminal-Fenster öffnen</span>
+                <button type="button" class="info-tip" data-tip="admin.settings.rebuildTerminalInfo" data-i18n-aria-label="info.label" aria-label="Info"><span class="ni-icon ni-icon-info" aria-hidden="true"></span></button>
+              </span>
               <span class="toggle-wrap">
                 <input type="checkbox" id="setting-rebuild-terminal">
                 <span class="toggle-track"><span class="toggle-thumb"></span></span>
               </span>
             </label>
-            <label class="toggle-row" style="margin-top:8px">
-              <span data-i18n="admin.settings.prefetchDryRun">Analyse vor dem Rebuild (Download-Größe, Warnung vor Kompilieren)</span>
+            <label class="toggle-row" for="setting-prefetch-dry-run" style="margin-top:8px">
+              <span class="settings-label">
+                <span data-i18n="admin.settings.prefetchDryRun">Analyse vor dem Rebuild</span>
+                <button type="button" class="info-tip" data-tip="admin.settings.prefetchDryRunHint" data-i18n-aria-label="info.label" aria-label="Info"><span class="ni-icon ni-icon-info" aria-hidden="true"></span></button>
+              </span>
               <span class="toggle-wrap">
                 <input type="checkbox" id="setting-prefetch-dry-run">
                 <span class="toggle-track"><span class="toggle-thumb"></span></span>
               </span>
             </label>
-            <p class="raw-panel-hint" style="margin-top:2px;margin-bottom:0" data-i18n="admin.settings.prefetchDryRunHint">Prüft vor jedem Rebuild, was geladen und was kompiliert werden muss. Muss ein Paket auf diesem Rechner aus dem Quelltext gebaut werden, fragt NiCo vorher nach und bietet den abgesicherten Rebuild an. Ermöglicht außerdem einen echten Fortschrittsbalken für den Download. Verlängert den Start um einige Sekunden.</p>
+
+              </div>
+            </div>
 
             <!-- Rubrik: Diesen Rechner lesen (hostread.py, 2026-11-21) -->
-            <div class="settings-rubrik" style="margin-top:24px" data-i18n="admin.settings.rubrikHostRead">Diesen Rechner lesen</div>
-            <p class="raw-panel-hint" style="margin-top:2px;margin-bottom:8px" data-i18n="admin.settings.hostReadHint">NiCo liest standardmäßig nur das Config-Verzeichnis. Hier erlaubst du einzelnen Funktionen, auch diesen Rechner anzusehen – nur lesend, nichts verlässt den Rechner.</p>
-            <label class="toggle-row">
-              <span data-i18n="admin.settings.readValidator">Validator: diesen Rechner prüfen</span>
+            <div class="settings-group">
+              <div class="settings-rubrik settings-group-toggle" role="button" tabindex="0">
+                <span class="settings-label">
+                  <span data-i18n="admin.settings.rubrikHostRead">Diesen Rechner lesen</span>
+                  <button type="button" class="info-tip" data-tip="admin.settings.hostReadHint" data-i18n-aria-label="info.label" aria-label="Info"><span class="ni-icon ni-icon-info" aria-hidden="true"></span></button>
+                </span>
+              </div>
+              <div class="settings-group-body">
+
+            <label class="toggle-row" for="setting-read-validator">
+              <span class="settings-label">
+                <span data-i18n="admin.settings.readValidator">Validator</span>
+                <button type="button" class="info-tip" data-tip="admin.settings.readValidatorHint" data-i18n-aria-label="info.label" aria-label="Info"><span class="ni-icon ni-icon-info" aria-hidden="true"></span></button>
+              </span>
               <span class="toggle-wrap">
                 <input type="checkbox" id="setting-read-validator" data-host-read-setting="read_host_validator">
                 <span class="toggle-track"><span class="toggle-thumb"></span></span>
               </span>
             </label>
-            <p class="raw-panel-hint" style="margin-top:2px;margin-bottom:8px" data-i18n="admin.settings.readValidatorHint">Benutzer und Gruppen (/etc/passwd, /etc/group), laufende NixOS-Version, Installationsdatum, Swap und Dateisysteme – für die Prüfungen „Konto gesperrt“, „uid/gid vergeben“, „stateVersion“ und Btrfs.</p>
-            <label class="toggle-row">
-              <span data-i18n="admin.settings.readHardware">Hardware dieses Rechners lesen</span>
+            <label class="toggle-row" for="setting-read-hardware" style="margin-top:8px">
+              <span class="settings-label">
+                <span data-i18n="admin.settings.readHardware">Hardware</span>
+                <button type="button" class="info-tip" data-tip="admin.settings.readHardwareHint" data-i18n-aria-label="info.label" aria-label="Info"><span class="ni-icon ni-icon-info" aria-hidden="true"></span></button>
+              </span>
               <span class="toggle-wrap">
                 <input type="checkbox" id="setting-read-hardware" data-host-read-setting="read_host_hardware">
                 <span class="toggle-track"><span class="toggle-thumb"></span></span>
               </span>
             </label>
-            <p class="raw-panel-hint" style="margin-top:2px;margin-bottom:8px" data-i18n="admin.settings.readHardwareHint">/etc/nixos/hardware-configuration.nix und die Datenträger (/dev/disk) – für den Hardware-Abgleich und die Suche nach Hardware-Dateien.</p>
-            <label class="toggle-row">
-              <span data-i18n="admin.settings.readGenerations">Systemstände (Generationen) lesen</span>
+            <label class="toggle-row" for="setting-read-generations" style="margin-top:8px">
+              <span class="settings-label">
+                <span data-i18n="admin.settings.readGenerations">Systemstände (Generationen)</span>
+                <button type="button" class="info-tip" data-tip="admin.settings.readGenerationsHint" data-i18n-aria-label="info.label" aria-label="Info"><span class="ni-icon ni-icon-info" aria-hidden="true"></span></button>
+              </span>
               <span class="toggle-wrap">
                 <input type="checkbox" id="setting-read-generations" data-host-read-setting="read_host_generations">
                 <span class="toggle-track"><span class="toggle-thumb"></span></span>
               </span>
             </label>
-            <p class="raw-panel-hint" style="margin-top:2px;margin-bottom:0" data-i18n="admin.settings.readGenerationsHint">Die Liste der Systemstände dieses Rechners – für die Zeitmaschine, Seite System.</p>
+
+              </div>
+            </div>
           </div>
         </div>
 
-        <!-- Sub-Tab: Config-Einstellungen (wandern mit der Config) -->
+        <!-- Sub-Tab: Config-Einstellungen (wandern mit der Config).
+             Layout 2026-11-25 like the NiCo tab: one line per option,
+             explanations behind ⓘ, groups fold and start closed; changes of
+             directories and remote happen in a window (openFlowDialog). -->
         <div class="settings-subtab-panel hidden" data-subtab-panel="config">
           <div class="admin-section">
-            <div class="admin-section-title" data-i18n="admin.settings.configTitle">Config-Einstellungen</div>
-            <p class="raw-panel-hint" style="margin-top:4px;margin-bottom:12px" data-i18n="admin.settings.configHint">
-              Diese Einstellungen gehören zur Konfiguration und wandern beim Kopieren mit.
-            </p>
+            <p class="raw-panel-hint settings-scope-hint" data-i18n="admin.settings.configHint">(wandern mit der Config)</p>
 
             <!-- Rubrik: Verzeichnisse -->
-            <div class="settings-rubrik" data-i18n="admin.settings.rubrikDirs">Verzeichnisse</div>
-
-            <label for="settings-hosts-dir" data-i18n="admin.settings.hostsDir">Hosts-Verzeichnis</label>
-            <div style="display:flex;gap:8px;align-items:center;margin-top:6px">
-              <input type="text" id="settings-hosts-dir" class="settings-path-input"
-                     style="flex:1" placeholder="hosts" spellcheck="false" autocomplete="off">
+            <div class="settings-group">
+              <div class="settings-rubrik settings-group-toggle" role="button" tabindex="0">
+                <span data-i18n="admin.settings.rubrikDirs">Verzeichnisse</span>
+              </div>
+              <div class="settings-group-body">
+            <div class="settings-value-row">
+              <span class="settings-label">
+                <label for="settings-hosts-dir" data-i18n="admin.settings.hostsDir">Hosts-Verzeichnis</label>
+                <button type="button" class="info-tip" data-tip="admin.settings.hostsDirHint" data-i18n-aria-label="info.label" aria-label="Info"><span class="ni-icon ni-icon-info" aria-hidden="true"></span></button>
+              </span>
+              <input type="text" id="settings-hosts-dir" class="settings-path-input" readonly>
             </div>
-            <p class="raw-panel-hint" style="margin-top:4px" data-i18n="admin.settings.hostsDirHint">
-              Unterverzeichnis für Host-Konfigurationen (Standard: hosts)
-            </p>
-
-            <label for="settings-modules-dir" style="display:block;margin-top:12px" data-i18n="admin.settings.modulesDir">Module-Verzeichnis</label>
-            <div style="display:flex;gap:8px;align-items:center;margin-top:6px">
-              <input type="text" id="settings-modules-dir" class="settings-path-input"
-                     style="flex:1" placeholder="modules" spellcheck="false" autocomplete="off">
+            <div class="settings-value-row">
+              <span class="settings-label">
+                <label for="settings-modules-dir" data-i18n="admin.settings.modulesDir">Module-Verzeichnis</label>
+                <button type="button" class="info-tip" data-tip="admin.settings.modulesDirHint" data-i18n-aria-label="info.label" aria-label="Info"><span class="ni-icon ni-icon-info" aria-hidden="true"></span></button>
+              </span>
+              <input type="text" id="settings-modules-dir" class="settings-path-input" readonly>
             </div>
-            <p class="raw-panel-hint" style="margin-top:4px" data-i18n="admin.settings.modulesDirHint">
-              Unterverzeichnis für NixOS-Module (Standard: modules)
-            </p>
-
-            <label for="settings-hm-dir" style="display:block;margin-top:12px" data-i18n="admin.settings.hmDir">Home-Manager-Verzeichnis</label>
-            <div style="display:flex;gap:8px;align-items:center;margin-top:6px">
-              <input type="text" id="settings-hm-dir" class="settings-path-input"
-                     style="flex:1" placeholder="home" spellcheck="false" autocomplete="off">
+            <div class="settings-value-row">
+              <span class="settings-label">
+                <label for="settings-hm-dir" data-i18n="admin.settings.hmDir">Home-Manager-Verzeichnis</label>
+                <button type="button" class="info-tip" data-tip="admin.settings.hmDirHint" data-i18n-aria-label="info.label" aria-label="Info"><span class="ni-icon ni-icon-info" aria-hidden="true"></span></button>
+              </span>
+              <input type="text" id="settings-hm-dir" class="settings-path-input" readonly>
             </div>
-            <p class="raw-panel-hint" style="margin-top:4px" data-i18n="admin.settings.hmDirHint">
-              Unterverzeichnis für Home-Manager-Dateien (Standard: home)
-            </p>
-
-            <div style="margin-top:12px">
-              <button id="settings-config-save" class="btn-surface btn-small"
-                      data-i18n="admin.settings.save">Speichern</button>
+            <div style="margin-top:10px">
+              <button type="button" id="settings-dirs-change-btn" class="btn-primary btn-small"
+                      data-i18n="admin.settingsChangeBtn">Ändern</button>
+            </div>
+              </div>
             </div>
 
-            <!-- Rubrik: Git -->
-            <div class="settings-rubrik" style="margin-top:24px" data-i18n="admin.settings.rubrikGit">Git</div>
-
+            <!-- Rubrik: Rebuild -->
+            <div class="settings-group">
+              <div class="settings-rubrik settings-group-toggle" role="button" tabindex="0">
+                <span data-i18n="admin.settings.rubrikRebuild">Rebuild</span>
+              </div>
+              <div class="settings-group-body">
             <div id="flake-update-row">
-              <label class="toggle-row">
-                <span data-i18n="admin.flakeUpdate">Flake bei Rebuild immer aktualisieren</span>
+              <label class="toggle-row" for="flake-update-toggle">
+                <span class="settings-label">
+                  <span data-i18n="admin.flakeUpdate">Flake bei Rebuild immer aktualisieren</span>
+                  <button type="button" class="info-tip" data-tip="admin.flakeUpdateInfo" data-i18n-aria-label="info.label" aria-label="Info"><span class="ni-icon ni-icon-info" aria-hidden="true"></span></button>
+                </span>
                 <span class="toggle-wrap">
                   <input type="checkbox" id="flake-update-toggle">
                   <span class="toggle-track"><span class="toggle-thumb"></span></span>
                 </span>
               </label>
             </div>
-
-            <div id="git-set-remote-row" class="hidden" style="margin-top:12px">
-              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
-                <p class="raw-panel-hint" data-i18n="git.setRemoteTitle">Remote-Repository einrichten</p>
-                <a href="/help#k7-3" target="_blank" style="font-size:0.8em;color:var(--blue);text-decoration:none;opacity:0.8" data-i18n="git.setRemoteHelpLink">? Hilfe</a>
               </div>
-              <p class="raw-panel-hint" style="margin-bottom:8px;font-size:0.85em" data-i18n="git.setRemoteHint">Noch kein Remote konfiguriert. Plattform und Repository wählen:</p>
-              <select id="git-remote-platform" class="settings-path-input" style="width:100%;margin-bottom:8px">
-                <option value="github">GitHub</option>
-                <option value="gitlab">GitLab</option>
-                <option value="codeberg">Codeberg</option>
-                <option value="custom" data-i18n-opt="git.setRemoteCustomOption">Eigene URL</option>
-              </select>
-              <div id="git-remote-fields" style="display:flex;gap:6px;align-items:center;margin-bottom:8px">
-                <input id="git-remote-user" type="text" class="settings-path-input" style="flex:1"
-                       placeholder="benutzername" spellcheck="false" autocomplete="off">
-                <span style="color:var(--fg-muted);font-weight:600">/</span>
-                <input id="git-remote-repo" type="text" class="settings-path-input" style="flex:1.5"
-                       placeholder="nixos-config" spellcheck="false" autocomplete="off">
-              </div>
-              <div id="git-remote-custom-field" style="display:none;margin-bottom:8px">
-                <input id="git-remote-url-input" type="text" class="settings-path-input" style="width:100%"
-                       placeholder="git@github.com:user/nixos-config.git" spellcheck="false" autocomplete="off">
-              </div>
-              <div id="git-remote-preview" style="font-size:0.82em;color:var(--fg-muted);font-family:monospace;margin-bottom:8px;min-height:1.2em"></div>
-              <button id="git-remote-check-btn" class="btn-surface btn-small" data-i18n="git.setRemoteSave">Remote speichern</button>
-              <div id="git-remote-status" style="margin-top:6px;font-size:0.85em;min-height:1.2em"></div>
-              <p class="raw-panel-hint" style="margin-top:8px;font-size:0.85em" data-i18n="git.setRemoteRestartHint">Änderungen an Remote-Daten werden erst nach einem Programmneustart für den Start-Abgleich verwendet.</p>
             </div>
 
-            <div id="git-push-settings-row" class="hidden" style="margin-top:12px">
-              <label class="toggle-row">
-                <span data-i18n="admin.settings.pushAfterSave">Nach dem Speichern automatisch pushen</span>
+            <!-- Rubrik: Git -->
+            <div class="settings-group">
+              <div class="settings-rubrik settings-group-toggle" role="button" tabindex="0">
+                <span data-i18n="admin.settings.rubrikGit">Versionierung (Git)</span>
+              </div>
+              <div class="settings-group-body">
+            <div id="git-set-remote-row" class="hidden">
+              <div class="settings-value-row">
+                <span class="settings-label">
+                  <label for="git-remote-current" data-i18n="git.remoteLabel">Remote-Repository</label>
+                  <button type="button" class="info-tip" data-tip="git.remoteInfo" data-i18n-aria-label="info.label" aria-label="Info"><span class="ni-icon ni-icon-info" aria-hidden="true"></span></button>
+                </span>
+                <input type="text" id="git-remote-current" class="settings-path-input" readonly>
+                <button type="button" id="git-remote-setup-btn" class="btn-primary btn-small"
+                        data-i18n="git.remoteSetupBtn">Einrichten</button>
+              </div>
+            </div>
+            <div id="git-settings-nogit" class="settings-action-row hidden">
+              <span data-i18n="git.settingsNoGit">Keine Versionierung eingerichtet.</span>
+              <button type="button" id="git-settings-init-btn" class="btn-primary btn-small"
+                      data-i18n="git.remoteSetupBtn">Einrichten</button>
+            </div>
+
+            <div id="git-push-settings-row" class="hidden" style="margin-top:10px">
+              <label class="toggle-row" for="push-after-save-toggle">
+                <span class="settings-label">
+                  <span data-i18n="admin.settings.pushAfterSave">Nach dem Speichern automatisch pushen</span>
+                  <button type="button" class="info-tip" data-tip="admin.settings.pushAfterSaveInfo" data-i18n-aria-label="info.label" aria-label="Info"><span class="ni-icon ni-icon-info" aria-hidden="true"></span></button>
+                </span>
                 <span class="toggle-wrap">
                   <input type="checkbox" id="push-after-save-toggle">
                   <span class="toggle-track"><span class="toggle-thumb"></span></span>
                 </span>
               </label>
-              <label class="toggle-row" style="margin-top:6px">
-                <span data-i18n="admin.settings.pushAfterRebuild">Nach erfolgreichem Rebuild automatisch pushen</span>
+              <label class="toggle-row" for="push-after-rebuild-toggle" style="margin-top:8px">
+                <span class="settings-label">
+                  <span data-i18n="admin.settings.pushAfterRebuild">Nach erfolgreichem Rebuild automatisch pushen</span>
+                  <button type="button" class="info-tip" data-tip="admin.settings.pushAfterRebuildInfo" data-i18n-aria-label="info.label" aria-label="Info"><span class="ni-icon ni-icon-info" aria-hidden="true"></span></button>
+                </span>
                 <span class="toggle-wrap">
                   <input type="checkbox" id="push-after-rebuild-toggle">
                   <span class="toggle-track"><span class="toggle-thumb"></span></span>
@@ -2101,23 +2186,73 @@
               </label>
             </div>
 
-            <!-- Rubrik: Editor -->
-            <div class="settings-rubrik" style="margin-top:24px" data-i18n="admin.settings.rubrikEditor">Editor</div>
+            <!-- Moved here from the time machine (Martin, 2026-11-25): settings
+                 and upkeep of the versioning belong to the config, the time
+                 machine keeps comparing and restoring. -->
+            <label class="toggle-row" for="foreign-guard-toggle" style="margin-top:10px">
+              <span class="settings-label">
+                <span data-i18n="git.foreign.toggleLabel">Vor Aufnahme fremder Dateien fragen</span>
+                <button type="button" class="info-tip" data-tip="git.foreign.sectionHint" data-i18n-aria-label="info.label" aria-label="Info"><span class="ni-icon ni-icon-info" aria-hidden="true"></span></button>
+              </span>
+              <span class="toggle-wrap">
+                <input type="checkbox" id="foreign-guard-toggle">
+                <span class="toggle-track"><span class="toggle-thumb"></span></span>
+              </span>
+            </label>
+            <div class="settings-action-row">
+              <span class="settings-label">
+                <span data-i18n="admin.gitignore.title">Ausgenommene Dateien (.gitignore)</span>
+                <button type="button" class="info-tip" data-tip="admin.gitignore.hint" data-i18n-aria-label="info.label" aria-label="Info"><span class="ni-icon ni-icon-info" aria-hidden="true"></span></button>
+              </span>
+              <button type="button" id="git-gitignore-edit-btn" class="btn-primary btn-small"
+                      data-i18n="admin.gitignore.editBtn">Bearbeiten</button>
+            </div>
+            <div id="git-maint-rows">
+              <div class="settings-action-row">
+                <span class="settings-label">
+                  <span data-i18n="git.foreign.cleanupLabel">Versionierte Fremddateien</span>
+                  <button type="button" class="info-tip" data-tip="git.foreign.cleanupInfo" data-i18n-aria-label="info.label" aria-label="Info"><span class="ni-icon ni-icon-info" aria-hidden="true"></span></button>
+                </span>
+                <button type="button" id="git-foreign-cleanup-btn" class="btn-primary btn-small"
+                        data-i18n="git.upkeep.check">Prüfen</button>
+              </div>
+              <div class="settings-action-row">
+                <span class="settings-label">
+                  <span data-i18n="git.large.label">Zu große Dateien</span>
+                  <button type="button" class="info-tip" data-tip="git.large.info" data-i18n-aria-label="info.label" aria-label="Info"><span class="ni-icon ni-icon-info" aria-hidden="true"></span></button>
+                </span>
+                <button type="button" id="git-large-cleanup-btn" class="btn-primary btn-small"
+                        data-i18n="git.upkeep.check">Prüfen</button>
+              </div>
+            </div>
+              </div>
+            </div>
 
-            <label class="toggle-row">
-              <span data-i18n="admin.settings.panelDefault">Dateien standardmäßig im Textmodus öffnen</span>
+            <!-- Rubrik: Editor -->
+            <div class="settings-group">
+              <div class="settings-rubrik settings-group-toggle" role="button" tabindex="0">
+                <span data-i18n="admin.settings.rubrikEditor">Editor</span>
+              </div>
+              <div class="settings-group-body">
+            <label class="toggle-row" for="panel-default-toggle">
+              <span class="settings-label">
+                <span data-i18n="admin.settings.panelDefault">Dateien standardmäßig im Textmodus öffnen</span>
+                <button type="button" class="info-tip" data-tip="admin.settings.panelDefaultInfo" data-i18n-aria-label="info.label" aria-label="Info"><span class="ni-icon ni-icon-info" aria-hidden="true"></span></button>
+              </span>
               <span class="toggle-wrap">
                 <input type="checkbox" id="panel-default-toggle">
                 <span class="toggle-track"><span class="toggle-thumb"></span></span>
               </span>
             </label>
-
-            <div style="margin-top:10px">
-              <button id="validation-settings-btn" class="btn-surface btn-small"
-                      data-i18n="admin.validation.settingsBtn">Validierung anpassen</button>
-              <p class="raw-panel-hint" style="margin-top:4px" data-i18n="admin.validation.hint">
-                Legt fest welche statischen Prüfungen vor Rebuild/Dry-Run ausgeführt werden.
-              </p>
+            <div class="settings-action-row">
+              <span class="settings-label">
+                <span data-i18n="admin.validation.rowLabel">Validator-Regeln</span>
+                <button type="button" class="info-tip" data-tip="admin.validation.hint" data-i18n-aria-label="info.label" aria-label="Info"><span class="ni-icon ni-icon-info" aria-hidden="true"></span></button>
+              </span>
+              <button id="validation-settings-btn" class="btn-primary btn-small"
+                      data-i18n="admin.sections.settingsBtn">Anpassen</button>
+            </div>
+              </div>
             </div>
           </div>
         </div>
@@ -2126,89 +2261,86 @@
 
       <!-- ── Tab 2: Administration ───────────────────────────────────── -->
       <div class="admin-tab-panel hidden" data-admin-panel="administration">
-
-        <!-- Symlink /etc/nixos → NixOS-Config -->
-        <div class="admin-section" id="admin-symlink-section">
-          <div class="admin-section-title">Symlink von /etc/nixos auf NixOS-Config-Pfad anlegen</div>
-          <p id="admin-symlink-hint" class="raw-panel-hint" style="margin:4px 0 8px">/etc/nixos wird vorher nach /etc/nixos.bak gesichert.</p>
-          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:4px">
-            <span id="admin-symlink-status-label" class="admin-hint" style="margin:0"></span>
-            <button type="button" id="admin-symlink-btn" class="action-btn btn-red hidden"></button>
-          </div>
-          <div id="admin-symlink-error" class="settings-error hidden"></div>
-        </div>
-
-        <!-- ZIP Export / Import -->
+        <!-- Layout 2026-11-25 like the settings: groups fold and start closed,
+             one line per action with ⓘ, the button on the right. Every
+             action that changes something runs in a window. -->
         <div class="admin-section">
-          <div class="admin-section-title" data-i18n="admin.exportTitle">Exportieren</div>
-          <div class="admin-actions">
-            <div style="display:flex;gap:8px">
-              <button type="button" id="admin-export-btn" class="action-btn btn-green"
-                      style="flex:1;width:auto"
-                      data-i18n="admin.export"
-                      data-i18n-title="admin.exportTitle"
-                      title="Erstellt eine ZIP-Datei mit allen Config-Dateien zum Mitnehmen oder Sichern">
-                Als ZIP exportieren
-              </button>
-              <button type="button" id="admin-zip-import-btn" class="action-btn btn-red"
-                      style="flex:1;width:auto"
-                      data-i18n="admin.zipImport">
-                Aus ZIP importieren
-              </button>
+
+        <div class="settings-group">
+          <div class="settings-rubrik settings-group-toggle" role="button" tabindex="0">
+            <span data-i18n="admin.adm.transferTitle">Config übertragen</span>
+          </div>
+          <div class="settings-group-body">
+            <div class="settings-action-row">
+              <span class="settings-label">
+                <span data-i18n="admin.adm.zipExportLabel">Config als ZIP-Datei</span>
+                <button type="button" class="info-tip" data-tip="admin.adm.zipInfo" data-i18n-aria-label="info.label" aria-label="Info"><span class="ni-icon ni-icon-info" aria-hidden="true"></span></button>
+              </span>
+              <span class="settings-buttons">
+                <button type="button" id="admin-export-btn" class="btn-primary btn-small"
+                        data-i18n="admin.adm.exportBtn">Exportieren</button>
+                <button type="button" id="admin-zip-import-btn" class="action-btn btn-red btn-small"
+                        data-i18n="admin.adm.importBtn">Importieren</button>
+              </span>
             </div>
             <input type="file" id="admin-zip-input" accept=".zip" class="hidden">
+            <div class="settings-action-row">
+              <span class="settings-label">
+                <span data-i18n="admin.adm.dirImportLabel">Config aus einem Verzeichnis</span>
+                <button type="button" class="info-tip" data-tip="admin.importHint" data-i18n-aria-label="info.label" aria-label="Info"><span class="ni-icon ni-icon-info" aria-hidden="true"></span></button>
+              </span>
+              <button type="button" id="admin-import-btn" class="action-btn btn-red btn-small"
+                      data-i18n="admin.adm.importBtn">Importieren</button>
+            </div>
+            <div class="settings-action-row">
+              <span class="settings-label">
+                <span data-i18n="admin.adm.moveLabel">Config verschieben</span>
+                <button type="button" class="info-tip" data-tip="admin.adm.moveInfo" data-i18n-aria-label="info.label" aria-label="Info"><span class="ni-icon ni-icon-info" aria-hidden="true"></span></button>
+              </span>
+              <button type="button" id="admin-move-btn" class="btn-primary btn-small"
+                      data-i18n="admin.adm.moveBtn">Verschieben</button>
+            </div>
           </div>
         </div>
 
-        <!-- Settings Export/Import -->
-        <div class="admin-section">
-          <div class="admin-section-title" data-i18n="admin.settingsExportTitle">Programmeinstellungen</div>
-          <div class="admin-actions">
-            <div style="display:flex;gap:8px">
-              <button type="button" id="admin-settings-export-btn" class="action-btn btn-green"
-                      style="flex:1;width:auto"
-                      data-i18n="admin.settingsExport">
-                Einstellungen exportieren
-              </button>
-              <button type="button" id="admin-settings-import-btn" class="action-btn btn-red"
-                      style="flex:1;width:auto"
-                      data-i18n="admin.settingsImport">
-                Einstellungen importieren
-              </button>
+        <div class="settings-group">
+          <div class="settings-rubrik settings-group-toggle" role="button" tabindex="0">
+            <span data-i18n="admin.adm.settingsTitle">Programmeinstellungen</span>
+          </div>
+          <div class="settings-group-body">
+            <div class="settings-action-row">
+              <span class="settings-label">
+                <span data-i18n="admin.adm.settingsLabel">Einstellungen dieses Rechners</span>
+                <button type="button" class="info-tip" data-tip="admin.adm.settingsInfo" data-i18n-aria-label="info.label" aria-label="Info"><span class="ni-icon ni-icon-info" aria-hidden="true"></span></button>
+              </span>
+              <span class="settings-buttons">
+                <button type="button" id="admin-settings-export-btn" class="btn-primary btn-small"
+                        data-i18n="admin.adm.exportBtn">Exportieren</button>
+                <button type="button" id="admin-settings-import-btn" class="action-btn btn-red btn-small"
+                        data-i18n="admin.adm.importBtn">Importieren</button>
+              </span>
             </div>
             <input type="file" id="admin-settings-import-input" accept=".json" class="hidden">
           </div>
         </div>
 
-        <div class="admin-section">
-          <div class="admin-section-title" data-i18n="admin.detachTitle">Aus NiCo lösen</div>
-          <p class="raw-panel-hint" style="margin:4px 0 8px" data-i18n="admin.detachHint">
-            Erstellt eine ZIP-Sicherung, entfernt NiCo-Kommentarzeilen aus allen .nix-Dateien und löscht die NiCo-Metadatei der Config. Eigene Dateien bleiben erhalten.
-          </p>
-          <p class="raw-panel-hint" style="margin:0 0 10px" data-i18n="admin.detachWarn">
-            Danach ist kein Config-Pfad mehr in NiCo hinterlegt und der Startdialog erscheint wieder.
-          </p>
-          <button type="button" id="admin-detach-btn" class="action-btn btn-red"
-                  data-i18n="admin.detachBtn">
-            Config aus NiCo lösen
-          </button>
-        </div>
-
-        <!-- Import -->
-        <div class="admin-section" id="admin-import-section">
-          <div class="admin-section-title admin-section-toggle" id="admin-import-toggle">
-            <span data-i18n="admin.importTitle">Import</span>
-            <span class="admin-section-chevron ni-icon ni-icon-chevron-right"></span>
+        <div class="settings-group">
+          <div class="settings-rubrik settings-group-toggle" role="button" tabindex="0">
+            <span data-i18n="admin.detachTitle">Aus NiCo lösen</span>
           </div>
-          <div id="admin-import-body" class="admin-import-body">
-            <p class="admin-hint" data-i18n="admin.importHint"></p>
-            <!-- Path, browse and every step in a window (_dirImportFlow, 2026-11-25) -->
-            <button type="button" id="admin-import-btn" class="action-btn btn-blue"
-                    data-i18n="admin.dirImport">Aus Verzeichnis importieren…</button>
-          </div><!-- /#admin-import-body -->
+          <div class="settings-group-body">
+            <div class="settings-action-row">
+              <span class="settings-label">
+                <span data-i18n="admin.detachBtn">Config aus NiCo lösen</span>
+                <button type="button" class="info-tip" data-tip="admin.adm.detachInfo" data-i18n-aria-label="info.label" aria-label="Info"><span class="ni-icon ni-icon-info" aria-hidden="true"></span></button>
+              </span>
+              <button type="button" id="admin-detach-btn" class="action-btn btn-red btn-small"
+                      data-i18n="admin.adm.detachAction">Lösen</button>
+            </div>
+          </div>
         </div>
 
-
+        </div>
       </div><!-- /Tab 2 -->
 
       <!-- ── Tab 3: Zeitmaschine ─────────────────────────────────────── -->
@@ -2225,62 +2357,20 @@
         </div>
 
         <div id="tm-config" class="settings-subtab-panel hidden" data-subtab-panel="tm-config">
-        <!-- Git-Status / Init -->
-        <div class="admin-section" id="git-init-section">
-          <div class="admin-section-title" data-i18n="admin.gitTitle">Git</div>
-          <div id="git-status-row" class="settings-path-row" style="align-items:center;gap:10px">
-            <span id="git-status-label" data-i18n="admin.gitChecking">…</span>
-            <button id="git-init-btn" class="btn-surface btn-small hidden"
-                    data-i18n="admin.gitInitBtn">Git initialisieren</button>
-          </div>
-        </div>
-
-        <!-- .gitignore -->
-        <div class="admin-section" id="git-gitignore-section">
-          <div class="admin-section-title" data-i18n="admin.gitignore.title">.gitignore</div>
-          <p class="admin-hint" data-i18n="admin.gitignore.hint">
-            Verhindert dass NiCo-interne Dateien (Logs, Backups) in Git committet werden.
-          </p>
-          <div id="git-gitignore-missing" class="hidden" style="margin-top:8px">
-            <button id="git-gitignore-create-btn" class="btn-surface btn-small"
-                    data-i18n="admin.gitignore.createBtn">Standard-Einträge anlegen</button>
-          </div>
-          <div id="git-gitignore-editor" class="hidden" style="margin-top:8px">
-            <textarea id="git-gitignore-content"
-                      style="width:100%;height:140px;font-family:monospace;font-size:12px;
-                             background:var(--surface0);color:var(--text);border:1px solid var(--surface2);
-                             border-radius:6px;padding:8px;resize:vertical;box-sizing:border-box"></textarea>
-            <div style="display:flex;gap:8px;margin-top:6px">
-              <button id="git-gitignore-save-btn" class="btn-primary btn-small"
-                      data-i18n="admin.gitignore.saveBtn">Speichern</button>
-              <button id="git-gitignore-add-btn" class="btn-surface btn-small"
-                      data-i18n="admin.gitignore.addBtn">Standard-Einträge ergänzen</button>
-            </div>
-          </div>
-        </div>
-
-        <!-- Fremddateien (foreign-file guard) -->
-        <div class="admin-section" id="git-foreign-section">
-          <div class="admin-section-title" data-i18n="git.foreign.sectionTitle">Fremddateien</div>
-          <p class="admin-hint" data-i18n="git.foreign.sectionHint">
-            Dateien, die nicht zur Config gehören: NiCo fragt vor dem Sicherungspunkt, ob sie in Git aufgenommen oder ausgenommen werden sollen.
-          </p>
-          <label class="toggle-row">
-            <span data-i18n="git.foreign.toggleLabel">Vor Aufnahme fremder Dateien fragen</span>
-            <span class="toggle-wrap">
-              <input type="checkbox" id="foreign-guard-toggle">
-              <span class="toggle-track"><span class="toggle-thumb"></span></span>
-            </span>
-          </label>
-          <button id="git-foreign-cleanup-btn" class="btn-surface btn-small" style="margin-top:8px"
-                  data-i18n="git.foreign.cleanupBtn">Getrackte Fremddateien aufräumen</button>
-          <button id="git-large-cleanup-btn" class="btn-surface btn-small" style="margin-top:8px"
-                  data-i18n="git.large.btn">Zu große Dateien bereinigen</button>
-        </div>
-
+        <!-- Layout 2026-11-25 like the System side: the checkpoints list is the
+             main part and fills the window; the tools above fold and start
+             closed. No "Git / Zeitmaschine" title any more – the tab says it. -->
         <div class="admin-section">
-          <div class="admin-section-title" data-i18n="diff.title">Commit-Diff</div>
-          <p class="admin-hint" data-i18n="diff.hint">Vergleich zwischen zwei Commits. „Von" ist der ältere Stand, „Bis" der neuere.</p>
+
+          <!-- Vergleich zweier Sicherungspunkte (Diff) -->
+          <div class="settings-group">
+            <div class="settings-rubrik settings-group-toggle" role="button" tabindex="0">
+              <span class="settings-label">
+                <span data-i18n="diff.title">Vergleich zweier Sicherungspunkte (Diff)</span>
+                <button type="button" class="info-tip" data-tip="diff.hint" data-i18n-aria-label="info.label" aria-label="Info"><span class="ni-icon ni-icon-info" aria-hidden="true"></span></button>
+              </span>
+            </div>
+            <div class="settings-group-body">
           <div class="diff-select-row">
             <div class="diff-select-group">
               <label class="diff-select-label" data-i18n="diff.from">Von</label>
@@ -2292,12 +2382,19 @@
             </div>
             <button id="diff-show-btn" class="btn-primary btn-small" data-i18n="diff.show">Diff anzeigen</button>
           </div>
-        </div>
+            </div>
+          </div>
 
-        <div class="admin-section">
-          <p class="admin-hint" data-i18n="admin.gitHint">
-            NiCo legt nach jedem Speichern automatisch einen Sicherungspunkt (Commit) an. „Wiederherstellen“ holt die Nix-Dateien eines Sicherungspunkts zurück – als neuer Commit, die Historie bleibt vollständig erhalten.
-          </p>
+          <!-- Sicherungspunkte (Commits): fills the rest of the window -->
+          <div class="settings-rubrik rubrik-static tm-list-head">
+            <span data-i18n="admin.gitLogTitle">Sicherungspunkte (Commits)</span>
+            <button type="button" class="info-tip" data-tip="admin.gitHint" data-i18n-aria-label="info.label" aria-label="Info"><span class="ni-icon ni-icon-info" aria-hidden="true"></span></button>
+          </div>
+          <div id="git-status-row" class="settings-path-row hidden" style="align-items:center;gap:10px">
+            <span id="git-status-label" data-i18n="admin.gitChecking">…</span>
+            <button id="git-init-btn" class="btn-primary btn-small hidden"
+                    data-i18n="admin.gitInitBtn">Versionierung einrichten (Git)</button>
+          </div>
           <div id="admin-git-log" class="rollback-list">
             <span class="admin-loading" data-i18n="admin.loading">Wird geladen …</span>
           </div>
@@ -2307,8 +2404,12 @@
         <!-- System side: generations (generations.py, hostread GENERATIONS) -->
         <div id="tm-system" class="settings-subtab-panel" data-subtab-panel="tm-system">
           <div class="admin-section">
-            <div class="admin-section-title" data-i18n="generations.title">Systemstände (Generationen)</div>
-            <p class="admin-hint" data-i18n="generations.hint">Jeder Rebuild legt einen Systemstand an. Hier wählst du, welcher läuft – jetzt oder ab dem nächsten Start. Die Config-Dateien bleiben dabei unverändert; der nächste Rebuild baut wieder aus ihnen.</p>
+            <!-- Heading with ⓘ instead of a paragraph; the list fills the height
+                 of the window (Martin, 2026-11-25). -->
+            <div class="settings-rubrik rubrik-static">
+              <span data-i18n="generations.title">Systemstände (Generationen)</span>
+              <button type="button" class="info-tip" data-tip="generations.hint" data-i18n-aria-label="info.label" aria-label="Info"><span class="ni-icon ni-icon-info" aria-hidden="true"></span></button>
+            </div>
             <div id="generations-body" style="margin-top:8px">
               <span class="admin-loading" data-i18n="admin.loading">Wird geladen …</span>
             </div>
@@ -2322,18 +2423,19 @@
 
   <!-- ── Sektionen-Einstellungen-Overlay ─────────────────────────────────── -->
   <div id="sections-settings-overlay" class="overlay hidden" style="z-index:120">
-    <div class="admin-panel" style="max-width:540px">
+    <div class="admin-panel list-dialog" style="max-width:540px">
       <div class="admin-panel-header">
         <span class="admin-panel-title" data-i18n="admin.sections.settingsTitle">Sektionen anpassen</span>
         <button id="sections-settings-close" class="btn-icon" title="Schließen"><span class="ni-icon ni-icon-x" aria-hidden="true"></span></button>
       </div>
       <div style="padding:16px 20px 20px">
-        <p class="raw-panel-hint" style="margin-bottom:14px" data-i18n="admin.sections.settingsHint">
-          Sektionen die standardmäßig sichtbar sein sollen. Sektionen mit Inhalt werden immer angezeigt.
-        </p>
-        <div id="sections-settings-list"></div>
-        <div style="margin-top:18px;display:flex;gap:10px;flex-wrap:wrap">
-          <button id="sections-settings-save" class="btn-surface btn-small"
+        <p class="raw-panel-hint" style="margin-bottom:20px" data-i18n="admin.sections.settingsHint">Sektionen, die im Panel angezeigt werden sollen:</p>
+        <div id="sections-settings-list" class="list-dialog-list"></div>
+        <p class="raw-panel-hint" style="margin-top:20px" data-i18n="admin.sections.alwaysShown">(Sektionen mit Inhalt zeigt das Panel immer an.)</p>
+        <div class="dialog-actions" style="margin-top:18px">
+          <button id="sections-settings-cancel" type="button" class="btn-secondary"
+                  data-i18n="dialog.cancel">Abbrechen</button>
+          <button id="sections-settings-save" type="button" class="btn-primary"
                   data-i18n="admin.sections.save">Speichern</button>
         </div>
       </div>
@@ -2342,18 +2444,26 @@
 
   <!-- ── Validierungseinstellungen-Overlay ───────────────────────────────── -->
   <div id="validation-settings-overlay" class="overlay hidden" style="z-index:120">
-    <div class="admin-panel" style="max-width:540px">
+    <div class="admin-panel list-dialog" style="max-width:540px">
       <div class="admin-panel-header">
         <span class="admin-panel-title" data-i18n="admin.validation.settingsTitle">Validierung anpassen</span>
         <button id="validation-settings-close" class="btn-icon" title="Schließen"><span class="ni-icon ni-icon-x" aria-hidden="true"></span></button>
       </div>
       <div style="padding:16px 20px 20px">
-        <p class="raw-panel-hint" style="margin-bottom:14px" data-i18n="admin.validation.settingsHint">
-          Aktive Regeln werden bei jeder Validierung geprüft. Flake-Regeln erscheinen nur bei Flake-Configs.
-        </p>
-        <div id="validation-rules-list"></div>
-        <div style="margin-top:18px;display:flex;gap:10px;flex-wrap:wrap">
-          <button id="validation-settings-save" class="btn-surface btn-small"
+        <p class="raw-panel-hint" style="margin-bottom:20px" data-i18n="admin.validation.settingsHint">Aktive Regeln prüft der Validator bei jedem Lauf:</p>
+        <div id="validation-rules-list" class="list-dialog-list"></div>
+        <!-- Legend (Martin, 2026-11-25): what the colours mean and what they do. -->
+        <div class="validator-legend">
+          <div><span class="legend-dot" style="background:var(--red)"></span><span data-i18n="admin.validation.legendError">Fehler – hält Rebuild und Dry-Run an; du kannst abbrechen oder „System trotzdem bauen“.</span></div>
+          <div><span class="legend-dot" style="background:var(--yellow)"></span><span data-i18n="admin.validation.legendWarning">Warnung – wird beim Validator-Lauf gemeldet, hält nichts an.</span></div>
+          <div><span class="legend-dot" style="background:var(--blue)"></span><span data-i18n="admin.validation.legendInfo">Hinweis – nur zur Information.</span></div>
+          <div id="validator-legend-flake"><span class="rule-badge">Flake</span><span data-i18n="admin.validation.legendFlake">nur bei Flake-Configs</span></div>
+          <div data-i18n="admin.validation.legendOff">Ausgeschaltete Regeln prüft der Validator nicht.</div>
+        </div>
+        <div class="dialog-actions" style="margin-top:18px">
+          <button id="validation-settings-cancel" type="button" class="btn-secondary"
+                  data-i18n="dialog.cancel">Abbrechen</button>
+          <button id="validation-settings-save" type="button" class="btn-primary"
                   data-i18n="admin.validation.save">Speichern</button>
         </div>
       </div>

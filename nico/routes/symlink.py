@@ -34,8 +34,11 @@ def register(app, ctx):
         if etc_nixos.is_symlink():
             target = str(etc_nixos.resolve())
             is_nico = (Path(target).resolve() == Path(nixos_dir).resolve())
+            # has_backup: "Remove" puts /etc/nixos.bak back, and is offered only
+            # when there is one (2026-11-25).
             return jsonify({"status": "symlink", "points_to_nico": is_nico, "target": target,
-                            "nico_dir": str(Path(nixos_dir).resolve())})
+                            "nico_dir": str(Path(nixos_dir).resolve()),
+                            "has_backup": Path("/etc/nixos.bak").exists()})
         if etc_nixos.exists():
             return jsonify({"status": "dir"})
         return jsonify({"status": "missing"})

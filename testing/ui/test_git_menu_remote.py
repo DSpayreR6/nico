@@ -70,7 +70,7 @@ try:
       return [b.disabled, b.textContent.trim()];
     """)
     check("Eintrag ist nicht klickbar", el[0] is True)
-    check("Text übersetzt", el[1] == "Git Push/Pull: kein Remote eingerichtet", el[1])
+    check("Text übersetzt", el[1] == "Hochladen/Holen: kein Remote eingerichtet", el[1])
 
     print("\n2. Mit Remote, ohne dass der Admin-Bereich offen war")
     got = state({"has_git": True, "has_remote": True, "behind": 0})

@@ -76,7 +76,14 @@ def register(app, ctx):
         nixos_dir, err = _require_setup()
         if err:
             return jsonify({"commits": []})
-        return jsonify({"commits": git_manager.get_log(nixos_dir)})
+        # "Load more" (2026-11-25): a page of 30 from `skip` on; one more is
+        # read to know whether an older page exists.
+        try:
+            skip = max(0, int(request.args.get("skip", 0)))
+        except ValueError:
+            skip = 0
+        page = git_manager.get_log(nixos_dir, 31, skip)
+        return jsonify({"commits": page[:30], "more": len(page) > 30})
 
     @app.route("/api/git/pull", methods=["POST"])
     def git_pull():

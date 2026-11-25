@@ -77,6 +77,29 @@ kaputtem und gültigem JSON, Config-Pfad ändern mit Rückfrage für ein neues
 Verzeichnis. Dateien gehen über das versteckte Datei-Feld (send_keys).
 Legt Wegwerf-Config und XDG_CONFIG_HOME selbst an.
 
+## test_config_settings_layout.py
+
+Reiter Config-Einstellungen (2026-11-25), 30 Prüfungen: Rubriken zu beim
+Öffnen, Verzeichnisse und Remote im Fenster (ungültiger Name, Verzeichnis
+außerhalb der Config, Remote ohne Angaben), Validator-Regeln einzeilig mit
+ⓘ, und mit kleinem Fenster (1280×600) scrollt die Liste, Speichern bleibt
+im Bild. Legt Wegwerf-Config mit git-Repository selbst an.
+
+## test_timemachine_layout.py
+
+Zeitmaschine (2026-11-25): Seite System – Liste füllt das Fenster, scrollt in
+sich, kleine Fenster behalten eine Mindesthöhe; Seite Config – nur Vergleich
+und Sicherungspunkte, ohne Versionierung „Versionierung einrichten (Git)“,
+mit 40 Sicherungspunkten „Mehr laden“. Systemstände nachgebaut, Git-Repository
+legt der Test selbst an.
+
+## test_settings_layout.py
+
+Reiter NiCo-Einstellungen mit ⓘ und einklappbaren Rubriken (2026-11-25):
+keine doppelte Überschrift, Rubriken beim Öffnen zu, ⓘ per Hover, Klick,
+Escape, Klick auf die Bezeichnung legt weiter den Schalter um, Schalter
+speichern in settings.json. Legt Wegwerf-Config und XDG_CONFIG_HOME selbst an.
+
 ## test_sections.py (ohne Browser, in testing/routes/)
 
 Abschnitts-Kürzel, alte deutsche Namen und der Formatmarker, 38 Prüfungen.
