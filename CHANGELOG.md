@@ -5,9 +5,11 @@
 ### New Features
 
 - Nix-Brick editor: syntax colors and bracket pairs while typing, like the text mode; the editor grows with its text
+- Restart NiCo: the quit dialog offers *Cancel*, *Restart* and *Quit*; after an update the monitor offers *Restart NiCo* or *Later*. The open file is saved first, the tab reloads by itself
 
 ### Bug Fixes
 
+- Quit no longer loses unsaved edits in text mode: the open file is saved first, as with the disk button; if that fails, NiCo stays open
 - Clicking a Nix-Brick head no longer makes the view jump: the brick stays where it was clicked, also when its section opens
 - Editing a Nix-Brick no longer makes the view jump: the caret goes to the clicked line and that line keeps its place, also after Save or Cancel
 - The interface language is stored in NiCo's settings instead of only in the browser, so it survives another browser or cleared site data; a choice made before is taken over once

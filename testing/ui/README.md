@@ -41,7 +41,8 @@ einen Flake mit drei Hosts.
 Tests, die ihre Config selbst anlegen und das Skript nicht brauchen:
 `test_unmappable`, `test_flake_create`, `test_raw_panel_keep`,
 `test_git_menu_remote`, `test_rebuild_preparing`, `test_package_inactive`,
-`test_outside_change`, `test_outside_restructure`, `test_brick_adopt`.
+`test_outside_change`, `test_outside_restructure`, `test_brick_adopt`,
+`test_restart_ui`.
 
 ## test_collapse.py
 
@@ -56,6 +57,16 @@ zugeklappter Sektion lässt den Kopf an seiner Stelle, ein Klick in einen
 langen Brick setzt den Cursor in die angeklickte Zeile, ohne dass die
 Ansicht springt; Farben im Brick-Editor schon beim Tippen, Abbrechen und
 Speichern ohne Sprung. Profil `standard`, legt den langen Brick selbst an.
+
+## test_restart_ui.py
+
+Beenden-Dialog mit Neustart (2026-11-25), 16 Prüfungen: Abbrechen / Neu
+starten / Beenden, Beenden und Neu starten speichern ungespeicherten Text
+im Textmodus vorher, schlägt das Speichern fehl, bleibt NiCo offen; nach
+einem Update bietet der Monitor „NiCo neu starten“ und „Später“.
+`/api/shutdown` und `/api/restart` sind im Browser ersetzt, der echte
+Aufruf beendete den Testprozess. Legt Wegwerf-Config und XDG_CONFIG_HOME
+selbst an. Der echte Neustart ohne Browser: `testing/routes/test_restart.py`.
 
 ## test_sections.py (ohne Browser, in testing/routes/)
 

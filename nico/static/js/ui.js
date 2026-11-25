@@ -313,6 +313,47 @@ function reportNestedBricks(nested) {
   _showNestedBricksModal(nested, 'existing');
 }
 
+// ── Leaving: save, quit, restart (2026-11-25) ──────────────────────────────
+
+/** Before NiCo stops (quit, restart) or is updated: save what is open, the
+ *  same way as the disk button. False when something could not be saved –
+ *  the caller then stops, NiCo stays open and nothing is lost. */
+async function saveBeforeLeave() {
+  // An unchanged file in text mode is not written again (for
+  // hardware-configuration.nix that would ask once more).
+  if (document.getElementById('raw-file-editor') && !Sidebar.hasUnsaved()) return true;
+  const ok = await Sidebar.saveActive({ toast: false });
+  if (!ok) await nicoAlert(t('leave.saveFailed'));
+  return ok;
+}
+
+/** Save, start a new NiCo on this port (nico/restart.py), and reload this
+ *  tab once /api/status answers with another instance. */
+async function restartNico() {
+  if (!(await saveBeforeLeave())) return;
+  const res  = await csrfFetch('/api/restart', { method: 'POST' }).catch(() => null);
+  const data = res ? await res.json().catch(() => null) : null;
+  if (!data?.ok) {
+    showToast(data?.error === 'ERR_REBUILD_RUNNING' ? t('rebuild.alreadyRunning')
+                                                    : tErr(data?.error) || t('toast.error'), 'error');
+    return;
+  }
+  const show = text => {
+    document.body.innerHTML = `<p style="font-family:monospace;padding:2rem;color:#cdd6f4">${escHtml(text)}</p>`;
+  };
+  show(t('restart.waiting'));
+  const until = Date.now() + 60000;
+  const poll = async () => {
+    try {
+      const s = await (await fetch('/api/status', { cache: 'no-store' })).json();
+      if (s.instance && s.instance !== data.instance) { location.reload(); return; }
+    } catch { /* the old one is gone, the new one not up yet */ }
+    if (Date.now() > until) { show(t('restart.failed')); return; }
+    setTimeout(poll, 500);
+  };
+  setTimeout(poll, 500);
+}
+
 // ── Event bindings ─────────────────────────────────────────────────────────
 //
 // Project rule: a click on the overlay background never closes a dialog –
@@ -662,6 +703,7 @@ function bindUI() {
   // not tear down the running rebuild stream: the user would lose the output
   // without knowing why, and the rebuild itself keeps running unattended.
   on('rebuild-close-btn', 'click', closeRebuild);
+  on('rebuild-restart-btn', 'click', () => { closeRebuild(); restartNico(); });
 
   // Write-Confirm-Dialog (Sicherungspunkt)
   on('write-confirm-btn', 'click', writeFiles);
@@ -734,6 +776,9 @@ function bindUI() {
     document.getElementById('help-dropdown').classList.add('hidden');
     if (!(await nicoConfirm(t('selfupdate.confirm', _selfupdateUrl),
                             { okLabel: t('header.helpUpdate') }))) return;
+    // Saved first (Martin, 2026-11-25): the update ends with the offer to
+    // restart, and the state on disk is then clear from the start.
+    if (!(await saveBeforeLeave())) return;
     const res = await csrfFetch('/api/selfupdate', { method: 'POST' }).catch(() => null);
     const data = res ? await res.json().catch(() => null) : null;
     if (!data?.success) {
@@ -762,9 +807,13 @@ function bindUI() {
 
   // Quit
   on('quit-btn', 'click', async () => {
-    if (!(await nicoConfirm(t('quit.confirm')))) return;
-    await _autoSave();
-    await Sidebar.flakeSave();
+    const choice = await nicoChoice(t('quit.confirm'),
+                                    { okLabel: t('quit.quit'), altLabel: t('quit.restart') });
+    if (!choice) return;
+    if (choice === 'alt') { await restartNico(); return; }
+    // Until 2026-11-25 only the form and flake.nix were saved here: unsaved
+    // text mode edits were lost without a word.
+    if (!(await saveBeforeLeave())) return;
 
     // Close-check: prompt push if remote exists and local is ahead/dirty,
     // but only when NiCo loaded a config normally (not in aborted state).

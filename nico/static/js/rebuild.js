@@ -752,6 +752,10 @@ function attachRebuildMonitor(fromIndex = 0) {
     pushBtn.disabled = false;
     pushInfoEl.classList.add('hidden');
     pushInfoEl.textContent = '';
+    // After an update the close button reads "Later" next to "Restart".
+    document.getElementById('rebuild-restart-btn')?.classList.add('hidden');
+    closeBtn.textContent = t('rebuild.close');
+    closeBtn.className   = 'btn-green';
   }
 
   // Reset state
@@ -1068,6 +1072,12 @@ function attachRebuildMonitor(fromIndex = 0) {
         ? niIcon('alert-triangle') + ' ' + escHtml(t('rebuild.activatedWarn'))
         : niIcon('x-circle') + ' ' + t('rebuild.failed') + (firstErrorLine ? ': ' + escHtml(firstErrorLine.substring(0, 80)) : '');
       _finishMonitor(activatedWarn ? 'warning' : msg.success, label);
+      // Updated NiCo: offer the restart right here (Martin, 2026-11-25).
+      if (msg.success && isSelfupdate) {
+        document.getElementById('rebuild-restart-btn')?.classList.remove('hidden');
+        closeBtn.textContent = t('rebuild.later');
+        closeBtn.className   = 'btn-secondary';
+      }
       // Units first, error lines second: both insert right after the result
       // line, so the later call ends up on top – and the cause belongs above
       // the consequence.

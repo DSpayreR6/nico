@@ -542,6 +542,12 @@ def failed_units(limit: int = 6, log_lines: int = 15,
     return out
 
 
+def job_running() -> bool:
+    """A rebuild, switch or update is running – a restart would kill it."""
+    with _job_cv:
+        return _job is not None and bool(_job["running"])
+
+
 def _job_public(job):
     """Serializable job summary (caller must hold _job_cv)."""
     return {

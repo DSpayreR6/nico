@@ -9,6 +9,7 @@ Port strategy:
   3. If preferred port is busy with something else → find the next free port.
 """
 
+import os
 import socket
 import threading
 import time
@@ -363,8 +364,33 @@ def _serve_already_running_page(preferred_port: int) -> None:
     srv.serve_forever()
 
 
+def _restart_port() -> int | None:
+    """Started by a restart from the interface (nico/restart.py): the port of
+    the NiCo that is exiting, once it is free – up to 10 s. None for a normal
+    start, or when the old one did not let go of the port in time; the normal
+    start then picks a port and opens a browser as always."""
+    from nico.restart import ENV_PORT
+    raw = os.environ.pop(ENV_PORT, "")
+    if not raw.isdigit():
+        return None
+    port = int(raw)
+    for _ in range(100):
+        if _is_port_free(port):
+            return port
+        time.sleep(0.1)
+    return None
+
+
 def main():
     print("NiCo – NixOS Configurator")
+
+    port = _restart_port()
+    if port is not None:
+        # The open tab reloads itself; no second browser tab.
+        print(f"Server running at http://{HOST}:{port}")
+        print("Beenden mit Ctrl+C.")
+        create_app().run(host=HOST, port=port, debug=False)
+        return
 
     if _is_port_free(PREFERRED_PORT):
         port = PREFERRED_PORT

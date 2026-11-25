@@ -269,7 +269,7 @@ function _dialogText(text) {
  * true/false (confirm, alert), the entered text or null (prompt).
  */
 function _nicoDialog({ title = '', text = '', okLabel, cancel = true, danger = false,
-                       input = null }) {
+                       input = null, altLabel = '' }) {
   return new Promise(resolve => {
     const overlay = document.createElement('div');
     overlay.className = 'overlay';
@@ -280,24 +280,28 @@ function _nicoDialog({ title = '', text = '', okLabel, cancel = true, danger = f
         ${input !== null ? `<input type="text" class="nico-dialog-input">` : ''}
         <div class="dialog-actions">
           ${cancel ? `<button type="button" class="btn-secondary" data-nd="cancel">${escHtml(t('dialog.cancel'))}</button>` : ''}
+          ${altLabel ? `<button type="button" class="btn-secondary" data-nd="alt">${escHtml(altLabel)}</button>` : ''}
           <button type="button" class="${danger ? 'action-btn btn-red' : 'btn-primary'}" data-nd="ok">${escHtml(okLabel || t('dialog.ok'))}</button>
         </div>
       </div>`;
     document.body.appendChild(overlay);
     const field = overlay.querySelector('.nico-dialog-input');
     if (field) field.value = input;
-    const done = ok => {
+    // r: 'ok' | 'cancel' | 'alt'
+    const done = r => {
       document.removeEventListener('keydown', onKey, true);
       overlay.remove();
-      resolve(input !== null ? (ok ? field.value : null) : ok);
+      const ok = r === 'ok';
+      resolve(input !== null ? (ok ? field.value : null)
+              : altLabel ? (r === 'cancel' ? false : r) : ok);
     };
     const onKey = e => {
-      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); done(false); }
-      else if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); done(true); }
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); done('cancel'); }
+      else if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); done('ok'); }
     };
     document.addEventListener('keydown', onKey, true);
     overlay.querySelectorAll('[data-nd]').forEach(b =>
-      b.addEventListener('click', () => done(b.dataset.nd === 'ok')));
+      b.addEventListener('click', () => done(b.dataset.nd)));
     (field || overlay.querySelector('[data-nd="ok"]')).focus();
     field?.select();
   });
@@ -306,6 +310,12 @@ function _nicoDialog({ title = '', text = '', okLabel, cancel = true, danger = f
 /** Yes/no question. Resolves true on OK. `danger` paints OK red. */
 function nicoConfirm(text, { title = '', okLabel = '', danger = false } = {}) {
   return _nicoDialog({ title, text, okLabel, danger });
+}
+
+/** Three ways out: Cancel, an alternative, OK (quit dialog: Restart / Quit,
+ *  2026-11-25). Resolves 'ok', 'alt' or false. */
+function nicoChoice(text, { title = '', okLabel = '', altLabel, danger = false } = {}) {
+  return _nicoDialog({ title, text, okLabel, altLabel, danger });
 }
 
 /** A message with one OK button. */

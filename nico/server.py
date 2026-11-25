@@ -22,6 +22,10 @@ from .core import validate_user_path as _validate_user_path
 from .version import get_revision, get_version
 
 
+# Changes with every process: after a restart the browser tab waits for a
+# /api/status with a different value before it reloads (2026-11-25).
+_INSTANCE = secrets.token_hex(8)
+
 _THEMES_DIR = Path(__file__).parent / "static" / "themes"
 _DEFAULT_THEME = "catppuccin-mocha"
 _NIXOS_CHANNELS_URL = "https://nix-channels.s3.amazonaws.com?delimiter=/"
@@ -240,9 +244,10 @@ def create_app() -> Flask:
                 "running_host":      validator.running_host(),
                 "version":           get_version(),
                 "revision":          get_revision(),
+                "instance":          _INSTANCE,
             })
         return jsonify({"setup_complete": False, "version": get_version(),
-                        "revision": get_revision()})
+                        "revision": get_revision(), "instance": _INSTANCE})
 
     # Write guard for configs from a newer NiCo: the user may override, but not
     # by accident.  Cached because it reads every .nix file in the config.
@@ -272,7 +277,8 @@ def create_app() -> Flask:
 
     _FORMAT_GUARD_EXEMPT = {
         "/api/format/check", "/api/format/proceed", "/api/format/safety-commit",
-        "/api/shutdown", "/api/status", "/api/sections", "/api/app/settings",
+        "/api/shutdown", "/api/restart", "/api/status", "/api/sections",
+        "/api/app/settings",
     }
 
     @app.before_request
@@ -461,5 +467,26 @@ def create_app() -> Flask:
         # Delay exit slightly so the HTTP response can be sent back first
         threading.Thread(target=lambda: (threading.Event().wait(0.3), os._exit(0)), daemon=True).start()
         return jsonify({"ok": True})
+
+    @app.route("/api/restart", methods=["POST"])
+    def restart():
+        """Start a new NiCo on this port and exit (nico/restart.py). The
+        browser has saved before calling; the tab reloads once /api/status
+        answers with another instance."""
+        if err := _check_csrf(): return err
+        from . import restart as _restart
+        from .routes.rebuild import job_running
+        if job_running():
+            return jsonify({"error": "ERR_REBUILD_RUNNING"}), 409
+        try:
+            port = int(request.environ.get("SERVER_PORT", ""))
+        except ValueError:
+            return jsonify({"error": "ERR_RESTART_FAILED"}), 500
+        try:
+            _restart.spawn(port)
+        except OSError:
+            return jsonify({"error": "ERR_RESTART_FAILED"}), 500
+        threading.Thread(target=lambda: (threading.Event().wait(0.3), os._exit(0)), daemon=True).start()
+        return jsonify({"ok": True, "instance": _INSTANCE})
 
     return app
