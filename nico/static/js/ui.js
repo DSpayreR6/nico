@@ -689,8 +689,7 @@ function bindUI() {
   on('validation-settings-save',  'click', saveValidationSettings);
   on('validation-results-close',  'click', closeValidationResults);
 
-  on('admin-import-btn', 'click', runAdminImport);
-  initImportBrowse();
+  initDirImport();
   initImportManual();
   initZipImport();
   initSettingsImport();

@@ -1887,20 +1887,6 @@
               <button type="button" id="settings-change-btn" class="btn-surface btn-small"
                       data-i18n="admin.settingsChangeBtn">Ändern</button>
             </div>
-            <div id="settings-change-row" class="settings-change-row hidden">
-              <input type="text" id="settings-new-path" spellcheck="false" autocomplete="off"
-                     class="settings-path-input"
-                     data-i18n-placeholder="admin.settingsNewPathPlaceholder"
-                     placeholder="z.B. ~/nixos-config">
-              <button type="button" id="settings-apply-btn" class="action-btn btn-red btn-small"
-                      data-i18n="admin.settingsApplyBtn">Übernehmen</button>
-              <button type="button" id="settings-cancel-btn" class="btn-surface btn-small"
-                      data-i18n="admin.settingsCancelBtn">Abbrechen</button>
-            </div>
-            <p id="settings-path-hint" class="setup-hint hidden" data-i18n="admin.settingsPathHint">
-              Neues Verzeichnis? Pfad einfach eintippen – NiCo legt es an.
-            </p>
-            <div id="settings-error" class="settings-error hidden"></div>
 
             <div style="margin-top:8px" id="default-host-row" class="hidden">
               <div style="display:flex;align-items:center;gap:8px">
@@ -2172,36 +2158,6 @@
             </div>
             <input type="file" id="admin-zip-input" accept=".zip" class="hidden">
           </div>
-          <div id="admin-zip-import-state" class="hidden" style="margin-top:10px">
-            <div id="admin-zip-checking" class="admin-hint hidden" data-i18n="admin.zipChecking">Prüfe ZIP…</div>
-            <div id="admin-zip-confirm" class="hidden">
-              <p id="admin-zip-confirm-text" class="admin-hint"></p>
-              <div class="confirm-buttons">
-                <button type="button" id="admin-zip-confirm-yes" class="action-btn btn-blue"
-                        data-i18n="admin.zipConfirmYes">Importieren</button>
-                <button type="button" id="admin-zip-confirm-cancel" class="btn-surface"
-                        data-i18n="admin.zipCancel">Abbrechen</button>
-              </div>
-            </div>
-            <div id="admin-zip-backup-confirm" class="hidden">
-              <p id="admin-zip-backup-text" class="admin-hint"></p>
-              <div class="confirm-buttons">
-                <button type="button" id="admin-zip-backup-yes" class="action-btn btn-blue"
-                        data-i18n="import.backupYes">Sichern &amp; Importieren</button>
-                <button type="button" id="admin-zip-backup-cancel" class="btn-surface"
-                        data-i18n="admin.zipCancel">Abbrechen</button>
-              </div>
-            </div>
-            <div id="admin-zip-invalid" class="hidden">
-              <p id="admin-zip-invalid-text" class="admin-hint import-err"></p>
-              <div class="confirm-buttons">
-                <button type="button" id="admin-zip-fallback-btn" class="btn-surface"
-                        data-i18n="admin.zipFallbackBtn">Manuell suchen</button>
-                <button type="button" id="admin-zip-invalid-cancel" class="btn-surface"
-                        data-i18n="admin.zipCancel">Abbrechen</button>
-              </div>
-            </div>
-          </div>
         </div>
 
         <!-- Settings Export/Import -->
@@ -2221,24 +2177,6 @@
               </button>
             </div>
             <input type="file" id="admin-settings-import-input" accept=".json" class="hidden">
-          </div>
-          <div id="admin-settings-import-state" class="hidden" style="margin-top:10px">
-            <div id="admin-settings-import-confirm" class="hidden">
-              <p id="admin-settings-import-confirm-text" class="admin-hint"></p>
-              <div class="confirm-buttons">
-                <button type="button" id="admin-settings-import-yes" class="action-btn btn-red"
-                        data-i18n="admin.settingsImportYes">Übernehmen</button>
-                <button type="button" id="admin-settings-import-cancel" class="btn-surface"
-                        data-i18n="admin.zipCancel">Abbrechen</button>
-              </div>
-            </div>
-            <div id="admin-settings-import-error" class="hidden">
-              <p id="admin-settings-import-error-text" class="admin-hint import-err"></p>
-              <div class="confirm-buttons">
-                <button type="button" id="admin-settings-import-error-cancel" class="btn-surface"
-                        data-i18n="admin.zipCancel">Abbrechen</button>
-              </div>
-            </div>
           </div>
         </div>
 
@@ -2264,19 +2202,9 @@
           </div>
           <div id="admin-import-body" class="admin-import-body">
             <p class="admin-hint" data-i18n="admin.importHint"></p>
-            <div class="import-form">
-              <label data-i18n="admin.importConfigLabel">configuration.nix</label>
-              <div class="import-path-row">
-                <input type="text" id="import-config-path" spellcheck="false" autocomplete="off"
-                       value="/etc/nixos">
-                <button type="button" id="import-config-browse" class="btn-browse"
-                        data-i18n="admin.importBrowse" title="Verzeichnis auswählen">…</button>
-              </div>
-              <p class="admin-hint" data-i18n="admin.importPathHint"></p>
-              <button type="button" id="admin-import-btn" class="action-btn btn-blue"
-                      data-i18n="admin.importBtn">Importieren</button>
-            </div>
-            <div id="import-result" class="import-result hidden"></div>
+            <!-- Path, browse and every step in a window (_dirImportFlow, 2026-11-25) -->
+            <button type="button" id="admin-import-btn" class="action-btn btn-blue"
+                    data-i18n="admin.dirImport">Aus Verzeichnis importieren…</button>
           </div><!-- /#admin-import-body -->
         </div>
 

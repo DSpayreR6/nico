@@ -892,6 +892,7 @@
   "admin.importConfigLabel": "configuration.nix",
   "admin.importHwLabel":     "hardware-configuration.nix",
   "admin.importBtn":         "Importieren",
+  "admin.dirImport": "Aus Verzeichnis importieren…",
   "admin.importBrowse":      "Verzeichnis auswählen",
   "admin.importPathHint":    "Verzeichnis auswählen oder Pfad eingeben. NiCo sucht darin nach configuration.nix.",
 
@@ -1109,6 +1110,7 @@
   "admin.settingsPathLabel":       "Aktueller NixOS-Config-Pfad:",
   "admin.settingsPathLoading":     "Wird geladen …",
   "admin.settingsChangeBtn":       "Ändern",
+  "admin.settingsChangeTitle": "Config-Pfad ändern",
   "admin.settingsApplyBtn":        "Übernehmen",
   "admin.settingsCancelBtn":       "Abbrechen",
   "admin.settingsNewPathPlaceholder": "z.B. ~/nixos-config",
@@ -1497,6 +1499,7 @@
   "errors.ERR_GENERATION_TOOL": "nix-env oder switch-to-configuration wurde nicht gefunden.",
   "dialog.ok": "OK",
   "dialog.cancel": "Abbrechen",
+  "dialog.close": "Schließen",
   "generations.stateRunning": "Dieser Systemstand läuft",
   "generations.stateNext": "Wird beim nächsten Start verwendet",
   "generations.backTitle": "Beim nächsten Start wieder diesen Systemstand verwenden",

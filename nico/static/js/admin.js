@@ -628,74 +628,58 @@ async function doAdminSymlink() {
   }
 }
 
+/** "Change" next to the config path: a window with the new path, its hint
+ *  and any error (Martin, 2026-11-25 – until then a row opened below). */
 function initSettingsPanel() {
-  const changeBtn  = document.getElementById('settings-change-btn');
-  const cancelBtn  = document.getElementById('settings-cancel-btn');
-  const applyBtn   = document.getElementById('settings-apply-btn');
-  const changeRow  = document.getElementById('settings-change-row');
-  const newInput   = document.getElementById('settings-new-path');
-  const errorDiv   = document.getElementById('settings-error');
+  on('settings-change-btn', 'click', _changeConfigPathFlow);
+}
 
-  if (!changeBtn) return;
+async function _changeConfigPathFlow() {
+  const flow = openFlowDialog(t('admin.settingsChangeTitle'));
+  let path  = document.getElementById('settings-current-path')?.value || '';
+  let error = '';
+  const post = body => csrfFetch('/api/setup', {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify(body),
+  }).then(r => r.json());
 
-  const pathHint = document.getElementById('settings-path-hint');
+  for (;;) {
+    const node = document.createElement('div');
+    node.innerHTML = `
+      <input type="text" class="settings-path-input flow-path-input" spellcheck="false" autocomplete="off">
+      <p class="setup-hint">${escHtml(t('admin.settingsPathHint'))}</p>`;
+    const input = node.querySelector('input');
+    input.value = path;
+    input.placeholder = t('admin.settingsNewPathPlaceholder');
+    const go = await flow.step({ node, error, buttons: [
+      { label: t('admin.settingsCancelBtn'), value: 'cancel' },
+      { label: t('admin.settingsApplyBtn'), value: 'ok', danger: true }] });
+    if (go !== 'ok') return flow.close();
+    path = input.value.trim();
+    if (!path) { error = t('setup.errNoDir'); continue; }
 
-  changeBtn.addEventListener('click', () => {
-    const current = document.getElementById('settings-current-path')?.value || '';
-    newInput.value = current;
-    changeRow.classList.remove('hidden');
-    pathHint?.classList.remove('hidden');
-    errorDiv.classList.add('hidden');
-    newInput.focus();
-  });
-
-  cancelBtn.addEventListener('click', () => {
-    changeRow.classList.add('hidden');
-    pathHint?.classList.add('hidden');
-    errorDiv.classList.add('hidden');
-  });
-
-  applyBtn.addEventListener('click', async () => {
-    const newPath = newInput.value.trim();
-    errorDiv.classList.add('hidden');
-    if (!newPath) {
-      errorDiv.textContent = t('setup.errNoDir');
-      errorDiv.classList.remove('hidden');
-      return;
-    }
+    let data;
     try {
-      const res  = await csrfFetch('/api/setup', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ nixos_config_dir: newPath }),
-      });
-      const data = await res.json();
-      if (data.error) {
-        errorDiv.textContent = tErr(data.error);
-        errorDiv.classList.remove('hidden');
-        return;
-      }
+      data = await post({ nixos_config_dir: path });
       if (data.needs_confirmation) {
-        if (!(await nicoConfirm(`${t('setup.confirmPrefix')} ${data.path} ${t('setup.confirmSuffix')}`))) return;
-        const res2  = await csrfFetch('/api/setup', {
-          method:  'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body:    JSON.stringify({ nixos_config_dir: newPath, create_if_missing: true }),
-        });
-        const data2 = await res2.json();
-        if (data2.error) {
-          errorDiv.textContent = tErr(data2.error);
-          errorDiv.classList.remove('hidden');
-          return;
-        }
+        const create = await flow.step({
+          text: `${t('setup.confirmPrefix')} ${data.path} ${t('setup.confirmSuffix')}`,
+          buttons: [{ label: t('admin.settingsCancelBtn'), value: 'cancel' },
+                    { label: t('dialog.ok'), value: 'ok', primary: true }] });
+        if (create !== 'ok') { error = ''; continue; }
+        data = await post({ nixos_config_dir: path, create_if_missing: true });
       }
-      showToast(t('toast.saved'), 'success');
-      setTimeout(() => location.reload(), 800);
-    } catch (e) {
-      errorDiv.textContent = t('toast.error');
-      errorDiv.classList.remove('hidden');
+    } catch {
+      error = t('toast.error');
+      continue;
     }
-  });
+    if (data.error) { error = tErr(data.error); continue; }
+    flow.close();
+    showToast(t('toast.saved'), 'success');
+    setTimeout(() => location.reload(), 800);
+    return;
+  }
 }
 
 

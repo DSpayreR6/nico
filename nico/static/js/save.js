@@ -198,8 +198,22 @@ async function refreshAfterImport() {
 
 let _importEditMode = null;
 
-/** Resolves 'r', 'p', or null for cancel. Closed by its buttons only. */
-function askImportEditMode() {
+/** Resolves 'r', 'p', or null for cancel. Closed by its buttons only.
+ *  With `flow` (openFlowDialog) the question is a step in that window
+ *  instead of a second window on top (admin imports, 2026-11-25). */
+async function askImportEditMode(flow = null) {
+  if (flow) {
+    const v = await flow.step({
+      text: `${t('importMode.title')}\n\n${t('importMode.info')}`,
+      buttons: [
+        { label: t('unsaved.cancel'),    value: 'cancel' },
+        { label: t('importMode.raw'),    value: 'r' },
+        { label: t('importMode.panel'),  value: 'p', primary: true },
+      ],
+    });
+    _importEditMode = v === 'cancel' ? null : v;
+    return _importEditMode;
+  }
   return new Promise(resolve => {
     const overlay = document.createElement('div');
     overlay.className = 'overlay';
@@ -559,129 +573,90 @@ async function exportZip() {
 }
 
 // ── ZIP-Import ──────────────────────────────────────────────────────────────
-let _pendingZipFile = null;
-
-function _zipImportResetState() {
-  _pendingZipFile = null;
-  document.getElementById('admin-zip-import-state').classList.add('hidden');
-  ['admin-zip-checking', 'admin-zip-confirm', 'admin-zip-backup-confirm', 'admin-zip-invalid']
-    .forEach(id => document.getElementById(id)?.classList.add('hidden'));
-}
+// The file picker opens on the click itself (browsers allow it only there).
+// Everything after the choice runs in one window (openFlowDialog, Martin
+// 2026-11-25): checking, confirming, the edit-mode question, the backup
+// question, the result. Until then each step opened as a row below the
+// button.
 
 function initZipImport() {
   on('admin-zip-import-btn', 'click', () => {
-    _zipImportResetState();
-    document.getElementById('admin-zip-input').value = '';
-    document.getElementById('admin-zip-input').click();
+    const input = document.getElementById('admin-zip-input');
+    input.value = '';
+    input.click();
   });
-
-  document.getElementById('admin-zip-input')?.addEventListener('change', async (e) => {
+  document.getElementById('admin-zip-input')?.addEventListener('change', e => {
     const file = e.target.files[0];
-    if (!file) return;
-    _pendingZipFile = file;
-
-    const stateDiv   = document.getElementById('admin-zip-import-state');
-    const checkingEl = document.getElementById('admin-zip-checking');
-    stateDiv.classList.remove('hidden');
-    checkingEl.classList.remove('hidden');
-
-    const fd = new FormData();
-    fd.append('file', file);
-    let data;
-    try {
-      const res = await csrfFetch('/api/import/zip/check', { method: 'POST', body: fd });
-      data = await res.json();
-    } catch {
-      checkingEl.classList.add('hidden');
-      _showZipInvalid(t('toast.error'));
-      return;
-    }
-    checkingEl.classList.add('hidden');
-
-    if (data.error) {
-      _showZipInvalid(tErr(data.error));
-      return;
-    }
-    if (!data.valid) {
-      _showZipInvalid(t('admin.zipInvalidHint'));
-      return;
-    }
-
-    // Gültige ZIP – Bestätigung anzeigen
-    document.getElementById('admin-zip-confirm-text').textContent =
-      t('admin.zipConfirmText', data.found_file);
-    document.getElementById('admin-zip-confirm').classList.remove('hidden');
-  });
-
-  on('admin-zip-confirm-yes',    'click', () => _doZipApply(false));
-  on('admin-zip-confirm-cancel', 'click', _zipImportResetState);
-  on('admin-zip-backup-yes',     'click', () => _doZipApply(true));
-  on('admin-zip-backup-cancel',  'click', _zipImportResetState);
-  on('admin-zip-invalid-cancel', 'click', _zipImportResetState);
-
-  on('admin-zip-fallback-btn', 'click', () => {
-    _zipImportResetState();
-    // Manuellen Import-Browser öffnen (Import-Sektion aufklappen + Browser starten)
-    const body = document.getElementById('admin-import-body');
-    const section = document.getElementById('admin-import-section');
-    if (body?.classList.contains('hidden') || section?.classList.contains('collapsed')) {
-      document.getElementById('admin-import-toggle')?.click();
-    }
-    document.getElementById('admin-import-body')?.scrollIntoView({ behavior: 'smooth' });
+    if (file) _zipImportFlow(file);
   });
 }
 
-function _showZipInvalid(msg) {
-  document.getElementById('admin-zip-import-state').classList.remove('hidden');
-  document.getElementById('admin-zip-invalid-text').textContent = msg;
-  document.getElementById('admin-zip-invalid').classList.remove('hidden');
-}
+async function _zipImportFlow(file) {
+  const flow   = openFlowDialog(t('admin.zipImport'));
+  const cancel = { label: t('admin.zipCancel'), value: 'cancel' };
+  // Not a usable ZIP: the directory import in the same window.
+  const invalid = async msg => {
+    const v = await flow.step({ error: msg, buttons: [
+      cancel, { label: t('admin.zipFallbackBtn'), value: 'manual', primary: true }] });
+    if (v === 'manual') await _dirImportFlow(flow);
+    else flow.close();
+  };
 
-async function _doZipApply(confirmed) {
-  if (!_pendingZipFile) return;
-  if (!confirmed && !(await askImportEditMode())) return;
-
-  document.getElementById('admin-zip-confirm').classList.add('hidden');
-  document.getElementById('admin-zip-backup-confirm').classList.add('hidden');
-  const checkingEl = document.getElementById('admin-zip-checking');
-  checkingEl.textContent = t('admin.zipImporting');
-  checkingEl.classList.remove('hidden');
-
+  flow.busy(t('admin.zipChecking'));
   const fd = new FormData();
-  fd.append('file', _pendingZipFile);
-  fd.append('confirmed', confirmed ? 'true' : 'false');
-  fd.append('edit_mode', _importEditMode || '');
-
-  let res, data;
+  fd.append('file', file);
+  let data;
   try {
-    res  = await csrfFetch('/api/import/zip/apply', { method: 'POST', body: fd });
-    data = await res.json();
+    data = await (await csrfFetch('/api/import/zip/check', { method: 'POST', body: fd })).json();
   } catch {
-    checkingEl.classList.add('hidden');
-    _showZipInvalid(t('toast.error'));
+    return invalid(t('toast.error'));
+  }
+  if (data.error)  return invalid(tErr(data.error));
+  if (!data.valid) return invalid(t('admin.zipInvalidHint'));
+
+  const go = await flow.step({ text: t('admin.zipConfirmText', data.found_file), buttons: [
+    cancel, { label: t('admin.zipConfirmYes'), value: 'ok', primary: true }] });
+  if (go !== 'ok') return flow.close();
+  if (!(await askImportEditMode(flow))) return flow.close();
+
+  let confirmed = false;
+  for (;;) {
+    flow.busy(t('admin.zipImporting'));
+    const body = new FormData();
+    body.append('file', file);
+    body.append('confirmed', confirmed ? 'true' : 'false');
+    body.append('edit_mode', _importEditMode || '');
+    let res, out;
+    try {
+      res = await csrfFetch('/api/import/zip/apply', { method: 'POST', body });
+      out = await res.json();
+    } catch {
+      return _flowFailed(flow, t('toast.error'));
+    }
+    if (out.needs_backup_confirmation && !confirmed) {
+      const ok = await flow.step({ text: t('import.backupConfirm', out.zip_name), buttons: [
+        cancel, { label: t('import.backupYes'), value: 'ok', primary: true }] });
+      if (ok !== 'ok') return flow.close();
+      confirmed = true;
+      continue;
+    }
+    if (!res.ok || out.error) return _flowFailed(flow, tErr(out.error));
+    flow.close();
+    await refreshAfterImport();
+    // A ZIP carries whatever hardware config the machine it came from had.
+    // This is the way a foreign config most often arrives, so it must be
+    // settled here – the start check would only see it on the next load.
+    await checkHardwareMatch(out.hardware);
+    showToast(t('import.success'), 'success');
     return;
   }
-  checkingEl.classList.add('hidden');
+}
 
-  if (data.needs_backup_confirmation) {
-    document.getElementById('admin-zip-backup-text').textContent =
-      t('import.backupConfirm', data.zip_name);
-    document.getElementById('admin-zip-backup-confirm').classList.remove('hidden');
-    return;
-  }
-
-  if (!res.ok || data.error) {
-    _showZipInvalid(tErr(data.error));
-    return;
-  }
-
-  _zipImportResetState();
-  await refreshAfterImport();
-  // A ZIP carries whatever hardware config the machine it came from had. This
-  // is the way a foreign config most often arrives, so it must be settled here
-  // – the start check would only see it on the next page load.
-  await checkHardwareMatch(data.hardware);
-  showToast(t('import.success'), 'success');
+/** Last step of a failed process: the message and Close. */
+async function _flowFailed(flow, msg) {
+  await flow.step({ error: msg || t('toast.error'),
+                    buttons: [{ label: t('dialog.close'), value: 'cancel', primary: true }] });
+  flow.close();
 }
 
 // ── Settings Export/Import ─────────────────────────────────────────────────
@@ -690,66 +665,47 @@ function exportAppSettings() {
   window.location.href = '/api/settings/app/export';
 }
 
-function _settingsImportReset() {
-  document.getElementById('admin-settings-import-state').classList.add('hidden');
-  ['admin-settings-import-confirm', 'admin-settings-import-error']
-    .forEach(id => document.getElementById(id)?.classList.add('hidden'));
-}
-
 function initSettingsImport() {
   on('admin-settings-export-btn', 'click', exportAppSettings);
-
   on('admin-settings-import-btn', 'click', () => {
-    _settingsImportReset();
-    document.getElementById('admin-settings-import-input').value = '';
-    document.getElementById('admin-settings-import-input').click();
+    const input = document.getElementById('admin-settings-import-input');
+    input.value = '';
+    input.click();
   });
-
-  document.getElementById('admin-settings-import-input')?.addEventListener('change', async (e) => {
+  document.getElementById('admin-settings-import-input')?.addEventListener('change', e => {
     const file = e.target.files[0];
-    if (!file) return;
-
-    let data;
-    try {
-      data = JSON.parse(await file.text());
-    } catch {
-      document.getElementById('admin-settings-import-state').classList.remove('hidden');
-      document.getElementById('admin-settings-import-error-text').textContent = t('admin.settingsImportErrJson');
-      document.getElementById('admin-settings-import-error').classList.remove('hidden');
-      return;
-    }
-
-    document.getElementById('admin-settings-import-confirm-text').textContent =
-      t('admin.settingsImportConfirm');
-    document.getElementById('admin-settings-import-state').classList.remove('hidden');
-    document.getElementById('admin-settings-import-confirm').classList.remove('hidden');
-
-    on('admin-settings-import-yes', 'click', async () => {
-      const fd = new FormData();
-      fd.append('file', file);
-      let res, result;
-      try {
-        res    = await csrfFetch('/api/settings/app/import', { method: 'POST', body: fd });
-        result = await res.json();
-      } catch {
-        showToast(t('toast.error'), 'error');
-        _settingsImportReset();
-        return;
-      }
-      _settingsImportReset();
-      if (!res.ok || result.error) {
-        showToast(tErr(result?.error) || t('toast.error'), 'error');
-        return;
-      }
-      showToast(t('admin.settingsImportSuccess'), 'success');
-      // Reload to apply language/theme changes
-      setTimeout(() => location.reload(), 800);
-    }, { once: true });
-
-    on('admin-settings-import-cancel', 'click', _settingsImportReset, { once: true });
+    if (file) _settingsImportFlow(file);
   });
+}
 
-  on('admin-settings-import-error-cancel', 'click', _settingsImportReset);
+/** Confirm, import, reload – in one window like the config imports. */
+async function _settingsImportFlow(file) {
+  const flow = openFlowDialog(t('admin.settingsImport'));
+  try {
+    JSON.parse(await file.text());
+  } catch {
+    return _flowFailed(flow, t('admin.settingsImportErrJson'));
+  }
+  const go = await flow.step({ text: t('admin.settingsImportConfirm'), buttons: [
+    { label: t('admin.zipCancel'), value: 'cancel' },
+    { label: t('admin.settingsImportYes'), value: 'ok', danger: true }] });
+  if (go !== 'ok') return flow.close();
+
+  flow.busy('…');
+  const fd = new FormData();
+  fd.append('file', file);
+  let res, result;
+  try {
+    res    = await csrfFetch('/api/settings/app/import', { method: 'POST', body: fd });
+    result = await res.json();
+  } catch {
+    return _flowFailed(flow, t('toast.error'));
+  }
+  if (!res.ok || result.error) return _flowFailed(flow, tErr(result?.error));
+  flow.close();
+  showToast(t('admin.settingsImportSuccess'), 'success');
+  // Reload to apply language/theme changes
+  setTimeout(() => location.reload(), 800);
 }
 
 async function detachConfig() {
@@ -780,71 +736,81 @@ async function detachConfig() {
   setTimeout(() => location.reload(), 900);
 }
 
-// ── Admin-Import ───────────────────────────────────────────────────────────
+// ── Admin-Import (directory) ───────────────────────────────────────────────
 
-function initImportBrowse() {
-  on('import-config-browse', 'click', () => {
-    const pathEl = document.getElementById('import-config-path');
-    const cur = pathEl?.value.trim() || '/etc/nixos';
-    openDirBrowser(cur, path => {
-      if (pathEl) pathEl.value = path;
-    });
-  });
+let _lastImportDir = '/etc/nixos';
+
+function initDirImport() {
+  on('admin-import-btn', 'click', () => _dirImportFlow());
 }
 
-async function runAdminImport() {
-  const dir      = document.getElementById('import-config-path')?.value.trim() || '';
-  const resultEl = document.getElementById('import-result');
-  if (!dir) return;
-  const configPath = dir.replace(/\/+$/, '') + '/configuration.nix';
-  resultEl.textContent = '…';
-  resultEl.className   = 'import-result';
-  await _doAdminImport(configPath, false, resultEl);
+/** Import from a directory: its own window, or the next step of the ZIP
+ *  window ("Search manually"). A failed import comes back to the path with
+ *  the message, so a typo is fixed in place. */
+async function _dirImportFlow(flow = null) {
+  flow ??= openFlowDialog(t('admin.dirImport'));
+  let error = '';
+  for (;;) {
+    const node = document.createElement('div');
+    node.innerHTML = `
+      <p class="dialog-info">${escHtml(t('admin.importHint'))}</p>
+      <div class="import-path-row">
+        <input type="text" class="flow-dir-input" spellcheck="false" autocomplete="off">
+        <button type="button" class="btn-browse" title="${escHtml(t('admin.importBrowse'))}">…</button>
+      </div>
+      <p class="admin-hint">${escHtml(t('admin.importPathHint'))}</p>`;
+    const input = node.querySelector('input');
+    input.value = _lastImportDir;
+    node.querySelector('.btn-browse').addEventListener('click', () =>
+      openDirBrowser(input.value.trim() || '/etc/nixos', p => { input.value = p; }));
+    const go = await flow.step({ node, error, buttons: [
+      { label: t('admin.zipCancel'), value: 'cancel' },
+      { label: t('admin.importBtn'), value: 'ok', primary: true }] });
+    if (go !== 'ok') return flow.close();
+    const dir = input.value.trim();
+    if (!dir) { error = t('setup.errNoDir'); continue; }
+    _lastImportDir = dir;
+    error = await _doAdminImport(dir.replace(/\/+$/, '') + '/configuration.nix', flow);
+    if (!error) return;
+  }
 }
 
-async function _doAdminImport(configPath, confirmed, resultEl) {
-  if (!confirmed && !(await askImportEditMode())) {
-    resultEl.className = 'import-result hidden';
-    return;
+/** Edit-mode question, backup question, import – as steps of `flow`.
+ *  Resolves null when finished (window closed), or the error message. */
+async function _doAdminImport(configPath, flow) {
+  if (!(await askImportEditMode(flow))) { flow.close(); return null; }
+  let confirmed = false;
+  for (;;) {
+    flow.busy(t('admin.zipImporting'));
+    const body = confirmed
+      ? { config_path: configPath, confirmed: true, edit_mode: _importEditMode }
+      : { config_path: configPath, edit_mode: _importEditMode };
+    let res, data;
+    try {
+      res  = await csrfFetch('/api/import/run', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify(body),
+      });
+      data = await res.json();
+    } catch {
+      return t('toast.error');
+    }
+    if (data.needs_backup_confirmation && !confirmed) {
+      const ok = await flow.step({ text: t('import.backupConfirm', data.zip_name), buttons: [
+        { label: t('import.backupCancel'), value: 'cancel' },
+        { label: t('import.backupYes'), value: 'ok', primary: true }] });
+      if (ok !== 'ok') { flow.close(); return null; }
+      confirmed = true;
+      continue;
+    }
+    if (!res.ok || data.error) return tErr(data.error);
+    flow.close();
+    await refreshAfterImport();
+    await checkHardwareMatch(data.hardware);
+    showToast(t('import.success'), 'success');
+    return null;
   }
-  const body = confirmed
-    ? { config_path: configPath, confirmed: true, edit_mode: _importEditMode }
-    : { config_path: configPath, edit_mode: _importEditMode };
-
-  const res  = await csrfFetch('/api/import/run', {
-    method:  'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body:    JSON.stringify(body),
-  });
-  const data = await res.json();
-
-  if (data.needs_backup_confirmation) {
-    resultEl.innerHTML =
-      `${escHtml(t('import.backupConfirm', data.zip_name))}\n` +
-      `<div class="confirm-buttons" style="margin-top:8px">` +
-        `<button class="btn-primary" id="admin-backup-yes">${escHtml(t('import.backupYes'))}</button>` +
-        `<button id="admin-backup-no">${escHtml(t('import.backupCancel'))}</button>` +
-      `</div>`;
-    document.getElementById('admin-backup-yes')?.addEventListener('click', async () => {
-      resultEl.textContent = '…';
-      await _doAdminImport(configPath, true, resultEl);
-    });
-    document.getElementById('admin-backup-no')?.addEventListener('click', () => {
-      resultEl.className = 'import-result hidden';
-    });
-    return;
-  }
-
-  if (!res.ok || data.error) {
-    resultEl.innerHTML = `<span class="import-err">${escHtml(tErr(data.error))}</span>`;
-    resultEl.classList.remove('hidden');
-    return;
-  }
-
-  resultEl.className = 'import-result hidden';
-  await refreshAfterImport();
-  await checkHardwareMatch(data.hardware);
-  showToast(t('import.success'), 'success');
 }
 
 

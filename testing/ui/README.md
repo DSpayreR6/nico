@@ -42,7 +42,7 @@ Tests, die ihre Config selbst anlegen und das Skript nicht brauchen:
 `test_unmappable`, `test_flake_create`, `test_raw_panel_keep`,
 `test_git_menu_remote`, `test_rebuild_preparing`, `test_package_inactive`,
 `test_outside_change`, `test_outside_restructure`, `test_brick_adopt`,
-`test_restart_ui`.
+`test_restart_ui`, `test_admin_flows`.
 
 ## test_collapse.py
 
@@ -67,6 +67,15 @@ einem Update bietet der Monitor „NiCo neu starten“ und „Später“.
 `/api/shutdown` und `/api/restart` sind im Browser ersetzt, der echte
 Aufruf beendete den Testprozess. Legt Wegwerf-Config und XDG_CONFIG_HOME
 selbst an. Der echte Neustart ohne Browser: `testing/routes/test_restart.py`.
+
+## test_admin_flows.py
+
+Importe und Config-Pfad als Fenster (2026-11-25), 27 Prüfungen: ZIP-Import
+mit allen Schritten in einem Fenster, ungültige ZIP mit „Manuell suchen“,
+Verzeichnis-Import mit leerem und falschem Pfad, Einstellungs-Import mit
+kaputtem und gültigem JSON, Config-Pfad ändern mit Rückfrage für ein neues
+Verzeichnis. Dateien gehen über das versteckte Datei-Feld (send_keys).
+Legt Wegwerf-Config und XDG_CONFIG_HOME selbst an.
 
 ## test_sections.py (ohne Browser, in testing/routes/)
 

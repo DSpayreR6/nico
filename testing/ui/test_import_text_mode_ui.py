@@ -113,17 +113,18 @@ try:
       window.__errors = [];
       window.addEventListener('error', e => window.__errors.push(String(e.message)));
       window.addEventListener('unhandledrejection', e => window.__errors.push(String(e.reason)));
-      const el = document.getElementById('import-result');
-      window.__imp = _doAdminImport(arguments[0], false, el).then(() => 'fertig', e => 'Fehler: ' + e);
+      // Since 2026-11-25 the steps run in one window (openFlowDialog).
+      const flow = openFlowDialog('Import');
+      window.__imp = _doAdminImport(arguments[0], flow).then(() => 'fertig', e => 'Fehler: ' + e);
     """, str(src / "configuration.nix"))
     time.sleep(1.5)
     titles = d.execute_script(
-        "return [...document.querySelectorAll('.dialog-title')].map(e => e.textContent);")
+        "return [...document.querySelectorAll('.dialog-title, .flow-body')].map(e => e.textContent);")
     check("Frage „Wie willst du …“ erscheint", any("bearbeiten" in t for t in titles), titles)
-    d.execute_script("document.querySelector('.dialog [data-mode=\"r\"]').click();")
+    d.execute_script("document.querySelector('.flow-dialog [data-flow=\"r\"]').click();")
     time.sleep(2)
     # The target is not empty: the backup question, then the import itself.
-    d.execute_script("window.__imp2 = new Promise(r => { const b = document.getElementById('admin-backup-yes'); if (!b) { r('keine Rückfrage'); return; } b.click(); setTimeout(() => r('fertig'), 4000); });")
+    d.execute_script("window.__imp2 = new Promise(r => { const b = document.querySelector('.flow-dialog [data-flow=\"ok\"]'); if (!b) { r('keine Rückfrage'); return; } b.click(); setTimeout(() => r('fertig'), 4000); });")
     time.sleep(5)
     check("Rückfrage zum Backup beantwortet",
           d.execute_script("return await window.__imp2;") == "fertig")

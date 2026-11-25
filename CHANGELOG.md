@@ -6,6 +6,7 @@
 
 - Nix-Brick editor: syntax colors and bracket pairs while typing, like the text mode; the editor grows with its text
 - Restart NiCo: the quit dialog offers *Cancel*, *Restart* and *Quit*; after an update the monitor offers *Restart NiCo* or *Later*. The open file is saved first, the tab reloads by itself
+- Admin panel: the imports (ZIP, directory, program settings) and changing the config path run in one window, step by step, instead of rows opening below the buttons
 
 ### Bug Fixes
 

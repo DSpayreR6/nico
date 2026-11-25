@@ -318,6 +318,87 @@ function nicoChoice(text, { title = '', okLabel = '', altLabel, danger = false }
   return _nicoDialog({ title, text, okLabel, altLabel, danger });
 }
 
+/** One window for a process with several steps (Martin, 2026-11-25): each
+ *  step replaces the previous one in the same window, instead of rows
+ *  opening below a button in the admin panel. Same look as the dialogs
+ *  above; closed by its buttons only, Escape = the 'cancel' button where a
+ *  step has one.
+ *
+ *  flow.step({ text, node, error, buttons }) shows a step and resolves with
+ *  the value of the clicked button. buttons: [{ label, value, primary,
+ *  danger }]. Enter outside a button presses the primary/danger one.
+ *  flow.busy(text) shows a waiting text without buttons, flow.close()
+ *  removes the window. */
+function openFlowDialog(title) {
+  const overlay = document.createElement('div');
+  overlay.className = 'overlay';
+  overlay.innerHTML = `
+    <div class="dialog flow-dialog">
+      <h2 class="dialog-title"></h2>
+      <div class="flow-body"></div>
+      <div class="dialog-actions"></div>
+    </div>`;
+  overlay.querySelector('.dialog-title').textContent = title;
+  document.body.appendChild(overlay);
+  const body    = overlay.querySelector('.flow-body');
+  const actions = overlay.querySelector('.dialog-actions');
+  let onKey = null;
+  const dropKey = () => {
+    if (onKey) document.removeEventListener('keydown', onKey, true);
+    onKey = null;
+  };
+  return {
+    el: overlay,
+    step({ text = '', node = null, error = '', buttons = [] } = {}) {
+      dropKey();
+      body.innerHTML = text ? _dialogText(text) : '';
+      if (node) body.appendChild(node);
+      if (error) {
+        const p = document.createElement('p');
+        p.className = 'dialog-info import-err flow-error';
+        p.textContent = error;
+        body.appendChild(p);
+      }
+      actions.innerHTML = '';
+      return new Promise(resolve => {
+        const finish = v => { dropKey(); resolve(v); };
+        for (const b of buttons) {
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = b.danger ? 'action-btn btn-red' : b.primary ? 'btn-primary' : 'btn-secondary';
+          btn.textContent = b.label;
+          btn.dataset.flow = b.value;
+          btn.addEventListener('click', () => finish(b.value));
+          actions.appendChild(btn);
+        }
+        const main = buttons.find(b => b.primary || b.danger);
+        onKey = e => {
+          // Only while this window has the focus: the directory browser
+          // opens on top of it and handles its own keys.
+          const a = document.activeElement;
+          if (a && a !== document.body && !overlay.contains(a)) return;
+          if (e.key === 'Escape' && buttons.some(b => b.value === 'cancel')) {
+            e.preventDefault(); e.stopPropagation(); finish('cancel');
+          } else if (e.key === 'Enter' && main && !(a && a.tagName === 'BUTTON')) {
+            e.preventDefault(); e.stopPropagation(); finish(main.value);
+          }
+        };
+        document.addEventListener('keydown', onKey, true);
+        (body.querySelector('input') || actions.querySelector('.btn-primary, .btn-red'))?.focus();
+      });
+    },
+    busy(text) {
+      dropKey();
+      body.innerHTML = _dialogText(text);
+      actions.innerHTML = '';
+    },
+    close() {
+      dropKey();
+      overlay.remove();
+    },
+  };
+}
+
 /** A message with one OK button. */
 function nicoAlert(text, { title = '' } = {}) {
   return _nicoDialog({ title, text, cancel: false });

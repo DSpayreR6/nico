@@ -2949,6 +2949,14 @@ button.rollback-btn.gen-state-running:hover { background: rgba(166,227,161,.12);
 
 .dialog .nico-dialog-input { width: 100%; margin-top: 4px; }
 
+/* Step window of the admin processes (openFlowDialog, 2026-11-25): the
+   existing path row and input styles, only the spacing inside the window. */
+.flow-dialog .import-path-row { margin-top: 8px; }
+.flow-dialog .flow-path-input { display: block; width: 100%; box-sizing: border-box; }
+.flow-dialog .admin-hint,
+.flow-dialog .setup-hint { margin-top: 6px; }
+.flow-dialog .flow-error { margin-top: 8px; }
+
 /* ── Diff-Select-Row ─────────────────────────────────────────────────────── */
 .diff-select-row {
   display: flex;
