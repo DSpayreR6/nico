@@ -702,6 +702,7 @@
   "errors.ERR_NO_UPSTREAM": "Es ist kein Upstream-Branch eingetragen.",
   "errors.ERR_NOTHING_RESTORED": "Es wurde keine Datei wiederhergestellt.",
   "errors.ERR_PARTIALLY_RESTORED": "Nur teilweise wiederhergestellt – diese Dateien stehen noch auf dem neueren Stand: {0}",
+  "errors.ERR_ROLLBACK_SKIPPED": "Wiederherstellen abgebrochen, nichts wurde verändert: Diese Dateien sind zu groß für einen Sicherungspunkt (Commit), ihr jetziger Stand ginge verloren: {0}. Datei verschieben oder löschen, dann erneut versuchen.",
   "errors.ERR_TOO_BIG_FOR_GIT": "Zu groß für die Versionierung (über {0} MB): {1}. Solche Dateien blockieren dauerhaft jeden Push und lassen sich später nur durch Umschreiben der Historie wieder entfernen.",
   "errors.ERR_BLOB_TOO_BIG_TO_PUSH": "In einem noch nicht hochgeladenen Sicherungspunkt steckt eine zu große Datei: {0}. Der Server nimmt Dateien über {1} MB nicht an. Sie muss aus der Historie entfernt werden – ein erneuter Push ändert nichts.",
   "errors.ERR_DRY_OK_SEM": "✓ Semantische Prüfung erfolgreich – keine Fehler gefunden.",
@@ -1141,6 +1142,7 @@
 
   "outside.title": "Datei außerhalb von NiCo geändert",
   "outside.info": "Die Datei wurde geändert, seit NiCo sie geladen hat – etwa durch Syncthing, git pull oder einen Editor. „Neu laden“ übernimmt den Stand der Datei; deine ungespeicherten Änderungen im Panel entfallen. „Überschreiben“ legt vom Stand der Datei zuerst einen Sicherungspunkt (Commit) an, sofern die Versionierung eingerichtet ist, und schreibt dann deinen Stand aus dem Panel.",
+  "outside.infoText": "Die Datei wurde geändert, seit NiCo sie geöffnet hat – etwa durch Syncthing, git pull oder einen Editor. „Abbrechen“ lässt die Datei, wie sie ist; dein Text bleibt im Textmodus stehen. „Überschreiben“ legt vom Stand der Datei zuerst einen Sicherungspunkt (Commit) an, sofern die Versionierung eingerichtet ist, und schreibt dann deinen Text.",
   "outside.reloadBtn": "Neu laden",
   "outside.diffBtn": "Unterschiede ansehen",
   "outside.overwriteBtn": "Überschreiben",

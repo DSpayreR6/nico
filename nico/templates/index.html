@@ -1759,9 +1759,13 @@
     <div class="modal modal-wide">
       <div class="modal-logo" data-i18n="outside.title">Datei außerhalb von NiCo geändert</div>
       <p class="raw-panel-hint" id="outside-file"></p>
-      <p data-i18n="outside.info">Die Datei wurde geändert, seit NiCo sie geladen hat.</p>
+      <p id="outside-info" data-i18n="outside.info">Die Datei wurde geändert, seit NiCo sie geladen hat.</p>
       <div id="outside-diff" class="hidden" style="max-height:40vh;overflow:auto;margin-bottom:12px"></div>
       <div class="confirm-buttons">
+        <!-- Text mode (revision 2026-11-25, F3): Cancel instead of Reload –
+             the disk stays as it is, the user's text stays in the editor. -->
+        <button type="button" id="outside-cancel-btn" class="btn-primary hidden"
+                data-i18n="dialog.cancel">Abbrechen</button>
         <button type="button" id="outside-reload-btn" class="btn-primary"
                 data-i18n="outside.reloadBtn">Neu laden</button>
         <button type="button" id="outside-diff-btn"

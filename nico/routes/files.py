@@ -631,6 +631,38 @@ def register(app, ctx):
 
         root = Path(nixos_dir).resolve()
         written = []
+        bases: dict[str, str] = {}
+
+        # Text mode, changed outside NiCo since the editor opened the file
+        # (revision 2026-11-25, F3): the same question as for a form
+        # (outside.py, Martin 2026-11-17). Kate saved the file while NiCo
+        # had it open, and the next save here wrote the old text back over
+        # it without a word. `base` is the digest /api/file handed out when
+        # the editor was filled; `overwrite` is the user's answer - the state
+        # from outside goes into a checkpoint or ZIP first. Without a base
+        # (an older client) nothing is compared, as before.
+        conflicts = []
+        for f in files:
+            rel  = (f.get("path") or "").strip()
+            base = f.get("base")
+            if not rel or not isinstance(base, str) or not base:
+                continue
+            target = (root / rel).resolve()
+            try:
+                target.relative_to(root)
+            except ValueError:
+                continue          # refused by the loop below
+            if outside.changed_outside(target, base):
+                conflicts.append(rel)
+        if conflicts:
+            if not body.get("overwrite"):
+                return jsonify({"error": "ERR_CHANGED_OUTSIDE", "file": conflicts[0]}), 409
+            try:
+                git_manager.backup_before_write(
+                    nixos_dir, conflicts,
+                    label=f"NiCo: backup before overwriting {', '.join(conflicts)}")
+            except git_manager.BackupError as exc:
+                return jsonify({"error": "ERR_RESTRUCTURE_BACKUP", "detail": str(exc)}), 500
 
         for f in files:
             rel  = (f.get("path") or "").strip()
@@ -669,13 +701,16 @@ def register(app, ctx):
                     content = _set_type_in_content(content, ftype)
                 atomic.write_text(target, content)
                 written.append(rel)
+                # The file as this save left it (hash, Home Manager
+                # normalisation) is the editor's new base.
+                bases[rel] = outside.loaded(target, content)
             except OSError:
                 return jsonify({"error": "ERR_FILE_WRITE"}), 500
 
         if written:
             git_manager.auto_commit(nixos_dir)
 
-        return jsonify({"success": True, "written": written})
+        return jsonify({"success": True, "written": written, "bases": bases})
 
     @app.route("/api/file/set-type", methods=["POST"])
     def set_file_type():

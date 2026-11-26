@@ -11,6 +11,7 @@ from datetime import datetime
 from pathlib import Path
 
 from . import atomic, config_manager, fidelity, generator, git_manager, hm_generator, importer, validator
+from . import outside as _outside_mod
 from .brix import (
     FILE_FORMAT,
     SUPPORTED_FORMATS,
@@ -980,6 +981,10 @@ def read_config_file(nixos_dir: str, rel_path: str, *, persist_stamp: bool = Tru
         raise FileNotFoundError("ERR_FILE_NOT_FOUND")
 
     content = target.read_text(encoding="utf-8")
+    # What lies on disk once this function is done - the base the text
+    # editor sends back with its save (outside.py, revision 2026-11-25, F3).
+    # A stamp written below changes it; one only shown does not.
+    on_disk = content
 
     if target.name == "flake.lock":
         return {"content": content, "path": rel, "file_type": "flk", "writable": False}
@@ -1005,6 +1010,7 @@ def read_config_file(nixos_dir: str, rel_path: str, *, persist_stamp: bool = Tru
         if persist_stamp:
             try:
                 atomic.write_text(target, content)
+                on_disk = content
             except OSError:
                 pass
         ftype = stamp
@@ -1017,6 +1023,7 @@ def read_config_file(nixos_dir: str, rel_path: str, *, persist_stamp: bool = Tru
             if persist_stamp:
                 try:
                     atomic.write_text(target, content)
+                    on_disk = content
                 except OSError:
                     pass
             ftype = override
@@ -1049,6 +1056,7 @@ def read_config_file(nixos_dir: str, rel_path: str, *, persist_stamp: bool = Tru
         # with the reason next to it.
         "unmappable": reason is not None,
         "unmappable_reason": reason,
+        "_base": _outside_mod.loaded(target, on_disk),
     }
 
 

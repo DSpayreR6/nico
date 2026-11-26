@@ -351,31 +351,41 @@ function showOutsideNotice(rel) {
 // The form still holds the values from when it was loaded; saving would write
 // them back over the newer file. The user decides (Martin, 2026-11-17).
 
-/** Ask what to do. Resolves 'reload' or 'overwrite'; "show differences"
- *  opens the diff inside the dialog and keeps it open. No closing by a click
- *  on the background – only the buttons decide. */
-function askChangedOutside(rel) {
+/** Ask what to do. Resolves 'reload' or 'overwrite' – in text mode
+ *  'cancel' or 'overwrite' (revision 2026-11-25, F3: the editor keeps the
+ *  user's text, the disk stays). "Show differences" opens the diff inside
+ *  the dialog and keeps it open. No closing by a click on the background –
+ *  only the buttons decide. `base`: the state the form or editor was
+ *  filled from. */
+function askChangedOutside(rel, { base = _coBase, textMode = false } = {}) {
   const overlay = document.getElementById('outside-overlay');
   const diffEl  = document.getElementById('outside-diff');
+  const info    = document.getElementById('outside-info');
   document.getElementById('outside-file').textContent = rel;
+  info.dataset.i18n = textMode ? 'outside.infoText' : 'outside.info';
+  info.textContent  = t(info.dataset.i18n);
   diffEl.innerHTML = '';
   diffEl.classList.add('hidden');
   overlay.classList.remove('hidden');
   return new Promise(resolve => {
     const reloadBtn = document.getElementById('outside-reload-btn');
+    const cancelBtn = document.getElementById('outside-cancel-btn');
     const overBtn   = document.getElementById('outside-overwrite-btn');
     const diffBtn   = document.getElementById('outside-diff-btn');
+    reloadBtn.classList.toggle('hidden', textMode);
+    cancelBtn.classList.toggle('hidden', !textMode);
     const done = choice => {
-      reloadBtn.onclick = overBtn.onclick = diffBtn.onclick = null;
+      reloadBtn.onclick = cancelBtn.onclick = overBtn.onclick = diffBtn.onclick = null;
       overlay.classList.add('hidden');
       resolve(choice);
     };
     reloadBtn.onclick = () => done('reload');
+    cancelBtn.onclick = () => done('cancel');
     overBtn.onclick   = () => done('overwrite');
     diffBtn.onclick   = async () => {
       if (!diffEl.classList.contains('hidden')) { diffEl.classList.add('hidden'); return; }
       try {
-        const data = await fetch(`/api/file/outside-diff?path=${encodeURIComponent(rel)}&base=${encodeURIComponent(_coBase || '')}`)
+        const data = await fetch(`/api/file/outside-diff?path=${encodeURIComponent(rel)}&base=${encodeURIComponent(base || '')}`)
           .then(r => r.json());
         diffEl.innerHTML = data.error ? escHtml(tErr(data.error))
                                       : _renderDiff(data, t('diff.outsideNone'));
@@ -384,7 +394,7 @@ function askChangedOutside(rel) {
       }
       diffEl.classList.remove('hidden');
     };
-    reloadBtn.focus();
+    (textMode ? cancelBtn : reloadBtn).focus();
   });
 }
 

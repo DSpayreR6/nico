@@ -855,6 +855,10 @@ const Sidebar = (() => {
   let _paintTextEditor = null; // repaints the text editor's colored layer
   // Editor-Inhalt beim Öffnen der Raw-Ansicht (für Dirty-Erkennung beim Dateiwechsel)
   let _rawEditOrig   = '';
+  // The disk state the text editor was filled from (outside.py): sent back
+  // with the save, so a change from Kate or Syncthing in between is asked
+  // about instead of overwritten (revision 2026-11-25, F3).
+  let _rawEditBase   = null;
   // Panel-Default aus Config-Settings ('p' oder 'r')
   let _panelDefault  = 'p';
 
@@ -914,7 +918,7 @@ const Sidebar = (() => {
     _openUnmappable = !!data.unmappable;
     if (data.unmappable) {
       _updatePanelToggle('unmappable', '');
-      _showRawView(data.content || '', fileName, path);
+      _showRawView(data.content || '', fileName, path, data._base);
       _showLeftPanel('panel-off', fileName, { panelOff: true, unmappable: true,
                                               reason: data.unmappable_reason });
       _setRawModeUI(true);
@@ -942,7 +946,7 @@ const Sidebar = (() => {
       // Changed outside NiCo: in raw mode only a notice (Martin, 2026-11-18).
       if (data.outside) await showOutsideNotice(path);
       if (activeFile?.path !== path) return;
-      _showRawView(data.content || '', fileName, path);
+      _showRawView(data.content || '', fileName, path, data._base);
       _showLeftPanel('panel-off', fileName, { panelOff: true, flagSource: _getPanelModeFromContent(data.content || '') !== null ? 'file' : 'settings' });
       _setRawModeUI(true);
       return;
@@ -991,7 +995,7 @@ const Sidebar = (() => {
       switchTab('hm');
       _populateHmPanel(data.content, path);
     } else {
-      _showRawView(data.content, fileName, path);
+      _showRawView(data.content, fileName, path, data._base);
       _showLeftPanel(ftype, fileName);
       if (data.file_type === null && !skipTypeDialog) openSetType();
     }
@@ -1763,9 +1767,10 @@ const Sidebar = (() => {
     showToast(t('tools.reloaded'), 'success');
   }
 
-  function _showRawView(content, fileName, filePath) {
+  function _showRawView(content, fileName, filePath, base = null) {
     _clearRawView();
     _rawEditPath = filePath;
+    _rawEditBase = base || null;
     _parseErr    = null;
     const previewTabs = elPreviewPanel.querySelector('.preview-tabs');
     if (previewTabs) { previewTabs.dataset.hiddenByRaw = '1'; previewTabs.style.display = 'none'; }
@@ -1981,13 +1986,25 @@ const Sidebar = (() => {
     }
 
     try {
-      const res  = await csrfFetch('/api/file', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ files: [{ path, content }] }),
-      });
-      const data = await res.json();
+      const send = async overwrite => {
+        const res = await csrfFetch('/api/file', {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ files: [{ path, content, base: _rawEditBase }], overwrite }),
+        });
+        return res.json();
+      };
+      let data = await send(false);
+      // Changed outside NiCo since the editor was filled (F3): the user
+      // decides. Cancel leaves the disk as it is and the text in the editor.
+      if (data.error === 'ERR_CHANGED_OUTSIDE') {
+        const choice = await askChangedOutside(data.file || path,
+                                               { base: _rawEditBase, textMode: true });
+        if (choice !== 'overwrite') return false;
+        data = await send(true);
+      }
       if (data.success) {
+        if (data.bases?.[path]) _rawEditBase = data.bases[path];
         _rawEditOrig = body;
         refreshUnsaved();
         showToast(t('sidebar.rawSaveOk'), 'success');
@@ -2024,6 +2041,7 @@ const Sidebar = (() => {
     document.getElementById('raw-file-view')?.remove();
     document.getElementById('flk-file-view')?.remove();
     _rawEditPath = null;
+    _rawEditBase = null;
     _parseErr    = null;
     _paintTextEditor = null;
     document.querySelectorAll('[data-hidden-by-raw]').forEach(el => {

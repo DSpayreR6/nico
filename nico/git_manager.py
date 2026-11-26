@@ -84,6 +84,7 @@ ERR_NOT_BACKUP_BRANCH    = "ERR_NOT_BACKUP_BRANCH"
 ERR_NO_UPSTREAM          = "ERR_NO_UPSTREAM"
 ERR_NOTHING_RESTORED     = "ERR_NOTHING_RESTORED"
 ERR_PARTIALLY_RESTORED   = "ERR_PARTIALLY_RESTORED"
+ERR_ROLLBACK_SKIPPED     = "ERR_ROLLBACK_SKIPPED"
 ERR_TOO_BIG_FOR_GIT      = "ERR_TOO_BIG_FOR_GIT"
 ERR_BLOB_TOO_BIG_TO_PUSH = "ERR_BLOB_TOO_BIG_TO_PUSH"
 
@@ -1383,9 +1384,15 @@ def rollback(nixos_dir: str, commit_hash: str) -> tuple[bool, str]:
     # state it cannot bring back (revision 2026-11-10, B40). A clean tree
     # yields no commit. If the checkpoint fails, nothing is restored: going on
     # would trade a visible error for a silent loss.
-    ok_backup, msg_backup, _skipped = auto_commit(nixos_dir, label="NiCo: backup before rollback")
+    ok_backup, msg_backup, skipped = auto_commit(nixos_dir, label="NiCo: backup before rollback")
     if not ok_backup:
         return False, msg_backup
+    # A file above the size limit is left out of that checkpoint. If the
+    # restore then overwrote it, its current content would be in no commit
+    # at all - the same loss B40 closed, through the size limit (revision
+    # 2026-11-25, F2). Stop before the first file is touched.
+    if skipped:
+        return False, _err(ERR_ROLLBACK_SKIPPED, ", ".join(sorted(skipped)[:10]))
 
     target_files = set(target_list)
 

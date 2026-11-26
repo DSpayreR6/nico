@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Bug Fixes
+
+- Text mode no longer overwrites a file changed outside NiCo (another editor, Syncthing, git pull) while it was open: saving asks first – *Cancel*, *Show differences* or *Overwrite* (with a checkpoint of the outside state)
+- Time machine: restoring stops before touching any file when the checkpoint taken first had to leave out a file above the size limit – its current state would otherwise have been lost
+
 ## 0.24.0 (2026-11-25)
 
 ### New Features
