@@ -11,6 +11,8 @@
 - Reading this machine: besides *Always allow* there is *Allow once* – valid until the page is reloaded, nothing is stored; a fourth switch *Installed programs* covers reading `nix profile list` for *Update NiCo*
 - System state that was entered but could not be activated: the time machine offers *Activate again*, which repeats only the activation
 - New Validator rule (note, can be switched off): names files linked in from outside the config, which NiCo does not read and the Validator therefore does not check
+- Text mode, file changed meanwhile: besides *Cancel* and *Overwrite* there is *Discard my version*, which loads the file as it is on disk (after a question)
+- Clear names: the menu entry that saves and creates a checkpoint is called *Checkpoint (commit)*, the dry-run window *Dry run* (it no longer only checks the syntax), the menu entry *Rebuild*
 
 ### Bug Fixes
 
@@ -38,6 +40,9 @@
 - Moving the config or restarting NiCo waits for a save in progress (up to five seconds) instead of losing it
 - Import, restore, download (pull), removing large files, detach, categorize and creating a flake no longer run next to a save, a rebuild or a dry run – a save in between could be overwritten when the action rolled back
 - The rebuild in a terminal now counts as running until its command has finished: moving the config or a dry run can no longer start next to it; an open window waiting for *Enter* does not block
+- The dry run before a checkpoint shows that it is running (spinner with elapsed time), and a second click does nothing
+- A window that opens always lies on top: the question about a file changed meanwhile no longer hides behind the checkpoint window
+- *Change config path* with the path left as it is no longer sets the config up again and reloads the page
 
 ## 0.24.0 (2026-11-25)
 

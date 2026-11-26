@@ -316,5 +316,29 @@ for lang, term in VERSIONING.items():
           term.lower() in data.get("admin.settings.rubrikGit", "").lower(),
           data.get("admin.settings.rubrikGit"))
 
+print("\n15. Dry-Run, Rebuild und Sicherungspunkt (Commit) (Entscheidung 2026-11-26)")
+# Fachbegriffe von Nix (Kategorie 2): in allen Sprachen englisch. Der Knopf
+# hieß "Dry-Run", sein Fenster "Syntax-Prüfung" – ein Rest aus der ersten
+# Fassung, als nur die Syntax geprüft wurde (Martin, VM-Test). Erlaubt bleibt
+# "Syntax" dort, wo wirklich nur die Syntax geprüft wurde oder ein
+# Syntaxfehler gemeint ist. Der Menüeintrag, der einen Sicherungspunkt
+# anlegt, hieß "Konfiguration schreiben" – geschrieben wird aber immer.
+OLD_DRY = {"de": r"Syntax-Prüfung|Syntax vor dem", "en": r"[Ss]yntax check",
+           "es": r"verificación de sintaxis", "fr": r"vérification syntax",
+           "ja": r"構文チェック|ドライラン", "ru": r"проверк\w+ синтаксиса", "zh": r"语法检查"}
+DRY_KEYS_OK = {"errors.ERR_DRY_OK_SYNTAX"}   # here only the syntax was checked
+for lang, pattern in OLD_DRY.items():
+    data = json.loads((LANG / f"{lang}.json").read_text(encoding="utf-8"))
+    hits = [k for k, v in data.items() if isinstance(v, str) and k not in DRY_KEYS_OK
+            and re.search(pattern, v)]
+    check(f"{lang}: kein alter Begriff für den Dry-Run", not hits, hits[:6])
+    for key in ("dryrun.title", "header.nixosDryRun"):
+        check(f"{lang}: {key} heißt Dry run", "dry" in data.get(key, "").lower(), data.get(key))
+    for key in ("header.nixosRebuild", "admin.rebuild"):
+        check(f"{lang}: {key} heißt Rebuild", data.get(key) == "Rebuild", data.get(key))
+    check(f"{lang}: Menü und Fenster heißen gleich (Sicherungspunkt)",
+          data.get("header.nixosSave") == data.get("write.title")
+          and "commit" in data.get("header.nixosSave", "").lower(), data.get("header.nixosSave"))
+
 print("\n" + ("ALLE PRÜFUNGEN BESTANDEN" if not fails else f"FEHLGESCHLAGEN: {fails}"))
 sys.exit(1 if fails else 0)

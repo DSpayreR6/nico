@@ -372,16 +372,24 @@ function askChangedOutside(rel, { base = _coBase, textMode = false } = {}) {
     const cancelBtn = document.getElementById('outside-cancel-btn');
     const overBtn   = document.getElementById('outside-overwrite-btn');
     const diffBtn   = document.getElementById('outside-diff-btn');
+    const discardBtn = document.getElementById('outside-discard-btn');
     reloadBtn.classList.toggle('hidden', textMode);
     cancelBtn.classList.toggle('hidden', !textMode);
+    discardBtn?.classList.toggle('hidden', !textMode);
     const done = choice => {
       reloadBtn.onclick = cancelBtn.onclick = overBtn.onclick = diffBtn.onclick = null;
+      if (discardBtn) discardBtn.onclick = null;
       overlay.classList.add('hidden');
       resolve(choice);
     };
     reloadBtn.onclick = () => done('reload');
     cancelBtn.onclick = () => done('cancel');
     overBtn.onclick   = () => done('overwrite');
+    if (discardBtn) discardBtn.onclick = async () => {
+      // The question lies above this window (window order, core.js).
+      if (await nicoConfirm(t('outside.discardConfirm'),
+                            { okLabel: t('outside.discardBtn'), danger: true })) done('discard');
+    };
     diffBtn.onclick   = async () => {
       if (!diffEl.classList.contains('hidden')) { diffEl.classList.add('hidden'); return; }
       try {
@@ -498,7 +506,25 @@ function closeWriteConfirm() {
   document.getElementById('write-overlay').classList.add('hidden');
 }
 
+/** While a checkpoint is being made (with its dry run) the button and Enter
+ *  do nothing: after the first click nothing showed that the dry run ran,
+ *  and the second one only reported it as busy (Martin, VM test 2026-11-26). */
+let _writeRunning = false;
+
 async function writeFiles() {
+  if (_writeRunning) return;
+  _writeRunning = true;
+  const btn = document.getElementById('write-confirm-btn');
+  if (btn) btn.disabled = true;
+  try {
+    await _writeFilesRun();
+  } finally {
+    _writeRunning = false;
+    if (btn) btn.disabled = false;
+  }
+}
+
+async function _writeFilesRun() {
   const label      = document.getElementById('write-label-input')?.value.trim() ?? '';
   const doDryrun   = document.getElementById('write-dryrun-check')?.checked;
   const dryResultEl = document.getElementById('write-dryrun-result');
@@ -512,12 +538,18 @@ async function writeFiles() {
     if (!await _autoSave()) return;
     if (!await _writeNix()) return;
 
-    dryResultEl.textContent = '…';
     dryResultEl.style.color = '';
     dryResultEl.classList.remove('hidden');
+    // The same spinner with elapsed time as the dry-run window.
+    const spinner = startElapsedSpinner(dryResultEl);
 
     // A job since 2026-11-26 (requestDryRun, rebuild.js).
-    const dd = await requestDryRun({ _host: _activeHost });
+    let dd;
+    try {
+      dd = await requestDryRun({ _host: _activeHost });
+    } finally {
+      spinner.stop();
+    }
 
     if (!dd) {
       dryResultEl.textContent = t('dryrun.networkError');

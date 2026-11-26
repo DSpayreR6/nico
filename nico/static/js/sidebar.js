@@ -2000,6 +2000,19 @@ const Sidebar = (() => {
       if (data.error === 'ERR_CHANGED_OUTSIDE') {
         const choice = await askChangedOutside(data.file || path,
                                                { base: _rawEditBase, textMode: true });
+        if (choice === 'discard') {
+          // Own text dropped: the editor takes the file as it is on disk.
+          const fresh = await csrfFetch(`/api/file?path=${encodeURIComponent(path)}`)
+            .then(r => r.json()).catch(() => null);
+          if (fresh && !fresh.error) {
+            _showRawView(fresh.content || '', path.split('/').pop(), path, fresh._base);
+            refreshUnsaved();
+            showToast(t('outside.discarded'), 'success');
+          } else {
+            showToast(tErr(fresh?.error) || t('toast.error'), 'error');
+          }
+          return false;
+        }
         if (choice !== 'overwrite') return false;
         data = await send(true);
       }

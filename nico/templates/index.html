@@ -185,7 +185,7 @@
               <button id="nixos-dryrun-btn"   class="nixos-action nixos-yellow"
                       data-i18n="header.nixosDryRun">Dry-Run</button>
               <button id="nixos-rebuild-btn"  class="nixos-action nixos-red"
-                      data-i18n="header.nixosRebuild">System-Neubau</button>
+                      data-i18n="header.nixosRebuild">Rebuild</button>
               <button id="nixos-git-push-btn" class="nixos-action nixos-blue hidden"
                       data-i18n="header.nixosGitPush">Hochladen (Push)</button>
               <button id="nixos-git-pull-btn" class="nixos-action nixos-blue hidden"
@@ -1540,10 +1540,10 @@
     </div>
   </div>
 
-  <!-- ── Syntax-Prüfung (Dry-Run)────────────────────────────────────── -->
+  <!-- ── Dry-Run ───────────────────────────────────────────────────────── -->
   <div id="dryrun-overlay" class="overlay hidden">
     <div class="modal modal-wide">
-      <div id="dryrun-logo" class="modal-logo" data-i18n="dryrun.title">Syntax-Prüfung</div>
+      <div id="dryrun-logo" class="modal-logo" data-i18n="dryrun.title">Dry-Run</div>
       <div id="dryrun-status" class="dryrun-status hidden"></div>
       <pre id="dryrun-output" class="dryrun-output"></pre>
       <div class="confirm-buttons" style="margin-top:16px">
@@ -1770,6 +1770,10 @@
                 data-i18n="outside.reloadBtn">Neu laden</button>
         <button type="button" id="outside-diff-btn"
                 data-i18n="outside.diffBtn">Unterschiede ansehen</button>
+        <!-- Text mode: drop the own text and take the file as it is now
+             (Martin, VM test 2026-11-26) - after a question. -->
+        <button type="button" id="outside-discard-btn" class="hidden"
+                data-i18n="outside.discardBtn">Meine Fassung verwerfen</button>
         <button type="button" id="outside-overwrite-btn" class="btn-red"
                 data-i18n="outside.overwriteBtn">Überschreiben</button>
       </div>
@@ -1800,7 +1804,7 @@
 
   <div id="write-overlay" class="overlay hidden">
     <div class="modal">
-      <div class="modal-logo" data-i18n="write.title">Konfiguration schreiben</div>
+      <div class="modal-logo" data-i18n="write.title">Sicherungspunkt (Commit)</div>
       <p data-i18n-html="write.info">
         NiCo schreibt die aktuelle Konfiguration in dein NixOS-Verzeichnis
         und legt dabei einen <strong>Sicherungspunkt</strong> an –
@@ -1824,14 +1828,14 @@
       <div class="write-dryrun-row">
         <label class="checkbox-label">
           <input type="checkbox" id="write-dryrun-check" checked>
-          <span data-i18n="write.dryrunLabel">Syntax vor dem Schreiben prüfen</span>
+          <span data-i18n="write.dryrunLabel">Vorher Dry-Run ausführen</span>
         </label>
       </div>
       <pre id="write-dryrun-result" class="dryrun-output hidden"></pre>
       <div class="confirm-buttons" style="margin-top:14px">
         <button id="write-confirm-btn" class="btn-primary" style="background:var(--red);color:var(--crust)"
                 data-i18n="write.btn">
-          Schreiben
+          Sicherungspunkt anlegen
         </button>
         <button id="write-cancel-btn" data-i18n="write.cancel">Abbrechen</button>
       </div>

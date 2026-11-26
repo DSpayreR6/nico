@@ -732,7 +732,8 @@ function initSettingsPanel() {
 
 async function _changeConfigPathFlow() {
   const flow = openFlowDialog(t('admin.settingsChangeTitle'));
-  if (!(await _configPathSteps(flow, document.getElementById('settings-current-path')?.value || ''))) {
+  const current = document.getElementById('settings-current-path')?.value || '';
+  if (!(await _configPathSteps(flow, current, { unchangedFrom: current }))) {
     flow.close();
   }
 }
@@ -741,8 +742,13 @@ async function _changeConfigPathFlow() {
  *  save. True when saved (window closed, page reloads), false on Cancel –
  *  the caller decides what follows (the window after a move comes back to
  *  its three choices). */
-async function _configPathSteps(flow, path) {
+async function _configPathSteps(flow, path, { unchangedFrom = null } = {}) {
   let error = '';
+  // "Apply" with the path as it was set the config up again as if it were
+  // new - settings written, page reloaded, and afterwards the /etc/nixos
+  // button showed up wrongly (Martin, VM test 2026-11-26). Unchanged now
+  // just closes. A trailing slash is no change.
+  const norm = p => String(p || '').trim().replace(/\/+$/, '');
   const post = body => csrfFetch('/api/setup', {
     method:  'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -763,6 +769,7 @@ async function _configPathSteps(flow, path) {
     if (go !== 'ok') return false;
     path = input.value.trim();
     if (!path) { error = t('setup.errNoDir'); continue; }
+    if (unchangedFrom !== null && norm(path) === norm(unchangedFrom)) return false;
 
     let data;
     try {

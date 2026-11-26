@@ -838,3 +838,32 @@ document.addEventListener('DOMContentLoaded', async () => {
   }, true);
   window.addEventListener('scroll', () => { if (pop) hide(); }, true);
 })();
+
+// ── Window order: the one opened last lies on top ───────────────────────────
+// Every .overlay had the same z-index, so which one covered the other
+// depended on its place in the HTML: asking about a file changed outside
+// NiCo while the checkpoint window was open put the question *behind* it
+// (Martin, VM test 2026-11-26). Fixed for every window at once: an overlay
+// that opens goes above all open ones. Counted from the open ones, not up
+// forever - toasts (200) and menus stay above a normal stack of windows.
+(() => {
+  const BASE = 130;
+  const visible = el => el.classList?.contains('overlay') && !el.classList.contains('hidden');
+  const raise = el => {
+    let top = BASE - 1;
+    document.querySelectorAll('.overlay:not(.hidden)').forEach(o => {
+      if (o !== el) top = Math.max(top, parseInt(getComputedStyle(o).zIndex, 10) || 0);
+    });
+    el.style.zIndex = String(Math.max(BASE, top + 1));
+  };
+  new MutationObserver(muts => {
+    for (const m of muts) {
+      if (m.type === 'attributes') {
+        if (visible(m.target) && (m.oldValue || '').split(/\s+/).includes('hidden')) raise(m.target);
+      } else {
+        m.addedNodes.forEach(n => { if (n.nodeType === 1 && visible(n)) raise(n); });
+      }
+    }
+  }).observe(document.body, { subtree: true, childList: true, attributes: true,
+                              attributeFilter: ['class'], attributeOldValue: true });
+})();
