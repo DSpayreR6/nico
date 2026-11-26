@@ -862,11 +862,24 @@ def _terminal_answer(answer: Path, text: str) -> str:
             pass
 
 
+def _say(msg: str) -> None:
+    """A diagnostic line on stderr that can never fail its caller (Codex
+    re-check: a failed warning ended the watch and released the config)."""
+    import sys as _sys
+    try:
+        print(msg, file=_sys.stderr)
+    except Exception:
+        pass
+
+
 def _terminal_watch(run_id: str, d: Path) -> None:
     """Hold the reservation the route took until the script is done with
-    the config (see the comment above), then give it back."""
+    the config (see the comment above), then give it back.
+
+    After "go" the release depends on one thing only: the confirmed end of
+    the command. Nothing beside it - writing the answer, tidying, a warning
+    - may end the watch early; every failure there is tried again."""
     import fcntl
-    import sys as _sys
     ready, answer, lock = d / f"{run_id}.ready", d / f"{run_id}.answer", d / "terminal.lock"
     fd = None
     try:
@@ -887,8 +900,7 @@ def _terminal_watch(run_id: str, d: Path) -> None:
             try:
                 fd = os.open(lock, os.O_RDWR | os.O_CREAT, 0o600)
             except OSError as exc:
-                print(f"NiCo: terminal rebuild not started, cannot watch {lock}: {exc}",
-                      file=_sys.stderr)
+                _say(f"NiCo: terminal rebuild not started, cannot watch {lock}: {exc}")
                 reported = False
         try:
             got = _terminal_answer(answer, ("go " if reported else "dead ") + run_id)
@@ -899,7 +911,7 @@ def _terminal_watch(run_id: str, d: Path) -> None:
             # is there, the script may be building - watch it.
             try:
                 got = answer.read_text(encoding="utf-8").strip()
-            except OSError:
+            except Exception:
                 got = ""
         go = got == "go " + run_id and fd is not None
         if go:
@@ -912,10 +924,9 @@ def _terminal_watch(run_id: str, d: Path) -> None:
                     fcntl.flock(fd, fcntl.LOCK_EX)      # returns when the script let go
                     fcntl.flock(fd, fcntl.LOCK_UN)
                     break
-                except OSError as exc:
+                except Exception as exc:
                     if not warned:
-                        print(f"NiCo: watching the terminal rebuild failed, trying again: {exc}",
-                              file=_sys.stderr)
+                        _say(f"NiCo: watching the terminal rebuild failed, trying again: {exc}")
                         warned = True
                     time.sleep(1.0)
     except Exception:

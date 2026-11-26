@@ -119,10 +119,12 @@ def group_alive(pgs=None):
         if not d.name.isdigit():
             continue
         try:
-            rest = (d / "stat").read_text().rsplit(")", 1)[1].split()
-        except (OSError, IndexError):
+            # Bytes: a process name need not be valid UTF-8 (Codex).
+            rest = (d / "stat").read_bytes().rsplit(b")", 1)[1].split()
+            state, pgrp = rest[0], int(rest[2])
+        except (OSError, IndexError, ValueError):
             continue
-        state, pgrp = rest[0], int(rest[2])
+        state = state.decode("ascii", "replace")
         if pgrp in want and state not in ("Z", "X"):
             return True
     return False
@@ -272,6 +274,25 @@ s, r = post("/api/dry-run")
 check("… Dry-Run: 409", s == 409, (s, r))
 check("Nach dem Ende frei", wait(is_free, 10))
 Path.unlink = real_unlink
+
+# ── 10. Beobachtung und Warnung scheitern ───────────────────────────────────
+print("10. Erster flock nach 'go' und die Warnung darüber scheitern")
+fails_left = {"n": 1}
+fcntl.flock = flaky_flock
+def broken_print(*a, **kw):
+    raise OSError("stderr geschlossen (simuliert)")
+import builtins  # noqa: E402
+real_print = builtins.print
+builtins.print = lambda *a, **kw: (broken_print() if kw.get("file") is sys.stderr
+                                   else real_print(*a, **kw))
+mark = run / "m10"
+s, r = start(3.0, mark)
+check("Gestartet, Befehl läuft", s == 200 and wait(mark.exists, 10), (s, r))
+time.sleep(1.5)
+check("Trotz gescheiterter Warnung belegt", fails_left["n"] == 0 and not is_free(), fails_left)
+check("Nach bestätigtem Ende frei", wait(is_free, 10))
+builtins.print = real_print
+fcntl.flock = real_flock
 
 kill_groups()
 print()
