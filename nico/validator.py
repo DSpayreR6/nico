@@ -53,6 +53,10 @@ class Rule:
 
 
 from .hostread import HARDWARE as _RH, VALIDATOR as _RV  # noqa: E402
+# The config's own .nix files - no links out of it, no hidden directories
+# (configfiles.py, revision 2026-11-25 S1/S2: the rules used to read the file
+# at the other end of such a link, which is reading outside the config).
+from . import configfiles  # noqa: E402
 
 # ── Rule catalogue ─────────────────────────────────────────────────────────────
 
@@ -485,7 +489,7 @@ def _rule_user_in_config(nixos_dir: str, config: dict, is_flake: bool,
 
     # Scan ALL .nix files – catches users defined in host configs too
     known: set[str] = set()
-    for nix_file in sorted(Path(nixos_dir).rglob("*.nix")):
+    for nix_file in configfiles.nix_files(nixos_dir):
         if ".git" in nix_file.parts:
             continue
         try:
@@ -970,7 +974,7 @@ def _scoped_nix_files(nixos_dir: str, host: str | None = None,
     """
     base = Path(nixos_dir)
     skip_dirs = _other_host_dirs(nixos_dir, host, strict)
-    for nix_file in sorted(base.rglob("*.nix")):
+    for nix_file in configfiles.nix_files(base):
         if ".git" in nix_file.parts:
             continue
         if any(d in nix_file.parents for d in skip_dirs):
@@ -1168,7 +1172,7 @@ def _mutable_users_off(nixos_dir: str) -> bool:
     rebuild drops an existing password went wrong both ways.
     """
     from . import nix_parser as _np
-    for nix_file in sorted(Path(nixos_dir).rglob("*.nix")):
+    for nix_file in configfiles.nix_files(nixos_dir):
         if ".git" in nix_file.parts:
             continue
         try:
@@ -1365,7 +1369,7 @@ def _hardware_declared_elsewhere(nixos_dir: str) -> bool:
     from .importer import _strip_nix_comments
 
     base = Path(nixos_dir)
-    for nix_file in sorted(base.rglob("*.nix")):
+    for nix_file in configfiles.nix_files(base):
         if ".git" in nix_file.parts:
             continue
         try:
@@ -1534,7 +1538,7 @@ def _rule_duplicate_attrs(nixos_dir: str, config: dict, is_flake: bool,
     findings = []
     base = Path(nixos_dir)
     targets = [
-        nix_file for nix_file in sorted(base.rglob("*.nix"))
+        nix_file for nix_file in configfiles.nix_files(base)
         if ".git" not in nix_file.parts
     ]
 
@@ -1682,7 +1686,7 @@ def breaks_parsing(before: str, after: str) -> str | None:
 
 def _config_nix_files(nixos_dir: str) -> list[Path]:
     """Every .nix file of the config directory, .git left out."""
-    return [f for f in sorted(Path(nixos_dir).rglob("*.nix"))
+    return [f for f in configfiles.nix_files(nixos_dir)
             if ".git" not in f.parts]
 
 
@@ -1756,7 +1760,7 @@ def _rule_imports_exist(nixos_dir: str, config: dict, is_flake: bool,
     findings = []
     base = Path(nixos_dir)
 
-    for nix_file in sorted(base.rglob("*.nix")):
+    for nix_file in configfiles.nix_files(base):
         # Skip the .git directory
         if ".git" in nix_file.parts:
             continue
@@ -2621,7 +2625,7 @@ def _rule_hm_duplicate_args(nixos_dir: str, config: dict, is_flake: bool,
         return []
 
     findings: list[Finding] = []
-    for nix_file in sorted(hm_dir.rglob("*.nix")):
+    for nix_file in configfiles.nix_files(base, hm_dir):
         if ".git" in nix_file.parts:
             continue
         try:
@@ -2670,7 +2674,7 @@ def _rule_brix_nested(nixos_dir: str, config: dict, is_flake: bool,
 
     base = Path(nixos_dir)
     findings: list[Finding] = []
-    for nix_file in sorted(base.rglob("*.nix")):
+    for nix_file in configfiles.nix_files(base):
         if ".git" in nix_file.parts:
             continue
         try:
@@ -2720,7 +2724,7 @@ def _rule_pkg_inactive_brick(nixos_dir: str, config: dict, is_flake: bool,
 
     base = Path(nixos_dir)
     findings: list[Finding] = []
-    for nix_file in sorted(base.rglob("*.nix")):
+    for nix_file in configfiles.nix_files(base):
         if ".git" in nix_file.parts:
             continue
         try:
@@ -2861,7 +2865,7 @@ def _rule_hm_user_defined(nixos_dir: str, config: dict, is_flake: bool,
         return []
 
     pattern = re.compile(r'home-manager\s*\.\s*users\s*\.\s*"?[\w-]+"?')
-    for nix_file in sorted(Path(nixos_dir).rglob("*.nix")):
+    for nix_file in configfiles.nix_files(nixos_dir):
         if ".git" in nix_file.parts:
             continue
         try:
@@ -2916,7 +2920,7 @@ def _rule_hm_orphan_root(nixos_dir: str, config: dict, is_flake: bool,
     if not root_home.exists():
         return []
 
-    for nix_file in sorted(Path(nixos_dir).rglob("*.nix")):
+    for nix_file in configfiles.nix_files(nixos_dir):
         if ".git" in nix_file.parts:
             continue
         if nix_file == root_home:
@@ -2951,7 +2955,7 @@ def _rule_hm_allowunfree(nixos_dir: str, config: dict, is_flake: bool,
 
     hm_files: list[Path] = []
     if hm_subdir.is_dir():
-        hm_files = [f for f in hm_subdir.rglob("*.nix") if ".git" not in f.parts]
+        hm_files = [f for f in configfiles.nix_files(base, hm_subdir) if ".git" not in f.parts]
     if not hm_files:
         return []
 
@@ -3173,7 +3177,7 @@ def _rule_flake_untracked_reference(nixos_dir: str, config: dict, is_flake: bool
     # {referenced file: [referencing .nix files]}. Untracked .nix targets are
     # skipped: NiCo stages new .nix files automatically before every rebuild.
     missing: dict[str, list[str]] = {}
-    for nix_file in sorted(root.rglob("*.nix")):
+    for nix_file in configfiles.nix_files(root):
         if ".git" in nix_file.parts:
             continue
         try:
@@ -3294,7 +3298,7 @@ def host_fingerprint(nixos_dir: str, host: str | None) -> str:
     # looked current (revision 2026-11-18, finding 21). Hidden paths (.git)
     # are no part of a build.
     files: list[Path] = []
-    for p in base.rglob("*.nix"):
+    for p in configfiles.nix_files(base):
         rel = p.relative_to(base).parts
         if not p.is_file() or any(part.startswith(".") for part in rel):
             continue
@@ -3356,7 +3360,7 @@ def _btrfs_declarations(nixos_dir: str, host: str | None) -> list[str]:
     cfg_settings = _cm.load_config_settings(nixos_dir)
     hosts_dir = (cfg_settings.get("hosts_dir") or "hosts").strip() or "hosts"
     hits: list[str] = []
-    for nix_file in sorted(base.rglob("*.nix")):
+    for nix_file in configfiles.nix_files(base):
         if ".git" in nix_file.parts:
             continue
         rel = nix_file.relative_to(base)

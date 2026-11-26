@@ -263,15 +263,19 @@ def create_app() -> Flask:
         from .brix import FILE_FORMAT, SUPPORTED_FORMATS
         from .core import get_file_format
 
+        from . import configfiles
         found = []
         if nixos_dir and Path(nixos_dir).is_dir():
-            for path in sorted(Path(nixos_dir).rglob("*.nix")):
+            # The config's own files only: a symlink out of it was read here,
+            # and a file elsewhere could lock writing for this config
+            # (revision 2026-11-25, S2).
+            for _rel, path in configfiles.scan(nixos_dir).files:
                 try:
                     fmt = get_file_format(path.read_text(encoding="utf-8"))
                 except Exception:
                     continue
                 if fmt not in SUPPORTED_FORMATS and fmt > FILE_FORMAT:
-                    found.append({"file": str(path.relative_to(nixos_dir)), "format": fmt})
+                    found.append({"file": _rel, "format": fmt})
         _format_state.update(at=time.monotonic(), too_new=found)
         return found
 
@@ -319,16 +323,18 @@ def create_app() -> Flask:
         from .brix import FILE_FORMAT, SUPPORTED_FORMATS
         from .core import get_file_format
 
+        from . import configfiles
         nixos_dir = _nixos_dir()
         newest, files = FILE_FORMAT, []
         if nixos_dir and Path(nixos_dir).is_dir():
-            for path in sorted(Path(nixos_dir).rglob("*.nix")):
+            # The config's own files (revision 2026-11-25, S2).
+            for rel, path in configfiles.scan(nixos_dir).files:
                 try:
                     fmt = get_file_format(path.read_text(encoding="utf-8"))
                 except Exception:
                     continue
                 if fmt not in SUPPORTED_FORMATS and fmt > FILE_FORMAT:
-                    files.append({"file": str(path.relative_to(nixos_dir)), "format": fmt})
+                    files.append({"file": rel, "format": fmt})
                     newest = max(newest, fmt)
         return jsonify({
             "known":   FILE_FORMAT,

@@ -611,6 +611,21 @@ def register(app, ctx):
             return jsonify({"error": "ERR_WRITE"}), 500
         return jsonify(result)
 
+    @app.route("/api/config/left-out")
+    def config_left_out():
+        """What an action will not cover (configfiles.py, Martin 2026-11-26):
+        links out of the config, hard links, paths in the Nix code outside
+        it; with move=1 also what points nowhere after a move. Shown before
+        every action the user starts. all=1: every file (ZIP, export, move),
+        otherwise .nix files only. Reads nothing outside the config."""
+        nixos_dir, err = _require_setup()
+        if err:
+            return err
+        from .. import configfiles
+        found = configfiles.scan(nixos_dir, nix_only=request.args.get("all") != "1",
+                                 move=request.args.get("move") == "1", refs=True)
+        return jsonify({"left": found.left_json()})
+
     # ------------------------------------------------------------------ export
 
     @app.route("/api/export")
@@ -627,21 +642,15 @@ def register(app, ctx):
             return err
 
         import json as _json
-        root = Path(nixos_dir)
+        from .. import configfiles
         buf = io.BytesIO()
-        skipped: list[str] = []
+        # A link out of the config directory is not part of the config;
+        # following it packed foreign content (finding 6). The one walk of
+        # the config since 2026-11-26 (configfiles.py).
+        found = configfiles.scan(nixos_dir, nix_only=False)
+        skipped = [x.file for x in found.left if x.kind == "link_out"]
         with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-            for f in sorted(root.rglob("*")):
-                if not f.is_file():
-                    continue
-                rel = f.relative_to(root)
-                if any(part.startswith('.') for part in rel.parts):
-                    continue
-                # A link out of the config directory is not part of the
-                # config; following it packed foreign content (finding 6).
-                if importer.link_leaves_dir(f, root):
-                    skipped.append(rel.as_posix())
-                    continue
+            for rel, f in found.files:
                 zf.write(f, rel)
         buf.seek(0)
 

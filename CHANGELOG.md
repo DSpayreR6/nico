@@ -2,7 +2,13 @@
 
 ## Unreleased
 
+### New Features
+
+- Before export, detach, copying from /etc/nixos and the backup of an import, NiCo lists the files the action does not cover: symlinks leading out of the config, hard links, and paths in the Nix code pointing outside it (e.g. `/etc/nixos/hardware-configuration.nix`)
+
 ### Bug Fixes
+
+- Detach and categorize no longer write into files outside the config that are linked in by symlink; format check and Validator no longer read them
 
 - Text mode no longer overwrites a file changed outside NiCo (another editor, Syncthing, git pull) while it was open: saving asks first – *Cancel*, *Show differences* or *Overwrite* (with a checkpoint of the outside state)
 - Time machine: restoring stops before touching any file when the checkpoint taken first had to leave out a file above the size limit – its current state would otherwise have been lost

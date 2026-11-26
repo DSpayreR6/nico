@@ -216,6 +216,10 @@ async function doSetupSymlink(createSymlink) {
       return;
     }
 
+    // Copying replaces the .nix files of the config after a backup ZIP,
+    // which leaves links out of the config out (configfiles.py).
+    if (!(await confirmLeftOut(null, { all: true }))) return;
+
     const nonce = await acquireSudoNonce();
     if (nonce === null) return;  // abgebrochen
 
@@ -377,6 +381,8 @@ async function applyImport(confirmed = false) {
       document.getElementById('import-main-buttons').classList.add('hidden');
       document.getElementById('import-backup-confirm-text').textContent =
         t('import.backupConfirm', data.zip_name);
+      // What the backup leaves out (configfiles.py, Martin 2026-11-26).
+      await showLeftOutAfter(document.getElementById('import-backup-confirm-text'), { all: true });
       document.getElementById('import-backup-confirm').classList.remove('hidden');
       return;
     }
@@ -512,6 +518,7 @@ function initImportManual() {
       resultEl.classList.add('hidden');
       document.getElementById('import-manual-backup-text').textContent =
         t('import.backupConfirm', data.zip_name);
+      await showLeftOutAfter(document.getElementById('import-manual-backup-text'), { all: true });
       document.getElementById('import-manual-backup-confirm').classList.remove('hidden');
       return;
     }

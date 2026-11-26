@@ -1973,30 +1973,18 @@ def backup_to_zip(nixos_dir: str | Path) -> str:
         zip_name = f"nixos-config-{ts}-{n}.zip"
         n += 1
     zip_path = root / zip_name
-    skipped: list[str] = []
+    from . import configfiles
+    # The one walk of the config (configfiles.py, revision 2026-11-25):
+    # links out of the directory are left out and named in the archive.
+    found = configfiles.scan(root, nix_only=False)
+    skipped = [x.file for x in found.left if x.kind == "link_out"]
     with _zipfile.ZipFile(zip_path, "x", _zipfile.ZIP_DEFLATED) as zf:
-        for f in sorted(root.rglob("*")):
-            if not f.is_file():
-                continue
-            rel = f.relative_to(root)
+        for rel, f in found.files:
             if f.suffix.lower() == ".zip":
                 continue
-            if any(part.startswith('.') for part in rel.parts):
-                continue
-            if str(rel) == "nico.json":
-                continue  # add separately below
-            if link_leaves_dir(f, root):
-                skipped.append(rel.as_posix())
-                continue
+            # nico.json goes in as a copy for reference (not applied on
+            # import) - under its name like every other file.
             zf.write(f, rel)
-        # nico.json als Kopie beifügen (Referenz, wird beim Import nicht angewendet)
-        nico_json = root / "nico.json"
-        if nico_json.exists():
-            # Same link rule as above (Codex re-check 2026-11-20, finding 6).
-            if link_leaves_dir(nico_json, root):
-                skipped.append("nico.json")
-            else:
-                zf.write(nico_json, "nico.json")
         # The backup runs inside other actions, which have no place for a
         # message; the archive itself says what is missing.
         if skipped:
@@ -2020,14 +2008,12 @@ def scrub_nico_comments_in_tree(nixos_dir: str | Path) -> list[str]:
     """Remove NiCo comment/marker lines from all visible .nix files recursively.
     Returns relative file paths that changed.
     """
-    root = Path(nixos_dir)
+    from . import configfiles
     changed: list[str] = []
-    for f in sorted(root.rglob("*.nix")):
-        if not f.is_file():
-            continue
-        rel = f.relative_to(root)
-        if any(part.startswith('.') for part in rel.parts):
-            continue
+    # The config's own files: a symlink out of it led this write to the
+    # file at the other end, which the backup before had left out
+    # (revision 2026-11-25, S1).
+    for rel, f in configfiles.scan(nixos_dir).files:
         original = f.read_text(encoding="utf-8")
         cleaned = strip_nico_comment_lines(original)
         if cleaned == original:

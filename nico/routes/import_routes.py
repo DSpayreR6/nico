@@ -237,13 +237,12 @@ def register(app, ctx):
         done: list[dict] = []
         errors: list[dict] = []
 
-        for nix_file in sorted(root.rglob("*.nix")):
-            rel = nix_file.relative_to(root)
-            # Skip hidden directories (e.g. .git)
-            if any(part.startswith('.') for part in rel.parts[:-1]):
-                continue
-            if nix_file.suffix != ".nix":
-                continue
+        from .. import configfiles
+        # The config's own files (configfiles.py): a symlink out of it got
+        # its type stamp written into the file at the other end (revision
+        # 2026-11-25, S1). Hidden directories (.git) are not walked.
+        for rel_s, nix_file in configfiles.scan(root).files:
+            rel = Path(rel_s)
 
             # Pfad-basierte Klassifizierung: hm_dir/*.nix → 'hm' (höchste Priorität)
             rel_parts = rel.parts

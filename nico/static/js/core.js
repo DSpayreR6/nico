@@ -399,6 +399,69 @@ function openFlowDialog(title) {
   };
 }
 
+// ── What an action does not cover (configfiles.py) ──────────────────────────
+// Martin, 2026-11-26: a file linked in from outside the config, a hard link,
+// a path in the Nix code pointing elsewhere - an action leaves them out,
+// and saying nothing about it is what NiCo avoids everywhere else. So every
+// action the user starts shows the list first, every time ("nicht jeder ist
+// ein Computer"), and the user can fetch those files by hand.
+
+const _LEFT_OUT_KINDS = ['link_out', 'link_breaks', 'nix_path', 'path_breaks', 'hardlink'];
+
+/** The list from the server. all: every file (ZIP, export, move), else
+ *  .nix only; move: also what points nowhere after moving. */
+async function fetchLeftOut({ all = false, move = false } = {}) {
+  try {
+    const d = await fetch(`/api/config/left-out?all=${all ? 1 : 0}&move=${move ? 1 : 0}`)
+      .then(r => r.json());
+    return Array.isArray(d.left) ? d.left : [];
+  } catch {
+    return [];
+  }
+}
+
+/** The list as a node: one box per kind, like the other file lists. */
+function leftOutNode(left) {
+  const node = document.createElement('div');
+  node.className = 'left-out';
+  let html = `<p>${escHtml(t('leftOut.intro'))}</p>`;
+  for (const kind of _LEFT_OUT_KINDS) {
+    const rows = left.filter(x => x.kind === kind);
+    if (!rows.length) continue;
+    html += `<p style="margin-top:10px">${escHtml(t(`leftOut.kind.${kind}`))}</p>
+      <div class="gsi"><div class="gsi-block"><div class="gsi-block-body">
+      ${rows.map(x => `<div style="margin:3px 0;overflow-wrap:anywhere">${escHtml(x.file)}${
+        x.line ? ` <span style="color:var(--fg-muted)">· ${escHtml(t('leftOut.line', x.line))}</span>` : ''}${
+        x.target ? ` <span style="color:var(--fg-muted)">→ ${escHtml(x.target)}</span>` : ''}</div>`).join('')}
+      </div></div></div>`;
+  }
+  node.innerHTML = html;
+  return node;
+}
+
+/** Show the list before an action; resolves true to go on. Nothing left
+ *  out: true at once, no window. `flow`: a step of that window, otherwise
+ *  a window of its own. */
+async function confirmLeftOut(flow = null, opts = {}) {
+  const left = await fetchLeftOut(opts);
+  if (!left.length) return true;
+  const own = !flow;
+  flow ??= openFlowDialog(t('leftOut.title'));
+  const v = await flow.step({ node: leftOutNode(left), buttons: [
+    { label: t('dialog.cancel'), value: 'cancel' },
+    { label: t('leftOut.proceed'), value: 'ok', primary: true }] });
+  if (own) flow.close();
+  return v === 'ok';
+}
+
+/** For the fixed setup windows: put the list below `el` (replacing an
+ *  earlier one). */
+async function showLeftOutAfter(el, opts = {}) {
+  el?.parentNode?.querySelectorAll(':scope > .left-out').forEach(n => n.remove());
+  const left = await fetchLeftOut(opts);
+  if (left.length && el) el.after(leftOutNode(left));
+}
+
 /** A message with one OK button. */
 function nicoAlert(text, { title = '' } = {}) {
   return _nicoDialog({ title, text, cancel: false });

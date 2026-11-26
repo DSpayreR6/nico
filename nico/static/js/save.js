@@ -564,7 +564,9 @@ async function writeFiles() {
 async function exportZip() {
   // Fetched rather than navigated to: links out of the config directory are
   // left out of the archive (revision 2026-11-18, finding 6), and the
-  // response header is the only place that says which.
+  // response header is the only place that says which. Before that, the
+  // list of what will be missing (configfiles.py, Martin 2026-11-26).
+  if (!(await confirmLeftOut(null, { all: true }))) return;
   const res = await fetch('/api/export').catch(() => null);
   if (!res || !res.ok) { showToast(t('toast.error'), 'error'); return; }
   let skipped = [];
@@ -644,7 +646,8 @@ async function _zipImportFlow(file) {
       return _flowFailed(flow, t('toast.error'));
     }
     if (out.needs_backup_confirmation && !confirmed) {
-      const ok = await flow.step({ text: t('import.backupConfirm', out.zip_name), buttons: [
+      const ok = await flow.step({ text: t('import.backupConfirm', out.zip_name),
+        node: await _leftOutOrNull(), buttons: [
         cancel, { label: t('import.backupYes'), value: 'ok', primary: true }] });
       if (ok !== 'ok') return flow.close();
       confirmed = true;
@@ -660,6 +663,13 @@ async function _zipImportFlow(file) {
     showToast(t('import.success'), 'success');
     return;
   }
+}
+
+/** The backup before an import leaves links out of the config out: its
+ *  question carries the list (configfiles.py), or nothing. */
+async function _leftOutOrNull() {
+  const left = await fetchLeftOut({ all: true });
+  return left.length ? leftOutNode(left) : null;
 }
 
 /** Last step of a failed process: the message and Close. */
@@ -720,6 +730,8 @@ async function _settingsImportFlow(file) {
 
 async function detachConfig() {
   if (!(await nicoConfirm(t('admin.detachConfirm')))) return;
+  // The backup ZIP and the clean-up leave links out of the config alone.
+  if (!(await confirmLeftOut(null, { all: true }))) return;
 
   try {
     await _autoSave();
@@ -807,7 +819,8 @@ async function _doAdminImport(configPath, flow) {
       return t('toast.error');
     }
     if (data.needs_backup_confirmation && !confirmed) {
-      const ok = await flow.step({ text: t('import.backupConfirm', data.zip_name), buttons: [
+      const ok = await flow.step({ text: t('import.backupConfirm', data.zip_name),
+        node: await _leftOutOrNull(), buttons: [
         { label: t('import.backupCancel'), value: 'cancel' },
         { label: t('import.backupYes'), value: 'ok', primary: true }] });
       if (ok !== 'ok') { flow.close(); return null; }
