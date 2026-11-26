@@ -28,6 +28,9 @@
 - *Update NiCo* updates the installation that is running – not a different profile entry (started from a checkout, or two entries for main and dev)
 - Switching to a system state: when entering it worked but updating the boot menu failed, the monitor says so instead of showing the state as set for the next start
 - Removing oversized files no longer rewrites already uploaded checkpoints when the branch was pushed by hand without a linked remote branch; if the boundary cannot be told, it stops
+- Text mode, same file open in two tabs: after one tab saved, the other no longer overwrites it silently – saving asks first; two saves at the same moment can no longer both get through
+- A ZIP import keeps the permissions of the files it replaces – a script kept its execute bit, a file only the owner could read stayed that way
+- ZIP import of a NiCo export in text mode: the export's own setting no longer switches back to panel mode; the backups before the import hold the previous choice
 
 ## 0.24.0 (2026-11-25)
 

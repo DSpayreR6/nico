@@ -116,6 +116,35 @@ def changed_outside(path: str | Path, base: str | None = None) -> bool:
     return digest(now) != base
 
 
+def differs_from_base(path: str | Path, base: str) -> bool:
+    """True if `path` on disk is not exactly the state `base` was handed
+    out for - NiCo's own last write included.
+
+    For the text editor (revision 2026-11-25, F3; Codex re-check
+    2026-11-26): it renews its base after every save of its own, so any
+    other state on disk is one it has not seen. changed_outside() accepts
+    NiCo's last write, and with that tab B overwrote what tab A had saved.
+    A missing or unreadable file counts as changed - saving would recreate it.
+    """
+    try:
+        now = Path(path).read_text(encoding="utf-8")
+    except OSError:
+        return True
+    return digest(now) != base
+
+
+# One lock per file, held by atomic.write_bytes for every write and by a
+# caller across compare-and-write (path_lock). Reentrant, so a caller that
+# holds it can still write through atomic.write_bytes in the same thread.
+_path_locks: dict[str, threading.RLock] = {}
+
+
+def path_lock(path: str | Path) -> threading.RLock:
+    """The lock of `path` (resolved, so a link and its target share it)."""
+    with _lock:
+        return _path_locks.setdefault(_key(path), threading.RLock())
+
+
 def diff(path: str | Path, label: str, base: str | None = None) -> dict:
     """The state the form was filled from against disk, in the shape
     /api/git/diff returns. Falls back to NiCo's last write.

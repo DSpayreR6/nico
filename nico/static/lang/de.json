@@ -1159,9 +1159,9 @@
   "hm.promptUsername": "Benutzername (z. B. martin):",
   "hm.noFiles":               "Keine HM-Dateien vorhanden.",
 
-  "outside.title": "Datei außerhalb von NiCo geändert",
+  "outside.title": "Datei inzwischen geändert",
   "outside.info": "Die Datei wurde geändert, seit NiCo sie geladen hat – etwa durch Syncthing, git pull oder einen Editor. „Neu laden“ übernimmt den Stand der Datei; deine ungespeicherten Änderungen im Panel entfallen. „Überschreiben“ legt vom Stand der Datei zuerst einen Sicherungspunkt (Commit) an, sofern die Versionierung eingerichtet ist, und schreibt dann deinen Stand aus dem Panel.",
-  "outside.infoText": "Die Datei wurde geändert, seit NiCo sie geöffnet hat – etwa durch Syncthing, git pull oder einen Editor. „Abbrechen“ lässt die Datei, wie sie ist; dein Text bleibt im Textmodus stehen. „Überschreiben“ legt vom Stand der Datei zuerst einen Sicherungspunkt (Commit) an, sofern die Versionierung eingerichtet ist, und schreibt dann deinen Text.",
+  "outside.infoText": "Die Datei wurde geändert, seit NiCo sie geöffnet hat – etwa durch Syncthing, git pull, einen Editor oder einen zweiten NiCo-Tab. „Abbrechen“ lässt die Datei, wie sie ist; dein Text bleibt im Textmodus stehen. „Überschreiben“ legt vom Stand der Datei zuerst einen Sicherungspunkt (Commit) an, sofern die Versionierung eingerichtet ist, und schreibt dann deinen Text.",
   "outside.reloadBtn": "Neu laden",
   "outside.diffBtn": "Unterschiede ansehen",
   "outside.overwriteBtn": "Überschreiben",

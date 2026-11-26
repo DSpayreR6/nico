@@ -4,6 +4,7 @@ Split from server.py. Route bodies are unchanged; shared request helpers
 from create_app() are passed in via the ctx dict.
 """
 
+import json
 from pathlib import Path
 
 from flask import jsonify, request
@@ -200,14 +201,30 @@ def register(app, ctx):
                 "zip_name": f"nixos-config-{ts}.zip",
             })
 
-        ok, prev_mode = _store_edit_mode(nixos_dir, edit_mode)
-        if not ok:
-            return jsonify(_EDIT_MODE_FAILED[0]), _EDIT_MODE_FAILED[1]
+        # A NiCo export brings its own config.json, and its panel_default
+        # replaced the mode the user had just chosen - while the answer
+        # reported a text import (Codex re-check 2026-11-26). The choice is
+        # written into the incoming file instead, so files and setting are
+        # one step that replace_nix_tree puts back as a whole.
+        if edit_mode in ("r", "p") and "config.json" in incoming:
+            try:
+                arch_settings = json.loads(incoming["config.json"].decode("utf-8"))
+                if not isinstance(arch_settings, dict):
+                    raise ValueError("not an object")
+            except (ValueError, UnicodeDecodeError) as exc:
+                return jsonify({"error": "ERR_IMPORT_READ",
+                                "detail": f"config.json: {exc}"}), 400
+            arch_settings["panel_default"] = edit_mode
+            incoming["config.json"] = (json.dumps(arch_settings, indent=2,
+                                                  ensure_ascii=False)).encode("utf-8")
+
+        # Backups first, before the first change: they hold the mode as it
+        # was (Codex re-check 2026-11-26 - the choice used to be stored
+        # before them).
         if confirmed:
             try:
                 importer.backup_to_zip(nixos_dir)
             except OSError as exc:
-                _undo_edit_mode(nixos_dir, prev_mode)
                 return jsonify({"error": "ERR_BACKUP_FAILED", "detail": str(exc)}), 500
 
         try:
@@ -215,6 +232,13 @@ def register(app, ctx):
         except Exception:
             pass
         _stash_hardware(nixos_dir)
+
+        if "config.json" in incoming:
+            prev_mode = None
+        else:
+            ok, prev_mode = _store_edit_mode(nixos_dir, edit_mode)
+            if not ok:
+                return jsonify(_EDIT_MODE_FAILED[0]), _EDIT_MODE_FAILED[1]
 
         try:
             files_copied = importer.replace_nix_tree(dst, incoming)

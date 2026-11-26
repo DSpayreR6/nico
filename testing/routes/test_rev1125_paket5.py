@@ -125,11 +125,11 @@ before = snapshot()
 os.chmod(ext / "aussen.nix", 0o000)     # the old code read it - now it must not
 real_write = atomic.write_bytes
 calls = {"n": 0}
-def write_fails_second(path, data):
+def write_fails_second(path, data, mode=None):
     calls["n"] += 1
     if calls["n"] == 2:
         raise OSError("Platte voll")
-    return real_write(path, data)
+    return real_write(path, data, mode=mode)
 atomic.write_bytes = write_fails_second
 try:
     importer.replace_nix_tree(cfg, {"configuration.nix": b"{ }\n", "modules/b.nix": b"{ }\n",
@@ -162,12 +162,17 @@ config_manager.save_config_settings = save_fails
 s, r = zip_post("/api/import/zip/apply", GOOD, confirmed="true", edit_mode="r")
 config_manager.save_config_settings = real_save
 check("Wahl nicht speicherbar: 500 ERR_EDIT_MODE_SAVE", s == 500 and r.get("error") == "ERR_EDIT_MODE_SAVE", (s, r))
-check("… nichts importiert", snapshot() == before)
+# Since the Codex re-check of 2026-11-26 the backups come first, before
+# the choice is stored - they must hold the mode as it was. So a backup
+# ZIP may be there; the config itself is untouched.
+def _no_backup(snap):
+    return {k: v for k, v in snap.items() if not k.startswith("nixos-config-")}
+check("… nichts importiert", _no_backup(snapshot()) == _no_backup(before))
 
-def nix_write_fails(p, d):
+def nix_write_fails(p, d, mode=None):
     if str(p).endswith(".nix"):           # config.json goes the same way
         raise OSError("Platte voll")
-    return real_write(p, d)
+    return real_write(p, d, mode=mode)
 atomic.write_bytes = nix_write_fails
 s, r = zip_post("/api/import/zip/apply", GOOD, confirmed="true", edit_mode="r")
 atomic.write_bytes = real_write

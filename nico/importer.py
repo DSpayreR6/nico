@@ -2726,7 +2726,13 @@ def replace_nix_tree(dst: str | Path, files: dict[str, bytes]) -> list[str]:
         for rel, data in files.items():
             dest = dst / rel
             dest.parent.mkdir(parents=True, exist_ok=True)
-            atomic.write_bytes(dest, data)
+            # A regular file the import replaces keeps its mode: it was
+            # deleted above, so the write would fall back to 0644 - a script
+            # lost its execute bit, a 0600 file became readable for others
+            # (Codex re-check 2026-11-26). Applied before the rename.
+            prev = old.get(rel)
+            atomic.write_bytes(dest, data,
+                               mode=prev[2] if prev and prev[0] == "file" else None)
             written.append(rel)
     except OSError as exc:
         restored = True

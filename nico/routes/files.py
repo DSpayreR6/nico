@@ -4,6 +4,7 @@ Split from server.py. Route bodies are unchanged; shared request helpers
 from create_app() are passed in via the ctx dict.
 """
 
+import contextlib
 import shutil
 from pathlib import Path
 
@@ -630,8 +631,6 @@ def register(app, ctx):
             return jsonify({"error": "ERR_NO_FILES"}), 400
 
         root = Path(nixos_dir).resolve()
-        written = []
-        bases: dict[str, str] = {}
 
         # Text mode, changed outside NiCo since the editor opened the file
         # (revision 2026-11-25, F3): the same question as for a form
@@ -641,6 +640,21 @@ def register(app, ctx):
         # the editor was filled; `overwrite` is the user's answer - the state
         # from outside goes into a checkpoint or ZIP first. Without a base
         # (an older client) nothing is compared, as before.
+        #
+        # Strict since the Codex re-check of 2026-11-26: any state other
+        # than the tab's base is a conflict, NiCo's own last write included
+        # - that was tab A's save, and tab B overwrote it. The lock of each
+        # file is held from the comparison to the end of the write, so two
+        # saves with the same base cannot both pass the comparison.
+        with contextlib.ExitStack() as held:
+            for key in sorted({str((root / (f.get("path") or "").strip()).resolve())
+                               for f in files if (f.get("path") or "").strip()}):
+                held.enter_context(outside.path_lock(key))
+            return _write_files_locked(nixos_dir, root, files, body)
+
+    def _write_files_locked(nixos_dir, root, files, body):
+        written = []
+        bases: dict[str, str] = {}
         conflicts = []
         for f in files:
             rel  = (f.get("path") or "").strip()
@@ -652,7 +666,7 @@ def register(app, ctx):
                 target.relative_to(root)
             except ValueError:
                 continue          # refused by the loop below
-            if outside.changed_outside(target, base):
+            if outside.differs_from_base(target, base):
                 conflicts.append(rel)
         if conflicts:
             if not body.get("overwrite"):

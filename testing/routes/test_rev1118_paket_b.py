@@ -80,11 +80,11 @@ print("\n1b. Schreibfehler beim zweiten Datei-Schreiben")
 reset_old()
 real_write = atomic.write_bytes
 calls = {"n": 0}
-def failing_write(path, data):
+def failing_write(path, data, mode=None):
     calls["n"] += 1
     if calls["n"] == 2:
         raise OSError(28, "No space left on device")
-    return real_write(path, data)
+    return real_write(path, data, mode=mode)
 atomic.write_bytes = failing_write
 try:
     s, r = post("/api/import/run", {"confirmed": True, "files": [
@@ -97,7 +97,7 @@ check("alter Stand wiederhergestellt, keine neue Datei", state() == OLD, sorted(
 
 print("\n1c. Wiederherstellung scheitert auch")
 reset_old()
-def always_fail(path, data):
+def always_fail(path, data, mode=None):
     raise OSError(28, "No space left on device")
 atomic.write_bytes = always_fail
 try:

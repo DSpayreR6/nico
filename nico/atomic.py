@@ -45,8 +45,15 @@ from . import outside
 _DEFAULT_MODE = 0o644
 
 
-def write_bytes(path: str | Path, data: bytes) -> None:
-    """Replace `path` with `data`, atomically."""
+def write_bytes(path: str | Path, data: bytes, mode: int | None = None) -> None:
+    """Replace `path` with `data`, atomically.
+
+    `mode`: the permissions for the new file. Default: those of the file
+    being replaced, or 0644 for a new one. Set on the temporary file before
+    the rename, so the file never shows up at its place with other rights -
+    for a caller that removed the old file first and still knows its mode
+    (importer.replace_nix_tree, Codex re-check 2026-11-26).
+    """
     target = Path(path)
 
     # A rename replaces the symlink itself, while write_text wrote *through* it.
@@ -56,10 +63,19 @@ def write_bytes(path: str | Path, data: bytes) -> None:
     if target.is_symlink():
         target = target.resolve()
 
-    try:
-        mode = target.stat().st_mode & 0o7777
-    except OSError:
-        mode = _DEFAULT_MODE
+    # Every NiCo write to this file waits for a caller that compares and
+    # then writes (outside.path_lock) - the comparison stays true until
+    # its own write.
+    with outside.path_lock(target):
+        _write_locked(target, data, mode)
+
+
+def _write_locked(target: Path, data: bytes, mode: int | None) -> None:
+    if mode is None:
+        try:
+            mode = target.stat().st_mode & 0o7777
+        except OSError:
+            mode = _DEFAULT_MODE
 
     tmp_name = None
     try:
