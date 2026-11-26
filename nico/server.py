@@ -13,7 +13,7 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, g, jsonify, render_template, request
 
 from . import config_manager, git_manager, routes, validator
 from .core import apply_import_result as _apply_import_result_core
@@ -287,21 +287,58 @@ def create_app() -> Flask:
     }
 
     @app.before_request
-    def _move_guard():
-        """Nothing is written while the config moves (decision Martin
-        2026-11-26): a save in a second tab or the autosave would land in
-        the old place in the middle of the copy, and the old place is
-        deleted afterwards. The verification would notice and stop the
-        move; refusing here keeps it from happening at all."""
-        if request.method not in ("POST", "PUT", "DELETE", "PATCH"):
-            return None
-        if not request.path.startswith("/api/") or request.path in ("/api/config/move",
-                                                                    "/api/shutdown"):
-            return None
+    def _write_guard():
+        """Every write to the config is counted from its start to its end,
+        and an action that needs the config alone waits for them
+        (writeguard.py, Paket C of the Codex re-check 2026-11-26). Until
+        then only the move refused writes, and only on arrival: a save
+        already past that check wrote into the old place after the copy was
+        verified, and the move deleted it.
+
+        Applied here to every request, so a new route is covered without
+        anyone remembering it; which route is what stands in writeguard.
+        A request without a valid token claims nothing - the route refuses
+        it anyway, and it must not hold the config meanwhile."""
+        from . import writeguard
         from .routes import rebuild as _rb
-        if _rb._holder == "move":
-            return jsonify({"success": False, "error": "ERR_BUSY_MOVE"}), 409
+        token_ok = secrets.compare_digest(request.headers.get("X-CSRF-Token", ""), _csrf_token)
+        rule = request.url_rule.rule if request.url_rule is not None else None
+        claim = writeguard.classify(rule, request.method, token_ok) if token_ok else None
+        if claim == "shared":
+            busy = writeguard.enter_shared()
+            if busy:
+                return jsonify({"success": False, "error": busy}), 409
+            g.write_claim = "shared"
+        elif claim == "exclusive":
+            kind = writeguard.EXCLUSIVE[rule]
+            # Move and restart take the job reservation in their route;
+            # the other actions are kept apart from config-reading jobs here.
+            if kind not in ("move", "restart"):
+                busy = _rb.reserve_config_action(kind)
+                if busy:
+                    return jsonify({"success": False, "error": busy}), 409
+                g.config_action = True
+            busy = writeguard.enter_exclusive(kind)
+            if busy:
+                if g.pop("config_action", None):
+                    _rb.release_config_action()
+                return jsonify({"success": False, "error": busy}), 409
+            g.write_claim = "exclusive"
         return None
+
+    @app.teardown_request
+    def _write_guard_end(_exc=None):
+        from . import writeguard
+        from .routes import rebuild as _rb
+        claim = g.pop("write_claim", None)
+        if claim == "shared":
+            writeguard.leave_shared()
+        elif claim == "exclusive" and not g.pop("write_keep", False):
+            # A successful restart keeps the config held: this process ends,
+            # nothing may write in between.
+            writeguard.leave_exclusive()
+        if g.pop("config_action", None):
+            _rb.release_config_action()
 
     @app.before_request
     def _format_guard():
@@ -583,6 +620,7 @@ def create_app() -> Flask:
             release()
             return jsonify({"error": "ERR_RESTART_FAILED"}), 500
         threading.Thread(target=lambda: (threading.Event().wait(0.3), os._exit(0)), daemon=True).start()
+        g.write_keep = True       # the config stays held until the exit (writeguard)
         return jsonify({"ok": True, "instance": _INSTANCE})
 
     return app

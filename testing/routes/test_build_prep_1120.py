@@ -12,7 +12,7 @@ B  Dieselbe Dateiauswahl für Monitor-Weg (stage_all), Terminal und Dry-Run:
 
 Lauf: nix-shell shell.nix --run "python testing/routes/test_build_prep_1120.py"
 """
-import json, os, re, shutil, subprocess, sys, tempfile
+import json, os, re, shutil, subprocess, sys, tempfile, time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -144,7 +144,18 @@ try:
 
     cfg = make_repo()
     c, H = client_for(cfg)
+    # Since 2026-11-26 the terminal rebuild holds the reservation until its
+    # script reports; the fake terminal here never runs it - a short start
+    # timeout lets it expire, then the next steps are free again.
+    from nico.routes import rebuild as _rb
+    _rb.TERMINAL_START_TIMEOUT = 0.3
+    def _free():
+        for _ in range(100):
+            if _rb.reserve("move") is None:
+                _rb.release(); return
+            time.sleep(0.05)
     r = c.post("/api/rebuild/open-terminal", headers=H, data=json.dumps({"hostname": "h1", "mode": "test"}))
+    _free()
     check("Terminal: gestartet", r.status_code == 200 and launched, (r.status_code, r.get_json()))
     check("Terminal: derselbe Index", index(cfg) == expected, index(cfg))
     script = " ".join(" ".join(x) for x in launched)

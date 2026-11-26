@@ -1482,26 +1482,34 @@ async function requestDryRun(body) {
   const d = await res.json().catch(() => null);
   if (!d) return null;
   if (d.error) return { ok: false, output: d.error };
-  return waitDryRunResult();
+  return waitDryRunResult(d.job_id);
 }
 
-/** Follow the current job until its dry-run result arrives, then mark it
- *  seen. Resolves null when the job ended without one. */
-function waitDryRunResult() {
+/** Follow job `jobId` until its dry-run result arrives, then mark that
+ *  one seen. Resolves null when the job ended without one. The id goes
+ *  along to the stream and the ack: without it a second run started
+ *  before this tab attached delivered its result here (Codex re-check
+ *  2026-11-26). A result no longer kept answers ERR_DRY_GONE - not ok, so
+ *  a save waiting on it stops. */
+function waitDryRunResult(jobId) {
   return new Promise(resolve => {
     let done = false;
     const finish = v => {
       if (done) return;
       done = true;
       es.close();
-      csrfFetch('/api/rebuild/ack', { method: 'POST' }).catch(() => {});
+      csrfFetch('/api/rebuild/ack', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ job: jobId || '' }) }).catch(() => {});
       resolve(v);
     };
-    const es = new EventSource(`/api/rebuild/stream?token=${encodeURIComponent(CSRF_TOKEN)}&from=0`);
+    const es = new EventSource(`/api/rebuild/stream?token=${encodeURIComponent(CSRF_TOKEN)}&from=0`
+                               + (jobId ? `&job=${encodeURIComponent(jobId)}` : ''));
     es.onmessage = e => {
       let m;
       try { m = JSON.parse(e.data); } catch { return; }
       if (m.type === 'done' && m.kind === 'dryrun') finish(m.dry || null);
+      else if (m.type === 'gone') finish({ ok: false, output: 'ERR_DRY_GONE' });
       else if (m.type === 'error') finish({ ok: false, output: m.message });
       else if (m.type === 'eof') finish(null);
     };
@@ -1534,7 +1542,7 @@ async function restoreDryRun(job) {
   overlay.classList.remove('hidden');
   const spinner = startElapsedSpinner(output);
   if (job.started) spinner.setStart(job.started * 1000);
-  const data = await waitDryRunResult();
+  const data = await waitDryRunResult(job.id);
   spinner.stop();
   _showDryRunResult(output, data);
 }

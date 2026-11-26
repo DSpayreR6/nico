@@ -120,7 +120,9 @@ try:
     st = client.get("/api/rebuild/status").get_json()["job"]
     check("Job bleibt bis zum Ansehen (mode dryrun, nicht acked)",
           st["mode"] == "dryrun" and not st["running"] and not st["acked"], st)
-    post("/api/rebuild/ack")
+    # Since the Codex re-check of 2026-11-26 a dry run is acknowledged only
+    # with its own id.
+    post("/api/rebuild/ack", {"job": r.get("job_id")})
     check("nach dem Ansehen acked", client.get("/api/rebuild/status").get_json()["job"]["acked"])
 finally:
     subprocess.run = real_run
@@ -149,7 +151,9 @@ check("… und den alten Stand wieder", configfiles.nix_state(cfg) == before)
 print("\n6. Ein Rahmen statt drei Kopien")
 src = Path(rb.__file__).read_text(encoding="utf-8")
 check("nur eine Stelle legt einen Job an", src.count("_job = {") == 1, src.count("_job = {"))
-check("nur eine Stelle startet einen Worker", src.count("threading.Thread(") == 1, src.count("threading.Thread("))
+# The terminal watcher (Paket C, 2026-11-26) holds a reservation, it runs no job.
+workers = src.count("threading.Thread(") - src.count("threading.Thread(target=_terminal_watch")
+check("nur eine Stelle startet einen Worker", workers == 1, workers)
 check("Rebuild meldet changed_during", "'changed_during': changed_during" in src)
 check("Systemstand-Wechsel und Update reservieren",
       'reserve("generation")' in src and 'reserve("selfupdate")' in src)

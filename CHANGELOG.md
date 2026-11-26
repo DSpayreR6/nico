@@ -34,6 +34,10 @@
 - Importing from a directory or /etc/nixos no longer copies the content of files linked in from outside it; the import lists them first
 - The Validator no longer reads a flake.nix, flake.lock or imported module that lies outside the config or is linked in from outside
 - When the list of files not covered cannot be loaded, the action stops and offers *Try again* – before, it went ahead without the list
+- A dry run's result always reaches the tab that started it; a second run started meanwhile can no longer hand its result to the first tab, and a result no longer kept says so
+- Moving the config or restarting NiCo waits for a save in progress (up to five seconds) instead of losing it
+- Import, restore, download (pull), removing large files, detach, categorize and creating a flake no longer run next to a save, a rebuild or a dry run – a save in between could be overwritten when the action rolled back
+- The rebuild in a terminal now counts as running until its command has finished: moving the config or a dry run can no longer start next to it; an open window waiting for *Enter* does not block
 
 ## 0.24.0 (2026-11-25)
 

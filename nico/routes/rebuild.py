@@ -44,6 +44,15 @@ _SWITCH_BUSY_STATES = {"active", "activating", "reloading", "deactivating"}
 _job_cv = threading.Condition()
 _job = None
 
+# Finished dry-run results by job id, until the tab that started the run
+# fetched and acknowledged it (Codex re-check 2026-11-26). The server holds
+# one job: when a second run started between the end of the first and the
+# moment its tab opened the stream, that tab read the second result - and
+# a save waiting on a passed dry run went ahead on someone else's result.
+# A few are enough - one per tab waiting; an id pushed out answers "gone".
+_DRY_RESULTS_MAX = 8
+_dry_results: "dict[str, str]" = {}   # job id -> its done event (SSE block)
+
 
 class DownloadTally:
     """Compressed bytes of the cache downloads in a rebuild.
@@ -112,12 +121,28 @@ def _job_kind(mode: str) -> str:
     return "rebuild"
 
 
+# A config action that changes many files as one step (writeguard.EXCLUSIVE:
+# import, restore, pull, …) while it runs. Paket C (Codex re-check
+# 2026-11-26): an import deletes the old files before it writes the new ones,
+# so a rebuild evaluating meanwhile could find no configuration.nix -
+# changed_during only compares start and end. Kept apart in both orders:
+# the action is refused while such a job runs or is being prepared, and no
+# such job starts while the action runs. Generation switch and update do
+# not read the config and stay free.
+_config_action: str | None = None
+_READS_CONFIG = {"rebuild", "dryrun", "move", "restart"}
+_CONFIG_ACTION_BUSY = "ERR_BUSY_CONFIG_ACTION"
+
+
 def reserve(kind: str) -> str | None:
     """Take the reservation for `kind`. None when taken - the caller must
     release() it - otherwise the error code naming what is running."""
     global _holder
     if not _start_lock.acquire(blocking=False):
         return _BUSY_CODES.get(_holder or "rebuild", "ERR_REBUILD_RUNNING")
+    if kind in _READS_CONFIG and _config_action is not None:
+        _start_lock.release()
+        return _CONFIG_ACTION_BUSY
     with _job_cv:
         running = _job.get("mode", "") if _job is not None and _job["running"] else None
     if running is not None:
@@ -125,6 +150,40 @@ def reserve(kind: str) -> str | None:
         return _BUSY_CODES[_job_kind(running)]
     _holder = kind
     return None
+
+
+def reserve_config_action(kind: str) -> str | None:
+    """Mark a config action as running (see _config_action). None when
+    marked - release_config_action() afterwards - or the busy code.
+
+    Checked and marked under _start_lock, the lock every job start holds
+    from its check to its registration: there is no moment in which both
+    see the other as absent. A start being prepared holds that lock only
+    for its preparation; waiting up to two seconds for it keeps an import
+    from being refused for a generation switch that is just registering.
+    """
+    global _config_action
+    if not _start_lock.acquire(timeout=2.0):
+        return _BUSY_CODES.get(_holder or "rebuild", "ERR_REBUILD_RUNNING")
+    try:
+        if _config_action is not None:
+            return _CONFIG_ACTION_BUSY
+        with _job_cv:
+            running = _job.get("mode", "") if _job is not None and _job["running"] else None
+        if running is not None and _job_kind(running) in _READS_CONFIG:
+            return _BUSY_CODES[_job_kind(running)]
+        _config_action = kind
+        return None
+    finally:
+        _start_lock.release()
+
+
+def release_config_action() -> None:
+    # Without _start_lock: a terminal rebuild holds it for its whole run,
+    # and clearing needs no check - at worst a start sees the action one
+    # moment longer and is refused.
+    global _config_action
+    _config_action = None
 
 
 def release() -> None:
@@ -674,6 +733,11 @@ def _job_append(job_id, event):
         # /status knows whether the rebuild succeeded without replaying the log.
         if event.startswith('data: {"type": "done"'):
             _job["success"] = '"success": true' in event
+            if '"kind": "dryrun"' in event:
+                _dry_results.pop(job_id, None)
+                _dry_results[job_id] = event
+                while len(_dry_results) > _DRY_RESULTS_MAX:
+                    _dry_results.pop(next(iter(_dry_results)))
         elif event.startswith('data: {"type": "error"'):
             _job["success"] = False
         _job_cv.notify_all()
@@ -688,6 +752,175 @@ def _job_finish(job_id):
         if _job["success"] is None:
             _job["success"] = False
         _job_cv.notify_all()
+
+
+# ── Terminal rebuild: reserved from the route to the end of the command ─────
+# Until 2026-11-26 the terminal rebuild reserved nothing: once the window was
+# open, a move or a dry run with "update flake" could start next to the build
+# (Codex re-check). The reservation is now taken before the git staging and
+# handed over to the script without a gap (Paket C, refined with ChatGPT):
+#
+#   1. The script takes `flock` on terminal.lock, then writes <id>.ready.
+#   2. NiCo answers in <id>.answer: "go <id>" - or, when the script did not
+#      report within TERMINAL_START_TIMEOUT, "dead <id>". The answer file is
+#      written in full under a temporary name and linked into place, so it
+#      appears complete or not at all, and exists only once: go and dead
+#      cannot both happen. The script runs nothing before it has read a
+#      complete "go" for its own id; an empty or foreign file is no answer.
+#   3. After "go" NiCo waits for the lock. The script held it before it
+#      reported, so even a command that ends at once is seen ending - the
+#      watcher never has to catch the lock while it is held.
+#   4. The script gives the lock back after its last command, before
+#      "Press Enter to close": an open window does not hold the config.
+#
+# A terminal that starts after the timeout finds "dead" and stops before it
+# touches the config. A killed script or a closed window releases the lock
+# through the kernel.
+TERMINAL_START_TIMEOUT = 60.0
+_RELEASE = "\x00release"          # marker in the work lines: give the lock back here
+
+
+def _terminal_dir() -> Path:
+    """Where lock, report and answer files live: $XDG_RUNTIME_DIR/nico
+    (tmpfs, per user), else the cache directory."""
+    runtime = os.environ.get("XDG_RUNTIME_DIR", "")
+    if runtime and Path(runtime).is_dir():
+        d = Path(runtime) / "nico"
+    else:
+        cache = os.environ.get("XDG_CACHE_HOME") or str(Path.home() / ".cache")
+        d = Path(cache) / "nico" / "run"
+    d.mkdir(parents=True, exist_ok=True, mode=0o700)
+    return d
+
+
+def terminal_script(work: list, run_id: str, d: Path) -> list:
+    """The whole script: lock, report, wait for "go", the work lines with
+    the release point (_RELEASE), clean-up."""
+    import shlex as _shlex
+    q = _shlex.quote
+    lock, ready, answer = d / "terminal.lock", d / f"{run_id}.ready", d / f"{run_id}.answer"
+    # The script waits longer than NiCo: NiCo always decides first.
+    ticks = int((TERMINAL_START_TIMEOUT + 30) * 10)
+    head = [
+        "#!/usr/bin/env bash",
+        f"_lock={q(str(lock))}; _ready={q(str(ready))}; _answer={q(str(answer))}; _id={run_id}",
+        'exec 9>"$_lock"',
+        'if ! flock -n 9; then',
+        '    echo "NiCo: another rebuild is still running - nothing was started."',
+        '    read -rp "Press Enter to close..."; rm -f "$0"; exit 1',
+        'fi',
+        'printf "%s\\n" "$_id" > "$_ready.tmp" && mv "$_ready.tmp" "$_ready"',
+        '_ans=""',
+        f'for _i in $(seq 1 {ticks}); do',
+        '    if [ -f "$_answer" ]; then',
+        '        _ans=$(cat "$_answer")',
+        '        case "$_ans" in "go $_id"|"dead $_id") break ;; esac',
+        '    fi',
+        '    sleep 0.1',
+        'done',
+        'rm -f "$_ready"',
+        'if [ "$_ans" != "go $_id" ]; then',
+        '    exec 9>&-',
+        '    echo "NiCo: this start has expired - nothing was run. Please start the rebuild again in NiCo."',
+        '    read -rp "Press Enter to close..."; rm -f "$0"; exit 1',
+        'fi',
+    ]
+    body = ['exec 9>&-' if line == _RELEASE else line for line in work]
+    if _RELEASE not in work:
+        body.append('exec 9>&-')
+    return head + body + ['rm -f "$_answer" "$0"']
+
+
+def _terminal_answer(answer: Path, text: str) -> str:
+    """Write `text` as the answer unless one exists; returns the answer that
+    stands. Complete when visible (written aside, then linked into place),
+    and only once (link fails when the name exists)."""
+    tmp = answer.with_name(answer.name + f".{uuid.uuid4().hex}.tmp")
+    # Not a config file and not atomic.write_bytes: the answer has to be
+    # linked into place (exists once), which a rename cannot promise.
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    try:
+        os.write(fd, (text + "\n").encode("utf-8"))
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+    try:
+        os.link(tmp, answer)
+        return text
+    except FileExistsError:
+        try:
+            return answer.read_text(encoding="utf-8").strip()
+        except OSError:
+            return ""
+    finally:
+        tmp.unlink(missing_ok=True)
+
+
+def _terminal_watch(run_id: str, d: Path) -> None:
+    """Hold the reservation the route took until the script is done with
+    the config (see the comment above), then give it back."""
+    import fcntl
+    import sys as _sys
+    ready, answer, lock = d / f"{run_id}.ready", d / f"{run_id}.answer", d / "terminal.lock"
+    fd = None
+    try:
+        end = time.monotonic() + TERMINAL_START_TIMEOUT
+        reported = False
+        while time.monotonic() < end:
+            try:
+                if ready.read_text(encoding="utf-8").strip() == run_id:
+                    reported = True
+                    break
+            except OSError:
+                pass
+            time.sleep(0.1)
+        # The means to see the end, before the script may start (Codex C3):
+        # opened after "go", a failure here gave the reservation back while
+        # the build could already run. Cannot be opened → "dead", nothing runs.
+        if reported:
+            try:
+                fd = os.open(lock, os.O_RDWR | os.O_CREAT, 0o600)
+            except OSError as exc:
+                print(f"NiCo: terminal rebuild not started, cannot watch {lock}: {exc}",
+                      file=_sys.stderr)
+                reported = False
+        go = _terminal_answer(answer, ("go " if reported else "dead ") + run_id) == "go " + run_id
+        if go:
+            # From here the build may run: the reservation is held until its
+            # end is confirmed. A failing look at the lock is tried again,
+            # never taken for the end.
+            warned = False
+            while True:
+                try:
+                    fcntl.flock(fd, fcntl.LOCK_EX)      # returns when the script let go
+                    fcntl.flock(fd, fcntl.LOCK_UN)
+                    break
+                except OSError as exc:
+                    if not warned:
+                        print(f"NiCo: watching the terminal rebuild failed, trying again: {exc}",
+                              file=_sys.stderr)
+                        warned = True
+                    time.sleep(1.0)
+    except Exception:
+        pass
+    finally:
+        if fd is not None:
+            try:
+                os.close(fd)
+            except OSError:
+                pass
+        release()
+
+
+def _terminal_tidy(d: Path) -> None:
+    """Answer files of starts that expired, older than a day."""
+    cutoff = time.time() - 86400
+    for f in d.glob("*.answer"):
+        try:
+            if f.stat().st_mtime < cutoff:
+                f.unlink()
+        except OSError:
+            pass
 
 
 def register(app, ctx):
@@ -736,12 +969,34 @@ def register(app, ctx):
 
     @app.route("/api/rebuild/open-terminal", methods=["POST"])
     def rebuild_open_terminal():
-        """Build nixos-rebuild command and launch it in a terminal emulator."""
+        """Build nixos-rebuild command and launch it in a terminal emulator.
+
+        Reserved like the monitored rebuild, from before the git staging to
+        the end of the last command in the terminal (_terminal_watch)."""
         if err := _check_csrf(): return err
         nixos_dir, err = _require_setup()
         if err:
             return err
+        import shutil as _shutil_f
+        # Without flock the end of the command cannot be seen; the rebuild in
+        # the monitor needs none (decision Martin 2026-11-26).
+        if not _shutil_f.which("flock"):
+            return jsonify({"error": "ERR_NO_FLOCK"}), 409
+        busy = reserve("rebuild")
+        if busy:
+            return jsonify({"error": busy}), 409
+        handed_over = False
+        try:
+            resp = _open_terminal_reserved(nixos_dir)
+            handed_over = bool(getattr(resp, "_nico_handed_over", False))
+            return resp
+        finally:
+            if not handed_over:
+                release()
 
+    def _open_terminal_reserved(nixos_dir):
+        """rebuild_open_terminal with the reservation held; hands it to the
+        watcher once the terminal is started."""
         # Same collision as in rebuild_start: the terminal would run into
         # "unit was already loaded" and the user would have to read a traceback
         # in a window NiCo cannot explain.
@@ -815,14 +1070,17 @@ def register(app, ctx):
                 script_lines += [
                     'if [ "$_rebuild_ok" -eq 1 ]; then',
                     '    git push',
+                    '    exec 9>&-',
                     '    sudo shutdown -h now',
                     'else',
+                    '    exec 9>&-',
                     '    echo',
                     '    read -rp "Rebuild failed. Press Enter to close..."',
                     'fi',
                 ]
             else:
                 script_lines += [
+                    'exec 9>&-',
                     'if [ "$_rebuild_ok" -eq 1 ]; then',
                     '    sudo shutdown -h now',
                     'else',
@@ -837,10 +1095,16 @@ def register(app, ctx):
             else:
                 script_lines.append(rebuild_cmd)
             script_lines += [
+                _RELEASE,
                 'echo',
                 'read -rp "Press Enter to close..."',
             ]
-        script_lines.append('rm -f "$0"')
+        run_id = uuid.uuid4().hex
+        tdir = _terminal_dir()
+        _terminal_tidy(tdir)
+        # The work lines run inside the handshake (terminal_script); the
+        # first one changes into the config.
+        script_lines = terminal_script(script_lines[1:], run_id, tdir)
 
         fd, script_path = _tempfile.mkstemp(suffix=".sh", prefix="nico-rebuild-")
         try:
@@ -862,9 +1126,13 @@ def register(app, ctx):
             if _shutil2.which(term_cmd[0]):
                 try:
                     _sp.Popen(term_cmd)
-                    return jsonify({"success": True})
                 except Exception:
                     continue
+                threading.Thread(target=_terminal_watch, args=(run_id, tdir),
+                                 name=f"terminal-{run_id[:8]}", daemon=True).start()
+                resp = jsonify({"success": True})
+                resp._nico_handed_over = True
+                return resp
 
         try:
             os.unlink(script_path)
@@ -1700,10 +1968,21 @@ def register(app, ctx):
 
     @app.route("/api/rebuild/ack", methods=["POST"])
     def rebuild_ack():
-        """Mark the finished job as seen so a reload stops reopening the monitor."""
+        """Mark the finished job as seen so a reload stops reopening the monitor.
+
+        `job` (body): the id the tab followed. A dry run is acknowledged only
+        with its own id - acknowledging "whatever finished last" marked the
+        result of another tab's run as seen (Codex re-check 2026-11-26).
+        Without an id (the rebuild monitor) only a job that is not a dry run
+        is marked."""
         if err := _check_csrf(): return err
+        want = (request.get_json(silent=True) or {}).get("job")
         with _job_cv:
-            if _job is not None and not _job["running"]:
+            if isinstance(want, str) and want:
+                _dry_results.pop(want, None)
+                if _job is not None and _job["id"] == want and not _job["running"]:
+                    _job["acked"] = True
+            elif _job is not None and not _job["running"] and _job["mode"] != "dryrun":
                 _job["acked"] = True
         return jsonify({"success": True})
 
@@ -1721,6 +2000,10 @@ def register(app, ctx):
           token – CSRF token (required)
           from  – first event index to send (default: 0). The browser's own
                   reconnect sends Last-Event-ID instead, which wins.
+          job   – the job the tab started (a dry run). When another job has
+                  replaced it meanwhile, its stored result is sent, or
+                  {"type": "gone"} when that is no longer kept - never the
+                  output of the other job (Codex re-check 2026-11-26).
 
         Each event carries its index as SSE id, so a reconnect resumes exactly
         where the previous connection stopped. A final {"type": "eof"} event
@@ -1742,10 +2025,22 @@ def register(app, ctx):
             except ValueError:
                 start = 0
 
+        want = request.args.get('job', '').strip() or None
+
+        def _stored(job):
+            with _job_cv:
+                return _dry_results.get(job)
+
         def _sse():
             idx = start
             with _job_cv:
                 job_id = _job["id"] if _job else None
+                if want and job_id != want:
+                    job_id = None
+            if want and job_id is None:
+                yield _stored(want) or f"data: {_json.dumps({'type': 'gone'})}\n\n"
+                yield f"data: {_json.dumps({'type': 'eof'})}\n\n"
+                return
             if job_id is None:
                 yield f"data: {_json.dumps({'type': 'eof'})}\n\n"
                 return
@@ -1766,6 +2061,13 @@ def register(app, ctx):
                     idx += len(pending)
                 else:
                     yield ": keep-alive\n\n"
+            # Replaced while following it: what was not sent yet is gone from
+            # the buffer, the stored result is not.
+            if want:
+                with _job_cv:
+                    replaced = _job is None or _job["id"] != want
+                if replaced:
+                    yield _stored(want) or f"data: {_json.dumps({'type': 'gone'})}\n\n"
             yield f"data: {_json.dumps({'type': 'eof'})}\n\n"
 
         return Response(

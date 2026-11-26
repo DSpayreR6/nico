@@ -141,6 +141,8 @@ r = client.post("/api/restart", headers=hdr, data="{}", base_url="http://127.0.0
 check("nach dem Neustart: nichts startet mehr (ERR_BUSY_RESTART)",
       r.status_code == 409 and r.get_json().get("error") == "ERR_BUSY_RESTART", r.get_json())
 rb.release()   # the new process starts without it
+from nico import writeguard  # noqa: E402
+writeguard.leave_exclusive()   # held since Paket C, likewise until the exit
 
 spawned.clear(); exited.clear()
 

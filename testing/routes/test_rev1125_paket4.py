@@ -176,6 +176,9 @@ post("/api/config/path", {"path": str(base / "neu4")})
 # ── 6. Speichersperre ───────────────────────────────────────────────────────
 print("\n6. Während des Umzugs wird nichts geschrieben")
 check("Reservierung für den Umzug", rb.reserve("move") is None)
+# The move route holds the config alone as well (writeguard, Paket C 2026-11-26).
+from nico import writeguard  # noqa: E402
+check("… und die Config für sich allein", writeguard.enter_exclusive("move") is None)
 s, r = post("/api/file", {"files": [{"path": "configuration.nix", "content": "{ }\n"}]})
 check("Speichern im Textmodus: 409 ERR_BUSY_MOVE", s == 409 and r.get("error") == "ERR_BUSY_MOVE", (s, r))
 s, r = post("/api/config", {})
@@ -183,6 +186,7 @@ check("Speichern aus dem Panel: 409 ERR_BUSY_MOVE", s == 409 and r.get("error") 
 check("Datei unverändert", (base / "neu4" / "configuration.nix").read_text() == "{ ... }:\n{\n}\n")
 r = client.get("/api/rebuild/status")
 check("Lesen geht weiter", r.status_code == 200)
+writeguard.leave_exclusive()
 rb.release()
 s, r = post("/api/file", {"files": [{"path": "modules/a.nix", "content": "{ x = 1; }\n"}]})
 check("danach wieder speichern", s == 200 and r.get("success"), (s, r))
