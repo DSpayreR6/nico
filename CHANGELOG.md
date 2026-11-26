@@ -16,7 +16,9 @@
 - Moving the config to another drive could lose it when deleting the old place failed half-way; now the copy is written to disk, read back and compared before anything at the old place is deleted, and a failed delete leaves the copy alone
 - After moving the config, a failed save of the new path no longer leaves NiCo pointing to a directory that is gone
 - Nothing can be saved while the config is being moved
-
+- Importing a ZIP without a configuration.nix or flake.nix file at its top level is refused before anything is changed; before, a folder of that name passed and the old config was deleted
+- A failed import puts linked files back as links and keeps file permissions (a file only the owner could read stayed readable for others); linked files outside the config are no longer read
+- The choice panel/text of an import is saved first: if that fails, nothing is imported; if the import fails, the choice is reset
 - Text mode no longer overwrites a file changed outside NiCo (another editor, Syncthing, git pull) while it was open: saving asks first – *Cancel*, *Show differences* or *Overwrite* (with a checkpoint of the outside state)
 - Time machine: restoring stops before touching any file when the checkpoint taken first had to leave out a file above the size limit – its current state would otherwise have been lost
 

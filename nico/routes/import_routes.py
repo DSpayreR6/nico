@@ -18,26 +18,52 @@ from ..core import (
 )
 
 
-def _take_edit_mode(nixos_dir: str, value) -> bool:
-    """Store the answer to "how do you want to edit this config?" and
-    return True for text mode (Martin, 2026-11-22).
+def _store_edit_mode(nixos_dir: str, value):
+    """Store the answer to "how do you want to edit this config?" BEFORE the
+    import touches a file. Returns (ok, previous) – previous goes to
+    _undo_edit_mode when the import fails afterwards.
 
     Text mode: NiCo works like an editor – the import only copies, no file
     is restructured or stamped, and files without a NiCo line open in text
     mode (`panel_default` "r" in config.json, the switch under Settings).
     Panel: as before – configuration.nix and flake.nix are rebuilt for the
     form. No answer (older callers, tests): the setting stays as it is and
-    the import restructures as before.
+    the import restructures as before (Martin, 2026-11-22).
+
+    Until 2026-11-26 the answer was stored after the import and a failed
+    save was swallowed: a text import reported success, and the files
+    opened in the panel - which rebuilds them (revision 2026-11-25, W2).
+    Now: not stored, not imported (Martin: either both are right, or
+    nothing happened).
     """
     if value not in ("r", "p"):
-        return False
+        return True, None
     try:
         settings = config_manager.load_config_settings(nixos_dir)
+        previous = ("panel_default" in settings, settings.get("panel_default"))
         settings["panel_default"] = value
         config_manager.save_config_settings(nixos_dir, settings)
     except OSError:
+        return False, None
+    return True, previous
+
+
+def _undo_edit_mode(nixos_dir: str, previous) -> None:
+    """The import failed after the answer was stored: put the old one back."""
+    if previous is None:
+        return
+    try:
+        settings = config_manager.load_config_settings(nixos_dir)
+        if previous[0]:
+            settings["panel_default"] = previous[1]
+        else:
+            settings.pop("panel_default", None)
+        config_manager.save_config_settings(nixos_dir, settings)
+    except OSError:
         pass
-    return value == "r"
+
+
+_EDIT_MODE_FAILED = ({"error": "ERR_EDIT_MODE_SAVE"}, 500)
 
 
 def _stash_hardware(nixos_dir: str) -> None:
@@ -59,6 +85,8 @@ def _stash_hardware(nixos_dir: str) -> None:
 
 def _import_failed(exc: OSError):
     """Response for an import that stopped (importer.replace_nix_tree)."""
+    if isinstance(exc, importer.ImportNoMainError):
+        return jsonify({"error": "ERR_IMPORT_NO_MAIN"}), 400
     if isinstance(exc, importer.ImportWriteError):
         code = "ERR_IMPORT_WRITE" if exc.restored else "ERR_IMPORT_PARTIAL"
     elif isinstance(exc, PermissionError) or isinstance(exc.__cause__, PermissionError):
@@ -97,9 +125,11 @@ def register(app, ctx):
         except zipfile.BadZipFile:
             return jsonify({"error": "ERR_INVALID_ZIP"}), 400
         top_level = {n.split("/")[0] for n in names if n}
+        # A file entry of that name at the top, not a directory called so
+        # (revision 2026-11-25, F4: `configuration.nix/x` passed).
         found = None
         for candidate in ("configuration.nix", "flake.nix"):
-            if candidate in top_level:
+            if candidate in names:
                 found = candidate
                 break
         return jsonify({
@@ -139,26 +169,6 @@ def register(app, ctx):
         except zipfile.BadZipFile:
             return jsonify({"error": "ERR_INVALID_ZIP"}), 400
 
-        # Backup-Bestätigung
-        if not confirmed and importer.dir_has_non_zip_files(nixos_dir):
-            from datetime import datetime as _dt
-            ts = _dt.now().strftime("%Y-%m-%d-%H%M%S")
-            return jsonify({
-                "needs_backup_confirmation": True,
-                "zip_name": f"nixos-config-{ts}.zip",
-            })
-        if confirmed:
-            try:
-                importer.backup_to_zip(nixos_dir)
-            except OSError as exc:
-                return jsonify({"error": "ERR_BACKUP_FAILED", "detail": str(exc)}), 500
-
-        try:
-            git_manager.auto_commit(nixos_dir, label="NiCo: backup before ZIP import")
-        except Exception:
-            pass
-        _stash_hardware(nixos_dir)
-
         dst = Path(nixos_dir).resolve()
 
         # Read every entry before the old config is touched: a damaged entry
@@ -175,13 +185,44 @@ def register(app, ctx):
                     incoming[dest.relative_to(dst).as_posix()] = zf.read(member)
         except (zipfile.BadZipFile, OSError, EOFError) as exc:
             return jsonify({"error": "ERR_IMPORT_READ", "detail": str(exc)}), 400
+        # What will really be taken over must hold a main file - checked
+        # before the backup question, so an unusable ZIP leaves everything
+        # as it is (revision 2026-11-25, F4; replace_nix_tree checks again).
+        if not any(rel in ("configuration.nix", "flake.nix") for rel in incoming):
+            return jsonify({"error": "ERR_IMPORT_NO_MAIN"}), 400
+
+        # Backup-Bestätigung
+        if not confirmed and importer.dir_has_non_zip_files(nixos_dir):
+            from datetime import datetime as _dt
+            ts = _dt.now().strftime("%Y-%m-%d-%H%M%S")
+            return jsonify({
+                "needs_backup_confirmation": True,
+                "zip_name": f"nixos-config-{ts}.zip",
+            })
+
+        ok, prev_mode = _store_edit_mode(nixos_dir, edit_mode)
+        if not ok:
+            return jsonify(_EDIT_MODE_FAILED[0]), _EDIT_MODE_FAILED[1]
+        if confirmed:
+            try:
+                importer.backup_to_zip(nixos_dir)
+            except OSError as exc:
+                _undo_edit_mode(nixos_dir, prev_mode)
+                return jsonify({"error": "ERR_BACKUP_FAILED", "detail": str(exc)}), 500
+
+        try:
+            git_manager.auto_commit(nixos_dir, label="NiCo: backup before ZIP import")
+        except Exception:
+            pass
+        _stash_hardware(nixos_dir)
 
         try:
             files_copied = importer.replace_nix_tree(dst, incoming)
         except OSError as exc:
+            _undo_edit_mode(nixos_dir, prev_mode)
             return _import_failed(exc)
 
-        if _take_edit_mode(nixos_dir, edit_mode):
+        if edit_mode == "r":
             from .hardware import decision_json
             return jsonify({"success": True, "recognized": {}, "has_brix": False,
                             "files_copied": files_copied, "edit_mode": "r",
@@ -359,9 +400,13 @@ def register(app, ctx):
                 if dest is None:  # traversal or hidden path segment
                     continue
                 incoming[dest.relative_to(dst).as_posix()] = str(fcont).encode("utf-8")
+            ok, prev_mode = _store_edit_mode(nixos_dir, body.get("edit_mode"))
+            if not ok:
+                return jsonify(_EDIT_MODE_FAILED[0]), _EDIT_MODE_FAILED[1]
             try:
                 files_copied = importer.replace_nix_tree(dst, incoming)
             except OSError as exc:
+                _undo_edit_mode(nixos_dir, prev_mode)
                 return _import_failed(exc)
 
         elif config_path:
@@ -379,15 +424,19 @@ def register(app, ctx):
             recognized = importer.parse_config(content)
             rest_brix  = importer.build_rest_brix(content, recognized)
 
+            ok, prev_mode = _store_edit_mode(nixos_dir, body.get("edit_mode"))
+            if not ok:
+                return jsonify(_EDIT_MODE_FAILED[0]), _EDIT_MODE_FAILED[1]
             try:
                 files_copied = importer.copy_nix_tree(cfg_file.parent, nixos_dir)
             except OSError as exc:
+                _undo_edit_mode(nixos_dir, prev_mode)
                 return _import_failed(exc)
 
         else:
             return jsonify({"error": "ERR_NO_PATH"}), 400
 
-        if _take_edit_mode(nixos_dir, body.get("edit_mode")):
+        if body.get("edit_mode") == "r":
             from .hardware import decision_json
             return jsonify({"success": True, "recognized": {}, "has_brix": False,
                             "files_copied": files_copied, "edit_mode": "r",
@@ -507,12 +556,16 @@ def register(app, ctx):
         # Copy all .nix/.lock files from /etc/nixos into the config dir.
         # A failure used to be swallowed and the import reported success
         # with half a config in place (revision 2026-11-18, finding 1).
+        ok, prev_mode = _store_edit_mode(nixos_dir, body.get("edit_mode"))
+        if not ok:
+            return jsonify(_EDIT_MODE_FAILED[0]), _EDIT_MODE_FAILED[1]
         try:
             files_copied = importer.copy_nix_tree(importer.ETC_NIXOS, nixos_dir)
         except OSError as exc:
+            _undo_edit_mode(nixos_dir, prev_mode)
             return _import_failed(exc)
 
-        if _take_edit_mode(nixos_dir, body.get("edit_mode")):
+        if body.get("edit_mode") == "r":
             from .hardware import decision_json
             return jsonify({"success": True, "recognized": [], "has_brix": False,
                             "files_copied": files_copied, "edit_mode": "r",

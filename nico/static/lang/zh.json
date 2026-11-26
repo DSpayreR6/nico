@@ -677,6 +677,8 @@
   "errors.ERR_LAST_FLAKE_HOST": "无法删除最后一个主机——没有主机的 flake 无法构建任何内容。请先添加另一个主机。",
   "errors.ERR_IMPORT_READ": "无法完整读取来源。config 目录未做任何更改。",
   "errors.ERR_IMPORT_WRITE": "写入导入的文件失败。已恢复之前的状态。",
+  "errors.ERR_IMPORT_NO_MAIN": "导入已中止，未做任何更改：顶层缺少 configuration.nix 或 flake.nix 文件。",
+  "errors.ERR_EDIT_MODE_SAVE": "导入已中止，未做任何更改：无法将“面板/文本”的选择保存到 config.json。",
   "errors.ERR_IMPORT_PARTIAL": "写入导入的文件失败，且无法完全恢复之前的状态。请通过导入前创建的检查点或 ZIP 恢复。",
   "errors.ERR_COPY_FAILED": "无法复制文件。",
   "errors.ERR_INVALID_ZIP": "该文件不是有效的 ZIP 存档。",

@@ -801,6 +801,8 @@
   "errors.ERR_LAST_FLAKE_HOST": "Der letzte Host lässt sich nicht löschen – eine Flake ohne Host baut nichts. Lege zuerst einen anderen an.",
   "errors.ERR_IMPORT_READ": "Die Quelle ließ sich nicht vollständig lesen. Am Config-Verzeichnis wurde nichts geändert.",
   "errors.ERR_IMPORT_WRITE": "Schreiben der importierten Dateien fehlgeschlagen. Der vorherige Stand wurde wiederhergestellt.",
+  "errors.ERR_IMPORT_NO_MAIN": "Import abgebrochen, nichts wurde verändert: In der obersten Ebene fehlt eine Datei configuration.nix oder flake.nix.",
+  "errors.ERR_EDIT_MODE_SAVE": "Import abgebrochen, nichts wurde verändert: Die Wahl Panel/Text konnte nicht in config.json gespeichert werden.",
   "errors.ERR_IMPORT_PARTIAL": "Schreiben der importierten Dateien fehlgeschlagen, der vorherige Stand ließ sich nicht vollständig wiederherstellen. Zurück geht es über den Sicherungspunkt bzw. die ZIP von vor dem Import.",
   "errors.ERR_COPY_FAILED": "Die Dateien konnten nicht kopiert werden.",
   "errors.ERR_INVALID_ZIP": "Die Datei ist kein gültiges ZIP-Archiv.",

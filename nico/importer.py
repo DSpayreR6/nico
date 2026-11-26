@@ -10,6 +10,7 @@ Strategie:
   3. Nicht konsumierte Bindings werden als Brix-Blöcke gesichert.
 """
 
+import os
 import re
 import shutil
 import textwrap
@@ -2655,6 +2656,11 @@ class ImportReadError(OSError):
     """The import source could not be read completely; nothing was changed."""
 
 
+class ImportNoMainError(ImportReadError):
+    """The import brings no configuration.nix or flake.nix at its top level;
+    nothing was changed (revision 2026-11-25, F4)."""
+
+
 class ImportWriteError(OSError):
     """Writing the imported files failed.
 
@@ -2693,13 +2699,20 @@ def replace_nix_tree(dst: str | Path, files: dict[str, bytes]) -> list[str]:
     half a config in place (revision 2026-11-18, finding 1).
     """
     dst = Path(dst)
+    # Without a main file the import would delete the old config and bring
+    # nothing that builds: a ZIP whose `configuration.nix` was a directory,
+    # or one with nothing usable left after filtering, passed and reported
+    # success (revision 2026-11-25, F4). Checked here, before anything is
+    # touched, because every import comes through here.
+    if not any(rel in ("configuration.nix", "flake.nix") for rel in files):
+        raise ImportNoMainError("ERR_IMPORT_NO_MAIN")
     try:
-        old = {rel: path.read_bytes() for rel, path in _visible_nix_files(dst)}
+        old = {rel: _entry_state(path) for rel, path in _own_nix_entries(dst)}
         # A non-.nix file the import overwrites belongs to the old state, too.
         for rel in files:
             p = dst / rel
-            if rel not in old and p.is_file():
-                old[rel] = p.read_bytes()
+            if rel not in old and (p.is_symlink() or p.is_file()):
+                old[rel] = _entry_state(p)
     except OSError as exc:
         # Without the old state there is nothing to restore from - stop
         # before the first file is deleted.
@@ -2707,8 +2720,9 @@ def replace_nix_tree(dst: str | Path, files: dict[str, bytes]) -> list[str]:
 
     written: list[str] = []
     try:
-        for rel, _path in _visible_nix_files(dst):
-            (dst / rel).unlink()
+        for rel in old:
+            # unlink removes a link itself, never what it points to.
+            (dst / rel).unlink(missing_ok=True)
         for rel, data in files.items():
             dest = dst / rel
             dest.parent.mkdir(parents=True, exist_ok=True)
@@ -2720,14 +2734,52 @@ def replace_nix_tree(dst: str | Path, files: dict[str, bytes]) -> list[str]:
             for rel in written:
                 if rel not in old:
                     (dst / rel).unlink(missing_ok=True)
-            for rel, data in old.items():
-                dest = dst / rel
-                dest.parent.mkdir(parents=True, exist_ok=True)
-                atomic.write_bytes(dest, data)
+            for rel, state in old.items():
+                _restore_entry(dst / rel, state)
         except OSError:
             restored = False
         raise ImportWriteError(str(exc), restored) from exc
     return written
+
+
+def _own_nix_entries(root: Path) -> list[tuple[str, Path]]:
+    """(relative path, path) of every .nix/.lock entry of the config itself
+    - regular files and symlinks, the links not followed. Hidden
+    directories are skipped, symlinked directories not entered."""
+    root = Path(root)
+    out = []
+    for dirpath, dirnames, filenames in os.walk(root):
+        dirnames[:] = sorted(n for n in dirnames
+                             if not n.startswith(".") and not os.path.islink(os.path.join(dirpath, n)))
+        for name in sorted(filenames):
+            if name.startswith(".") or not name.endswith((".nix", ".lock")):
+                continue
+            p = Path(dirpath) / name
+            if p.is_symlink() or p.is_file():
+                out.append((p.relative_to(root).as_posix(), p))
+    return out
+
+
+def _entry_state(p: Path) -> tuple:
+    """What putting `p` back needs: a link as its target (its content is not
+    read - it may lie outside the config), a file as content and mode.
+    Until 2026-11-26 only the bytes were kept: the rollback turned a link
+    into a copy and a 0600 file into a 0644 one, and still reported the old
+    state as restored (revision 2026-11-25, S4)."""
+    if p.is_symlink():
+        return ("link", os.readlink(p))
+    return ("file", p.read_bytes(), p.stat().st_mode & 0o7777)
+
+
+def _restore_entry(dest: Path, state: tuple) -> None:
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    if os.path.lexists(dest):
+        dest.unlink()
+    if state[0] == "link":
+        os.symlink(state[1], dest)
+        return
+    atomic.write_bytes(dest, state[1])
+    os.chmod(dest, state[2])
 
 
 def copy_hardware_config(nixos_dir: str, src_path: str | None = None) -> bool:

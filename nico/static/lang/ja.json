@@ -677,6 +677,8 @@
   "errors.ERR_LAST_FLAKE_HOST": "最後のホストは削除できません。ホストのない flake は何もビルドしません。先に別のホストを追加してください。",
   "errors.ERR_IMPORT_READ": "インポート元を完全に読み取れませんでした。config ディレクトリは変更されていません。",
   "errors.ERR_IMPORT_WRITE": "インポートしたファイルの書き込みに失敗しました。以前の状態に戻しました。",
+  "errors.ERR_IMPORT_NO_MAIN": "インポートを中止しました。何も変更されていません: 最上位に configuration.nix または flake.nix ファイルがありません。",
+  "errors.ERR_EDIT_MODE_SAVE": "インポートを中止しました。何も変更されていません: パネル/テキストの選択を config.json に保存できませんでした。",
   "errors.ERR_IMPORT_PARTIAL": "インポートしたファイルの書き込みに失敗し、以前の状態を完全には戻せませんでした。インポート前のチェックポイントまたは ZIP から戻してください。",
   "errors.ERR_COPY_FAILED": "ファイルをコピーできませんでした。",
   "errors.ERR_INVALID_ZIP": "このファイルは有効な ZIP アーカイブではありません。",

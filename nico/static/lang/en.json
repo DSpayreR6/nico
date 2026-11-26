@@ -680,6 +680,8 @@
   "errors.ERR_LAST_FLAKE_HOST": "The last host cannot be deleted – a flake without a host builds nothing. Add another one first.",
   "errors.ERR_IMPORT_READ": "The source could not be read completely. Nothing in the config directory was changed.",
   "errors.ERR_IMPORT_WRITE": "Writing the imported files failed. The previous state has been restored.",
+  "errors.ERR_IMPORT_NO_MAIN": "Import stopped, nothing was changed: there is no configuration.nix or flake.nix file at the top level.",
+  "errors.ERR_EDIT_MODE_SAVE": "Import stopped, nothing was changed: the choice panel/text could not be saved in config.json.",
   "errors.ERR_IMPORT_PARTIAL": "Writing the imported files failed and the previous state could not be fully restored. Use the checkpoint or the ZIP made before the import to go back.",
   "errors.ERR_COPY_FAILED": "The files could not be copied.",
   "errors.ERR_INVALID_ZIP": "The file is not a valid ZIP archive.",

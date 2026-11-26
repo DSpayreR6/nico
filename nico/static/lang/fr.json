@@ -677,6 +677,8 @@
   "errors.ERR_LAST_FLAKE_HOST": "Le dernier hôte ne peut pas être supprimé – un flake sans hôte ne construit rien. Ajoutez-en d'abord un autre.",
   "errors.ERR_IMPORT_READ": "La source n'a pas pu être lue entièrement. Rien n'a été modifié dans le répertoire de la config.",
   "errors.ERR_IMPORT_WRITE": "L'écriture des fichiers importés a échoué. L'état précédent a été restauré.",
+  "errors.ERR_IMPORT_NO_MAIN": "Import arrêté, rien n’a été modifié : il manque un fichier configuration.nix ou flake.nix au premier niveau.",
+  "errors.ERR_EDIT_MODE_SAVE": "Import arrêté, rien n’a été modifié : le choix panneau/texte n’a pas pu être enregistré dans config.json.",
   "errors.ERR_IMPORT_PARTIAL": "L'écriture des fichiers importés a échoué et l'état précédent n'a pas pu être entièrement restauré. Pour revenir en arrière, utilisez le point de contrôle ou le ZIP créé avant l'import.",
   "errors.ERR_COPY_FAILED": "Impossible de copier les fichiers.",
   "errors.ERR_INVALID_ZIP": "Le fichier n'est pas une archive ZIP valide.",
