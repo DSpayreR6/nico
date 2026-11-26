@@ -373,7 +373,7 @@ function bindUI() {
   // Language switcher dropdown (buttons built dynamically by initLangSwitcher)
   on('lang-current-btn', 'click', e => {
     e.stopPropagation();
-    document.getElementById('lang-dropdown')?.classList.toggle('hidden');
+    toggleMenu('lang-dropdown');
   });
   document.addEventListener('click', () => {
     document.getElementById('lang-dropdown')?.classList.add('hidden');
@@ -615,9 +615,7 @@ function bindUI() {
 
     function toggle(e) {
       e.stopPropagation();
-      const opening = drop.classList.contains('hidden');
-      drop.classList.toggle('hidden');
-      if (opening) _saveAllSilent();
+      if (toggleMenu('nixos-dropdown')) _saveAllSilent();
     }
     function close() { drop.classList.add('hidden'); }
 
@@ -723,7 +721,7 @@ function bindUI() {
   // Help dropdown
   on('help-btn', 'click', (e) => {
     e.stopPropagation();
-    document.getElementById('help-dropdown').classList.toggle('hidden');
+    toggleMenu('help-dropdown');
   });
   document.addEventListener('click', () => {
     document.getElementById('help-dropdown').classList.add('hidden');

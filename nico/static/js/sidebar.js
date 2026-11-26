@@ -62,7 +62,7 @@ const Sidebar = (() => {
     if (toolsBtn && toolsDropdown) {
       toolsBtn.addEventListener('click', e => {
         e.stopPropagation();
-        toolsDropdown.classList.toggle('hidden');
+        toggleMenu('tools-dropdown');
       });
       document.addEventListener('click', () => toolsDropdown.classList.add('hidden'));
     }
@@ -1936,8 +1936,20 @@ const Sidebar = (() => {
     if (activeFile?.path !== path) return;
     const fetchFile = () => csrfFetch(`/api/file?path=${encodeURIComponent(path)}`)
       .then(r => r.json()).catch(() => null);
+    // NiCo itself writes here (a type stamp on reading, the #r flag below):
+    // the editor takes that state as its new base, as long as its text is
+    // still the one just saved. Kept the old base, and since the strict
+    // comparison of 2026-11-26 the next save took NiCo's own write for a
+    // change from outside (found by test_unmappable_warning).
+    const adoptBase = b => {
+      if (b && _rawEditPath === path
+          && (document.getElementById('raw-file-editor')?.value ?? '') === _rawEditOrig) {
+        _rawEditBase = b;
+      }
+    };
     const fresh = await fetchFile();
     if (!fresh || fresh.error || activeFile?.path !== path) return;
+    adoptBase(fresh._base);
     const fileName = path.split('/').pop();
     if (fresh.unmappable) {
       // Broken by this save, or a different line now.
@@ -1961,7 +1973,10 @@ const Sidebar = (() => {
       const d = await r.json();
       if (d && !d.error) {
         const again = await fetchFile();
-        if (again && !again.error) content = again.content || content;
+        if (again && !again.error) {
+          content = again.content || content;
+          adoptBase(again._base);
+        }
       }
     } catch { /* the switch below still shows "panel off" */ }
     if (activeFile?.path !== path) return;

@@ -43,6 +43,8 @@
 - The dry run before a checkpoint shows that it is running (spinner with elapsed time), and a second click does nothing
 - A window that opens always lies on top: the question about a file changed meanwhile no longer hides behind the checkpoint window
 - *Change config path* with the path left as it is no longer sets the config up again and reloads the page
+- Menus open one at a time (NixOS, help, language, tools), and their entries fit on one line in every language
+- Text mode: after a save that made NiCo mark the file (raw flag), the next save no longer asks wrongly whether the file was changed meanwhile
 
 ## 0.24.0 (2026-11-25)
 

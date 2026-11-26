@@ -867,3 +867,29 @@ document.addEventListener('DOMContentLoaded', async () => {
   }).observe(document.body, { subtree: true, childList: true, attributes: true,
                               attributeFilter: ['class'], attributeOldValue: true });
 })();
+
+// ── Menus: one open at a time ───────────────────────────────────────────────
+// Every menu stops its click from reaching the document - otherwise the
+// document handler would close it again at once - and so the click never
+// closed the others: NixOS, help and language menu stayed open side by side
+// (Martin, VM test 2026-11-26). Every menu opens through here instead.
+const MENU_IDS = ['nixos-dropdown', 'help-dropdown', 'lang-dropdown', 'tools-dropdown'];
+
+/** Close every menu except `keepId` (and the context menu of the tree). */
+function closeMenusExcept(keepId = null) {
+  for (const id of MENU_IDS) {
+    if (id !== keepId) document.getElementById(id)?.classList.add('hidden');
+  }
+  if (typeof Sidebar !== 'undefined') Sidebar.closeTreeContextMenu?.();
+}
+
+/** Open or close the menu `id`; opening closes the others. True when it
+ *  is open afterwards. */
+function toggleMenu(id) {
+  const el = document.getElementById(id);
+  if (!el) return false;
+  const opening = el.classList.contains('hidden');
+  if (opening) closeMenusExcept(id);
+  el.classList.toggle('hidden', !opening);
+  return opening;
+}

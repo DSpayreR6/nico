@@ -4492,3 +4492,22 @@ button.rollback-btn.gen-state-running:hover { background: rgba(166,227,161,.12);
 .tree-import-status.error {
   color: var(--red);
 }
+
+/* Menus as wide as their longest entry, one line each, in every language
+   (Martin, VM test 2026-11-26: fixed minimum widths wrapped longer entries,
+   e.g. "Sicherungspunkt (Commit)" or the Russian texts). Never wider than
+   the window. */
+.nixos-dropdown,
+.help-dropdown,
+.lang-dropdown,
+.tools-dropdown {
+  width: max-content;
+  max-width: calc(100vw - 16px);
+}
+.nixos-dropdown > button,
+.help-dropdown > button,
+.help-dropdown a,
+.lang-dropdown > button,
+.tools-dropdown > button {
+  white-space: nowrap;
+}

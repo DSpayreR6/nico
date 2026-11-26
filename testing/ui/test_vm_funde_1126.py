@@ -163,6 +163,43 @@ try:
     check("Kein neues Einrichten (/api/setup nicht aufgerufen)", st["calls"] == 0, st)
     check("Fenster zu, Seite nicht neu geladen", not st["open"] and st["marker"] == 1, st)
     check("Einstellungen unverändert", SETTINGS.read_text() == before)
+    print("\n7. Menüs: eines zur Zeit, Einträge einzeilig (de und ru)")
+    close_all()
+    def menus():
+        return d.execute_script("""return ['nixos-dropdown', 'help-dropdown', 'lang-dropdown']
+          .filter(id => !document.getElementById(id).classList.contains('hidden'));""")
+    d.execute_script("document.getElementById('nixos-btn').click()")
+    time.sleep(0.3)
+    check("NixOS-Menü offen", menus() == ["nixos-dropdown"], menus())
+    d.execute_script("document.getElementById('help-btn').click()")
+    time.sleep(0.3)
+    check("Hilfe öffnen schließt das NixOS-Menü", menus() == ["help-dropdown"], menus())
+    d.execute_script("document.getElementById('lang-current-btn').click()")
+    time.sleep(0.3)
+    check("Sprache öffnen schließt das Hilfe-Menü", menus() == ["lang-dropdown"], menus())
+    d.execute_script("document.getElementById('nixos-btn').click()")
+    time.sleep(0.3)
+    check("NixOS öffnen schließt das Sprachmenü", menus() == ["nixos-dropdown"], menus())
+    d.execute_script("document.body.click()")
+    time.sleep(0.3)
+    check("Klick daneben schließt alles", menus() == [], menus())
+    for lang in ("de", "ru", "fr"):
+        d.execute_script("loadLang(arguments[0]).then(() => applyTranslations());", lang)
+        time.sleep(0.8)
+        wrapped = d.execute_script("""
+          const out = [];
+          for (const id of ['nixos-dropdown', 'help-dropdown']) {
+            const m = document.getElementById(id); m.classList.remove('hidden');
+            for (const b of m.querySelectorAll(':scope > button:not(.hidden)')) {
+              const r = document.createRange(); r.selectNodeContents(b);
+              const lines = new Set([...r.getClientRects()].map(x => Math.round(x.top)));
+              if (lines.size > 1) out.push(b.textContent.trim());
+            }
+            m.classList.add('hidden');
+          }
+          return out;""")
+        check(f"{lang}: alle Menüeinträge einzeilig", wrapped == [], wrapped)
+    d.execute_script("loadLang('de').then(() => applyTranslations());")
 finally:
     d.quit()
 
