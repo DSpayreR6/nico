@@ -1615,6 +1615,8 @@
   "leftOut.kind.hardlink": "Harter Link – die Datei steht noch an einer zweiten Stelle; die Fassung hier ist danach unabhängig davon:",
   "leftOut.line": "Zeile {0}",
   "leftOut.proceed": "Trotzdem fortfahren",
+  "leftOut.fetchFailed": "Die Liste der nicht erfassten Dateien konnte nicht geladen werden. Ohne sie geht es nicht weiter.",
+  "leftOut.retry": "Erneut versuchen",
   "dialog.close": "Schließen",
   "info.label": "Erklärung",
   "generations.stateRunning": "Dieser Systemstand läuft",

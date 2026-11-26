@@ -1547,6 +1547,8 @@
   "leftOut.kind.hardlink": "Hard link – the file also exists in a second place; the copy here is independent of it afterwards:",
   "leftOut.line": "line {0}",
   "leftOut.proceed": "Continue anyway",
+  "leftOut.fetchFailed": "The list of files not covered could not be loaded. Without it, NiCo does not go on.",
+  "leftOut.retry": "Try again",
   "dialog.close": "Close",
   "info.label": "Explanation",
   "generations.stateRunning": "This system state is running",

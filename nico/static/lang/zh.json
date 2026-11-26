@@ -1547,6 +1547,8 @@
   "leftOut.kind.hardlink": "硬链接——该文件在另一处也存在；此处的副本之后与其相互独立：",
   "leftOut.line": "第 {0} 行",
   "leftOut.proceed": "仍然继续",
+  "leftOut.fetchFailed": "无法加载未包含文件的列表。没有该列表，NiCo 不会继续。",
+  "leftOut.retry": "重试",
   "dialog.close": "关闭",
   "info.label": "说明",
   "generations.stateRunning": "此系统状态正在运行",

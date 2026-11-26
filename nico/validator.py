@@ -58,6 +58,25 @@ from .hostread import HARDWARE as _RH, VALIDATOR as _RV  # noqa: E402
 # at the other end of such a link, which is reading outside the config).
 from . import configfiles  # noqa: E402
 
+
+def _read_own(path: str | Path, nixos_dir: str | Path) -> str:
+    """Read a file of the config - never one outside it.
+
+    The rules that walk the config go through configfiles; the ones that
+    open a known file (flake.nix, configuration.nix, an imported module)
+    used to read it wherever it led: a flake.nix linked in from elsewhere,
+    an `imports = [ ../../shared/x.nix ]` above the config (Codex re-check
+    2026-11-26). Raises OSError for such a file, which every caller already
+    treats as "not readable"; the rule linked_outside names the links.
+    """
+    root = Path(nixos_dir).resolve()
+    real = Path(path).resolve()
+    try:
+        real.relative_to(root)
+    except ValueError:
+        raise OSError("ERR_OUTSIDE_CONFIG") from None
+    return real.read_text(encoding="utf-8")
+
 # ── Rule catalogue ─────────────────────────────────────────────────────────────
 
 ALL_RULES: list[Rule] = [
@@ -558,7 +577,7 @@ def _rule_flake_host_exists(nixos_dir: str, config: dict, is_flake: bool,
         return []
 
     try:
-        content = flake_path.read_text(encoding="utf-8")
+        content = _read_own(flake_path, nixos_dir)
     except OSError:
         return []
 
@@ -604,7 +623,7 @@ def _rule_host_orphaned(nixos_dir: str, config: dict, is_flake: bool,
         if not flake_path.exists():
             return []
         try:
-            content = flake_path.read_text(encoding="utf-8")
+            content = _read_own(flake_path, nixos_dir)
         except OSError:
             return []
         defined = set(re.findall(r'nixosConfigurations\s*\.\s*"?([\w-]+)"?', content))
@@ -622,7 +641,7 @@ def _rule_host_orphaned(nixos_dir: str, config: dict, is_flake: bool,
                 continue
             reachable.add(f)
             try:
-                content = f.read_text(encoding="utf-8")
+                content = _read_own(f, nixos_dir)
             except OSError:
                 continue
             # Unlike _extract_imports (./-only), also follow ../-imports here:
@@ -727,7 +746,7 @@ def _rule_flake_arch_matches(nixos_dir: str, config: dict, is_flake: bool,
     if not flake_path.exists():
         return []
     try:
-        content = flake_path.read_text(encoding="utf-8")
+        content = _read_own(flake_path, nixos_dir)
     except OSError:
         return []
     machine = platform.machine()
@@ -760,7 +779,7 @@ def _rule_hardware_imported(nixos_dir: str, config: dict, is_flake: bool,
         return []
 
     try:
-        content = co.read_text(encoding="utf-8")
+        content = _read_own(co, nixos_dir)
     except OSError:
         return []
 
@@ -769,7 +788,7 @@ def _rule_hardware_imported(nixos_dir: str, config: dict, is_flake: bool,
     # flake host as broken.
     if is_flake:
         try:
-            flake = (Path(nixos_dir) / "flake.nix").read_text(encoding="utf-8")
+            flake = _read_own((Path(nixos_dir) / "flake.nix"), nixos_dir)
         except OSError:
             flake = ""
         if "hardware-configuration.nix" in flake:
@@ -806,7 +825,7 @@ def _rule_hardware_host_location(nixos_dir: str, config: dict, is_flake: bool,
         return []
 
     try:
-        content = flake_path.read_text(encoding="utf-8")
+        content = _read_own(flake_path, nixos_dir)
     except OSError:
         return []
 
@@ -1960,7 +1979,7 @@ def _load_flake_lock_refs(nixos_dir: str) -> tuple[str | None, str | None] | Non
     if not lock_path.exists():
         return None
     try:
-        data = json.loads(lock_path.read_text(encoding="utf-8"))
+        data = json.loads(_read_own(lock_path, nixos_dir))
     except (OSError, json.JSONDecodeError):
         return None
 
@@ -1983,7 +2002,7 @@ def _rule_flake_hm_branch(nixos_dir: str, config: dict, is_flake: bool,
     if not flake_path.exists():
         return []
     try:
-        content = flake_path.read_text(encoding="utf-8")
+        content = _read_own(flake_path, nixos_dir)
     except OSError:
         return []
     if 'home-manager' not in content:
@@ -2444,7 +2463,7 @@ def state_version_overview(nixos_dir: str) -> dict:
     """
     out = {"per_host": False, "base": "", "base_prio": "", "hosts": []}
     try:
-        content = (Path(nixos_dir) / "flake.nix").read_text(encoding="utf-8")
+        content = _read_own((Path(nixos_dir) / "flake.nix"), nixos_dir)
     except OSError:
         content = ""
     hosts = sorted(_flake_defined_hosts(content)) if content else []
@@ -2475,7 +2494,7 @@ def _rule_state_version_per_host(nixos_dir: str, config: dict, is_flake: bool,
     """
     flake_path = Path(nixos_dir) / "flake.nix"
     try:
-        content = flake_path.read_text(encoding="utf-8")
+        content = _read_own(flake_path, nixos_dir)
     except OSError:
         return []
     hosts = _flake_defined_hosts(content)
@@ -2551,7 +2570,7 @@ def _rule_state_version_match(nixos_dir: str, config: dict, is_flake: bool,
     if not flake_path.exists():
         return []
     try:
-        content = flake_path.read_text(encoding="utf-8")
+        content = _read_own(flake_path, nixos_dir)
     except OSError:
         return []
 
@@ -2602,7 +2621,7 @@ def _rule_hm_state_version_match(nixos_dir: str, config: dict, is_flake: bool,
     """
     flake_path = Path(nixos_dir) / "flake.nix"
     try:
-        content = flake_path.read_text(encoding="utf-8")
+        content = _read_own(flake_path, nixos_dir)
     except OSError:
         return []
 
@@ -2834,7 +2853,7 @@ def _rule_brix_redundant(nixos_dir: str, config: dict, is_flake: bool,
         if not path.exists():
             continue
         try:
-            content = path.read_text(encoding="utf-8")
+            content = _read_own(path, nixos_dir)
         except OSError:
             continue
         findings += _brix_redundant_in(content, render, _imp, _fid, extract_brick_blocks)
@@ -2921,7 +2940,7 @@ def _rule_hm_missing_file(nixos_dir: str, config: dict, is_flake: bool,
     if not flake_path.exists():
         return []
     try:
-        content = flake_path.read_text(encoding="utf-8")
+        content = _read_own(flake_path, nixos_dir)
     except OSError:
         return []
 
@@ -3099,7 +3118,7 @@ def _rule_git_missing_gitignore(nixos_dir: str, config: dict, is_flake: bool,
             detail="In den Einstellungen → Zeitmaschine kann die .gitignore angelegt werden.",
             detail_key="validator.d.git_missing_gitignore.none",
         )]
-    existing = {l.strip() for l in path.read_text(encoding="utf-8").splitlines()
+    existing = {l.strip() for l in _read_own(path, nixos_dir).splitlines()
                 if l.strip() and not l.startswith("#")}
     missing = [e for e in _gm.GITIGNORE_ENTRIES if e not in existing]
     if missing:
@@ -3693,7 +3712,7 @@ def _nixpkgs_source(nixos_dir: str, is_flake: bool) -> "Path | None":
     """
     if is_flake:
         try:
-            lock = json.loads((Path(nixos_dir) / "flake.lock").read_text(encoding="utf-8"))
+            lock = json.loads(_read_own(Path(nixos_dir) / "flake.lock", nixos_dir))
             nodes = lock["nodes"]
             name = nodes[lock["root"]]["inputs"]["nixpkgs"]
             nar_hash = nodes[name]["locked"]["narHash"]   # a list (follows) raises TypeError

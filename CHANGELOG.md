@@ -31,6 +31,9 @@
 - Text mode, same file open in two tabs: after one tab saved, the other no longer overwrites it silently – saving asks first; two saves at the same moment can no longer both get through
 - A ZIP import keeps the permissions of the files it replaces – a script kept its execute bit, a file only the owner could read stayed that way
 - ZIP import of a NiCo export in text mode: the export's own setting no longer switches back to panel mode; the backups before the import hold the previous choice
+- Importing from a directory or /etc/nixos no longer copies the content of files linked in from outside it; the import lists them first
+- The Validator no longer reads a flake.nix, flake.lock or imported module that lies outside the config or is linked in from outside
+- When the list of files not covered cannot be loaded, the action stops and offers *Try again* – before, it went ahead without the list
 
 ## 0.24.0 (2026-11-25)
 

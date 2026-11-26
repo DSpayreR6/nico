@@ -1547,6 +1547,8 @@
   "leftOut.kind.hardlink": "Enlace duro – el archivo también existe en otro lugar; la copia de aquí queda independiente después:",
   "leftOut.line": "línea {0}",
   "leftOut.proceed": "Continuar de todos modos",
+  "leftOut.fetchFailed": "No se pudo cargar la lista de archivos no incluidos. Sin ella, NiCo no continúa.",
+  "leftOut.retry": "Reintentar",
   "dialog.close": "Cerrar",
   "info.label": "Explicación",
   "generations.stateRunning": "Este estado del sistema está en uso",

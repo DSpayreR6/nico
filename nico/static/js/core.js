@@ -456,12 +456,43 @@ const _LEFT_OUT_KINDS = ['link_out', 'link_breaks', 'nix_path', 'path_breaks', '
 /** The list from the server. all: every file (ZIP, export, move), else
  *  .nix only; move: also what points nowhere after moving. */
 async function fetchLeftOut({ all = false, move = false } = {}) {
+  return _fetchLeftList(`/api/config/left-out?all=${all ? 1 : 0}&move=${move ? 1 : 0}`);
+}
+
+/** Links out of an import source (Codex re-check 2026-11-26): the import
+ *  neither reads nor copies them. Same contract as fetchLeftOut. */
+async function fetchSourceLeftOut(dir) {
+  return _fetchLeftList(`/api/import/source-left?path=${encodeURIComponent(dir)}`);
+}
+
+/** The list, or null when it could not be fetched. Until 2026-11-26 a
+ *  failed request or an error answer counted as "nothing left out", and
+ *  the action went ahead without the list (Codex re-check). Callers stop
+ *  on null and offer to try again. */
+async function _fetchLeftList(url) {
   try {
-    const d = await fetch(`/api/config/left-out?all=${all ? 1 : 0}&move=${move ? 1 : 0}`)
-      .then(r => r.json());
-    return Array.isArray(d.left) ? d.left : [];
+    const r = await fetch(url);
+    if (!r.ok) return null;
+    const d = await r.json();
+    return Array.isArray(d?.left) ? d.left : null;
   } catch {
-    return [];
+    return null;
+  }
+}
+
+/** Fetch a list until it arrives or the user gives up: null = cancelled.
+ *  `flow`: ask as a step of that window, otherwise in a window of its own. */
+async function _leftListOrRetry(fetcher, flow = null) {
+  for (;;) {
+    const left = await fetcher();
+    if (left !== null) return left;
+    const own = !flow;
+    const f = flow ?? openFlowDialog(t('leftOut.title'));
+    const v = await f.step({ error: t('leftOut.fetchFailed'), buttons: [
+      { label: t('dialog.cancel'), value: 'cancel' },
+      { label: t('leftOut.retry'), value: 'retry', primary: true }] });
+    if (own) f.close();
+    if (v !== 'retry') return null;
   }
 }
 
@@ -488,7 +519,8 @@ function leftOutNode(left) {
  *  out: true at once, no window. `flow`: a step of that window, otherwise
  *  a window of its own. */
 async function confirmLeftOut(flow = null, opts = {}) {
-  const left = await fetchLeftOut(opts);
+  const left = await _leftListOrRetry(() => fetchLeftOut(opts), flow);
+  if (left === null) return false;
   if (!left.length) return true;
   const own = !flow;
   flow ??= openFlowDialog(t('leftOut.title'));
@@ -500,11 +532,22 @@ async function confirmLeftOut(flow = null, opts = {}) {
 }
 
 /** For the fixed setup windows: put the list below `el` (replacing an
- *  earlier one). */
-async function showLeftOutAfter(el, opts = {}) {
+ *  earlier one). Resolves false when the list could not be fetched - the
+ *  message stands there instead, and the caller hides the button that
+ *  would go on (Codex re-check 2026-11-26). `fetcher`: another list than
+ *  the config's, e.g. fetchSourceLeftOut. */
+async function showLeftOutAfter(el, opts = {}, fetcher = null) {
   el?.parentNode?.querySelectorAll(':scope > .left-out').forEach(n => n.remove());
-  const left = await fetchLeftOut(opts);
+  const left = await (fetcher ? fetcher() : fetchLeftOut(opts));
+  if (left === null) {
+    const p = document.createElement('p');
+    p.className = 'dialog-info import-err flow-error left-out';
+    p.textContent = t('leftOut.fetchFailed');
+    el?.after(p);
+    return false;
+  }
   if (left.length && el) el.after(leftOutNode(left));
+  return true;
 }
 
 /** A message with one OK button. */

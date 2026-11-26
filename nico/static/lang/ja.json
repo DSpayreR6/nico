@@ -1547,6 +1547,8 @@
   "leftOut.kind.hardlink": "ハードリンク – ファイルは別の場所にも存在します。ここにあるものはその後独立します:",
   "leftOut.line": "{0} 行目",
   "leftOut.proceed": "それでも続行",
+  "leftOut.fetchFailed": "対象外のファイルの一覧を読み込めませんでした。一覧がないと続行できません。",
+  "leftOut.retry": "再試行",
   "dialog.close": "閉じる",
   "info.label": "説明",
   "generations.stateRunning": "このシステム状態が実行中",

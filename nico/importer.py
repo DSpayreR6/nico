@@ -2634,19 +2634,13 @@ def copy_nix_tree(source_dir: str | Path, nixos_dir: str | Path) -> list[str]:
 
     if src == dst or src_inside_dst:
         # Dateien sind bereits am richtigen Ort – nur Liste zurückgeben, nichts löschen/kopieren
-        copied = []
-        for f in sorted(src.rglob("*")):
-            rel = f.relative_to(src)
-            if f.is_file() and f.suffix in (".nix", ".lock"):
-                if not any(p.startswith('.') for p in rel.parts):
-                    copied.append(str(rel))
-        return copied
+        return [rel for rel, _p in source_files(src)[0]]
 
     # Everything is read before anything in the target is touched: a file
     # that cannot be read used to surface only after the old config was
     # already deleted (revision 2026-11-18, finding 1).
     try:
-        files = {rel: path.read_bytes() for rel, path in _visible_nix_files(src)}
+        files = {rel: path.read_bytes() for rel, path in source_files(src)[0]}
     except OSError as exc:
         raise ImportReadError(str(exc)) from exc
     return replace_nix_tree(dst, files)
@@ -2673,19 +2667,39 @@ class ImportWriteError(OSError):
         self.restored = restored
 
 
-def _visible_nix_files(root: Path) -> list[tuple[str, Path]]:
-    """(relative path, path) of every .nix/.lock file below `root`.
+def main_file_leaves(main: str | Path) -> bool:
+    """True when the main file of an import source is itself a link out of
+    its directory: it is not read (Codex re-check 2026-11-26) - the import
+    stops with ERR_IMPORT_NO_MAIN, the list before it names the link."""
+    from . import configfiles
+    main = Path(main)
+    return configfiles.link_leaves(main, main.parent)
 
-    Hidden path segments (.git, .direnv, …) are skipped – same visibility
-    rules as tree listing and ZIP export.
+
+def source_files(root: str | Path) -> tuple[list[tuple[str, Path]], list]:
+    """The .nix/.lock files an import takes from `root`, and the links out
+    of `root` it leaves alone.
+
+    The one walk of configfiles.py, applied to the import source (decision
+    Martin 2026-11-26: links out are not read there either). Until then
+    rglob() and is_file() followed a link out, and a module kept elsewhere
+    arrived as an ordinary file in the new config (Codex re-check
+    2026-11-26). Hidden path segments (.git, .direnv, …) are skipped.
+    Returns (files, left): left holds configfiles.Left entries of kind
+    link_out - only those that could be a .nix/.lock file or a directory,
+    a linked README is no news. Only the link itself is looked at
+    (readlink), never what it points to.
     """
-    out = []
-    for f in sorted(root.rglob("*")):
-        if f.is_file() and f.suffix in (".nix", ".lock"):
-            rel = f.relative_to(root)
-            if not any(p.startswith('.') for p in rel.parts):
-                out.append((rel.as_posix(), f))
-    return out
+    from . import configfiles
+    root = Path(root)
+    found = configfiles.scan(root, nix_only=False)
+    files = [(rel, p) for rel, p in found.files if p.suffix in (".nix", ".lock")]
+    # is_dir() asks the file system for the kind of the target, it opens
+    # nothing - the same look configfiles.scan takes at a linked directory.
+    root = root.resolve()
+    left = [x for x in found.left if x.kind == "link_out"
+            and (Path(x.file).suffix in (".nix", ".lock") or (root / x.file).is_dir())]
+    return files, left
 
 
 def replace_nix_tree(dst: str | Path, files: dict[str, bytes]) -> list[str]:

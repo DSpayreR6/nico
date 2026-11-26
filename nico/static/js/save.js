@@ -643,8 +643,10 @@ async function _zipImportFlow(file) {
       return _flowFailed(flow, t('toast.error'));
     }
     if (out.needs_backup_confirmation && !confirmed) {
+      const node = await _leftOutOrNull(flow);
+      if (node === false) return flow.close();
       const ok = await flow.step({ text: t('import.backupConfirm', out.zip_name),
-        node: await _leftOutOrNull(), buttons: [
+        node, buttons: [
         cancel, { label: t('import.backupYes'), value: 'ok', primary: true }] });
       if (ok !== 'ok') return flow.close();
       confirmed = true;
@@ -663,9 +665,12 @@ async function _zipImportFlow(file) {
 }
 
 /** The backup before an import leaves links out of the config out: its
- *  question carries the list (configfiles.py), or nothing. */
-async function _leftOutOrNull() {
-  const left = await fetchLeftOut({ all: true });
+ *  question carries the list (configfiles.py), or nothing. false: the list
+ *  could not be fetched and the user gave up - the import stops (Codex
+ *  re-check 2026-11-26: no list is no permission). */
+async function _leftOutOrNull(flow) {
+  const left = await _leftListOrRetry(() => fetchLeftOut({ all: true }), flow);
+  if (left === null) return false;
   return left.length ? leftOutNode(left) : null;
 }
 
@@ -797,6 +802,17 @@ async function _dirImportFlow(flow = null) {
 /** Edit-mode question, backup question, import – as steps of `flow`.
  *  Resolves null when finished (window closed), or the error message. */
 async function _doAdminImport(configPath, flow) {
+  // Links out of the source are neither read nor copied (decision Martin
+  // 2026-11-26): the list comes before anything else.
+  const srcLeft = await _leftListOrRetry(
+    () => fetchSourceLeftOut(configPath.replace(/\/[^/]*$/, '') || '/'), flow);
+  if (srcLeft === null) { flow.close(); return null; }
+  if (srcLeft.length) {
+    const v = await flow.step({ node: leftOutNode(srcLeft), buttons: [
+      { label: t('dialog.cancel'), value: 'cancel' },
+      { label: t('leftOut.proceed'), value: 'ok', primary: true }] });
+    if (v !== 'ok') { flow.close(); return null; }
+  }
   if (!(await askImportEditMode(flow))) { flow.close(); return null; }
   let confirmed = false;
   for (;;) {
@@ -816,8 +832,10 @@ async function _doAdminImport(configPath, flow) {
       return t('toast.error');
     }
     if (data.needs_backup_confirmation && !confirmed) {
+      const node = await _leftOutOrNull(flow);
+      if (node === false) { flow.close(); return null; }
       const ok = await flow.step({ text: t('import.backupConfirm', data.zip_name),
-        node: await _leftOutOrNull(), buttons: [
+        node, buttons: [
         { label: t('import.backupCancel'), value: 'cancel' },
         { label: t('import.backupYes'), value: 'ok', primary: true }] });
       if (ok !== 'ok') { flow.close(); return null; }

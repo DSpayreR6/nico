@@ -436,6 +436,8 @@ def register(app, ctx):
         elif config_path:
             # ── Path mode: server reads directory recursively ─────────────────
             cfg_file = Path(config_path).expanduser()
+            if importer.main_file_leaves(cfg_file):
+                return jsonify({"error": "ERR_IMPORT_NO_MAIN"}), 400
             try:
                 content = cfg_file.read_text(encoding="utf-8", errors="replace")
             except FileNotFoundError:
@@ -504,6 +506,28 @@ def register(app, ctx):
             return jsonify({"error": "ERR_INVALID_PATH"}), 400
         return jsonify({"exists": config_path.is_file(), "config_path": str(config_path)})
 
+    @app.route("/api/import/source-left")
+    def import_source_left():
+        """Links out of an import source that the import leaves alone
+        (Codex re-check 2026-11-26, decision Martin: not read there either).
+        Shown before the import, like the list before every other action.
+        Only the links themselves are looked at (readlink)."""
+        raw = request.args.get("path", "").strip()
+        if not raw:
+            return jsonify({"error": "ERR_NO_PATH"}), 400
+        try:
+            src = Path(raw).expanduser()
+            if src.name.endswith(".nix"):
+                src = src.parent
+            if not src.is_dir():
+                # Nothing to list; the import itself says the path is wrong.
+                return jsonify({"left": []})
+            _files, left = importer.source_files(src)
+        except OSError as exc:
+            return jsonify({"error": "ERR_FILE_READ", "detail": str(exc)}), 500
+        from dataclasses import asdict
+        return jsonify({"left": [asdict(x) for x in left]})
+
     @app.route("/api/import/preview", methods=["POST"])
     def import_preview():
         """
@@ -512,6 +536,8 @@ def register(app, ctx):
         """
         if err := _check_csrf(): return err
         src = importer.ETC_NIXOS / "configuration.nix"
+        if importer.main_file_leaves(src):
+            return jsonify({"error": "ERR_IMPORT_NO_MAIN"}), 400
         if not src.is_file():
             return jsonify({"error": "ERR_FILE_NOT_FOUND"}), 404
         try:
@@ -565,6 +591,8 @@ def register(app, ctx):
         _stash_hardware(nixos_dir)
 
         src = importer.ETC_NIXOS / "configuration.nix"
+        if importer.main_file_leaves(src):
+            return jsonify({"error": "ERR_IMPORT_NO_MAIN"}), 400
         if not src.is_file():
             return jsonify({"error": "ERR_FILE_NOT_FOUND"}), 404
 

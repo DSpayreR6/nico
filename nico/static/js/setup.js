@@ -349,6 +349,11 @@ async function _lookIntoEtcNixos() {
       document.getElementById('import-intro-text').textContent =
         t('import.introWithPath', checkData.config_path);
     }
+    // Links out of /etc/nixos are neither read nor copied (decision Martin
+    // 2026-11-26); without the list the import does not go on.
+    const listed = await showLeftOutAfter(document.getElementById('import-intro-text'), {},
+                                          () => fetchSourceLeftOut('/etc/nixos'));
+    if (!listed) applyBtn?.classList.add('hidden');
   } else {
     document.getElementById('import-intro-text').textContent = t('import.introNoSource');
   }
@@ -382,7 +387,8 @@ async function applyImport(confirmed = false) {
       document.getElementById('import-backup-confirm-text').textContent =
         t('import.backupConfirm', data.zip_name);
       // What the backup leaves out (configfiles.py, Martin 2026-11-26).
-      await showLeftOutAfter(document.getElementById('import-backup-confirm-text'), { all: true });
+      const listed = await showLeftOutAfter(document.getElementById('import-backup-confirm-text'), { all: true });
+      document.getElementById('import-backup-yes-btn')?.classList.toggle('hidden', !listed);
       document.getElementById('import-backup-confirm').classList.remove('hidden');
       return;
     }
@@ -492,6 +498,10 @@ function initImportManual() {
     _checkedConfigPath = data.config_path;
     document.getElementById('import-manual-found-text').textContent =
       t('import.foundConfirm').replace('{path}', data.config_path);
+    // Links out of the source stay where they are (decision Martin 2026-11-26).
+    const listed = await showLeftOutAfter(document.getElementById('import-manual-found-text'), {},
+                                          () => fetchSourceLeftOut(dir));
+    document.getElementById('import-manual-confirm-btn')?.classList.toggle('hidden', !listed);
     document.getElementById('import-manual-found').classList.remove('hidden');
   });
 
@@ -518,7 +528,8 @@ function initImportManual() {
       resultEl.classList.add('hidden');
       document.getElementById('import-manual-backup-text').textContent =
         t('import.backupConfirm', data.zip_name);
-      await showLeftOutAfter(document.getElementById('import-manual-backup-text'), { all: true });
+      const listed = await showLeftOutAfter(document.getElementById('import-manual-backup-text'), { all: true });
+      document.getElementById('import-manual-backup-yes-btn')?.classList.toggle('hidden', !listed);
       document.getElementById('import-manual-backup-confirm').classList.remove('hidden');
       return;
     }
