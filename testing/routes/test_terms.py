@@ -327,6 +327,8 @@ OLD_DRY = {"de": r"Syntax-Prüfung|Syntax vor dem", "en": r"[Ss]yntax check",
            "es": r"verificación de sintaxis", "fr": r"vérification syntax",
            "ja": r"構文チェック|ドライラン", "ru": r"проверк\w+ синтаксиса", "zh": r"语法检查"}
 DRY_KEYS_OK = {"errors.ERR_DRY_OK_SYNTAX"}   # here only the syntax was checked
+OLD_REBUILD = {"de": r"Neubau|neu bauen", "es": r"[Rr]econstru", "fr": r"[Rr]econstru",
+               "ja": r"再構築|再ビルド", "ru": r"[Пп]ересб|[Пп]ересоб", "zh": r"重建"}
 for lang, pattern in OLD_DRY.items():
     data = json.loads((LANG / f"{lang}.json").read_text(encoding="utf-8"))
     hits = [k for k, v in data.items() if isinstance(v, str) and k not in DRY_KEYS_OK
@@ -336,6 +338,13 @@ for lang, pattern in OLD_DRY.items():
         check(f"{lang}: {key} heißt Dry run", "dry" in data.get(key, "").lower(), data.get(key))
     for key in ("header.nixosRebuild", "admin.rebuild"):
         check(f"{lang}: {key} heißt Rebuild", data.get(key) == "Rebuild", data.get(key))
+    # "Rebuild" also in running text; the panel restructuring a file
+    # (importMode.info) is another concept and keeps its word.
+    old_rb = OLD_REBUILD.get(lang)
+    if old_rb:
+        hits = [k for k, v in data.items() if isinstance(v, str) and k != "importMode.info"
+                and re.search(old_rb, v)]
+        check(f"{lang}: kein übersetztes Wort für den Rebuild", not hits, hits[:6])
     check(f"{lang}: Menü und Fenster heißen gleich (Sicherungspunkt)",
           data.get("header.nixosSave") == data.get("write.title")
           and "commit" in data.get("header.nixosSave", "").lower(), data.get("header.nixosSave"))
