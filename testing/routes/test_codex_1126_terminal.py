@@ -110,23 +110,35 @@ def groups():
     except OSError:
         return []
 
-def group_alive():
-    for pg in groups():
+def group_alive(pgs=None):
+    """A process of these groups still runs. Read from /proc, not with
+    killpg(pg, 0): the fake terminal is a child nobody waits for, and its
+    zombie answers that call as if it were alive."""
+    want = set(groups() if pgs is None else pgs)
+    for d in Path("/proc").iterdir():
+        if not d.name.isdigit():
+            continue
         try:
-            os.killpg(pg, 0)
+            rest = (d / "stat").read_text().rsplit(")", 1)[1].split()
+        except (OSError, IndexError):
+            continue
+        state, pgrp = rest[0], int(rest[2])
+        if pgrp in want and state not in ("Z", "X"):
             return True
-        except OSError:
-            pass
     return False
 
 def kill_groups():
-    """End the fake terminals and everything they started - nothing else."""
-    for pg in groups():
+    """End the fake terminals and everything they started - nothing else.
+    Returns the groups it ended, so a check can look at exactly those
+    (Codex: checking the emptied list afterwards always passed)."""
+    pgs = groups()
+    for pg in pgs:
         try:
             os.killpg(pg, signal.SIGKILL)
         except OSError:
             pass
     PGIDS.write_text("")
+    return pgs
 
 import atexit  # noqa: E402
 atexit.register(kill_groups)      # also when the test breaks off (Codex C1)
@@ -165,10 +177,10 @@ check("Config frei, obwohl das Fenster noch offen ist",
 check("… das Skript wartet tatsächlich noch", group_alive())
 import subprocess  # noqa: E402
 decoy = subprocess.Popen([BASH, "-c", "sleep 1000.5; : nico-rebuild-decoy"], start_new_session=True)
-kill_groups()
-check("Aufräumen beendet das Ersatz-Terminal", wait(lambda: not group_alive(), 5))
+ended = kill_groups()
+check("Aufräumen beendet das Ersatz-Terminal", ended and wait(lambda: not group_alive(ended), 5), ended)
 check("… ein fremder Prozess mit demselben Suchtext läuft weiter", decoy.poll() is None)
-decoy.kill(); decoy.wait()
+os.killpg(decoy.pid, signal.SIGKILL); decoy.wait()   # its sleep, too
 
 # ── 4. Abbruch ──────────────────────────────────────────────────────────────
 print("4. Abbruch mitten im Bau")
@@ -242,6 +254,24 @@ s, r = post("/api/dry-run")
 check("… Dry-Run: 409", s == 409, (s, r))
 check("Nach bestätigtem Ende frei", wait(is_free, 10))
 fcntl.flock = real_flock
+
+# ── 9. Aufräumen nach "go" scheitert ────────────────────────────────────────
+print("9. Löschen der temporären Antwortdatei scheitert nach 'go'")
+real_unlink = Path.unlink
+def failing_unlink(self, *a, **kw):
+    if ".answer." in self.name and self.name.endswith(".tmp"):
+        raise PermissionError("simuliert")
+    return real_unlink(self, *a, **kw)
+Path.unlink = failing_unlink
+mark = run / "m9"
+s, r = start(3.0, mark)
+check("Gestartet, Befehl läuft", s == 200 and wait(mark.exists, 10), (s, r))
+time.sleep(1.0)
+check("Trotz Aufräumfehler belegt, solange gebaut wird", not is_free())
+s, r = post("/api/dry-run")
+check("… Dry-Run: 409", s == 409, (s, r))
+check("Nach dem Ende frei", wait(is_free, 10))
+Path.unlink = real_unlink
 
 kill_groups()
 print()

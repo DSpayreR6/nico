@@ -853,7 +853,13 @@ def _terminal_answer(answer: Path, text: str) -> str:
         except OSError:
             return ""
     finally:
-        tmp.unlink(missing_ok=True)
+        # Tidying only: once the answer stands, nothing here may fail the
+        # handshake (Codex re-check of C3: a failed unlink after "go" made
+        # the watcher release without ever watching the build).
+        try:
+            tmp.unlink(missing_ok=True)
+        except OSError:
+            pass
 
 
 def _terminal_watch(run_id: str, d: Path) -> None:
@@ -884,7 +890,18 @@ def _terminal_watch(run_id: str, d: Path) -> None:
                 print(f"NiCo: terminal rebuild not started, cannot watch {lock}: {exc}",
                       file=_sys.stderr)
                 reported = False
-        go = _terminal_answer(answer, ("go " if reported else "dead ") + run_id) == "go " + run_id
+        try:
+            got = _terminal_answer(answer, ("go " if reported else "dead ") + run_id)
+        except Exception:
+            got = None
+        if got is None:
+            # What stands on disk decides, not how the writing ended: if "go"
+            # is there, the script may be building - watch it.
+            try:
+                got = answer.read_text(encoding="utf-8").strip()
+            except OSError:
+                got = ""
+        go = got == "go " + run_id and fd is not None
         if go:
             # From here the build may run: the reservation is held until its
             # end is confirmed. A failing look at the lock is tried again,

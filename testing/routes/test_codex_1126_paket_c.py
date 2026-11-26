@@ -344,7 +344,12 @@ exit_called = threading.Event()
 os._exit = lambda code: exit_called.set()
 r = client.post("/api/restart", headers=H, environ_base={"SERVER_PORT": "8999"})
 check("Neustart angenommen", r.status_code == 200, r.get_json())
-check("… der verzögerte Exit wurde (simuliert) aufgerufen", exit_called.wait(5))
+if not exit_called.wait(5):
+    # Stop here, with the fake still in place: restoring the real exit now
+    # would let the late thread end this test with status 0 (Codex re-check).
+    print("  FAIL … der verzögerte Exit wurde (simuliert) aufgerufen")
+    sys.exit(1)
+check("… der verzögerte Exit wurde (simuliert) aufgerufen", True)
 os._exit, _restart.spawn = real_exit, real_spawn
 check("… Config bleibt gehalten", writeguard.state()["exclusive"] == "restart", writeguard.state())
 s5, r5 = save_text("modules/b.nix", "{ b = 4; }\n")
