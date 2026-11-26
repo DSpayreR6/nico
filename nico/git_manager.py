@@ -102,6 +102,7 @@ def _err(code: str, *params) -> str:
     """An error code carrying its data, to be split again in the interface."""
     return _P_SEP.join([code, *(str(p) for p in params)])
 ERR_BLOB_PUBLISHED       = "ERR_BLOB_PUBLISHED"
+ERR_PUBLISH_UNKNOWN      = "ERR_PUBLISH_UNKNOWN"
 ERR_BRANCH_DELETE_FAILED = "ERR_BRANCH_DELETE_FAILED"
 ERR_BAD_COMMIT_HASH      = "ERR_BAD_COMMIT_HASH"
 ERR_COMMIT_NOT_FOUND     = "ERR_COMMIT_NOT_FOUND"
@@ -762,17 +763,49 @@ def oversized_blobs_to_push(nixos_dir: str) -> list[tuple[str, int]]:
     return sorted(found.items(), key=lambda kv: -kv[1])
 
 
-def _published_base(nixos_dir: str) -> str:
-    """Newest commit the remote already has (empty if nothing was ever pushed).
+def _published_base(nixos_dir: str) -> str | None:
+    """Newest commit the remote already has (empty if nothing was ever pushed,
+    None if that cannot be told).
 
     Everything after it is local-only and may be rewritten; everything up to
     and including it is published and must not be touched.
+
+    Without an upstream (pushed by hand without -u) the whole history used
+    to count as local, published or not, and the clean-up rewrote it
+    (revision 2026-11-25, F7). Then the remote-tracking refs decide
+    (decision 2026-11-26): local are the commits on no remote
+    (`git rev-list HEAD --not --remotes`), the base is the parent of the
+    oldest of them. A history where that is not one straight line - a merge
+    among them - gives None, and the caller stops.
     """
     rc, upstream = _run(["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"], cwd=nixos_dir)
-    if rc != 0 or not upstream.strip():
-        return ""
-    rc, base = _run(["merge-base", "HEAD", upstream.strip()], cwd=nixos_dir)
-    return base.strip() if rc == 0 else ""
+    if rc == 0 and upstream.strip():
+        rc, base = _run(["merge-base", "HEAD", upstream.strip()], cwd=nixos_dir)
+        return base.strip() if rc == 0 else ""
+    rc, refs = _run(["for-each-ref", "--format=%(objectname)", "refs/remotes"], cwd=nixos_dir)
+    if rc != 0 or not refs.strip():
+        return ""                       # no remote at all: nothing published
+    rc, out = _run(["rev-list", "--reverse", "HEAD", "--not", "--remotes"], cwd=nixos_dir)
+    if rc != 0:
+        return None
+    local = [c.strip() for c in out.splitlines() if c.strip()]
+    if not local:
+        rc, head = _run(["rev-parse", "HEAD"], cwd=nixos_dir)
+        return head.strip() if rc == 0 else None
+    rc, line = _run(["rev-list", "--parents", "-n", "1", local[0]], cwd=nixos_dir)
+    if rc != 0:
+        return None
+    parents = line.split()[1:]
+    if not parents:
+        base = ""                       # the root itself is local
+    elif len(parents) == 1:
+        base = parents[0]
+    else:
+        return None
+    rc, check = _run(["rev-list", "--reverse", f"{base}..HEAD" if base else "HEAD"], cwd=nixos_dir)
+    if rc != 0 or [c.strip() for c in check.splitlines() if c.strip()] != local:
+        return None
+    return base
 
 
 def _blobs_in_commit(nixos_dir: str, commit: str, limit: int) -> list[tuple[str, int]]:
@@ -821,6 +854,14 @@ def large_file_report(nixos_dir: str, limit: int | None = None) -> dict:
                 worktree.append((rel, size))
 
     base = _published_base(nixos_dir)
+    if base is None:
+        # Where the published history ends cannot be told: nothing counts
+        # as rewritable, everything in HEAD as published (F7).
+        empty.update(worktree=sorted(worktree, key=lambda kv: -kv[1]),
+                     published=sorted(_blobs_in_commit(nixos_dir, "HEAD", limit),
+                                      key=lambda kv: -kv[1]),
+                     unknown_base=True)
+        return empty
     rc, out = _run(["rev-list", "--reverse", f"{base}..HEAD" if base else "HEAD"], cwd=nixos_dir, timeout=20)
     local_commits = [c.strip() for c in out.splitlines() if c.strip()] if rc == 0 else []
 
@@ -857,6 +898,11 @@ def clean_large_files(nixos_dir: str, paths: list[str], delete_from_disk: bool =
     if not is_git_repo(nixos_dir):
         return False, ERR_NO_GIT_REPO, {}
     report = large_file_report(nixos_dir)
+    # No upstream and no clear line to the remote: stop before rewriting
+    # anything that is in a commit (revision 2026-11-25, F7).
+    if report.get("unknown_base") and any(
+            p not in {w for w, _ in report["worktree"]} for p in paths):
+        return False, ERR_PUBLISH_UNKNOWN, {}
     if any(p in [x[0] for x in report["published"]] for p in paths):
         return False, ERR_BLOB_PUBLISHED, {}
 

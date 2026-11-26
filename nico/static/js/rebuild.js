@@ -1068,6 +1068,10 @@ function attachRebuildMonitor(fromIndex = 0) {
                                                                       : 'generations.doneSwitch', msg.number))
         : msg.success
         ? niIcon('check-circle') + ' ' + t('rebuild.success')
+        : isGeneration && msg.entered && msg.failed_step === 'activate'
+        // Two steps reported apart (F8): entered yes, activated no.
+        ? niIcon('alert-triangle') + ' ' + escHtml(t(msg.mode === 'boot' ? 'generations.partialBoot'
+                                                                         : 'generations.partialSwitch', msg.number))
         : activatedWarn
         ? niIcon('alert-triangle') + ' ' + escHtml(t('rebuild.activatedWarn'))
         : niIcon('x-circle') + ' ' + t('rebuild.failed') + (firstErrorLine ? ': ' + escHtml(firstErrorLine.substring(0, 80)) : '');

@@ -197,7 +197,8 @@ def register(app, ctx):
         if err := _check_csrf(): return err
 
         _APP_KEYS = frozenset({"language", "theme", "code_view_plain", "rebuild_log", "hidden_sections", "section_filter", "show_flake_lock", "default_host", "rebuild_terminal", "rebuild_safe", "rebuild_safe_jobs", "rebuild_safe_cores", "rebuild_verbose", "prefetch_dry_run", "git_sync", "git_status_only",
-                               "read_host_validator", "read_host_hardware", "read_host_generations"})
+                               "read_host_validator", "read_host_hardware", "read_host_generations",
+                               "read_host_profile"})
         incoming = request.get_json(silent=True) or {}
         patch    = {k: v for k, v in incoming.items() if k in _APP_KEYS}
         # Limits of the safe rebuild: a whole number within 1..cpus, anything
@@ -206,7 +207,7 @@ def register(app, ctx):
             if key in patch:
                 patch[key] = buildlimits.clean(patch[key])
         for key in ("rebuild_verbose", "read_host_validator", "read_host_hardware",
-                    "read_host_generations"):
+                    "read_host_generations", "read_host_profile"):
             if key in patch and not isinstance(patch[key], bool):
                 del patch[key]
         for key in ("theme", "language"):

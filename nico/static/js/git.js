@@ -1108,6 +1108,7 @@ async function loadGenerations() {
     return;
   }
   const gens = data.generations || [];
+  const retry = data.retry || null;
   if (!gens.length) {
     body.innerHTML = `<span class="admin-empty">${escHtml(t('generations.empty'))}</span>`;
     return;
@@ -1129,6 +1130,12 @@ async function loadGenerations() {
     } else if (g.running) {
       state = `<button type="button" class="rollback-btn gen-state gen-state-running" data-gen-back="${g.number}"
                  title="${escHtml(t('generations.backTitle'))}">${escHtml(t('generations.stateRunning'))}</button>`;
+    } else if (g.default && retry && retry.number === g.number) {
+      // Entered, but activating it failed (revision 2026-11-25, F8): the
+      // boot menu may still hold the old state. One click repeats only the
+      // activation.
+      state = `<button type="button" class="rollback-btn gen-state gen-state-next" data-gen-retry="${g.number}"
+                 title="${escHtml(t('generations.retryTitle'))}">${escHtml(t('generations.retryBtn'))}</button>`;
     } else if (g.default) {
       state = `<span class="rollback-btn gen-state gen-state-next">${escHtml(t('generations.stateNext'))}</span>`;
     } else {
@@ -1146,6 +1153,9 @@ async function loadGenerations() {
   body.innerHTML = `<div class="rollback-list">${rows}</div>`;
   body.querySelectorAll('[data-gen]').forEach(btn =>
     btn.addEventListener('click', () => _useGeneration(Number(btn.dataset.gen))));
+  body.querySelectorAll('[data-gen-retry]').forEach(btn =>
+    btn.addEventListener('click', () => _startGenerationSwitch(
+      Number(btn.dataset.genRetry), retry.mode, { activateOnly: true })));
   body.querySelectorAll('[data-gen-back]').forEach(btn =>
     btn.addEventListener('click', () => _keepRunningGeneration(Number(btn.dataset.genBack),
                                                                 gens.find(g => g.default)?.number)));
@@ -1188,13 +1198,13 @@ async function _useGeneration(number) {
 }
 
 /** Switch in the rebuild monitor; the list shows again when it closes. */
-async function _startGenerationSwitch(number, mode) {
+async function _startGenerationSwitch(number, mode, { activateOnly = false } = {}) {
   const sudoNonce = await acquireSudoNonce();
   if (sudoNonce === null) return;
   const res = await csrfFetch('/api/generations/switch', {
     method:  'POST',
     headers: { 'Content-Type': 'application/json' },
-    body:    JSON.stringify({ number, mode, sudo_nonce: sudoNonce }),
+    body:    JSON.stringify({ number, mode, sudo_nonce: sudoNonce, activate_only: activateOnly }),
   }).catch(() => null);
   const data = res ? await res.json().catch(() => null) : null;
   if (!data?.success) {

@@ -8,6 +8,8 @@
 - Dry run runs in the background like the rebuild: its window comes back with the result after a reload
 - Dry run and rebuild say when the config was changed while they ran – the result is about the previous state
 - Move config: afterwards a window asks which config NiCo works with – the new place, another path, or none (setup starts again); before the move it lists what will not come along or will point nowhere
+- Reading this machine: besides *Always allow* there is *Allow once* – valid until the page is reloaded, nothing is stored; a fourth switch *Installed programs* covers reading `nix profile list` for *Update NiCo*
+- System state that was entered but could not be activated: the time machine offers *Activate again*, which repeats only the activation
 
 ### Bug Fixes
 
@@ -21,6 +23,10 @@
 - The choice panel/text of an import is saved first: if that fails, nothing is imported; if the import fails, the choice is reset
 - Text mode no longer overwrites a file changed outside NiCo (another editor, Syncthing, git pull) while it was open: saving asks first – *Cancel*, *Show differences* or *Overwrite* (with a checkpoint of the outside state)
 - Time machine: restoring stops before touching any file when the checkpoint taken first had to leave out a file above the size limit – its current state would otherwise have been lost
+- NiCo no longer reads the list of installed programs (`nix profile list`) on every start; *Update NiCo* shows when NiCo runs from the Nix store and asks on the click
+- *Update NiCo* updates the installation that is running – not a different profile entry (started from a checkout, or two entries for main and dev)
+- Switching to a system state: when entering it worked but updating the boot menu failed, the monitor says so instead of showing the state as set for the next start
+- Removing oversized files no longer rewrites already uploaded checkpoints when the branch was pushed by hand without a linked remote branch; if the boundary cannot be told, it stops
 
 ## 0.24.0 (2026-11-25)
 

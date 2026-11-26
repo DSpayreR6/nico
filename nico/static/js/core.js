@@ -70,6 +70,21 @@ function csrfFetch(url, options = {}) {
   return fetch(url, { ...options, headers });
 }
 
+// Reading this machine allowed once (hostread.py, Martin 2026-11-26): the
+// kinds released with "Allow once" go along as X-NiCo-Read-Once with every
+// request to NiCo until the page is reloaded. Nothing is stored.
+const _readOnce = new Set();
+const _plainFetch = window.fetch.bind(window);
+window.fetch = (input, init = {}) => {
+  const url = typeof input === 'string' ? input : (input?.url || '');
+  if (_readOnce.size && (url.startsWith('/api/') || url.startsWith(location.origin + '/api/'))) {
+    const headers = new Headers(init.headers || (typeof input === 'string' ? undefined : input.headers));
+    headers.set('X-NiCo-Read-Once', [..._readOnce].join(','));
+    init = { ...init, headers };
+  }
+  return _plainFetch(input, init);
+};
+
 // ── i18n ──────────────────────────────────────────────────────────────────────
 let _lang        = {};
 let currentLang  = 'de';
@@ -226,18 +241,29 @@ async function releaseHostRead(kind) {
   } catch { return false; }
 }
 
-/** HTML of a release button for `kind`. */
+/** HTML of the release buttons for `kind`: once (until reload, not
+ *  stored) and always (the app setting). */
 function hostReadButton(kind) {
-  return `<button type="button" class="btn-surface btn-small" data-host-read="${escHtml(kind)}"
-            style="margin-top:6px">${escHtml(t('hostRead.release'))}</button>`;
+  return `<span class="host-read-btns" style="display:inline-flex;gap:6px;margin-top:6px">
+    <button type="button" class="btn-surface btn-small" data-host-read-once="${escHtml(kind)}">${escHtml(t('hostRead.once'))}</button>
+    <button type="button" class="btn-surface btn-small" data-host-read="${escHtml(kind)}">${escHtml(t('hostRead.release'))}</button>
+  </span>`;
+}
+
+/** Release `kind` once: until the page is reloaded. */
+function releaseHostReadOnce(kind) {
+  _readOnce.add(kind);
 }
 
 document.addEventListener('click', async e => {
-  const btn = e.target.closest?.('[data-host-read]');
+  const btn = e.target.closest?.('[data-host-read], [data-host-read-once]');
   if (!btn) return;
-  const kind = btn.dataset.hostRead;
+  const once = 'hostReadOnce' in btn.dataset;
+  const kind = once ? btn.dataset.hostReadOnce : btn.dataset.hostRead;
   btn.disabled = true;
-  if (!await releaseHostRead(kind)) {
+  if (once) {
+    releaseHostReadOnce(kind);
+  } else if (!await releaseHostRead(kind)) {
     btn.disabled = false;
     showToast(t('toast.error'), 'error');
     return;
@@ -245,12 +271,31 @@ document.addEventListener('click', async e => {
   const note = document.createElement('div');
   note.className = 'hint';
   note.style.marginTop = '6px';
-  note.textContent = t('hostRead.released');
-  btn.replaceWith(note);
+  note.textContent = t(once ? 'hostRead.releasedOnce' : 'hostRead.released');
+  (btn.closest('.host-read-btns') || btn).replaceWith(note);
   note.dispatchEvent(new CustomEvent('host-read-released', { bubbles: true, detail: kind }));
+  if (!once) {
+    document.querySelectorAll(`input[data-host-read-setting="${kind}"]`)
+      .forEach(cb => { cb.checked = true; });
+  }
+});
+
+/** A function needs a release that is off: ask - Cancel / Allow once /
+ *  Always allow (Martin 2026-11-26). Resolves true when it may read now. */
+async function askHostRead(kind, text) {
+  const flow = openFlowDialog(t('hostRead.askTitle'));
+  const v = await flow.step({ text, buttons: [
+    { label: t('dialog.cancel'), value: 'cancel' },
+    { label: t('hostRead.once'), value: 'once' },
+    { label: t('hostRead.release'), value: 'always', primary: true }] });
+  flow.close();
+  if (v === 'once') { releaseHostReadOnce(kind); return true; }
+  if (v !== 'always') return false;
+  if (!await releaseHostRead(kind)) { showToast(t('toast.error'), 'error'); return false; }
   document.querySelectorAll(`input[data-host-read-setting="${kind}"]`)
     .forEach(cb => { cb.checked = true; });
-});
+  return true;
+}
 
 // ── NiCo dialogs instead of the browser's own ─────────────────────────────
 // confirm(), alert() and prompt() look like the browser, not like NiCo, and

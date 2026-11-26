@@ -87,6 +87,12 @@ _start_lock = threading.Lock()
 # never waits - the second one is told at once what is running.
 _holder: str | None = None   # what holds _start_lock while it is held
 
+# A generation entered in the profile whose activation failed (F8):
+# {"number", "mode"} for the "activate again" offer, None otherwise. In
+# memory only - after a restart of NiCo the list no longer offers it, any
+# state stays one click away.
+_activation_retry: dict | None = None
+
 _BUSY_CODES = {
     "rebuild":    "ERR_REBUILD_RUNNING",
     "dryrun":     "ERR_BUSY_DRYRUN",
@@ -1404,7 +1410,14 @@ def register(app, ctx):
         if not hostread.allowed(hostread.GENERATIONS):
             return jsonify({"allowed": False, "generations": []})
         gens = generations.list_generations()
-        return jsonify({"allowed": True, "generations": generations.as_dicts(gens)})
+        # Entered, but the activation failed (F8): the state marked for the
+        # next start is not what the boot menu holds - offer the retry,
+        # as long as the profile still points to it.
+        retry = _activation_retry
+        if retry and not any(g.default and g.number == retry["number"] for g in gens):
+            retry = None
+        return jsonify({"allowed": True, "generations": generations.as_dicts(gens),
+                        "retry": retry})
 
     @app.route("/api/generations/switch", methods=["POST"])
     def generations_switch():
@@ -1435,6 +1448,11 @@ def register(app, ctx):
         number = raw if isinstance(raw, int) and not isinstance(raw, bool) else None
         if number is None or number not in {g.number for g in gens}:
             return jsonify({"error": "ERR_GENERATION_UNKNOWN"}), 400
+        # "Activate again" (F8): only the second step, and only for the state
+        # the profile already points to.
+        if payload.get("activate_only") and not any(g.default and g.number == number
+                                                    for g in gens):
+            return jsonify({"error": "ERR_GENERATION_UNKNOWN"}), 400
         busy = reserve("generation")
         if busy:
             return jsonify({"error": busy}), 409
@@ -1460,16 +1478,26 @@ def register(app, ctx):
             pw, expiry = _sudo_nonces.pop(sudo_nonce)
             if expiry > _time_mod.time():
                 sudo_password = pw
-        commands = generations.switch_commands(number, mode)
+        activate_only = bool(payload.get("activate_only"))
+        commands = ([generations.activate_command(mode)] if activate_only
+                    else generations.switch_commands(number, mode))
         units_before = failed_unit_names()
 
         def _out(line):
             return f"data: {_json.dumps({'type': 'output', 'line': line})}\n\n"
 
         def _generate():
+            global _activation_retry
             yield _out(f"── system state {number} ({mode}) ──")
             activation = _Activation()
             ok = True
+            # Two steps, reported apart (revision 2026-11-25, F8): entered in
+            # the profile, then activated. When only the first one worked,
+            # the list marks the state for the next start while the boot
+            # menu still holds the old one - the monitor says so, and the
+            # list offers "activate again".
+            entered = activate_only
+            failed_step = ""
             for cmd in commands:
                 yield _out("$ " + " ".join(c for c in cmd if c != "-S"))
                 if "switch-to-configuration" in cmd[2]:
@@ -1490,11 +1518,19 @@ def register(app, ctx):
                 proc.wait()
                 if proc.returncode != 0:
                     ok = False
+                    failed_step = "activate" if "switch-to-configuration" in cmd[2] else "enter"
                     break
+                if "switch-to-configuration" not in cmd[2]:
+                    entered = True
+            if ok:
+                _activation_retry = None
+            elif entered and failed_step == "activate":
+                _activation_retry = {"number": number, "mode": mode}
             activated_warn = (not ok) and activation.partial
             yield ("data: " + _json.dumps({
                 "type": "done", "success": ok, "kind": "generation",
                 "number": number, "mode": mode,
+                "entered": entered, "failed_step": failed_step,
                 "failed_units": failed_units(exclude=units_before),
                 "error_lines": [], "error_lines_dropped": 0,
                 "activated_with_warnings": activated_warn,
@@ -1511,9 +1547,24 @@ def register(app, ctx):
         """Whether this user has NiCo installed with `nix profile` – only
         then the help menu offers the update."""
         from .. import selfupdate
-        entry = selfupdate.profile_entry()
-        return jsonify({"installed": entry is not None,
-                        "url": entry[1] if entry else ""})
+        # Its own path only - `nix profile list` ran here on every page load
+        # without asking (revision 2026-11-25, S3). Which profile entry it
+        # is, is asked on the click (selfupdate_start).
+        return jsonify({"installed": selfupdate.running_store_path() is not None})
+
+    @app.route("/api/selfupdate/entry")
+    def selfupdate_entry():
+        """The profile entry of this running NiCo, for the question before
+        the update (where it is fetched from). Reads `nix profile list`, so
+        only with the release hostread.PROFILE (always or once)."""
+        from .. import hostread, selfupdate
+        if not hostread.allowed(hostread.PROFILE):
+            return jsonify({"error": hostread.ERR_OFF, "kind": hostread.PROFILE}), 403
+        store = selfupdate.running_store_path()
+        entry = selfupdate.profile_entry(store) if store else None
+        if entry is None:
+            return jsonify({"error": "ERR_NOT_INSTALLED"}), 400
+        return jsonify({"name": entry[0], "url": entry[1]})
 
     @app.route("/api/selfupdate", methods=["POST"])
     def selfupdate_start():
@@ -1529,7 +1580,14 @@ def register(app, ctx):
         import subprocess as _sp
         from .. import selfupdate
 
-        entry = selfupdate.profile_entry()
+        from .. import hostread
+        # Reading the installed programs is reading this machine: only with
+        # the release, always or once (hostread.py, Martin 2026-11-26).
+        if not hostread.allowed(hostread.PROFILE):
+            return jsonify({"error": hostread.ERR_OFF, "kind": hostread.PROFILE}), 403
+        # The entry this running NiCo belongs to, nothing else (W1).
+        store = selfupdate.running_store_path()
+        entry = selfupdate.profile_entry(store) if store else None
         if entry is None:
             return jsonify({"error": "ERR_NOT_INSTALLED"}), 400
         cmd = selfupdate.upgrade_command(entry[0])

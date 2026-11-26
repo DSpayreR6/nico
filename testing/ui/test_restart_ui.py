@@ -37,8 +37,11 @@ data = config_manager.get_defaults(); data["_flake_mode"] = False
 MOD = cfg / "modules" / "text.nix"
 MOD.write_text("{ ... }:\n{\n  services.a.enable = true;\n}\n", encoding="utf-8")
 
-# An installed NiCo whose upgrade just prints a line.
-selfupdate.profile_entry = lambda: ("nico", "github:DSpayreR6/nico/dev")
+# An installed NiCo whose upgrade just prints a line. Since 2026-11-26 it is
+# known from its own store path; the profile entry is read on the click,
+# with the release read_host_profile (revision 2026-11-25, S3/W1).
+selfupdate.running_store_path = lambda here=None: "/nix/store/abc-nico-0.25.0"
+selfupdate.profile_entry = lambda store=None: ("nico", "github:DSpayreR6/nico/dev")
 selfupdate.upgrade_command = lambda name: ["sh", "-c", "echo upgraded"]
 
 from selenium import webdriver
@@ -155,7 +158,12 @@ try:
         if d.execute_script("return !document.getElementById('selfupdate-btn').classList.contains('hidden')"):
             break
         time.sleep(0.3)
-    d.execute_script("document.getElementById('selfupdate-btn').click()"); time.sleep(0.4)
+    d.execute_script("document.getElementById('selfupdate-btn').click()"); time.sleep(0.6)
+    # The release is off: first the question to read the installed programs.
+    ask = d.execute_script("""const o = document.querySelector('.flow-dialog');
+      return o ? [...o.querySelectorAll('.dialog-actions button')].map(b => b.dataset.flow) : null;""")
+    check("Rückfrage: Abbrechen, Einmal, Immer", ask == ["cancel", "once", "always"], ask)
+    d.execute_script("document.querySelector(\".flow-dialog [data-flow='once']\").click()"); time.sleep(0.6)
     press("ok")
     for _ in range(40):
         time.sleep(0.3)

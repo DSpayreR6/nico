@@ -11,7 +11,10 @@ Geprüft wird:
      altes (Liste, Index als Name); Treffer über die URL, nicht über den
      Namen; ein fremdes Paket mit ähnlicher URL zählt nicht; kaputtes JSON.
   2. Befehl: upgrade <name> --refresh, Flakes-Schalter dabei, kein Shell.
-  3. Routen: Status installed true/false; Start ohne Installation 400
+  3. Routen (seit 2026-11-26, Revision S3/W1): Status nur aus dem eigenen
+     Pfad, ohne Profil zu lesen; Lesen des Profils nur mit Freigabe (immer
+     oder einmal per X-NiCo-Read-Once); nur der Eintrag der laufenden NiCo;
+     Start ohne passenden Eintrag 400
      ERR_NOT_INSTALLED; ohne CSRF abgelehnt; mit Installation Job im
      Rebuild-Monitor mit kind=selfupdate; Fehlschlag meldet success=false.
   4. Oberfläche: Menüpunkt ist zu Beginn ausgeblendet.
@@ -82,6 +85,20 @@ check("ohne NiCo: None", selfupdate.parse_profile_list(
 check("kaputtes JSON: None", selfupdate.parse_profile_list("{nope") is None)
 check("leere Ausgabe: None", selfupdate.parse_profile_list("") is None)
 
+
+two = json.dumps({"elements": {
+    "nico": {"originalUrl": "github:DSpayreR6/nico", "storePaths": ["/nix/store/aaa-nico-0.24.0"]},
+    "nico-dev": {"originalUrl": "github:DSpayreR6/nico/dev", "storePaths": ["/nix/store/bbb-nico-0.25.0-dev"]}}})
+check("zwei Einträge: der mit dem laufenden Store-Pfad (W1)",
+      selfupdate.parse_profile_list(two, "/nix/store/bbb-nico-0.25.0-dev") == ("nico-dev", "github:DSpayreR6/nico/dev"),
+      selfupdate.parse_profile_list(two, "/nix/store/bbb-nico-0.25.0-dev"))
+check("laufende NiCo in keinem Eintrag (nix run): None",
+      selfupdate.parse_profile_list(two, "/nix/store/ccc-nico-0.25.0") is None)
+check("Store-Pfad aus dem eigenen Pfad",
+      selfupdate.running_store_path("/nix/store/bbb-nico-0.25.0-dev/lib/nico/nico/selfupdate.py")
+      == "/nix/store/bbb-nico-0.25.0-dev")
+check("Checkout: kein Store-Pfad", selfupdate.running_store_path("/home/x/projects/nico/nico/selfupdate.py") is None)
+
 # ── 2. Befehl ────────────────────────────────────────────────────────────────
 print("2. Befehl")
 cmd = selfupdate.upgrade_command("nico")
@@ -97,18 +114,43 @@ page = client.get("/").get_data(as_text=True)
 m = re.search(r'<meta name="csrf-token" content="([^"]+)"', page)
 hdr = {"X-CSRF-Token": m.group(1) if m else "", "Content-Type": "application/json"}
 
-selfupdate.profile_entry = lambda: None
+# Since 2026-11-26 (revision 2026-11-25, S3/W1): the status reads nothing
+# but NiCo's own path; the profile is read on the click, with the release
+# read_host_profile (always or once), and only the entry holding the
+# running store path counts.
+reads = []
+STORE = "/nix/store/abc-nico-0.25.0"
+selfupdate.running_store_path = lambda here=None: None
+selfupdate.profile_entry = lambda store=None: (reads.append(store), None)[1]
 d = client.get("/api/selfupdate/status").get_json()
-check("Status ohne Installation: installed=false", d == {"installed": False, "url": ""}, d)
+check("Status aus einem Checkout: installed=false", d == {"installed": False}, d)
+selfupdate.running_store_path = lambda here=None: STORE
+d = client.get("/api/selfupdate/status").get_json()
+check("Status aus dem Store: installed=true", d == {"installed": True}, d)
+check("Status liest das Profil nicht", reads == [], reads)
+
 r = client.post("/api/selfupdate", headers=hdr, data="{}")
-check("Start ohne Installation 400 ERR_NOT_INSTALLED",
+check("ohne Freigabe: 403 ERR_HOST_READ_OFF (read_host_profile)",
+      r.status_code == 403 and r.get_json() == {"error": "ERR_HOST_READ_OFF", "kind": "read_host_profile"},
+      (r.status_code, r.get_json()))
+r = client.get("/api/selfupdate/entry")
+check("Eintrag ohne Freigabe: 403", r.status_code == 403, r.status_code)
+check("… und das Profil nicht gelesen", reads == [], reads)
+
+once = {**hdr, "X-NiCo-Read-Once": "read_host_profile"}
+r = client.post("/api/selfupdate", headers=once, data="{}")
+check("einmal erlaubt, kein passender Eintrag: 400 ERR_NOT_INSTALLED",
       r.status_code == 400 and r.get_json().get("error") == "ERR_NOT_INSTALLED",
       (r.status_code, r.get_json()))
+check("… gesucht wurde der Eintrag der laufenden NiCo", reads == [STORE], reads)
+r = client.post("/api/selfupdate", headers=hdr, data="{}")
+check("einmal heißt: nicht gespeichert", r.status_code == 403, r.status_code)
 
-selfupdate.profile_entry = lambda: ("nico", "github:DSpayreR6/nico/dev")
-d = client.get("/api/selfupdate/status").get_json()
-check("Status mit Installation: URL", d == {"installed": True,
-                                            "url": "github:DSpayreR6/nico/dev"}, d)
+client.patch("/api/app/settings", headers=hdr, data=json.dumps({"read_host_profile": True}))
+selfupdate.profile_entry = lambda store=None: (reads.append(store), ("nico-dev", "github:DSpayreR6/nico/dev"))[1]
+r = client.get("/api/selfupdate/entry")
+check("immer erlaubt: Eintrag mit Herkunft", r.status_code == 200
+      and r.get_json() == {"name": "nico-dev", "url": "github:DSpayreR6/nico/dev"}, r.get_json())
 r = client.post("/api/selfupdate", headers={"Content-Type": "application/json"}, data="{}")
 check("ohne CSRF abgelehnt", r.status_code in (400, 403), r.status_code)
 
@@ -133,7 +175,7 @@ def run_job(script):
 
 r, done = run_job("echo upgraded")
 check("Job gestartet", r.status_code == 200 and r.get_json().get("success"), r.get_json())
-check("Profilname an upgrade_command", ran[-1:] == ["nico"], ran)
+check("Name des laufenden Eintrags an upgrade_command", ran[-1:] == ["nico-dev"], ran)
 check("Abschluss kind=selfupdate, erfolgreich",
       done and done.get("kind") == "selfupdate" and done.get("success") is True, done)
 client.post("/api/rebuild/ack", headers=hdr, data="{}")

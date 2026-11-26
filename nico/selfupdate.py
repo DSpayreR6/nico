@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+from pathlib import Path
 
 REPO_MARK = "DSpayreR6/nico"
 
@@ -29,10 +30,27 @@ REPO_MARK = "DSpayreR6/nico"
 _NIX = ["nix", "--extra-experimental-features", "nix-command flakes"]
 
 
-def parse_profile_list(text: str) -> tuple[str, str] | None:
+def running_store_path(here: str | None = None) -> str | None:
+    """The store path this NiCo runs from (/nix/store/<hash>-nico-…), or None
+    for a git checkout. Its own path, nothing read outside: decides whether
+    the menu shows "Update NiCo" at all (revision 2026-11-25, S3/W1)."""
+    p = Path(here or __file__).resolve()
+    parts = p.parts
+    if len(parts) > 3 and parts[:3] == ("/", "nix", "store"):
+        return str(Path(*parts[:4]))
+    return None
+
+
+def parse_profile_list(text: str, store_path: str | None = None) -> tuple[str, str] | None:
     """(name, original url) of NiCo in `nix profile list --json` output, or
     None. Matched on the url rather than the name: the name is whatever Nix
     derived, the url is ours (install.sh does the same).
+
+    store_path: only the entry this running NiCo belongs to - the one whose
+    storePaths hold it. Without that the first url match won: started from
+    a checkout, the update went to the profile and the restart opened the
+    checkout again; with two entries (main and dev) the first one was
+    updated, not necessarily the running one (revision 2026-11-25, W1).
 
     Two formats: since Nix 2.20 `elements` is an object keyed by name; before
     it was a list, and upgrade took the index instead of a name."""
@@ -52,14 +70,19 @@ def parse_profile_list(text: str) -> tuple[str, str] | None:
             continue
         url = str(entry.get("originalUrl") or "")
         # "github:DSpayreR6/nico" or ".../nico/dev", not "nico-something"
-        if url.startswith("github:") and (url[len("github:"):] == REPO_MARK
-                                          or url[len("github:"):].startswith(REPO_MARK + "/")):
-            return name, url
+        if not (url.startswith("github:") and (url[len("github:"):] == REPO_MARK
+                                               or url[len("github:"):].startswith(REPO_MARK + "/"))):
+            continue
+        if store_path is not None and store_path not in (entry.get("storePaths") or []):
+            continue
+        return name, url
     return None
 
 
-def profile_entry() -> tuple[str, str] | None:
-    """The installed NiCo of this user's profile, or None."""
+def profile_entry(store_path: str | None = None) -> tuple[str, str] | None:
+    """The installed NiCo of this user's profile (the one holding
+    `store_path`, when given), or None. Reads `nix profile list` - only
+    with the release hostread.PROFILE, checked by the caller."""
     try:
         res = subprocess.run(_NIX + ["profile", "list", "--json"],
                              capture_output=True, text=True, timeout=30)
@@ -67,7 +90,7 @@ def profile_entry() -> tuple[str, str] | None:
         return None
     if res.returncode != 0:
         return None
-    return parse_profile_list(res.stdout)
+    return parse_profile_list(res.stdout, store_path)
 
 
 def upgrade_command(name: str) -> list[str]:

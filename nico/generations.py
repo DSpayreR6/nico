@@ -132,10 +132,19 @@ def as_dicts(gens: list[Generation]) -> list[dict]:
 
 
 def switch_commands(number: int, mode: str, profile: Path = PROFILE) -> list[list[str]]:
-    """The two root commands for making `number` the system state."""
+    """The two root commands for making `number` the system state: enter it
+    in the profile, then activate it (boot menu / switch now)."""
     if mode not in MODES:
         raise ValueError("ERR_INVALID_ACTION")
     return [
         ["sudo", "-S", "nix-env", "-p", str(profile), "--switch-generation", str(int(number))],
-        ["sudo", "-S", str(profile / "bin" / "switch-to-configuration"), mode],
+        activate_command(mode, profile),
     ]
+
+
+def activate_command(mode: str, profile: Path = PROFILE) -> list[str]:
+    """The second step alone - for "activate again" after it failed while
+    the profile already points to the chosen state (revision 2026-11-25, F8)."""
+    if mode not in MODES:
+        raise ValueError("ERR_INVALID_ACTION")
+    return ["sudo", "-S", str(profile / "bin" / "switch-to-configuration"), mode]

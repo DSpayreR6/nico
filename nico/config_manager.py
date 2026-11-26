@@ -134,6 +134,7 @@ DEFAULT_APP_SETTINGS = {
     "read_host_validator":   False,
     "read_host_hardware":    False,
     "read_host_generations": False,
+    "read_host_profile":     False,
 }
 
 # Default config settings (travel with the config)

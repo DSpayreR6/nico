@@ -768,17 +768,23 @@ function bindUI() {
     document.getElementById('help-dropdown').classList.add('hidden');
     window.open(`${NICO_REPO}/discussions`, '_blank', 'noopener');
   });
-  // Update an installed NiCo (nix profile). Shown only when there is one:
-  // started with `nix run` or from a git checkout there is nothing to update.
-  let _selfupdateUrl = '';
+  // Update an installed NiCo (nix profile). Shown when NiCo runs from the
+  // Nix store - its own path, nothing read (revision 2026-11-25, S3). Which
+  // profile entry belongs to it is asked on the click, with the release to
+  // read the installed programs (always or once).
   fetch('/api/selfupdate/status').then(r => r.json()).then(d => {
     if (!d.installed) return;
-    _selfupdateUrl = d.url || '';
     document.getElementById('selfupdate-btn')?.classList.remove('hidden');
   }).catch(() => {});
   on('selfupdate-btn', 'click', async () => {
     document.getElementById('help-dropdown').classList.add('hidden');
-    if (!(await nicoConfirm(t('selfupdate.confirm', _selfupdateUrl),
+    let entry = await fetch('/api/selfupdate/entry').then(r => r.json()).catch(() => null);
+    if (entry?.error === 'ERR_HOST_READ_OFF') {
+      if (!(await askHostRead('read_host_profile', t('hostRead.askProfile')))) return;
+      entry = await fetch('/api/selfupdate/entry').then(r => r.json()).catch(() => null);
+    }
+    if (!entry || entry.error) { showToast(tErr(entry?.error) || t('toast.error'), 'error'); return; }
+    if (!(await nicoConfirm(t('selfupdate.confirm', entry.url),
                             { okLabel: t('header.helpUpdate') }))) return;
     // Saved first (Martin, 2026-11-25): the update ends with the offer to
     // restart, and the state on disk is then clear from the start.
