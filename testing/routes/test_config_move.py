@@ -101,18 +101,25 @@ check("Systemverzeichnis", d.get("error") == "ERR_SYSTEM_PATH", d)
 check("nichts verändert", cfg.exists() and setting() == str(cfg))
 
 print("3. Abgebrochenes Kopieren")
-real_move = configmove.shutil.move
+# Across filesystems (since 2026-11-26 its own copy - verify - delete,
+# configmove._move_across): the rename reports EXDEV, the copy breaks off.
+import errno  # noqa: E402
+real_rename, real_copytree = configmove._rename, configmove.shutil.copytree
 
 
-def broken(src, dst):
+def exdev(src, dst):
+    raise OSError(errno.EXDEV, "cross-device link")
+
+
+def broken(src, dst, **kw):
     Path(dst).mkdir(parents=True)
     (Path(dst) / "halb").write_text("x", encoding="utf-8")
     raise OSError("Datenträger voll")
 
 
-configmove.shutil.move = broken
+configmove._rename, configmove.shutil.copytree = exdev, broken
 code, d = move(base / "abbruch")
-configmove.shutil.move = real_move
+configmove._rename, configmove.shutil.copytree = real_rename, real_copytree
 check("Fehler ERR_MOVE_FAILED", d.get("error") == "ERR_MOVE_FAILED", d)
 check("Quelle unverändert, Config-Pfad alt", (cfg / "configuration.nix").exists() and setting() == str(cfg))
 check("Teilkopie entfernt", not (base / "abbruch").exists())

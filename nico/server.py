@@ -281,9 +281,27 @@ def create_app() -> Flask:
 
     _FORMAT_GUARD_EXEMPT = {
         "/api/format/check", "/api/format/proceed", "/api/format/safety-commit",
-        "/api/shutdown", "/api/restart", "/api/config/move", "/api/status", "/api/sections",
+        "/api/shutdown", "/api/restart", "/api/config/move", "/api/config/path",
+        "/api/status", "/api/sections",
         "/api/app/settings",
     }
+
+    @app.before_request
+    def _move_guard():
+        """Nothing is written while the config moves (decision Martin
+        2026-11-26): a save in a second tab or the autosave would land in
+        the old place in the middle of the copy, and the old place is
+        deleted afterwards. The verification would notice and stop the
+        move; refusing here keeps it from happening at all."""
+        if request.method not in ("POST", "PUT", "DELETE", "PATCH"):
+            return None
+        if not request.path.startswith("/api/") or request.path in ("/api/config/move",
+                                                                    "/api/shutdown"):
+            return None
+        from .routes import rebuild as _rb
+        if _rb._holder == "move":
+            return jsonify({"success": False, "error": "ERR_BUSY_MOVE"}), 409
+        return None
 
     @app.before_request
     def _format_guard():
@@ -497,15 +515,49 @@ def create_app() -> Flask:
             target, path_err = _validate_user_path(raw)
             if path_err:
                 return jsonify({"error": path_err}), 400
-            err = configmove.move(Path(old), target)
+            err, source_left = configmove.move(Path(old), target)
             if err:
                 return jsonify({"error": err}), 400
             new = str(target.resolve())
-            config_manager.save_app_settings({"nixos_config_dir": new})
-            return jsonify({"success": True, "target": new,
+            # Pointed to the new place at once, so nothing writes into the
+            # old one that is gone - but the window after the move decides
+            # (F5, Martin 2026-11-26: new place, another path, or none).
+            # A failed save no longer ends in a 500 with the config moved
+            # and nobody told where (revision 2026-11-25, F5).
+            try:
+                config_manager.save_app_settings({"nixos_config_dir": new})
+                path_saved = True
+            except OSError:
+                path_saved = False
+            return jsonify({"success": True, "target": new, "old": str(Path(old)),
+                            "source_left": source_left, "path_saved": path_saved,
                             "symlink_old": configmove.symlink_pointed_to(Path(old))})
         finally:
             release()
+
+    @app.route("/api/config/path", methods=["POST"])
+    def set_config_path():
+        """Only point NiCo to a config directory - the choice after a move
+        (F5): the new place, another existing directory, or "" to start the
+        setup again. Unlike /api/setup nothing is created there: no
+        config.json, no versioning, no hardware file - a moved config is
+        complete as it is."""
+        if err := _check_csrf(): return err
+        raw = str((request.get_json(silent=True) or {}).get("path", "")).strip()
+        if raw:
+            path, path_err = _validate_user_path(raw)
+            if path_err:
+                return jsonify({"error": path_err}), 400
+            if not path.is_dir():
+                return jsonify({"error": "ERR_NOT_A_DIR"}), 400
+            value = str(path.resolve())
+        else:
+            value = ""
+        try:
+            config_manager.save_app_settings({"nixos_config_dir": value})
+        except OSError:
+            return jsonify({"error": "ERR_PATH_SAVE"}), 500
+        return jsonify({"success": True, "path": value})
 
     @app.route("/api/restart", methods=["POST"])
     def restart():

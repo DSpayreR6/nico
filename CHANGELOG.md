@@ -7,11 +7,15 @@
 - Before export, detach, copying from /etc/nixos and the backup of an import, NiCo lists the files the action does not cover: symlinks leading out of the config, hard links, and paths in the Nix code pointing outside it (e.g. `/etc/nixos/hardware-configuration.nix`)
 - Dry run runs in the background like the rebuild: its window comes back with the result after a reload
 - Dry run and rebuild say when the config was changed while they ran – the result is about the previous state
+- Move config: afterwards a window asks which config NiCo works with – the new place, another path, or none (setup starts again); before the move it lists what will not come along or will point nowhere
 
 ### Bug Fixes
 
 - Detach and categorize no longer write into files outside the config that are linked in by symlink; format check and Validator no longer read them
 - Rebuild, dry run, system state switch, update, moving the config and restarting NiCo can no longer run at the same time – also not while a rebuild is still being prepared; the message says what is running
+- Moving the config to another drive could lose it when deleting the old place failed half-way; now the copy is written to disk, read back and compared before anything at the old place is deleted, and a failed delete leaves the copy alone
+- After moving the config, a failed save of the new path no longer leaves NiCo pointing to a directory that is gone
+- Nothing can be saved while the config is being moved
 
 - Text mode no longer overwrites a file changed outside NiCo (another editor, Syncthing, git pull) while it was open: saving asks first – *Cancel*, *Show differences* or *Overwrite* (with a checkpoint of the outside state)
 - Time machine: restoring stops before touching any file when the checkpoint taken first had to leave out a file above the size limit – its current state would otherwise have been lost

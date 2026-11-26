@@ -732,7 +732,16 @@ function initSettingsPanel() {
 
 async function _changeConfigPathFlow() {
   const flow = openFlowDialog(t('admin.settingsChangeTitle'));
-  let path  = document.getElementById('settings-current-path')?.value || '';
+  if (!(await _configPathSteps(flow, document.getElementById('settings-current-path')?.value || ''))) {
+    flow.close();
+  }
+}
+
+/** The steps of "change config path" in `flow`: path, create question,
+ *  save. True when saved (window closed, page reloads), false on Cancel –
+ *  the caller decides what follows (the window after a move comes back to
+ *  its three choices). */
+async function _configPathSteps(flow, path) {
   let error = '';
   const post = body => csrfFetch('/api/setup', {
     method:  'POST',
@@ -751,7 +760,7 @@ async function _changeConfigPathFlow() {
     const go = await flow.step({ node, error, buttons: [
       { label: t('admin.settingsCancelBtn'), value: 'cancel' },
       { label: t('admin.settingsApplyBtn'), value: 'ok', danger: true }] });
-    if (go !== 'ok') return flow.close();
+    if (go !== 'ok') return false;
     path = input.value.trim();
     if (!path) { error = t('setup.errNoDir'); continue; }
 
@@ -774,7 +783,7 @@ async function _changeConfigPathFlow() {
     flow.close();
     showToast(t('toast.saved'), 'success');
     setTimeout(() => location.reload(), 800);
-    return;
+    return true;
   }
 }
 
@@ -1120,6 +1129,8 @@ async function _moveConfigFlow() {
       { label: t('dialog.cancel'), value: 'cancel' },
       { label: t('admin.adm.moveBtn'), value: 'ok', primary: true }] });
     if (sure !== 'ok') { error = ''; continue; }
+    // What the move does not take along or breaks (configfiles.py).
+    if (!(await confirmLeftOut(flow, { all: true, move: true }))) { error = ''; continue; }
     if (!(await saveBeforeLeave())) return flow.close();
 
     flow.busy(t('admin.adm.moving'));
@@ -1136,28 +1147,73 @@ async function _moveConfigFlow() {
       continue;
     }
     if (!res.ok || data.error) { error = tErr(data.error); continue; }
+    return _afterMove(flow, data);
+  }
+}
 
-    if (data.symlink_old) {
-      const sw = await flow.step({ text: t('admin.adm.moveSymlink'), buttons: [
-        { label: t('admin.adm.moveLater'), value: 'cancel' },
-        { label: t('admin.symlinkRetarget'), value: 'ok', primary: true }] });
-      if (sw === 'ok') {
-        const nonce = await acquireSudoNonce();
-        if (nonce !== null) {
-          const r = await csrfFetch('/api/symlink/retarget', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ sudo_nonce: nonce }),
-          }).then(x => x.json()).catch(() => null);
-          if (!r || r.error) {
-            await flow.step({ error: tErr(r?.error) || t('toast.error'),
-                              buttons: [{ label: t('dialog.close'), value: 'cancel', primary: true }] });
-          }
-        }
-      }
+/** The window after the move (F5, Martin 2026-11-26). No cancel: the old
+ *  place is gone, so one of three answers is needed – the new place, another
+ *  path, or none (setup starts again). The server has already pointed NiCo
+ *  to the new place, so nothing writes into the old one meanwhile; a failed
+ *  save keeps the window open with the message, and "lies now in …" stays
+ *  visible, so the user always knows where the config is. */
+async function _afterMove(flow, data) {
+  const setPath = path => csrfFetch('/api/config/path', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path }),
+  }).then(r => r.json()).catch(() => null);
+  let error = data.path_saved ? '' : tErr('ERR_PATH_SAVE');
+  for (;;) {
+    let text = t('admin.adm.moveDone', data.target);
+    if (data.source_left) text += '\n\n' + t('admin.adm.moveSourceLeft', data.old);
+    const choice = await flow.step({ text, error, buttons: [
+      { label: t('admin.adm.moveFresh'), value: 'fresh' },
+      { label: t('admin.adm.moveOther'), value: 'other' },
+      { label: t('admin.adm.moveUseNew'), value: 'new', primary: true }] });
+    error = '';
+    if (choice === 'new') {
+      const r = await setPath(data.target);
+      if (!r || r.error) { error = tErr(r?.error || 'ERR_PATH_SAVE'); continue; }
+      // /etc/nixos only for the config NiCo works with from now on.
+      if (data.symlink_old) await _offerSymlinkRetarget(flow);
+      flow.close();
+      showToast(t('admin.adm.moved', data.target), 'success');
+      setTimeout(() => location.reload(), 900);
+      return;
     }
-    flow.close();
-    showToast(t('admin.adm.moved', data.target), 'success');
-    setTimeout(() => location.reload(), 900);
-    return;
+    if (choice === 'other') {
+      // The existing "change config path" steps; Cancel comes back here.
+      if (await _configPathSteps(flow, data.target)) return;
+      continue;
+    }
+    if (choice === 'fresh') {
+      const ok = await flow.step({ text: t('admin.adm.moveFreshInfo', data.target), buttons: [
+        { label: t('admin.adm.moveBack'), value: 'back' },
+        { label: t('admin.adm.moveFreshStart'), value: 'ok', primary: true }] });
+      if (ok !== 'ok') continue;
+      const r = await setPath('');
+      if (!r || r.error) { error = tErr(r?.error || 'ERR_PATH_SAVE'); continue; }
+      flow.close();
+      location.reload();
+      return;
+    }
+  }
+}
+
+/** /etc/nixos pointed to the old place: offer to switch it (sudo). */
+async function _offerSymlinkRetarget(flow) {
+  const sw = await flow.step({ text: t('admin.adm.moveSymlink'), buttons: [
+    { label: t('admin.adm.moveLater'), value: 'cancel' },
+    { label: t('admin.symlinkRetarget'), value: 'ok', primary: true }] });
+  if (sw !== 'ok') return;
+  const nonce = await acquireSudoNonce();
+  if (nonce === null) return;
+  const r = await csrfFetch('/api/symlink/retarget', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sudo_nonce: nonce }),
+  }).then(x => x.json()).catch(() => null);
+  if (!r || r.error) {
+    await flow.step({ error: tErr(r?.error) || t('toast.error'),
+                      buttons: [{ label: t('dialog.close'), value: 'cancel', primary: true }] });
   }
 }

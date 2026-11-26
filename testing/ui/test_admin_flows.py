@@ -299,6 +299,18 @@ try:
     check("Rückfrage nennt alt und neu", st and str(src) in st["text"] and str(dest) in st["text"], st)
     d.execute_script("window._marker = 1;")
     press("ok")
+    # Since 2026-11-26 (revision 2026-11-25, F5) a window follows the move:
+    # no cancel, three choices; "start over" asks once more with Back.
+    st = wait_flow(lambda s: s and "liegt jetzt in" in s["text"])
+    check("nach dem Umzug: Fenster nennt den neuen Ort", st and str(dest.resolve()) in st["text"], st)
+    check("… drei Wahlen, kein Abbrechen", st and sorted(st["buttons"]) == ["fresh", "new", "other"], st)
+    press("fresh")
+    st = wait_flow(lambda s: s and "Einrichtung startet" in s["text"])
+    check("„Ohne Config neu beginnen“: Hinweis mit Zurück", st and st["buttons"] == ["back", "ok"], st)
+    press("back")
+    st = wait_flow(lambda s: s and "liegt jetzt in" in s["text"])
+    check("Zurück führt zu den drei Wahlen", st and "new" in st["buttons"], st)
+    press("new")
     for _ in range(30):
         time.sleep(0.3)
         if d.execute_script("return window._marker === undefined"):
