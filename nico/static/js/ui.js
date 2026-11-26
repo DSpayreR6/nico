@@ -786,11 +786,7 @@ function bindUI() {
     const res = await csrfFetch('/api/selfupdate', { method: 'POST' }).catch(() => null);
     const data = res ? await res.json().catch(() => null) : null;
     if (!data?.success) {
-      if (data?.error === 'ERR_REBUILD_RUNNING') {
-        showToast(t('rebuild.alreadyRunning'), 'error');
-        attachRebuildMonitor();
-        return;
-      }
+      if (handleBusy(data?.error)) return;
       showToast(tErr(data?.error) || t('toast.error'), 'error');
       return;
     }

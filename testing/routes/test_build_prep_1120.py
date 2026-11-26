@@ -31,6 +31,27 @@ def check(label, cond, got=None):
     print(("  OK   " if cond else "  FAIL ") + label + ("" if cond or got is None else f"  (war: {got})"))
     if not cond: fails.append(label)
 
+
+
+def dry_run(client, headers, body):
+    """POST /api/dry-run and wait for the job's result (a job since
+    2026-11-26, revision 2026-11-25 D1): the `dry` dict of its done event,
+    or the refusal as it came."""
+    import time
+    from nico.routes import rebuild as _rb
+    d = client.post("/api/dry-run", headers=headers, data=json.dumps(body)).get_json() or {}
+    if not d.get("job_id"):
+        return d
+    for _ in range(1200):
+        with _rb._job_cv:
+            j = _rb._job
+            if j and j["id"] == d["job_id"] and not j["running"]:
+                for ev in j["events"]:
+                    if '"kind": "dryrun"' in ev:
+                        return json.loads(ev.split("data: ", 1)[1])["dry"]
+                return {}
+        time.sleep(0.05)
+    return {}
 MiB = 1024 * 1024
 
 # ── A ───────────────────────────────────────────────────────────────────────
@@ -118,8 +139,8 @@ try:
 
     cfg = make_repo()
     c, H = client_for(cfg)
-    r = c.post("/api/dry-run", headers=H, data=json.dumps({"hostname": "h1"}))
-    check("Dry-Run: derselbe Index", index(cfg) == expected, (index(cfg), r.get_json()))
+    r = dry_run(c, H, {"hostname": "h1"})
+    check("Dry-Run: derselbe Index", index(cfg) == expected, (index(cfg), r))
 
     cfg = make_repo()
     c, H = client_for(cfg)
@@ -138,8 +159,8 @@ try:
     check("stage_all meldet den Fehler", not ok and msg.startswith("ERR_GIT_FAILED_OUT"), (ok, msg))
     c, H = client_for(cfg)
     nix_calls.clear()
-    r = c.post("/api/dry-run", headers=H, data=json.dumps({"hostname": "h1"}))
-    body = r.get_json() or {}
+    r = dry_run(c, H, {"hostname": "h1"})
+    body = r or {}
     check("Dry-Run: Fehler, nix nicht aufgerufen", not body.get("ok")
           and str(body.get("output", "")).startswith("ERR_GIT_FAILED_OUT") and not nix_calls,
           (body, nix_calls))

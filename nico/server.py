@@ -482,23 +482,30 @@ def create_app() -> Flask:
         to switch it."""
         if err := _check_csrf(): return err
         from . import configmove
-        from .routes.rebuild import job_running
+        from .routes.rebuild import release, reserve
         old = _nixos_dir()
         if not old or not Path(old).is_dir():
             return jsonify({"error": "ERR_NOT_SETUP"}), 400
-        if job_running():
-            return jsonify({"error": "ERR_REBUILD_RUNNING"}), 409
-        raw = str((request.get_json(silent=True) or {}).get("target", "")).strip()
-        target, path_err = _validate_user_path(raw)
-        if path_err:
-            return jsonify({"error": path_err}), 400
-        err = configmove.move(Path(old), target)
-        if err:
-            return jsonify({"error": err}), 400
-        new = str(target.resolve())
-        config_manager.save_app_settings({"nixos_config_dir": new})
-        return jsonify({"success": True, "target": new,
-                        "symlink_old": configmove.symlink_pointed_to(Path(old))})
+        # First step, before anything moves: not next to a rebuild that is
+        # still being prepared, a dry run, an update … (revision 2026-11-25,
+        # F6). Held for the whole move.
+        busy = reserve("move")
+        if busy:
+            return jsonify({"error": busy}), 409
+        try:
+            raw = str((request.get_json(silent=True) or {}).get("target", "")).strip()
+            target, path_err = _validate_user_path(raw)
+            if path_err:
+                return jsonify({"error": path_err}), 400
+            err = configmove.move(Path(old), target)
+            if err:
+                return jsonify({"error": err}), 400
+            new = str(target.resolve())
+            config_manager.save_app_settings({"nixos_config_dir": new})
+            return jsonify({"success": True, "target": new,
+                            "symlink_old": configmove.symlink_pointed_to(Path(old))})
+        finally:
+            release()
 
     @app.route("/api/restart", methods=["POST"])
     def restart():
@@ -507,16 +514,21 @@ def create_app() -> Flask:
         answers with another instance."""
         if err := _check_csrf(): return err
         from . import restart as _restart
-        from .routes.rebuild import job_running
-        if job_running():
-            return jsonify({"error": "ERR_REBUILD_RUNNING"}), 409
+        from .routes.rebuild import release, reserve
+        # Reserved like a rebuild (revision 2026-11-25, F6) and not given
+        # back on success: this process ends, nothing may start in between.
+        busy = reserve("restart")
+        if busy:
+            return jsonify({"error": busy}), 409
         try:
             port = int(request.environ.get("SERVER_PORT", ""))
         except ValueError:
+            release()
             return jsonify({"error": "ERR_RESTART_FAILED"}), 500
         try:
             _restart.spawn(port)
         except OSError:
+            release()
             return jsonify({"error": "ERR_RESTART_FAILED"}), 500
         threading.Thread(target=lambda: (threading.Event().wait(0.3), os._exit(0)), daemon=True).start()
         return jsonify({"ok": True, "instance": _INSTANCE})

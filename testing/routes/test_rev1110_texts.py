@@ -148,8 +148,14 @@ src = (ROOT / "nico" / "routes" / "rebuild.py").read_text(encoding="utf-8")
 check("Dry-Run: gescheitertes flake update als Code", "ERR_DRY_UPDATE_FAILED" in src)
 check("Dry-Run: unbekannter Fehler als Code", '"output": combined or "ERR_UNKNOWN"' in src)
 js = (ROOT / "nico" / "static" / "js" / "rebuild.js").read_text(encoding="utf-8")
+# Since 2026-11-26 both ways (and the restore after a reload) go through
+# requestDryRun and _showDryRunResult, which translates the output.
+show = js[js.index("function _showDryRunResult"):]
+show = show[:show.index("\n}\n")]
 check("beide Dry-Run-Wege übersetzen die Ausgabe",
-      js.count("tErr(data.output)") == 2, js.count("tErr(data.output)"))
+      "tErr(data.output)" in show and js.count("_showDryRunResult(output, data") >= 3
+      and js.count("'/api/dry-run'") == 1,
+      (js.count("_showDryRunResult(output, data"), js.count("'/api/dry-run'")))
 
 print()
 if fails:

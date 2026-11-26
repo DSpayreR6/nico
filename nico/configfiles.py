@@ -148,6 +148,22 @@ def scan(root: str | Path, *, nix_only: bool = True, move: bool = False,
     return out
 
 
+def nix_state(nixos_dir: str | Path) -> dict[str, str]:
+    """{file: sha256} of the config's .nix files - taken when a dry run or
+    rebuild starts reading the config and again when it ends, so the result
+    can say "the config changed meanwhile, this is about the previous
+    state" (revision 2026-11-25, decision Martin 2026-11-26). flake.lock is
+    left out: an update in the run itself writes it."""
+    import hashlib
+    out = {}
+    for rel, p in scan(nixos_dir).files:
+        try:
+            out[rel] = hashlib.sha256(p.read_bytes()).hexdigest()
+        except OSError:
+            out[rel] = ""
+    return out
+
+
 def nix_files(nixos_dir: str | Path, under: str | Path | None = None) -> list[Path]:
     """Stand-in for `sorted(Path(nixos_dir).rglob("*.nix"))`: the config's
     own .nix files, without hidden directories and links out of it. The

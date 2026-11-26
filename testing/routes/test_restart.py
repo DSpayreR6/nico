@@ -134,6 +134,14 @@ check("Erfolg: neue NiCo auf demselben Port gestartet", spawned == [8421], spawn
 check("Erfolg: alte beendet sich", exited == [0], exited)
 check("Antwort nennt die alte Instanz", r.get_json() == {"ok": True, "instance": inst}, r.get_json())
 
+# The reservation stays with a restart that succeeded (revision 2026-11-25,
+# F6): the process ends, nothing may start in between - here it does not
+# end (os._exit is replaced), so the next start is refused.
+r = client.post("/api/restart", headers=hdr, data="{}", base_url="http://127.0.0.1:8421")
+check("nach dem Neustart: nichts startet mehr (ERR_BUSY_RESTART)",
+      r.status_code == 409 and r.get_json().get("error") == "ERR_BUSY_RESTART", r.get_json())
+rb.release()   # the new process starts without it
+
 spawned.clear(); exited.clear()
 
 

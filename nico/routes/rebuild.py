@@ -78,6 +78,96 @@ class DownloadTally:
 # finding 25). Not _job_cv itself: the stream readers wait on it.
 _start_lock = threading.Lock()
 
+# Since 2026-11-26 (revision 2026-11-25, F6) the one reservation for every
+# action that must not run next to another: rebuild, dry run, generation
+# switch, update, moving the config, restarting NiCo. Moving and restarting
+# used to check only the registered job, so a rebuild still being prepared
+# (holding _start_lock, no job yet) could run next to a move that took its
+# directory away. Reserved as the first step, before any state changes;
+# never waits - the second one is told at once what is running.
+_holder: str | None = None   # what holds _start_lock while it is held
+
+_BUSY_CODES = {
+    "rebuild":    "ERR_REBUILD_RUNNING",
+    "dryrun":     "ERR_BUSY_DRYRUN",
+    "generation": "ERR_BUSY_GENERATION",
+    "selfupdate": "ERR_BUSY_UPDATE",
+    "move":       "ERR_BUSY_MOVE",
+    "restart":    "ERR_BUSY_RESTART",
+}
+
+
+def _job_kind(mode: str) -> str:
+    """The kind of a registered job from its mode."""
+    if mode in ("dryrun", "selfupdate"):
+        return mode
+    if str(mode).startswith("generation-"):
+        return "generation"
+    return "rebuild"
+
+
+def reserve(kind: str) -> str | None:
+    """Take the reservation for `kind`. None when taken - the caller must
+    release() it - otherwise the error code naming what is running."""
+    global _holder
+    if not _start_lock.acquire(blocking=False):
+        return _BUSY_CODES.get(_holder or "rebuild", "ERR_REBUILD_RUNNING")
+    with _job_cv:
+        running = _job.get("mode", "") if _job is not None and _job["running"] else None
+    if running is not None:
+        _start_lock.release()
+        return _BUSY_CODES[_job_kind(running)]
+    _holder = kind
+    return None
+
+
+def release() -> None:
+    """Give the reservation back (not after a restart: the process ends)."""
+    global _holder
+    _holder = None
+    _start_lock.release()
+
+
+def _start_job(generate, *, mode: str, hostname: str = "", verbose: bool = False) -> str:
+    """Register a job and run `generate` (yielding SSE event strings) in a
+    worker thread; the monitor and /api/rebuild/stream follow it.
+
+    The one frame for every job (revision 2026-11-25, D1): rebuild,
+    generation switch, update and dry run had each their own copy of the
+    registration, the worker and the end. The caller holds the reservation;
+    from here on the running job is what keeps the others out."""
+    global _job
+    import json as _json
+    job_id = uuid.uuid4().hex
+    with _job_cv:
+        _job = {
+            "id":       job_id,
+            "running":  True,
+            "events":   [],
+            "dropped":  0,
+            "success":  None,
+            "acked":    False,
+            "mode":     mode,
+            "hostname": hostname,
+            "verbose":  verbose,
+            "started":  time.time(),
+            "finished": None,
+        }
+        _job_cv.notify_all()
+
+    def _run():
+        try:
+            for event in generate():
+                _job_append(job_id, event)
+        except Exception as exc:  # never let the thread die silently
+            _job_append(job_id,
+                        f"data: {_json.dumps({'type': 'error', 'message': str(exc)})}\n\n")
+        finally:
+            _job_finish(job_id)
+
+    threading.Thread(target=_run, name=f"{_job_kind(mode)}-{job_id[:8]}", daemon=True).start()
+    return job_id
+
 # Upper bound for the written rebuild log. nixos-rebuild runs with `--log-format internal-json -v`, which emits one JSON line per evaluated
 # file: a single failed run produced 2.1 GB here, so everything above this is
 # dropped. Since 2026-11-15 those lines are only kept while "show all
@@ -821,17 +911,18 @@ def register(app, ctx):
             return err
 
         # A second start while the first is still being set up gets the
-        # same answer as one during the build.
-        if not _start_lock.acquire(blocking=False):
-            return jsonify({"error": "ERR_REBUILD_RUNNING"}), 409
+        # same answer as one during the build; a move, dry run, update …
+        # in progress names itself (reserve()).
+        busy = reserve("rebuild")
+        if busy:
+            return jsonify({"error": busy}), 409
         try:
             return _start_locked(payload, mode, nixos_dir)
         finally:
-            _start_lock.release()
+            release()
 
     def _start_locked(payload, mode, nixos_dir):
         """rebuild_start from the running-check on; _start_lock is held."""
-        global _job
 
         import json as _json
         import subprocess as _sp
@@ -1214,6 +1305,10 @@ def register(app, ctx):
                         yield _emit_phase('analysing', False)
                         yield f"data: {_json.dumps({'type': 'prefetch_total', 'mib': 0})}\n\n"
 
+                # What the build reads, to tell at the end whether the config
+                # changed meanwhile (decision Martin 2026-11-26).
+                from .. import configfiles
+                state_before = configfiles.nix_state(nixos_dir)
                 proc = _sp.Popen(
                     cmd,
                     cwd=nixos_dir,       # flake.nix muss im cwd liegen
@@ -1284,42 +1379,16 @@ def register(app, ctx):
                 # Built and switched, only some units did not restart: its own
                 # outcome, shown as a warning. `success` stays the exit code.
                 activated_warn = (not success) and activation.partial
-                yield f"data: {_json.dumps({'type': 'done', 'success': success, 'exit_code': proc.returncode, 'log_written': log_written, 'failed_units': units, 'error_lines': err_lines.lines, 'error_lines_dropped': err_lines.dropped, 'activated_with_warnings': activated_warn, 'unrestarted_units': activation.units if activated_warn else []})}\n\n"
+                changed_during = configfiles.nix_state(nixos_dir) != state_before
+                yield f"data: {_json.dumps({'type': 'done', 'success': success, 'exit_code': proc.returncode, 'log_written': log_written, 'failed_units': units, 'error_lines': err_lines.lines, 'error_lines_dropped': err_lines.dropped, 'activated_with_warnings': activated_warn, 'unrestarted_units': activation.units if activated_warn else [], 'changed_during': changed_during})}\n\n"
             except FileNotFoundError:
                 msg = "ERR_NO_NIXOS_REBUILD"   # translated in the interface
                 yield f"data: {_json.dumps({'type': 'error', 'message': msg})}\n\n"
             except Exception as exc:
                 yield f"data: {_json.dumps({'type': 'error', 'message': str(exc)})}\n\n"
 
-        job_id = uuid.uuid4().hex
-        with _job_cv:
-            _job = {
-                "id":       job_id,
-                "running":  True,
-                "events":   [],
-                "dropped":  0,
-                "success":  None,
-                "acked":    False,
-                "mode":     mode,
-                "hostname": hostname if use_flake else "",
-                "verbose":  verbose,
-                "started":  time.time(),
-                "finished": None,
-            }
-            _job_cv.notify_all()
-
-        def _run_job():
-            try:
-                for event in _generate():
-                    _job_append(job_id, event)
-            except Exception as exc:  # never let the thread die silently
-                _job_append(job_id,
-                            f"data: {_json.dumps({'type': 'error', 'message': str(exc)})}\n\n")
-            finally:
-                _job_finish(job_id)
-
-        threading.Thread(target=_run_job, name=f"rebuild-{job_id[:8]}",
-                         daemon=True).start()
+        job_id = _start_job(_generate, mode=mode, hostname=hostname if use_flake else "",
+                            verbose=verbose)
         return jsonify({"success": True, "job_id": job_id})
 
     # ── Time machine, System side: generations (2026-11-21) ──────────────────
@@ -1366,11 +1435,15 @@ def register(app, ctx):
         number = raw if isinstance(raw, int) and not isinstance(raw, bool) else None
         if number is None or number not in {g.number for g in gens}:
             return jsonify({"error": "ERR_GENERATION_UNKNOWN"}), 400
-        with _start_lock:
+        busy = reserve("generation")
+        if busy:
+            return jsonify({"error": busy}), 409
+        try:
             return _start_generation(payload, number, mode, nixos_dir)
+        finally:
+            release()
 
     def _start_generation(payload, number: int, mode: str, nixos_dir: str):
-        global _job
         import json as _json
         import subprocess as _sp
         from .. import generations
@@ -1428,28 +1501,7 @@ def register(app, ctx):
                 "unrestarted_units": activation.units if activated_warn else [],
             }) + "\n\n")
 
-        job_id = uuid.uuid4().hex
-        with _job_cv:
-            _job = {
-                "id": job_id, "running": True, "events": [], "dropped": 0,
-                "success": None, "acked": False, "mode": f"generation-{mode}",
-                "hostname": "", "verbose": False, "started": time.time(),
-                "finished": None,
-            }
-            _job_cv.notify_all()
-
-        def _run_job():
-            try:
-                for event in _generate():
-                    _job_append(job_id, event)
-            except Exception as exc:
-                _job_append(job_id,
-                            f"data: {_json.dumps({'type': 'error', 'message': str(exc)})}\n\n")
-            finally:
-                _job_finish(job_id)
-
-        threading.Thread(target=_run_job, name=f"generation-{job_id[:8]}",
-                         daemon=True).start()
+        job_id = _start_job(_generate, mode=f"generation-{mode}")
         return jsonify({"success": True, "job_id": job_id})
 
     # ── Updating an installed NiCo (2026-11-22) ──────────────────────────────
@@ -1472,7 +1524,6 @@ def register(app, ctx):
         directory needed: the user profile belongs to the user. The running
         NiCo keeps running; the new version is used after a restart.
         """
-        global _job
         if err := _check_csrf(): return err
         import json as _json
         import subprocess as _sp
@@ -1503,31 +1554,13 @@ def register(app, ctx):
                 "activated_with_warnings": False, "unrestarted_units": [],
             }) + "\n\n")
 
-        with _start_lock:
-            with _job_cv:
-                if _job is not None and _job["running"]:
-                    return jsonify({"error": "ERR_REBUILD_RUNNING"}), 409
-                job_id = uuid.uuid4().hex
-                _job = {
-                    "id": job_id, "running": True, "events": [], "dropped": 0,
-                    "success": None, "acked": False, "mode": "selfupdate",
-                    "hostname": "", "verbose": False, "started": time.time(),
-                    "finished": None,
-                }
-                _job_cv.notify_all()
-
-        def _run_job():
-            try:
-                for event in _generate():
-                    _job_append(job_id, event)
-            except Exception as exc:
-                _job_append(job_id,
-                            f"data: {_json.dumps({'type': 'error', 'message': str(exc)})}\n\n")
-            finally:
-                _job_finish(job_id)
-
-        threading.Thread(target=_run_job, name=f"selfupdate-{job_id[:8]}",
-                         daemon=True).start()
+        busy = reserve("selfupdate")
+        if busy:
+            return jsonify({"error": busy}), 409
+        try:
+            job_id = _start_job(_generate, mode="selfupdate")
+        finally:
+            release()
         return jsonify({"success": True, "job_id": job_id})
 
     @app.route("/api/rebuild/precheck", methods=["POST"])
@@ -1549,6 +1582,18 @@ def register(app, ctx):
         if not bool(config_manager.get_app_settings().get("prefetch_dry_run", True)):
             return jsonify({"skipped": True})
 
+        # Stages and evaluates like a dry run: not next to a move, a rebuild
+        # or a dry run (reserve(); the interface then starts the rebuild,
+        # which names what is running).
+        busy = reserve("rebuild")
+        if busy:
+            return jsonify({"error": busy}), 409
+        try:
+            return _precheck_reserved(nixos_dir)
+        finally:
+            release()
+
+    def _precheck_reserved(nixos_dir: str):
         payload   = request.get_json(silent=True) or {}
         data      = config_manager.load_config(nixos_dir) or {}
         use_flake = bool(config_manager.flake_mode(nixos_dir))
@@ -1696,9 +1741,45 @@ def register(app, ctx):
 
     @app.route("/api/dry-run", methods=["POST"])
     def dry_run():
-        if err := _check_csrf(): return err
+        """Start a dry run as a job (revision 2026-11-25, D1).
+
+        Until 2026-11-26 the dry run was a plain request: no reservation, so
+        it ran next to a rebuild or a move (with "update flake" it writes
+        flake.lock, and it stages files), and a reload lost its result. Now
+        it is a job in the same frame as the rebuild: reserved like the
+        others, and its result - one `done` event of kind "dryrun" carrying
+        {ok, mode, output, changed_during} - survives a reload until it was
+        seen (/api/rebuild/ack).
         """
-        Validate configuration without writing anything.
+        if err := _check_csrf(): return err
+        nixos_dir, err = _require_setup()
+        if err:
+            return err
+        import json as _json
+        from .. import configfiles
+        body = request.get_json(silent=True) or {}
+
+        def _generate():
+            before = configfiles.nix_state(nixos_dir)
+            result = _dry_run_compute(nixos_dir, body)
+            result["changed_during"] = configfiles.nix_state(nixos_dir) != before
+            yield ("data: " + _json.dumps({"type": "done", "kind": "dryrun",
+                                           "success": bool(result.get("ok")),
+                                           "dry": result}) + "\n\n")
+
+        busy = reserve("dryrun")
+        if busy:
+            return jsonify({"error": busy}), 409
+        try:
+            job_id = _start_job(_generate, mode="dryrun")
+        finally:
+            release()
+        return jsonify({"success": True, "job_id": job_id})
+
+    def _dry_run_compute(nixos_dir: str, body: dict) -> dict:
+        """
+        Validate configuration without writing anything. Returns
+        {ok, mode, output}; `output` may be an error code (ERR_DRY_…).
 
         Flake mode  (flakes: true in nico.json):
           nix build .#nixosConfigurations.<host>.config.system.build.toplevel --dry-run
@@ -1711,11 +1792,6 @@ def register(app, ctx):
         """
         import subprocess
 
-        nixos_dir, err = _require_setup()
-        if err:
-            return err
-
-        body   = request.get_json(silent=True) or {}
         stored = config_manager.load_config(nixos_dir) or {}
         use_flake    = config_manager.flake_mode(nixos_dir)
         update_flake = bool(body.get("update_flake", False)) and use_flake
@@ -1734,12 +1810,12 @@ def register(app, ctx):
                     )
                     if upd.returncode != 0:
                         combined = (upd.stdout + upd.stderr).strip()
-                        return jsonify({"ok": False, "mode": "flake",
+                        return ({"ok": False, "mode": "flake",
                                         "output": chr(0x1f).join(["ERR_DRY_UPDATE_FAILED", combined])})
                 except subprocess.TimeoutExpired:
-                    return jsonify({"ok": False, "mode": "flake", "output": "ERR_UPDATE_TIMEOUT"})
+                    return ({"ok": False, "mode": "flake", "output": "ERR_UPDATE_TIMEOUT"})
                 except FileNotFoundError:
-                    return jsonify({"ok": False, "mode": "none",  "output": "ERR_DRY_NO_NIX"})
+                    return ({"ok": False, "mode": "none",  "output": "ERR_DRY_NO_NIX"})
 
             all_hosts  = bool(body.get("all_hosts", False))
             hostname_p = (body.get("hostname") or "").strip()
@@ -1758,7 +1834,7 @@ def register(app, ctx):
             if is_repo:
                 staged, stage_msg = git_manager.stage_all(nixos_dir)
                 if not staged:
-                    return jsonify({"ok": False, "mode": "flake", "output": stage_msg})
+                    return ({"ok": False, "mode": "flake", "output": stage_msg})
             flake_ref = prebuild.flake_base(nixos_dir, is_repo)
             targets = [
                 f"{flake_ref}#nixosConfigurations.{h}.config.system.build.toplevel"
@@ -1780,12 +1856,12 @@ def register(app, ctx):
                 combined = (result.stdout + result.stderr).strip()
                 if result.returncode == 0:
                     out = combined or "✓ Nichts zu bauen – Konfiguration ist aktuell."
-                    return jsonify({"ok": True, "mode": "flake", "output": out})
-                return jsonify({"ok": False, "mode": "flake", "output": combined or "ERR_UNKNOWN"})
+                    return ({"ok": True, "mode": "flake", "output": out})
+                return ({"ok": False, "mode": "flake", "output": combined or "ERR_UNKNOWN"})
             except subprocess.TimeoutExpired:
-                return jsonify({"ok": False, "mode": "flake", "output": "ERR_DRY_TIMEOUT_FLAKE"})
+                return ({"ok": False, "mode": "flake", "output": "ERR_DRY_TIMEOUT_FLAKE"})
             except FileNotFoundError:
-                return jsonify({"ok": False, "mode": "none",  "output": "ERR_DRY_NO_NIX"})
+                return ({"ok": False, "mode": "none",  "output": "ERR_DRY_NO_NIX"})
 
         # ── Non-flake mode ────────────────────────────────────────────────
         # Checks exactly what a non-flake rebuild would build: configuration.nix
@@ -1794,7 +1870,7 @@ def register(app, ctx):
 
         cfg_nix = Path(nixos_dir) / "configuration.nix"
         if not cfg_nix.exists():
-            return jsonify({"ok": False, "mode": "semantic", "output": "ERR_NO_CONFIG"}), 400
+            return ({"ok": False, "mode": "semantic", "output": "ERR_NO_CONFIG"})
 
         tmpfile = str(cfg_nix)
 
@@ -1815,7 +1891,7 @@ def register(app, ctx):
                     capture_output=True, text=True, timeout=60
                 )
                 if result.returncode == 0:
-                    return jsonify({
+                    return ({
                         "ok": True,
                         "mode": "semantic",
                         # Code statt Satz - das Feld laeuft im Frontend durch
@@ -1832,11 +1908,11 @@ def register(app, ctx):
                 )
                 if not nixpkgs_missing:
                     cleaned = _clean_nix_error(raw_err, tmpfile)
-                    return jsonify({"ok": False, "mode": "semantic", "output": cleaned})
+                    return ({"ok": False, "mode": "semantic", "output": cleaned})
             except subprocess.TimeoutExpired:
-                return jsonify({"ok": False, "mode": "semantic", "output": "ERR_DRY_TIMEOUT_SEM"})
+                return ({"ok": False, "mode": "semantic", "output": "ERR_DRY_TIMEOUT_SEM"})
             except FileNotFoundError:
-                return jsonify({"ok": False, "mode": "none", "output": "ERR_DRY_NO_NIX"})
+                return ({"ok": False, "mode": "none", "output": "ERR_DRY_NO_NIX"})
             except Exception:
                 pass  # fall through to syntax-only
 
@@ -1846,18 +1922,18 @@ def register(app, ctx):
                 capture_output=True, text=True, timeout=15
             )
             if result.returncode == 0:
-                return jsonify({
+                return ({
                     "ok": True,
                     "mode": "syntax",
                     "output": "ERR_DRY_OK_SYNTAX",
                 })
             raw_err = (result.stderr or result.stdout or "ERR_UNKNOWN").strip()
-            return jsonify({"ok": False, "mode": "syntax", "output": _clean_nix_error(raw_err, tmpfile)})
+            return ({"ok": False, "mode": "syntax", "output": _clean_nix_error(raw_err, tmpfile)})
 
         except FileNotFoundError:
-            return jsonify({"ok": False, "mode": "none", "output": "ERR_DRY_NO_NIX"})
+            return ({"ok": False, "mode": "none", "output": "ERR_DRY_NO_NIX"})
         except subprocess.TimeoutExpired:
-            return jsonify({"ok": False, "mode": "syntax", "output": "ERR_DRY_TIMEOUT_SYN"})
+            return ({"ok": False, "mode": "syntax", "output": "ERR_DRY_TIMEOUT_SYN"})
 
     # -------------------------------------------------------------------- sudo
 

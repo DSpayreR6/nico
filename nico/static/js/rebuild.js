@@ -539,6 +539,10 @@ async function _rebuildFlow(mode, preparing) {
   // A rebuild that already runs (another tab, an earlier start) is shown right
   // away instead of after all the steps below.
   const current = await fetch('/api/rebuild/status').then(r => r.json()).catch(() => null);
+  if (current?.job?.running && current.job.mode === 'dryrun') {
+    showToast(tErr('ERR_BUSY_DRYRUN'), 'error');
+    return;
+  }
   if (current?.job?.running) {
     showToast(t('rebuild.alreadyRunning'), 'error');
     preparing.close();
@@ -648,12 +652,8 @@ async function _rebuildFlow(mode, preparing) {
   const startData = startRes ? await startRes.json().catch(() => null) : null;
   if (!startData?.success) {
     // A rebuild is already running (e.g. started in another tab) – show it
-    // instead of starting a second one.
-    if (startData?.error === 'ERR_REBUILD_RUNNING') {
-      showToast(t('rebuild.alreadyRunning'), 'error');
-      attachRebuildMonitor();
-      return;
-    }
+    // instead of starting a second one; anything else running says what.
+    if (handleBusy(startData?.error)) return;
     showToast(tErr(startData?.error) || t('toast.error'), 'error');
     return;
   }
@@ -1088,6 +1088,16 @@ function attachRebuildMonitor(fromIndex = 0) {
       _showErrorLines(msg.error_lines, msg.error_lines_dropped, msg.success || unitsNamed);
       document.getElementById('rebuild-unrestarted-units')?.remove();
       if (activatedWarn) _showUnrestartedUnits(msg.unrestarted_units);
+      // Saved while it built (decision Martin 2026-11-26): the build is the
+      // state from its start, the change comes with the next rebuild.
+      document.getElementById('rebuild-changed-during')?.remove();
+      if (msg.changed_during) {
+        const note = document.createElement('div');
+        note.id = 'rebuild-changed-during';
+        note.className = 'validate-hint';
+        note.textContent = t('rebuild.changedDuring');
+        resultEl.insertAdjacentElement('afterend', note);
+      }
       if (msg.log_written) {
         logBtn.classList.remove('hidden');
         logBtn.onclick = async () => {
@@ -1266,14 +1276,21 @@ function getRebuildJob() {
  */
 async function rebuildJobOwnsWorktree() {
   const job = await getRebuildJob();
-  return !!job && (job.running || !job.acked);
+  // A dry run commits and pushes nothing (2026-11-26: a job since then).
+  return !!job && job.mode !== 'dryrun' && (job.running || !job.acked);
 }
 
 /**
  * On page load: if a rebuild is running – or finished without the result having
  * been seen – reopen the monitor and replay its output from the beginning.
+ * A dry run reopens its own window.
  */
 async function restoreRebuildMonitor() {
+  const job = await getRebuildJob();
+  if (job && job.mode === 'dryrun' && (job.running || !job.acked)) {
+    restoreDryRun(job);
+    return;
+  }
   if (await rebuildJobOwnsWorktree()) attachRebuildMonitor(0);
 }
 
@@ -1431,6 +1448,93 @@ async function _buildDryRunBody(hostInfo = null) {
   };
 }
 
+/** A start refused because something else runs (reserve(), 2026-11-26):
+ *  says what, and shows the monitor when that something lives in it.
+ *  Returns true when `code` was such a refusal. */
+function handleBusy(code) {
+  if (!code || !(code === 'ERR_REBUILD_RUNNING' || code.startsWith('ERR_BUSY_'))) return false;
+  showToast(tErr(code), 'error');
+  if (['ERR_REBUILD_RUNNING', 'ERR_BUSY_GENERATION', 'ERR_BUSY_UPDATE'].includes(code)) {
+    attachRebuildMonitor();
+  }
+  return true;
+}
+
+// ── Dry run as a job (revision 2026-11-25, D1) ───────────────────────────────
+// /api/dry-run starts a job in the same frame as the rebuild: reserved like
+// it, so it never runs next to a rebuild, a move or an update, and its
+// result waits on the server until it was seen - a reload does not lose it.
+
+/** Start a dry run and wait for its result: {ok, mode, output,
+ *  changed_during}; null on a network error. Something else running: ok
+ *  false and the error code as output (tErr names it). */
+async function requestDryRun(body) {
+  const res = await csrfFetch('/api/dry-run', {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify(body),
+  }).catch(() => null);
+  if (!res) return null;
+  const d = await res.json().catch(() => null);
+  if (!d) return null;
+  if (d.error) return { ok: false, output: d.error };
+  return waitDryRunResult();
+}
+
+/** Follow the current job until its dry-run result arrives, then mark it
+ *  seen. Resolves null when the job ended without one. */
+function waitDryRunResult() {
+  return new Promise(resolve => {
+    let done = false;
+    const finish = v => {
+      if (done) return;
+      done = true;
+      es.close();
+      csrfFetch('/api/rebuild/ack', { method: 'POST' }).catch(() => {});
+      resolve(v);
+    };
+    const es = new EventSource(`/api/rebuild/stream?token=${encodeURIComponent(CSRF_TOKEN)}&from=0`);
+    es.onmessage = e => {
+      let m;
+      try { m = JSON.parse(e.data); } catch { return; }
+      if (m.type === 'done' && m.kind === 'dryrun') finish(m.dry || null);
+      else if (m.type === 'error') finish({ ok: false, output: m.message });
+      else if (m.type === 'eof') finish(null);
+    };
+    es.onerror = () => { if (es.readyState === EventSource.CLOSED) finish(null); };
+  });
+}
+
+/** The result in the dry-run window, with the note when the config
+ *  changed while it ran (decision Martin 2026-11-26). */
+function _showDryRunResult(output, data, header = '') {
+  output.style.color = '';
+  if (!data) { output.textContent = t('dryrun.networkError'); return; }
+  output.innerHTML = _colorizedOutput(header + (data.output ? tErr(data.output) : ''));
+  if (data.changed_during) {
+    const note = document.createElement('div');
+    note.className = 'validate-hint';
+    note.textContent = t('dryrun.changedDuring');
+    output.appendChild(note);
+  }
+  _dryRunShowStatus(!!data.ok);
+}
+
+/** On page load: a dry run that is still running or whose result was not
+ *  seen opens its window again. */
+async function restoreDryRun(job) {
+  const overlay = document.getElementById('dryrun-overlay');
+  const output  = document.getElementById('dryrun-output');
+  if (!overlay || !output) return;
+  _dryRunResetStatus();
+  overlay.classList.remove('hidden');
+  const spinner = startElapsedSpinner(output);
+  if (job.started) spinner.setStart(job.started * 1000);
+  const data = await waitDryRunResult();
+  spinner.stop();
+  _showDryRunResult(output, data);
+}
+
 async function runDryRun() {
   document.getElementById('dryrun-overlay')?.classList.add('hidden');
   const hostInfo = await _fetchFlakeHosts();
@@ -1456,18 +1560,9 @@ async function runDryRun() {
       return;
     }
 
-    const res = await csrfFetch('/api/dry-run', {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify(body),
-    }).catch(() => null);
-
+    const data = await requestDryRun(body);
     spinner.stop();
-    if (!res) { output.textContent = t('dryrun.networkError'); return; }
-    const data = await res.json();
-    output.style.color = '';
-    output.innerHTML = _colorizedOutput(_dryRunHostHeader(body) + (tErr(data.output) || ''));
-    _dryRunShowStatus(data.ok);
+    _showDryRunResult(output, data, _dryRunHostHeader(body));
   } finally {
     spinner.stop();
   }
@@ -1495,23 +1590,14 @@ async function runSaveAndDryRun() {
   overlay.classList.remove('hidden');
   const spinner = startElapsedSpinner(output);
 
-  let res;
+  let data;
   try {
-    res = await csrfFetch('/api/dry-run', {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify(body),
-    }).catch(() => null);
+    data = await requestDryRun(body);
   } finally {
     spinner.stop();
   }
-
-  if (!res) { output.textContent = t('dryrun.networkError'); return; }
-  const data = await res.json();
-  output.style.color = '';
-  // tErr as in runDryRun: the output may be a code (ERR_DRY_…), and this
-  // path used to show it as it came.
-  output.innerHTML = _colorizedOutput(_dryRunHostHeader(body) + (tErr(data.output) || ''));
-  _dryRunShowStatus(data.ok);
+  // tErr as in runDryRun (_showDryRunResult): the output may be a code
+  // (ERR_DRY_…), and this path used to show it as it came.
+  _showDryRunResult(output, data, _dryRunHostHeader(body));
 }
 

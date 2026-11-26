@@ -35,6 +35,27 @@ def check(label, cond, got=None):
     print(("  OK   " if cond else "  FAIL ") + label + ("" if cond or got is None else f"  (war: {got})"))
     if not cond: fails.append(label)
 
+
+
+def dry_run(client, headers, body):
+    """POST /api/dry-run and wait for the job's result (a job since
+    2026-11-26, revision 2026-11-25 D1): the `dry` dict of its done event,
+    or the refusal as it came."""
+    import time
+    from nico.routes import rebuild as _rb
+    d = client.post("/api/dry-run", headers=headers, data=json.dumps(body)).get_json() or {}
+    if not d.get("job_id"):
+        return d
+    for _ in range(1200):
+        with _rb._job_cv:
+            j = _rb._job
+            if j and j["id"] == d["job_id"] and not j["running"]:
+                for ev in j["events"]:
+                    if '"kind": "dryrun"' in ev:
+                        return json.loads(ev.split("data: ", 1)[1])["dry"]
+                return {}
+        time.sleep(0.05)
+    return {}
 data = config_manager.get_defaults()
 data.update({"flakes": True, "hostname": "h1", "flake_hosts": [{"name": "h1"}]})
 config_manager.save_config(str(cfg), data)
@@ -140,7 +161,7 @@ def fake_run(cmd, *a, **kw):
 
 subprocess.run = fake_run
 try:
-    r = client.post("/api/dry-run", headers=H, data=json.dumps({"hostname": "h1"}))
+    r = dry_run(client, H, {"hostname": "h1"})
 finally:
     subprocess.run = real_run
 check("ohne Git: Ziel path:…#…h1", seen and seen[-1][2].startswith("path:")
@@ -153,7 +174,7 @@ git_manager.auto_commit(str(cfg), label="start")
 seen.clear()
 subprocess.run = fake_run
 try:
-    r = client.post("/api/dry-run", headers=H, data=json.dumps({"hostname": "h1"}))
+    r = dry_run(client, H, {"hostname": "h1"})
 finally:
     subprocess.run = real_run
 check("mit Git: Ziel .#…h1 (Git-Flake wie der Rebuild)",

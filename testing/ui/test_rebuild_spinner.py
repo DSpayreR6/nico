@@ -7,7 +7,7 @@ Beim Rebuild ist es die echte Laufzeit des Jobs (Startzeit vom Server), auch
 nach einem Neuladen.
 
 Es läuft kein Rebuild und kein Dry-Run: `EventSource` ist eine Attrappe, die
-Antworten von `/api/rebuild/status` und `/api/dry-run` werden im Browser
+Antworten von `/api/rebuild/status` und `requestDryRun` werden im Browser
 ersetzt.
 
   1. Monitor bei laufendem Job: Strich und Laufzeit ab Job-Start, dreht sich,
@@ -118,11 +118,9 @@ try:
 
     print("\n4. Dry-Run")
     d.execute_script("""
-      window._origCsrf = window._origCsrf || window.csrfFetch;
-      csrfFetch = (url, o) => url === '/api/dry-run'
-        ? new Promise(r => setTimeout(() => r({json: () => Promise.resolve(
-            {ok: true, output: 'alles gut'})}), 1500))
-        : window._origCsrf(url, o);
+      // A job since 2026-11-26: start and wait are one call (requestDryRun).
+      requestDryRun = () => new Promise(r => setTimeout(
+        () => r({ok: true, output: 'alles gut'}), 1500));
       _fetchFlakeHosts = () => Promise.resolve({flake_mode: false, hosts: []});
       Sidebar.flakeSave = () => Promise.resolve(true);
       _autoSave = () => Promise.resolve(true);

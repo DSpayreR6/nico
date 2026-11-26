@@ -516,19 +516,16 @@ async function writeFiles() {
     dryResultEl.style.color = '';
     dryResultEl.classList.remove('hidden');
 
-    const dr = await csrfFetch('/api/dry-run', {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ _host: _activeHost }),
-    }).catch(() => null);
+    // A job since 2026-11-26 (requestDryRun, rebuild.js).
+    const dd = await requestDryRun({ _host: _activeHost });
 
-    if (!dr) {
+    if (!dd) {
       dryResultEl.textContent = t('dryrun.networkError');
       dryResultEl.style.color = 'var(--red)';
       return;
     }
-    const dd = await dr.json();
-    dryResultEl.textContent = dd.output || (dd.ok ? '✓ OK' : t('dryrun.failed'));  // '✓' kept intentionally (text output)
+    dryResultEl.textContent = (dd.output ? tErr(dd.output) : (dd.ok ? '✓ OK' : t('dryrun.failed')))  // '✓' kept intentionally (text output)
+      + (dd.changed_during ? '\n' + t('dryrun.changedDuring') : '');
     dryResultEl.style.color = dd.ok ? 'var(--green)' : 'var(--red)';
     if (!dd.ok) return;  // stop – show error, let user decide
   }
