@@ -10,6 +10,7 @@
 - Move config: afterwards a window asks which config NiCo works with – the new place, another path, or none (setup starts again); before the move it lists what will not come along or will point nowhere
 - Reading this machine: besides *Always allow* there is *Allow once* – valid until the page is reloaded, nothing is stored; a fourth switch *Installed programs* covers reading `nix profile list` for *Update NiCo*
 - System state that was entered but could not be activated: the time machine offers *Activate again*, which repeats only the activation
+- New Validator rule (note, can be switched off): names files linked in from outside the config, which NiCo does not read and the Validator therefore does not check
 
 ### Bug Fixes
 

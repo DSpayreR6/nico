@@ -1365,6 +1365,10 @@
   "validator.f.flake_untracked_reference": "参照先の {0} 個のファイルがバージョン管理されていません – flake のビルドは失敗します。",
   "validator.f.etc_nixos_symlink": "/etc/nixos はこの config（{1}）ではなく {0} を指しています。",
   "validator.d.etc_nixos_symlink": "NiCo のリビルドには影響しませんが、ターミナルでの nixos-rebuild には影響します。変更するには：設定 → NiCo の設定 → シンボリックリンク /etc/nixos。",
+  "validator.rule.linked_outside.label": "外部からリンクされたファイル",
+  "validator.rule.linked_outside.desc": "設定の外からリンク（symlink）で取り込まれたファイルを示します。NiCo はそれらを読まないため、Validator はチェックしません。",
+  "validator.f.linked_outside": "外部からリンクされた {0} 個のファイルは Validator でチェックされません: {1}",
+  "validator.d.linked_outside": "NiCo は設定の外のファイルを読み書きしません。この注意が邪魔な場合は Validator の設定でオフにできます。",
 
   "admin.settings.pushSection": "同期（push、pull）",
   "admin.settings.pushAfterSave": "保存後に自動でプッシュ",

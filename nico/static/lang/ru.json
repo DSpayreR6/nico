@@ -1365,6 +1365,10 @@
   "validator.f.flake_untracked_reference": "{0} файлов по ссылкам не под контролем версий – сборка flake завершится ошибкой.",
   "validator.f.etc_nixos_symlink": "/etc/nixos указывает на {0} вместо этой config ({1}).",
   "validator.d.etc_nixos_symlink": "Rebuild в NiCo это не затрагивает, а nixos-rebuild в терминале – да. Изменить: настройки → настройки NiCo → символическая ссылка /etc/nixos.",
+  "validator.rule.linked_outside.label": "Связанные файлы извне",
+  "validator.rule.linked_outside.desc": "Называет файлы, подключённые ссылкой (symlink) из-за пределов конфигурации, — NiCo их не читает, поэтому Validator их не проверяет.",
+  "validator.f.linked_outside": "Validator не проверяет {0} файл(ов), подключённых ссылкой извне: {1}",
+  "validator.d.linked_outside": "NiCo не читает и не записывает файлы вне конфигурации. Если подсказка мешает, её можно отключить в настройках Validator.",
 
   "admin.settings.pushSection": "Синхронизация (push, pull)",
   "admin.settings.pushAfterSave": "Автоматически отправлять после сохранения",

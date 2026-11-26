@@ -135,6 +135,14 @@ check("… Link noch da", (cfg / "modules" / "secret.nix").is_symlink())
 
 # ── 5. Validator ────────────────────────────────────────────────────────────
 print("\n5. Validator nutzt denselben Weg")
+# Martin 2026-11-26: what the rules no longer see is said on every run,
+# as a note that can be switched off.
+found = validator._rule_linked_outside(str(cfg), {}, False)
+check("Hinweis linked_outside nennt den Link nach außen",
+      len(found) == 1 and found[0].severity == "info" and "modules/secret.nix" in found[0].params[1],
+      [f.params for f in found])
+check("… als abschaltbare Regel registriert", "linked_outside" in validator.RULE_MAP
+      and validator.default_validation_rules().get("linked_outside") is True)
 check("keine eigene rglob-Schleife mehr über die Config",
       ".rglob(\"*.nix\")" not in Path(validator.__file__).read_text().replace(
           '(source / "nixos" / "modules").rglob("*.nix")', ""))

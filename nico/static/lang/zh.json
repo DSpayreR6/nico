@@ -1365,6 +1365,10 @@
   "validator.f.flake_untracked_reference": "{0} 个被引用的文件未受版本控制——flake 构建将会失败。",
   "validator.f.etc_nixos_symlink": "/etc/nixos 指向 {0}，而不是此 config（{1}）。",
   "validator.d.etc_nixos_symlink": "NiCo 的重建不受影响，但终端中的 nixos-rebuild 会受影响。更改方法：设置 → NiCo 设置 → 符号链接 /etc/nixos。",
+  "validator.rule.linked_outside.label": "从外部链接的文件",
+  "validator.rule.linked_outside.desc": "列出通过链接（symlink）从配置之外引入的文件——NiCo 不读取它们，因此 Validator 不检查它们。",
+  "validator.f.linked_outside": "Validator 不检查 {0} 个从外部链接引入的文件：{1}",
+  "validator.d.linked_outside": "NiCo 不读写配置之外的文件。如果此提示造成干扰，可在 Validator 设置中关闭。",
 
   "admin.settings.pushSection": "同步（push、pull）",
   "admin.settings.pushAfterSave": "保存后自动推送",

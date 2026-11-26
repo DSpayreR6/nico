@@ -1365,6 +1365,10 @@
   "validator.f.flake_untracked_reference": "{0} archivos referenciados no están bajo control de versiones; el build del flake fallará.",
   "validator.f.etc_nixos_symlink": "/etc/nixos apunta a {0} en lugar de a esta config ({1}).",
   "validator.d.etc_nixos_symlink": "El rebuild de NiCo no se ve afectado; un nixos-rebuild en la terminal sí. Para cambiarlo: ajustes → ajustes de NiCo → enlace simbólico /etc/nixos.",
+  "validator.rule.linked_outside.label": "Archivos enlazados desde fuera",
+  "validator.rule.linked_outside.desc": "Indica los archivos enlazados (symlink) desde fuera de la configuración: NiCo no los lee, por eso el Validator no los comprueba.",
+  "validator.f.linked_outside": "El Validator no comprueba {0} archivo(s) enlazado(s) desde fuera: {1}",
+  "validator.d.linked_outside": "NiCo no lee ni escribe archivos fuera de la configuración. Si el aviso molesta, se puede desactivar en los ajustes del Validator.",
 
   "admin.settings.pushSection": "Sincronización (push, pull)",
   "admin.settings.pushAfterSave": "Hacer push automáticamente después de guardar",

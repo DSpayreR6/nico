@@ -257,6 +257,11 @@ ALL_RULES: list[Rule] = [
          "Warnt, wenn /etc/nixos ein Symlink auf ein anderes Verzeichnis ist – ein nixos-rebuild "
          "im Terminal baut dann eine andere Config.",
          "warning", host_local=True, reads=_RV),
+    Rule("linked_outside",
+         "Verknüpfte Dateien von außerhalb",
+         "Nennt Dateien, die per Verknüpfung (Symlink) von außerhalb der Config eingebunden sind – "
+         "NiCo liest sie nicht, der Validator prüft sie darum nicht.",
+         "info"),
 ]
 
 RULE_MAP: dict[str, Rule] = {r.id: r for r in ALL_RULES}
@@ -684,6 +689,30 @@ def _rule_etc_nixos_symlink(nixos_dir: str, config: dict, is_flake: bool,
         detail="NiCos Rebuild ist nicht betroffen, ein nixos-rebuild im Terminal schon. "
                "Umstellen: Einstellungen → NiCo → Symlink /etc/nixos.",
         detail_key="validator.d.etc_nixos_symlink",
+    )]
+
+
+def _rule_linked_outside(nixos_dir: str, config: dict, is_flake: bool,
+                         host: str | None = None) -> list[Finding]:
+    """Name the files linked in from outside the config (Martin, 2026-11-26).
+
+    Since links out of the config are never read (configfiles.py), the
+    other rules do not see these files. Said here, so it shows on every run
+    and not only before an action - and can be switched off like any rule
+    when it is known and in the way."""
+    linked = [x for x in configfiles.scan(nixos_dir).left if x.kind == "link_out"]
+    if not linked:
+        return []
+    names = ", ".join(f"{x.file} → {x.target}" for x in linked[:10])
+    if len(linked) > 10:
+        names += ", …"
+    return [Finding(
+        rule_id="linked_outside",
+        severity="info",
+        message=f"{len(linked)} per Verknüpfung von außerhalb eingebundene Datei(en) prüft der Validator nicht: {names}",
+        message_key="validator.f.linked_outside", params=[len(linked), names],
+        detail="NiCo liest und schreibt Dateien außerhalb der Config nicht.",
+        detail_key="validator.d.linked_outside",
     )]
 
 
@@ -3807,5 +3836,6 @@ _RULE_FNS: dict[str, object] = {
     "git_large_log":          _rule_git_large_log,
     "flake_untracked_reference": _rule_flake_untracked_reference,
     "etc_nixos_symlink":     _rule_etc_nixos_symlink,
+    "linked_outside":        _rule_linked_outside,
     "git_foreign_files":      _rule_git_foreign_files,
 }
